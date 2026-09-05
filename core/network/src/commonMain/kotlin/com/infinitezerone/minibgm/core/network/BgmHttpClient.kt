@@ -42,12 +42,14 @@ object BgmHttpClient {
      *   完成自动登出闭环）并沿用原始 401 上抛。
      * @param enableLogging 仅 debug 构建开启；LogLevel.INFO 只记录请求
      *   生命周期，不含 header 与 body，不会泄漏凭据。
+     * @param userAgent 必填：由 app 层以 BuildConfig.VERSION_NAME 拼装，
+     *   版本号随构建自动更新；commonMain 读不到 BuildConfig 故不设默认值。
      * @param engine 测试注入点（MockEngine）；默认 CIO 生产引擎。
      */
     fun create(
         tokenProvider: TokenProvider,
         enableLogging: Boolean = false,
-        userAgent: String = "MiniBgm/0.1.0 (android) (https://github.com/infinitezerone/MiniBgm)",
+        userAgent: String,
         tokenRefresher: (suspend (oldRefreshToken: String) -> BgmTokenPair?)? = null,
         engine: HttpClientEngine? = null,
     ): HttpClient {

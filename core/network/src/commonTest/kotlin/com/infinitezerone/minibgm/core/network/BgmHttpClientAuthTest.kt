@@ -86,6 +86,7 @@ class BgmHttpClientAuthTest {
             val provider = FakeTokenProvider("old-access", "old-refresh")
             val client =
                 BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
                     tokenProvider = provider,
                     tokenRefresher = { old ->
                         assertEquals("old-refresh", old)
@@ -115,6 +116,7 @@ class BgmHttpClientAuthTest {
             val provider = FakeTokenProvider("old-access", "old-refresh")
             val client =
                 BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
                     tokenProvider = provider,
                     tokenRefresher = { null },
                     engine = engine,
@@ -139,6 +141,7 @@ class BgmHttpClientAuthTest {
             val provider = FakeTokenProvider("old-access", null)
             val client =
                 BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
                     tokenProvider = provider,
                     tokenRefresher = { null },
                     engine = engine,

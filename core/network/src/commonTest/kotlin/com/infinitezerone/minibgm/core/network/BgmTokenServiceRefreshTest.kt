@@ -28,6 +28,7 @@ class BgmTokenServiceRefreshTest {
             // 裸 HttpClient 不含该插件，测出的降级行为会与生产不一致
             client =
                 BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
                     tokenProvider =
                         object : TokenProvider {
                             override suspend fun getAccessToken(): String? = null

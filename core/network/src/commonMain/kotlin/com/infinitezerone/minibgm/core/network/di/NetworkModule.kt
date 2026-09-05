@@ -16,14 +16,19 @@ import org.koin.dsl.module
 
 /**
  * @param enableNetworkLogging 仅由 app 层传入 BuildConfig.DEBUG
+ * @param userAgent 由 app 层以 BuildConfig.VERSION_NAME 拼装，随版本自动更新
  */
-fun networkModule(enableNetworkLogging: Boolean = false): Module =
+fun networkModule(
+    enableNetworkLogging: Boolean = false,
+    userAgent: String,
+): Module =
     module {
         single { BgmAuthConfig() }
 
         // 未鉴权独立 client（无 Auth 插件），专供访问无需 Bearer Token 的外部静态 CDN 资源与 Worker 兑换/刷新
         single(named("unauthenticated")) {
             BgmHttpClient.create(
+                userAgent = userAgent,
                 tokenProvider = get(),
                 enableLogging = enableNetworkLogging,
             )
@@ -36,6 +41,7 @@ fun networkModule(enableNetworkLogging: Boolean = false): Module =
         // 业务主 client：Bearer 自动注入 + 401 时经 Worker 刷新重试
         single {
             BgmHttpClient.create(
+                userAgent = userAgent,
                 tokenProvider = get(),
                 enableLogging = enableNetworkLogging,
                 // 凭据被 OAuth 拒绝（invalid_grant 等 4xx）降级为 null：client 据此

@@ -67,7 +67,7 @@ If none of these precedents fits, stop before introducing a new architectural pa
 - Mutating repository operations and critical writes (e.g. check-ins, collection status updates) must be guarded with `withContext(NonCancellable)` so that navigating away from a screen or ViewModel destruction does not cancel in-flight network synchronization.
 
 ### Network (Ktor 3)
-- Every `BgmHttpClient` request carries `User-Agent: MiniBgm/<versionName> (android) (https://github.com/infinitezerone/MiniBgm)` via `DefaultRequest` — never strip or override it; keep the version string in sync with the app's `versionName`.
+- Every `BgmHttpClient` request carries `User-Agent: MiniBgm/<versionName> (android) (https://github.com/infinitezerone/MiniBgm)` via `DefaultRequest` — never strip or override it; `userAgent` is a **required** parameter on `BgmHttpClient.create` and `networkModule`, injected by the app layer from `BuildConfig.VERSION_NAME`, so the version stays in sync automatically.
 - Reuse `BgmHttpClient.jsonConfig` (`ignoreUnknownKeys`, `isLenient`, `coerceInputValues`, ...) instead of hand-rolling `Json` instances.
 - Errors surface as typed `BgmNetworkException` subclasses (`Unauthorized`, `Forbidden`, `NotFound`, `RateLimited`, `ServerError`, `Unknown`), mapped from HTTP status codes.
 - Business API calls go direct to `api.bgm.tv`; only token exchange/refresh goes through the Cloudflare Worker proxy. The Ktor auth plugin auto-refreshes on 401 and clears credentials on unrecoverable refresh failures (auto-logout).

@@ -45,7 +45,7 @@ class BgmTokenServiceTest {
 
     private fun service(engine: MockEngine): BgmTokenService =
         BgmTokenService(
-            client = BgmHttpClient.create(tokenProvider = NoopTokenProvider(), engine = engine),
+            client = BgmHttpClient.create(userAgent = "MiniBgm/test", tokenProvider = NoopTokenProvider(), engine = engine),
             config = BgmAuthConfig(),
         )
 
