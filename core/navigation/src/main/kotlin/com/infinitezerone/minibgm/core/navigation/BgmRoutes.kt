@@ -4,7 +4,7 @@ import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
 /**
- * BgmPlus 全局类型安全路由契约（Navigation 3 NavKey）
+ * MiniBgm 全局类型安全路由契约（Navigation 3 NavKey）
  */
 
 @Serializable

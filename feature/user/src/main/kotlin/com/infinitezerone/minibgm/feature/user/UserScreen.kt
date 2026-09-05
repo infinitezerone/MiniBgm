@@ -92,7 +92,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmPlusTheme
+import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -1387,7 +1387,7 @@ private fun SettingsSection(
                 SettingsItemRow(
                     icon = Icons.Filled.BookmarkBorder,
                     iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "BgmPlus 客户端",
+                    title = "MiniBgm 客户端",
                     subtitle = "v1.0.0 · Apache-2.0 开源协议",
                     trailing = {
                         Icon(
@@ -1788,7 +1788,7 @@ private val previewProfile2 =
 @ThemePreviews
 @Composable
 private fun UserScreenUnauthenticatedPreview() {
-    BgmPlusTheme {
+    MiniBgmTheme {
         UserScreenContent(
             uiState = UserUiState(isLoggedIn = false),
             onLogin = {},
@@ -1810,7 +1810,7 @@ private fun UserScreenUnauthenticatedPreview() {
 @ThemePreviews
 @Composable
 private fun UserScreenSingleAccountPreview() {
-    BgmPlusTheme {
+    MiniBgmTheme {
         UserScreenContent(
             uiState =
                 UserUiState(
@@ -1845,7 +1845,7 @@ private fun UserScreenSingleAccountPreview() {
 @ThemePreviews
 @Composable
 private fun UserScreenMultiAccountPreview() {
-    BgmPlusTheme {
+    MiniBgmTheme {
         UserScreenContent(
             uiState =
                 UserUiState(

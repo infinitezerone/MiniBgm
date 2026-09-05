@@ -5,7 +5,7 @@
 
 ## 🏛️ 依赖关系
 * **依赖的上游**：`:core:model`, `:core:common`, `:core:data`
-* **被谁依赖**：所有 `:feature:*` 模块（经 `bgmplus.android.feature` 约定插件自动引入 `testImplementation`）、`:app` 及其他模块的测试源集
+* **被谁依赖**：所有 `:feature:*` 模块（经 `minibgm.android.feature` 约定插件自动引入 `testImplementation`）、`:app` 及其他模块的测试源集
 * **禁止依赖**：禁止依赖 `:core:network` 或 `:core:database` 的内部实现，禁止作为生产代码（`main` / `commonMain` 业务实现）的运行期依赖。
 
 ## ⚠️ 架构红线与约束

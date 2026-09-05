@@ -11,7 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmPlusTheme
+import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         }
         handleOAuthIntent(intent)
         setContent {
-            BgmPlusTheme {
+            MiniBgmTheme {
                 BgmApp(
                     snackbarHostState = snackbarHostState,
                     authRepository = authRepository,

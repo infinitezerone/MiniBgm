@@ -47,7 +47,7 @@ object BgmHttpClient {
     fun create(
         tokenProvider: TokenProvider,
         enableLogging: Boolean = false,
-        userAgent: String = "MiniBgm/1.0.0 (android) (https://github.com/infinitezerone/MiniBgm)",
+        userAgent: String = "MiniBgm/0.1.0 (android) (https://github.com/infinitezerone/MiniBgm)",
         tokenRefresher: (suspend (oldRefreshToken: String) -> BgmTokenPair?)? = null,
         engine: HttpClientEngine? = null,
     ): HttpClient {

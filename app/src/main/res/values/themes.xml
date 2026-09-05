@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- splash 退出后落到应用自有主题，避免直接暴露系统 Material 主题 -->
-    <style name="Theme.BgmPlus" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.MiniBgm" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

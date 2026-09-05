@@ -108,7 +108,7 @@ class BgmUrlParserTest {
         val external =
             listOf(
                 "https://bilibili.com/video/BV1xx411c7mD",
-                "https://github.com/infinitezerone/BgmPlus",
+                "https://github.com/infinitezerone/MiniBgm",
                 "https://google.com",
                 "https://other-bgm.tv/subject/123",
                 "plain text without url",

@@ -26,7 +26,7 @@ private val LightColorScheme =
     )
 
 @Composable
-fun BgmPlusTheme(
+fun MiniBgmTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,

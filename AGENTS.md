@@ -17,7 +17,7 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 ```
 MiniBgm/
 ├── app/                        # Entry point, MainActivity, Koin init, OAuth deep-link handling
-├── build-logic/                # Convention plugins (bgmplus.* ids) — all shared module config lives here
+├── build-logic/                # Convention plugins (minibgm.* ids) — all shared module config lives here
 ├── core/
 │   ├── model/                  # Pure Kotlin data classes (Subject, Episode, AirSchedule, SearchFilter, ...)
 │   ├── common/                 # AppResult, BgmDispatchers, TimeUtils, UserDataClearable
@@ -25,13 +25,13 @@ MiniBgm/
 │   ├── database/               # Room 3 entities, DAOs, BgmDatabase
 │   ├── datastore/              # UserPreferences (commonMain); Keystore-encrypted AuthTokensDataSource (androidMain)
 │   ├── data/                   # Repositories: AuthRepository, ScheduleRepository, SubjectRepository, CollectionRepository, SearchRepository, SyncManager
-│   ├── designsystem/           # BgmPlusTheme, M3 tokens, CoverImage
+│   ├── designsystem/           # MiniBgmTheme, M3 tokens, CoverImage
 │   ├── navigation/             # Navigation 3 NavKey contracts, BgmNavState, TopLevelDestination, BgmRoutes
 │   └── testing/                # Test doubles (Fake repositories), MainDispatcherRule, TestData
 ├── sync/
 │   └── work/                   # WorkManager background sync, BgmSyncWorker, periodic & one-time sync manager
 ├── worker (moved)              # OAuth token-exchange proxy: maintained in a separate private Cloudflare Workers repo; deploys to bgmplus-auth.shadow2go.dpdns.org via its own CI
-└── feature/                    # (Scaffolded with convention plugin bgmplus.android.feature)
+└── feature/                    # (Scaffolded with convention plugin minibgm.android.feature)
     ├── schedule/               # Weekly on-air schedule & countdown
     ├── subject/                # Subject detail, cast/staff, episode grouping, bottom sheets & custom tabs
     ├── user/                   # Collections browsing, multi-account management & quick progress tracking
@@ -40,10 +40,10 @@ MiniBgm/
 
 ## Module Rules
 
-1. **Feature isolation**: `:feature:A` must never depend on `:feature:B`; inter-feature navigation goes through type-safe route contracts. Feature modules use the `bgmplus.android.feature` convention plugin.
+1. **Feature isolation**: `:feature:A` must never depend on `:feature:B`; inter-feature navigation goes through type-safe route contracts. Feature modules use the `minibgm.android.feature` convention plugin.
 2. **`:core:model` is pure Kotlin**: no `android.*` or UI framework dependencies.
 3. **Single source of truth**: repositories in `:core:data` coordinate `:core:network` and `:core:database`; UI layers never touch network or database directly.
-4. **Convention plugins first**: new modules apply a `bgmplus.*` plugin from the catalog instead of hand-configuring Android/Kotlin settings.
+4. **Convention plugins first**: new modules apply a `minibgm.*` plugin from the catalog instead of hand-configuring Android/Kotlin settings.
 5. **Lightweight module docs**: module-level `README.md` files only declare **scope/responsibilities**, **dependency topology**, and **architectural invariants/redlines** — avoid internal implementation details or class inventories to prevent documentation rot.
 6. **Navigation**: app uses **Navigation 3** (`androidx.navigation3`) — `@Serializable` `NavKey` routes declared in `:core:navigation` (`BgmRoutes.kt`), rendered by `NavDisplay` in `:app`; per-tab `NavBackStack`s live in `BgmNavState` (exit-through-home, survives process death). Don't relocate route contracts or rewire the navigation stack without a deliberate decision.
 
@@ -79,12 +79,12 @@ If none of these precedents fits, stop before introducing a new architectural pa
 
 ### Build System (AGP 9)
 - `:app` / `:core:designsystem` use **AGP built-in Kotlin** — never re-add `org.jetbrains.kotlin.android`; Kotlin compile config goes through `android.compileOptions` (jvmTarget defaults to `targetCompatibility`).
-- KMP modules use `com.android.kotlin.multiplatform.library` (applied by `bgmplus.kmp.library`), which is **single-variant** (no debug/release) and has **no top-level `android {}` extension** — Android config (namespace, desugaring, host tests) goes through `Project.kmpAndroidLibrary { }` (finalizeDsl) in `build-logic`, and test source sets are named `androidHostTest` / `androidDeviceTest` with tests **opt-in** (`withHostTest` is already enabled in the convention plugin).
+- KMP modules use `com.android.kotlin.multiplatform.library` (applied by `minibgm.kmp.library`), which is **single-variant** (no debug/release) and has **no top-level `android {}` extension** — Android config (namespace, desugaring, host tests) goes through `Project.kmpAndroidLibrary { }` (finalizeDsl) in `build-logic`, and test source sets are named `androidHostTest` / `androidDeviceTest` with tests **opt-in** (`withHostTest` is already enabled in the convention plugin).
 - KMP modules use `testAndroid` (per module) or `allTests` (aggregate); Android-only modules use the standard variant task such as `testDebugUnitTest`. Select the task from the module's applied convention plugin instead of assuming one task name for all modules.
 - **Green ≠ tested**: a misnamed or empty test source set fails silently (the `androidUnitTest` → `androidHostTest` incident shipped a build where tests ran zero cases, all green). After any build-script or source-set change, verify the selected task's `build/test-results/<task>/*.xml` exists with `tests > 0` before claiming tests pass — BUILD SUCCESSFUL alone proves nothing.
 
 ### Compose & Design System
-- Always build under `BgmPlusTheme` using tokens from `:core:designsystem`; no hardcoded colors or typography in features.
+- Always build under `MiniBgmTheme` using tokens from `:core:designsystem`; no hardcoded colors or typography in features.
 - Keep recomposition cheap: immutable state classes, `@Stable` where useful, stable lambdas.
 - Support edge-to-edge: `enableEdgeToEdge()` plus proper `WindowInsets` padding.
 

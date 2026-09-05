@@ -2,9 +2,14 @@ import com.infinitezerone.minibgm.androidApplication
 import java.util.Properties
 
 // keystore.properties 不入库：本机没有该文件时 release 回退 debug 签名，保证任何人都能构建
-val releaseSigning = Properties().apply {
-    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
-}
+val releaseSigning =
+    Properties().apply {
+        rootProject
+            .file("keystore.properties")
+            .takeIf { it.exists() }
+            ?.inputStream()
+            ?.use { load(it) }
+    }
 
 plugins {
     alias(libs.plugins.minibgm.android.application.compose)
@@ -33,11 +38,12 @@ androidApplication {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = if (releaseSigning.isNotEmpty()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig =
+                if (releaseSigning.isNotEmpty()) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
