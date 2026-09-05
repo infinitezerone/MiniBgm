@@ -1,6 +1,6 @@
-# BgmPlus AI Agent & Developer Guidelines
+# MiniBgm AI Agent & Developer Guidelines
 
-Architectural context, coding standards, and verification workflow for **BgmPlus** — a modern Bangumi (bgm.tv) on-air schedule, anime tracking, and collection management client. Modular Clean Architecture modeled on Google's *Now in Android*. Written for human developers and AI coding agents alike.
+Architectural context, coding standards, and verification workflow for **MiniBgm** — a modern Bangumi (bgm.tv) on-air schedule, anime tracking, and collection management client. Modular Clean Architecture modeled on Google's *Now in Android*. Written for human developers and AI coding agents alike.
 
 ## Tech Stack
 
@@ -15,7 +15,7 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 ## Module Map
 
 ```
-BgmPlus/
+MiniBgm/
 ├── app/                        # Entry point, MainActivity, Koin init, OAuth deep-link handling
 ├── build-logic/                # Convention plugins (bgmplus.* ids) — all shared module config lives here
 ├── core/
