@@ -17,6 +17,10 @@ data class UserPreferences(
     val pendingOAuthVerifier: String = "",
     val isDarkMode: Boolean = false,
     val notifyBeforeAirMinutes: Int = 15,
+    /** 开播提醒总开关（每日追番更新汇总通知） */
+    val airingReminderEnabled: Boolean = true,
+    /** 上次发出更新提醒的日期（yyyy-MM-dd，用于每日去重） */
+    val airingReminderLastNotifiedDate: String = "",
     /** bangumi-data CDN 静态数据的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
     val bangumiDataEtag: String = "",
     /** 播放源后台自动同步频率 */

@@ -96,6 +96,15 @@ class ScheduleRepositoryImplTest {
         override suspend fun deleteEventsNotIn(keepIds: List<Long>) {
             events.value = events.value.filter { it.subjectId in keepIds }
         }
+
+        override suspend fun getUpcomingEvents(
+            subjectIds: List<Long>,
+            fromIso: String,
+            toIso: String,
+        ): List<AirEventEntity> =
+            events.value.filter {
+                it.subjectId in subjectIds.toSet() && it.airAtUtc >= fromIso && it.airAtUtc <= toIso
+            }
     }
 
     private class FakeAniListService : AniListService {

@@ -62,6 +62,17 @@ interface AirEventDao {
 
     @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
     suspend fun deleteEventsNotIn(keepIds: List<Long>)
+
+    @Query(
+        "SELECT * FROM air_events " +
+            "WHERE subjectId IN (:subjectIds) AND airAtUtc >= :fromIso AND airAtUtc <= :toIso " +
+            "ORDER BY airAtUtc ASC",
+    )
+    suspend fun getUpcomingEvents(
+        subjectIds: List<Long>,
+        fromIso: String,
+        toIso: String,
+    ): List<AirEventEntity>
 }
 
 @Dao

@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.testing.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,19 @@ class FakeScheduleRepository : ScheduleRepository {
     override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> {
         syncBangumiDataCallCount++
         return syncBangumiDataResult
+    }
+
+    /** 测试可预置的即将播出事件 */
+    var upcomingAiring: List<UpcomingAiring> = emptyList()
+    var upcomingAiringRequestedSubjectIds: List<Long> = emptyList()
+        private set
+
+    override suspend fun getUpcomingAiringForSubjects(
+        subjectIds: List<Long>,
+        hoursAhead: Long,
+    ): List<UpcomingAiring> {
+        upcomingAiringRequestedSubjectIds = subjectIds
+        return upcomingAiring.filter { it.subjectId in subjectIds.toSet() }
     }
 
     /** 测试可预置的默认筛选持久化值 */

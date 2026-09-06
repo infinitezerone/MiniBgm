@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
@@ -24,6 +25,15 @@ import kotlin.math.abs
 
 interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
+
+    /**
+     * 查询指定条目（通常为"我追的"）在 [hoursAhead] 小时窗口内的即将播出事件，
+     * 按播出时间升序；同话多源时按可信度去重（actual/scheduled 优先于 predicted）。
+     */
+    suspend fun getUpcomingAiringForSubjects(
+        subjectIds: List<Long>,
+        hoursAhead: Long = 24,
+    ): List<UpcomingAiring>
 
     /**
      * 前台极速刷新官方日历（50KB）：
@@ -60,6 +70,40 @@ class ScheduleRepositoryImpl(
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
             entities.map { it.toModel(json) }
         }
+
+    override suspend fun getUpcomingAiringForSubjects(
+        subjectIds: List<Long>,
+        hoursAhead: Long,
+    ): List<UpcomingAiring> {
+        if (subjectIds.isEmpty()) return emptyList()
+        val nowMillis = TimeUtils.nowEpochMillis()
+        val fromIso = TimeUtils.isoUtcFromEpochMillis(nowMillis)
+        val toIso = TimeUtils.isoUtcFromEpochMillis(nowMillis + hoursAhead * DAY_MILLIS)
+        val titles = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
+        return airEventDao
+            .getUpcomingEvents(subjectIds, fromIso, toIso)
+            // 同话多源去重：actual/scheduled 优先于 predicted
+            .groupBy { it.subjectId to it.episode }
+            .map { (_, sameEpisode) ->
+                sameEpisode.minWithOrNull(
+                    compareBy(
+                        { AirEventKind.rank(it.kind) },
+                        { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE },
+                    ),
+                )!!
+            }.sortedWith(compareBy { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE })
+            .mapNotNull { event ->
+                val subject = titles[event.subjectId] ?: return@mapNotNull null
+                UpcomingAiring(
+                    subjectId = event.subjectId,
+                    title = subject.title,
+                    titleCn = subject.titleCn,
+                    episode = event.episode,
+                    airAtUtc = event.airAtUtc,
+                    kind = event.kind,
+                )
+            }
+    }
 
     override suspend fun refreshSchedules(): AppResult<Unit> =
         try {
