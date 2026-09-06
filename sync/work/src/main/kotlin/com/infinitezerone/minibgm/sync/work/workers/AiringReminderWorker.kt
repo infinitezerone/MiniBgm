@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -14,10 +15,11 @@ import com.infinitezerone.minibgm.sync.work.reminders.AiringReminderPlanner
 import kotlinx.coroutines.flow.firstOrNull
 
 /**
- * 开播提醒 Worker：
- * 查询"我追的"条目在窗口内（默认 24 小时）的即将播出事件，
- * 经 [AiringReminderPlanner] 在设定时刻后每日一次决策，通过汇总通知提醒当日更新。
- * 纯本地查询，不强制网络约束；通知权限未授予时静默跳过。
+ * 开播提醒 Worker（15 分钟节拍，纯本地查询，不强制网络约束）：
+ * 1. 每日汇总——设定时刻后当天首次触发，汇总「我追的」条目在窗口内（默认 24 小时）的更新；
+ * 2. 开播前提醒——单集临近开播（提前 [UserPreferences.notifyBeforeAirMinutes] 分钟）时实时通知，
+ *    经逐集去重键防止重复提醒。
+ * 判定逻辑在 [AiringReminderPlanner]；通知权限未授予时静默跳过。
  */
 class AiringReminderWorker(
     appContext: Context,
@@ -47,7 +49,14 @@ class AiringReminderWorker(
                 hoursAhead = WINDOW_HOURS,
             )
 
-        val toNotify =
+        val notifier = AiringReminderNotifier(applicationContext)
+        if (!notifier.notificationsEnabled()) {
+            Log.d(TAG, "AiringReminderWorker: notifications disabled by user")
+            return Result.success()
+        }
+
+        // 流程一：每日汇总（设定时刻后当天首次）
+        val dailySummary =
             AiringReminderPlanner.plan(
                 enabled = prefs.airingReminderEnabled,
                 isLoggedIn = prefs.isLoggedIn,
@@ -60,31 +69,42 @@ class AiringReminderWorker(
                 reminderHour = prefs.airingReminderHour,
                 upcoming = upcoming,
             )
-
-        if (toNotify.isEmpty()) {
-            Log.d(TAG, "AiringReminderWorker: nothing to notify")
-            return Result.success()
+        if (dailySummary.isNotEmpty()) {
+            runCatching { notifier.notify(dailySummary) }.fold(
+                onSuccess = {
+                    Log.d(TAG, "AiringReminderWorker notified ${dailySummary.size} daily updates")
+                    userPreferences.setAiringReminderLastNotifiedDate(today)
+                },
+                onFailure = { e -> Log.e(TAG, "AiringReminderWorker failed to notify daily summary", e) },
+            )
         }
 
-        val notifier = AiringReminderNotifier(applicationContext)
-        if (!notifier.notificationsEnabled()) {
-            Log.d(TAG, "AiringReminderWorker: notifications disabled by user")
-            return Result.success()
+        // 流程二：开播前提醒（临近单集，逐集去重，不受每日提醒时刻约束）
+        val preAir =
+            AiringReminderPlanner.pickPreAir(
+                enabled = prefs.airingReminderEnabled,
+                isLoggedIn = prefs.isLoggedIn,
+                notifiedKeys = prefs.airingReminderNotifiedKeys,
+                today = today,
+                nowEpochMillis = TimeUtils.nowEpochMillis(),
+                leadMinutes = prefs.notifyBeforeAirMinutes.toLong(),
+                upcoming = upcoming,
+            )
+        if (preAir.isNotEmpty()) {
+            runCatching { notifier.notifyImminent(preAir) }.fold(
+                onSuccess = {
+                    Log.d(TAG, "AiringReminderWorker notified ${preAir.size} imminent episodes")
+                    val keptKeys =
+                        prefs.airingReminderNotifiedKeys
+                            .filter { it.startsWith("$today:") }
+                            .toSet() + preAir.map { AiringReminderPlanner.preAirKey(today, it) }
+                    userPreferences.setAiringReminderNotifiedKeys(keptKeys.toList())
+                },
+                onFailure = { e -> Log.e(TAG, "AiringReminderWorker failed to notify pre-air", e) },
+            )
         }
 
-        return runCatching {
-            notifier.notify(toNotify)
-            userPreferences.setAiringReminderLastNotifiedDate(today.toString())
-        }.fold(
-            onSuccess = {
-                Log.d(TAG, "AiringReminderWorker notified ${toNotify.size} updates")
-                Result.success()
-            },
-            onFailure = { e ->
-                Log.e(TAG, "AiringReminderWorker failed to notify", e)
-                Result.success()
-            },
-        )
+        return Result.success()
     }
 
     companion object {

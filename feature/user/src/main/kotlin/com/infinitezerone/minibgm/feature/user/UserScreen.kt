@@ -1393,7 +1393,7 @@ private fun SettingsSection(
                     icon = Icons.Filled.NotificationsActive,
                     iconTint = MaterialTheme.colorScheme.primary,
                     title = "追番更新提醒",
-                    subtitle = "每日汇总「我追的」番剧的当日内更新",
+                    subtitle = "每日汇总「我追的」的当日内更新，开播前 15 分钟逐集提醒",
                     trailing = {
                         Switch(
                             checked = airingReminderEnabled,
