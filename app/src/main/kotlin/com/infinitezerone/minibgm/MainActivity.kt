@@ -6,6 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.infinitezerone.minibgm.core.common.onError
@@ -20,6 +23,9 @@ class MainActivity : ComponentActivity() {
     private val authRepository: AuthRepository by inject()
     private val snackbarHostState = SnackbarHostState()
 
+    /** 通知点击携带的"直达时间表"标记，消费后复位 */
+    private var openSchedule by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -27,12 +33,14 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        handleOAuthIntent(intent)
+        handleIntent(intent)
         setContent {
             MiniBgmTheme {
                 BgmApp(
                     snackbarHostState = snackbarHostState,
                     authRepository = authRepository,
+                    openSchedule = openSchedule,
+                    onScheduleNavigated = { openSchedule = false },
                 )
             }
         }
@@ -40,7 +48,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
         handleOAuthIntent(intent)
+        if (intent?.getBooleanExtra(EXTRA_OPEN_SCHEDULE, false) == true) {
+            openSchedule = true
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_SCHEDULE = "open_schedule"
     }
 
     private fun handleOAuthIntent(intent: Intent?) {

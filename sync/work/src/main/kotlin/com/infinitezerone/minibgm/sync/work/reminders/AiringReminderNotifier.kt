@@ -59,13 +59,19 @@ class AiringReminderNotifier(
         }
     }
 
-    private fun launchAppIntent(): PendingIntent =
-        PendingIntent.getActivity(
+    private fun launchAppIntent(): PendingIntent {
+        val launch =
+            context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                // 与 :app MainActivity.EXTRA_OPEN_SCHEDULE 契约对齐（模块边界不允许直接引用）
+                putExtra("open_schedule", true)
+            }
+        return PendingIntent.getActivity(
             context,
             0,
-            context.packageManager.getLaunchIntentForPackage(context.packageName),
+            launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
 
     private companion object {
         const val CHANNEL_ID = "airing_reminders"
