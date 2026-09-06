@@ -3,4 +3,7 @@
     <string name="airing_reminder_channel_name">追番更新提醒</string>
     <string name="airing_reminder_title">今天有 %1$d 部追番更新</string>
     <string name="airing_reminder_item">《%1$s》第 %2$d 话</string>
+    <string name="airing_pre_air_channel_name">开播前提醒</string>
+    <string name="airing_pre_air_title">即将开播</string>
+    <string name="airing_pre_air_item">《%1$s》第 %2$d 话马上开始</string>
 </resources>

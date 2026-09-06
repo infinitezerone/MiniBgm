@@ -60,20 +60,21 @@ object Sync {
         reconfigure(context, interval)
     }
 
-    /** 注册开播提醒周期任务（每小时本地探测，与同步任务解耦） */
+    /** 注册开播提醒周期任务（15 分钟本地探测：每日汇总去重 + 开播前 15 分钟逐集提醒窗口） */
     fun enqueueAiringReminders(context: Context) {
         val workManager = WorkManager.getInstance(context)
         val periodicReminderWork =
             PeriodicWorkRequestBuilder<AiringReminderWorker>(
-                repeatInterval = 1L,
-                repeatIntervalTimeUnit = TimeUnit.HOURS,
+                repeatInterval = 15L,
+                repeatIntervalTimeUnit = TimeUnit.MINUTES,
             ).setConstraints(ReminderConstraints)
                 .addTag(AiringReminderWorker.TAG)
                 .build()
 
         workManager.enqueueUniquePeriodicWork(
             AiringReminderWorker.PERIODIC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
+            // UPDATE 而非 KEEP：节拍从历史版本的 1 小时加密到 15 分钟后，升级用户需要同步新周期
+            ExistingPeriodicWorkPolicy.UPDATE,
             periodicReminderWork,
         )
     }

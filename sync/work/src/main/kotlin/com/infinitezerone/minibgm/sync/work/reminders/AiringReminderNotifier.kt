@@ -51,11 +51,52 @@ class AiringReminderNotifier(
                 .setAutoCancel(true)
                 .build()
 
+        post(manager, NOTIFICATION_ID, notification)
+    }
+
+    /**
+     * 开播前提醒：单集临近开播的实时通知。使用独立的高优先级频道，
+     * 用户可在系统设置中对"每日汇总"与"开播前提醒"分别静音。
+     */
+    fun notifyImminent(upcoming: List<UpcomingAiring>) {
+        val manager = NotificationManagerCompat.from(context)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    PRE_AIR_CHANNEL_ID,
+                    context.getString(R.string.airing_pre_air_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ),
+            )
+        }
+
+        val listText =
+            upcoming.joinToString("\n") { item ->
+                context.getString(R.string.airing_pre_air_item, item.displayName, item.episode)
+            }
+        val notification =
+            NotificationCompat
+                .Builder(context, PRE_AIR_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setContentTitle(context.getString(R.string.airing_pre_air_title))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
+                .setContentIntent(launchAppIntent())
+                .setAutoCancel(true)
+                .build()
+
+        post(manager, PRE_AIR_NOTIFICATION_ID, notification)
+    }
+
+    private fun post(
+        manager: NotificationManagerCompat,
+        id: Int,
+        notification: android.app.Notification,
+    ) {
         if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED ||
             android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
         ) {
-            manager.notify(NOTIFICATION_ID, notification)
+            manager.notify(id, notification)
         }
     }
 
@@ -76,5 +117,7 @@ class AiringReminderNotifier(
     private companion object {
         const val CHANNEL_ID = "airing_reminders"
         const val NOTIFICATION_ID = 4701
+        const val PRE_AIR_CHANNEL_ID = "airing_pre_air"
+        const val PRE_AIR_NOTIFICATION_ID = 4702
     }
 }

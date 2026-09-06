@@ -23,6 +23,8 @@ data class UserPreferences(
     val airingReminderLastNotifiedDate: String = "",
     /** 每日提醒的触发时刻（设备本地时间小时 0-23，默认早上 8 点） */
     val airingReminderHour: Int = 8,
+    /** 已逐集提醒过的开播事件键（"yyyy-MM-dd:subjectId:episode"，读取侧按当日裁剪去重） */
+    val airingReminderNotifiedKeys: List<String> = emptyList(),
     /** bangumi-data CDN 静态数据的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
     val bangumiDataEtag: String = "",
     /** 播放源后台自动同步频率 */

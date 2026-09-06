@@ -132,6 +132,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 逐集开播前提醒的去重键集合（上限 200 条，读取侧按日期裁剪） */
+    suspend fun setAiringReminderNotifiedKeys(keys: List<String>) {
+        dataStore.updateData { current ->
+            current.copy(airingReminderNotifiedKeys = keys.take(200))
+        }
+    }
+
     suspend fun setBangumiDataEtag(etag: String) {
         dataStore.updateData { current ->
             current.copy(bangumiDataEtag = etag)
