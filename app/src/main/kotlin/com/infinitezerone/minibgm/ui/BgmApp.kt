@@ -24,6 +24,8 @@ import com.infinitezerone.minibgm.navigation.BgmNavHost
 fun BgmApp(
     snackbarHostState: SnackbarHostState,
     authRepository: AuthRepository,
+    openSchedule: Boolean = false,
+    onScheduleNavigated: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val isAuthenticating by authRepository.isAuthenticating.collectAsStateWithLifecycle()
@@ -33,6 +35,14 @@ fun BgmApp(
             startRoute = ScheduleRoute,
             topLevelRoutes = TopLevelDestination.entries.map { it.route }.toSet(),
         )
+
+    // 通知点击直达"放送"Tab：消费标记后自动切到时间表
+    androidx.compose.runtime.LaunchedEffect(openSchedule) {
+        if (openSchedule) {
+            navState.navigateTo(ScheduleRoute)
+            onScheduleNavigated()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },

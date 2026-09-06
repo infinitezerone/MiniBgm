@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.user
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
@@ -65,6 +68,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -121,6 +125,16 @@ fun UserScreen(
         CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
     }
 
+    // 开启提醒时顺带请求通知权限（Android 13+；拒绝仅影响送达，不影响开关本身）
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val toggleAiringReminder: (Boolean) -> Unit = { enabled ->
+        viewModel.setAiringReminderEnabled(enabled)
+        if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     UserScreenContent(
         uiState = uiState,
         onLogin = {
@@ -169,6 +183,7 @@ fun UserScreen(
                 }
             }
         },
+        onToggleAiringReminder = toggleAiringReminder,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -189,6 +204,7 @@ fun UserScreenContent(
     onCollectionClick: (CollectionType) -> Unit,
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onSyncNow: () -> Unit,
+    onToggleAiringReminder: (Boolean) -> Unit = {},
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
@@ -315,6 +331,8 @@ fun UserScreenContent(
                         syncInterval = uiState.syncInterval,
                         lastSyncTimestamp = uiState.lastSyncTimestamp,
                         isSyncing = uiState.isSyncing,
+                        airingReminderEnabled = uiState.airingReminderEnabled,
+                        onToggleAiringReminder = onToggleAiringReminder,
                         onOpenSyncDialog = { showSyncIntervalDialog = true },
                         onSyncNow = onSyncNow,
                         onOpenWebUrl = onOpenWebUrl,
@@ -1233,6 +1251,8 @@ private fun SettingsSection(
     syncInterval: SyncInterval,
     lastSyncTimestamp: Long,
     isSyncing: Boolean,
+    airingReminderEnabled: Boolean,
+    onToggleAiringReminder: (Boolean) -> Unit,
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
@@ -1319,6 +1339,40 @@ private fun SettingsSection(
                     title = "清理本地缓存",
                     subtitle = "清理离线网络图片与临时缓存数据",
                     onClick = onClearCache,
+                )
+            }
+        }
+
+        // Group 1.5: 通知与提醒
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                Text(
+                    text = "通知与提醒",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.NotificationsActive,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "追番更新提醒",
+                    subtitle = "每日汇总「我追的」番剧的当日内更新",
+                    trailing = {
+                        Switch(
+                            checked = airingReminderEnabled,
+                            onCheckedChange = onToggleAiringReminder,
+                        )
+                    },
                 )
             }
         }

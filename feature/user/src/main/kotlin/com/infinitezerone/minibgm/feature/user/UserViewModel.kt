@@ -33,6 +33,7 @@ data class UserUiState(
     val isSyncing: Boolean = false,
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
+    val airingReminderEnabled: Boolean = true,
 )
 
 class UserViewModel(
@@ -98,6 +99,7 @@ class UserViewModel(
                 isSyncing = workSyncing || manualSyncing,
                 collectionCounts = collectionCounts,
                 isCountsLoading = isCountsLoading,
+                airingReminderEnabled = prefs.airingReminderEnabled,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -163,6 +165,13 @@ class UserViewModel(
     fun setSyncInterval(interval: SyncInterval) {
         viewModelScope.launch {
             userPreferencesDataSource.setSyncInterval(interval)
+        }
+    }
+
+    /** 开播提醒总开关（通知权限的授予与否由 UI 层请求） */
+    fun setAiringReminderEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesDataSource.setAiringReminderEnabled(enabled)
         }
     }
 
