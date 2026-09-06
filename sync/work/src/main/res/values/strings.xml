@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airing_reminder_channel_name">追番更新提醒</string>
+    <string name="airing_reminder_title">今天有 %1$d 部追番更新</string>
+    <string name="airing_reminder_item">《%1$s》第 %2$d 话</string>
+</resources>

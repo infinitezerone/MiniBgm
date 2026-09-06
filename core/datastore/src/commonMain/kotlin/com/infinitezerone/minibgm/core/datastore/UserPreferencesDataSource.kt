@@ -113,6 +113,18 @@ class UserPreferencesDataSource(
         }
     }
 
+    suspend fun setAiringReminderEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(airingReminderEnabled = enabled)
+        }
+    }
+
+    suspend fun setAiringReminderLastNotifiedDate(date: String) {
+        dataStore.updateData { current ->
+            current.copy(airingReminderLastNotifiedDate = date)
+        }
+    }
+
     suspend fun setBangumiDataEtag(etag: String) {
         dataStore.updateData { current ->
             current.copy(bangumiDataEtag = etag)

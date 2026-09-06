@@ -1,0 +1,74 @@
+package com.infinitezerone.minibgm.sync.work.reminders
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.infinitezerone.minibgm.core.model.UpcomingAiring
+import com.infinitezerone.minibgm.sync.work.R
+
+/**
+ * 开播提醒通知的 Android 侧实现：频道管理、权限检查与汇总通知展示。
+ * 逻辑判定在 [AiringReminderPlanner]，本类只负责"发"。
+ */
+class AiringReminderNotifier(
+    private val context: Context,
+) {
+    fun notificationsEnabled(): Boolean =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
+        }
+
+    fun notify(upcoming: List<UpcomingAiring>) {
+        val manager = NotificationManagerCompat.from(context)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(R.string.airing_reminder_channel_name),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ),
+            )
+        }
+
+        val listText =
+            upcoming.joinToString("\n") { item ->
+                context.getString(R.string.airing_reminder_item, item.displayName, item.episode)
+            }
+        val notification =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_today)
+                .setContentTitle(context.getString(R.string.airing_reminder_title, upcoming.size))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
+                .setContentIntent(launchAppIntent())
+                .setAutoCancel(true)
+                .build()
+
+        if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED ||
+            android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
+        ) {
+            manager.notify(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun launchAppIntent(): PendingIntent =
+        PendingIntent.getActivity(
+            context,
+            0,
+            context.packageManager.getLaunchIntentForPackage(context.packageName),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+    private companion object {
+        const val CHANNEL_ID = "airing_reminders"
+        const val NOTIFICATION_ID = 4701
+    }
+}

@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.sync.work.workers.AiringReminderWorker
 import com.infinitezerone.minibgm.sync.work.workers.BgmSyncWorker
 import java.util.concurrent.TimeUnit
 
@@ -16,6 +17,13 @@ val SyncConstraints =
     Constraints
         .Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
+        .setRequiresBatteryNotLow(true)
+        .build()
+
+/** 开播提醒纯本地查询，不限网络；每小时探测一次窗口内的更新 */
+val ReminderConstraints =
+    Constraints
+        .Builder()
         .setRequiresBatteryNotLow(true)
         .build()
 
@@ -48,7 +56,26 @@ object Sync {
         interval: SyncInterval = SyncInterval.WEEKLY,
     ) {
         enqueueStartupSync(context)
+        enqueueAiringReminders(context)
         reconfigure(context, interval)
+    }
+
+    /** 注册开播提醒周期任务（每小时本地探测，与同步任务解耦） */
+    fun enqueueAiringReminders(context: Context) {
+        val workManager = WorkManager.getInstance(context)
+        val periodicReminderWork =
+            PeriodicWorkRequestBuilder<AiringReminderWorker>(
+                repeatInterval = 1L,
+                repeatIntervalTimeUnit = TimeUnit.HOURS,
+            ).setConstraints(ReminderConstraints)
+                .addTag(AiringReminderWorker.TAG)
+                .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            AiringReminderWorker.PERIODIC_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicReminderWork,
+        )
     }
 
     fun reconfigure(
