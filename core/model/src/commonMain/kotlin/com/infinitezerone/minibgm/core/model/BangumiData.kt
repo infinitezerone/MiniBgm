@@ -15,6 +15,8 @@ data class BangumiDataItem(
     val lang: String = "ja",
     val officialSite: String = "",
     val begin: String = "",
+    /** ISO 8601 重复区间（如 "R/2026-08-12T14:00:00.000Z/P7D"），周播排期的真值来源 */
+    val broadcast: String = "",
     val end: String = "",
     val sites: List<BangumiDataSite> = emptyList(),
 ) {

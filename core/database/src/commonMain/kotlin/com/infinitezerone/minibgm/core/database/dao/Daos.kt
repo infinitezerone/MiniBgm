@@ -4,6 +4,7 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
+import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
 import com.infinitezerone.minibgm.core.database.entity.SubjectEntity
@@ -36,8 +37,31 @@ interface AirScheduleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSchedules(schedules: List<AirScheduleEntity>)
 
+    /** 清理官方日历中已消失的条目（只清理 official 来源，保护 bgm-data 合并插入的网播番） */
+    @Query("DELETE FROM air_schedules WHERE source = 'official' AND bgmId NOT IN (:keepIds)")
+    suspend fun deleteOfficialSchedulesNotIn(keepIds: List<Long>)
+
+    /** 清理超出名单窗口的 bgm-data 合并行（防止过期网播番长期滞留） */
+    @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND beginUtc < :isoUtc")
+    suspend fun deleteStaleBgmDataSchedules(isoUtc: String)
+
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
+}
+
+@Dao
+interface AirEventDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAirEvents(events: List<AirEventEntity>)
+
+    @Query("SELECT * FROM air_events")
+    suspend fun getAllAirEvents(): List<AirEventEntity>
+
+    @Query("DELETE FROM air_events WHERE kind = 'predicted' AND airAtUtc < :isoUtc")
+    suspend fun deleteStalePredictedEvents(isoUtc: String)
+
+    @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
+    suspend fun deleteEventsNotIn(keepIds: List<Long>)
 }
 
 @Dao

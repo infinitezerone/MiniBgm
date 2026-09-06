@@ -16,7 +16,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
         extensions.configure<ApplicationExtension> {
             configureKotlinAndroid(this)
             defaultConfig.versionCode = 1
-            defaultConfig.versionName = "0.1.0"
+            defaultConfig.versionName = "0.1.1"
         }
         configureCoreLibraryDesugaring()
         configureSpotless()
