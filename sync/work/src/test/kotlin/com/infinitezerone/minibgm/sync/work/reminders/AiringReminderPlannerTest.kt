@@ -1,9 +1,9 @@
 package com.infinitezerone.minibgm.sync.work.reminders
 
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class AiringReminderPlannerTest {
     private val today = "2026-09-06"
@@ -27,6 +27,8 @@ class AiringReminderPlannerTest {
                 isLoggedIn = true,
                 lastNotifiedDate = "",
                 today = today,
+                currentHour = 9,
+                reminderHour = 8,
                 upcoming = upcoming,
             )
 
@@ -41,10 +43,44 @@ class AiringReminderPlannerTest {
                 isLoggedIn = false,
                 lastNotifiedDate = "",
                 today = today,
+                currentHour = 9,
+                reminderHour = 8,
                 upcoming = upcoming,
             )
 
         assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun plan_returnsEmpty_beforeReminderHour() {
+        val planned =
+            AiringReminderPlanner.plan(
+                enabled = true,
+                isLoggedIn = true,
+                lastNotifiedDate = "",
+                today = today,
+                currentHour = 7,
+                reminderHour = 8,
+                upcoming = upcoming,
+            )
+
+        assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun plan_notifiesAtReminderHour() {
+        val planned =
+            AiringReminderPlanner.plan(
+                enabled = true,
+                isLoggedIn = true,
+                lastNotifiedDate = "2026-09-05",
+                today = today,
+                currentHour = 8,
+                reminderHour = 8,
+                upcoming = upcoming,
+            )
+
+        assertEquals(1, planned.size)
     }
 
     @Test
@@ -55,6 +91,8 @@ class AiringReminderPlannerTest {
                 isLoggedIn = true,
                 lastNotifiedDate = "2026-09-06",
                 today = today,
+                currentHour = 9,
+                reminderHour = 8,
                 upcoming = upcoming,
             )
 
@@ -69,6 +107,8 @@ class AiringReminderPlannerTest {
                 isLoggedIn = true,
                 lastNotifiedDate = "2026-09-05",
                 today = today,
+                currentHour = 21,
+                reminderHour = 8,
                 upcoming = upcoming,
             )
 
@@ -85,6 +125,8 @@ class AiringReminderPlannerTest {
                 isLoggedIn = true,
                 lastNotifiedDate = "2026-09-06",
                 today = "2026-09-07",
+                currentHour = 9,
+                reminderHour = 8,
                 upcoming = upcoming,
             )
 
