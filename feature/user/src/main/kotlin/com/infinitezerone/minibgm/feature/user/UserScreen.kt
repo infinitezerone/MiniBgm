@@ -1286,6 +1286,15 @@ private fun SettingsSection(
             "已是最新"
         }
 
+    // 版本号取自 PackageManager，与 BuildConfig 保持一致；预览环境下取不到则留空
+    val context = LocalContext.current
+    val clientVersion =
+        remember {
+            runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+                .getOrNull()
+                .orEmpty()
+        }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -1473,7 +1482,7 @@ private fun SettingsSection(
                     icon = Icons.Filled.BookmarkBorder,
                     iconTint = MaterialTheme.colorScheme.tertiary,
                     title = "MiniBgm 客户端",
-                    subtitle = "v1.0.0 · Apache-2.0 开源协议",
+                    subtitle = "v$clientVersion · MIT 开源协议",
                     trailing = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
