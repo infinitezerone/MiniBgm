@@ -12,12 +12,16 @@ object AiringReminderPlanner {
         isLoggedIn: Boolean,
         lastNotifiedDate: String,
         today: String,
+        currentHour: Int,
+        reminderHour: Int,
         upcoming: List<UpcomingAiring>,
     ): List<UpcomingAiring> {
         if (!enabled) return emptyList()
         if (!isLoggedIn) return emptyList()
+        // 未到用户设定的提醒时刻（Worker 每小时触发，早于设定时刻的触发静默跳过）
+        if (currentHour < reminderHour) return emptyList()
         // 每日去重：同一天只提醒一次
-        if (lastNotifiedDate == today.toString()) return emptyList()
+        if (lastNotifiedDate == today) return emptyList()
         return upcoming
     }
 }

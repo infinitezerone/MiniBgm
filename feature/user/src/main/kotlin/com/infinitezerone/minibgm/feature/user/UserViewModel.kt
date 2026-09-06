@@ -34,6 +34,7 @@ data class UserUiState(
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
     val airingReminderEnabled: Boolean = true,
+    val airingReminderHour: Int = 8,
 )
 
 class UserViewModel(
@@ -100,6 +101,7 @@ class UserViewModel(
                 collectionCounts = collectionCounts,
                 isCountsLoading = isCountsLoading,
                 airingReminderEnabled = prefs.airingReminderEnabled,
+                airingReminderHour = prefs.airingReminderHour,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -172,6 +174,13 @@ class UserViewModel(
     fun setAiringReminderEnabled(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesDataSource.setAiringReminderEnabled(enabled)
+        }
+    }
+
+    /** 每日提醒触发时刻（设备本地时间小时） */
+    fun setAiringReminderHour(hour: Int) {
+        viewModelScope.launch {
+            userPreferencesDataSource.setAiringReminderHour(hour)
         }
     }
 

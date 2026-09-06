@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayCircleOutline
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
@@ -184,6 +185,8 @@ fun UserScreen(
             }
         },
         onToggleAiringReminder = toggleAiringReminder,
+        airingReminderHour = uiState.airingReminderHour,
+        onSelectReminderHour = viewModel::setAiringReminderHour,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -205,6 +208,8 @@ fun UserScreenContent(
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onSyncNow: () -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit = {},
+    airingReminderHour: Int = 8,
+    onSelectReminderHour: (Int) -> Unit = {},
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
@@ -213,6 +218,7 @@ fun UserScreenContent(
     var showLogoutAllDialog by remember { mutableStateOf(false) }
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
+    var showReminderHourDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -333,6 +339,8 @@ fun UserScreenContent(
                         isSyncing = uiState.isSyncing,
                         airingReminderEnabled = uiState.airingReminderEnabled,
                         onToggleAiringReminder = onToggleAiringReminder,
+                        airingReminderHour = airingReminderHour,
+                        onOpenReminderHourDialog = { showReminderHourDialog = true },
                         onOpenSyncDialog = { showSyncIntervalDialog = true },
                         onSyncNow = onSyncNow,
                         onOpenWebUrl = onOpenWebUrl,
@@ -350,6 +358,14 @@ fun UserScreenContent(
             currentInterval = uiState.syncInterval,
             onSelectInterval = onSelectSyncInterval,
             onDismiss = { showSyncIntervalDialog = false },
+        )
+    }
+
+    if (showReminderHourDialog) {
+        ReminderHourDialog(
+            currentHour = airingReminderHour,
+            onSelectHour = onSelectReminderHour,
+            onDismiss = { showReminderHourDialog = false },
         )
     }
 
@@ -1253,6 +1269,8 @@ private fun SettingsSection(
     isSyncing: Boolean,
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
+    airingReminderHour: Int,
+    onOpenReminderHourDialog: () -> Unit,
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
@@ -1373,6 +1391,19 @@ private fun SettingsSection(
                             onCheckedChange = onToggleAiringReminder,
                         )
                     },
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.Schedule,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    title = "提醒时刻",
+                    subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
+                    onClick = onOpenReminderHourDialog,
                 )
             }
         }
@@ -1537,6 +1568,52 @@ private fun SyncIntervalDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = interval.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+    )
+}
+
+@Composable
+private fun ReminderHourDialog(
+    currentHour: Int,
+    onSelectHour: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("每日提醒时刻") },
+        text = {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                listOf(7, 8, 12, 18, 21).forEach { hour ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectHour(hour)
+                                    onDismiss()
+                                }.padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = (hour == currentHour),
+                            onClick = {
+                                onSelectHour(hour)
+                                onDismiss()
+                            },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "%02d:00".format(hour),
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }

@@ -165,6 +165,17 @@ class UserViewModelTest {
         }
 
     @Test
+    fun setAiringReminderHour_updatesState() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            viewModel.setAiringReminderHour(21)
+
+            val state = viewModel.uiState.first { it.airingReminderHour == 21 }
+            assertEquals(21, state.airingReminderHour)
+        }
+
+    @Test
     fun syncBangumiDataNow_triggersScheduleRepository() =
         runTest {
             val scheduleRepo = FakeScheduleRepository()

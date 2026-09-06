@@ -125,6 +125,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 每日提醒触发时刻（设备本地时间小时，越界值收敛到 0-23） */
+    suspend fun setAiringReminderHour(hour: Int) {
+        dataStore.updateData { current ->
+            current.copy(airingReminderHour = hour.coerceIn(0, 23))
+        }
+    }
+
     suspend fun setBangumiDataEtag(etag: String) {
         dataStore.updateData { current ->
             current.copy(bangumiDataEtag = etag)

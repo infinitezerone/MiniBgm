@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.firstOrNull
 /**
  * 开播提醒 Worker：
  * 查询"我追的"条目在窗口内（默认 24 小时）的即将播出事件，
- * 经 [AiringReminderPlanner] 每日去重决策后，通过汇总通知提醒当日更新。
+ * 经 [AiringReminderPlanner] 在设定时刻后每日一次决策，通过汇总通知提醒当日更新。
  * 纯本地查询，不强制网络约束；通知权限未授予时静默跳过。
  */
 class AiringReminderWorker(
@@ -53,6 +53,11 @@ class AiringReminderWorker(
                 isLoggedIn = prefs.isLoggedIn,
                 lastNotifiedDate = prefs.airingReminderLastNotifiedDate,
                 today = today,
+                currentHour =
+                    java.time.LocalTime
+                        .now()
+                        .hour,
+                reminderHour = prefs.airingReminderHour,
                 upcoming = upcoming,
             )
 
