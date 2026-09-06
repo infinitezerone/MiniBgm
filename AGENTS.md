@@ -95,14 +95,14 @@ If none of these precedents fits, stop before introducing a new architectural pa
 ./gradlew :core:network:testAndroid           # KMP module unit tests; substitute a touched KMP module
 ./gradlew :core:navigation:testDebugUnitTest  # Android-only module unit tests; substitute a touched Android module
 ./gradlew spotlessCheck                       # ktlint + whitespace gate (spotlessApply to auto-fix)
-./gradlew allTests                             # FULL test suite — only for cross-cutting changes (see rule 2)
+./gradlew allTests testDebugUnitTest           # FULL test suite — only for cross-cutting changes (see rule 2)
 ./gradlew clean                               # rarely needed
 ```
 
 **Rules for AI agents:**
 
 1. **Verify before claiming**: the default loop for everyday changes is targeted, not full-suite — `./gradlew spotlessCheck`, then the matching test task for each touched module (`testAndroid` for KMP; normally `testDebugUnitTest` for Android-only), then `./gradlew :app:assembleDebug`. Report failures honestly.
-2. **Full `./gradlew allTests` only for cross-cutting changes**: touching `build-logic/`, `gradle/libs.versions.toml`, or the shared bases `:core:model` / `:core:common` (everything depends on them), and before opening a PR.
+2. **Full `./gradlew allTests testDebugUnitTest` only for cross-cutting changes**: touching `build-logic/`, `gradle/libs.versions.toml`, or the shared bases `:core:model` / `:core:common` (everything depends on them), and before opening a PR. `allTests` alone is a Kotlin Multiplatform aggregate and only covers KMP modules — Android-only modules (`:app`, `:feature:*`, `:sync:work`, `:core:designsystem`, `:core:navigation`) have no `allTests` task, so the root-level `testDebugUnitTest` must be named alongside it or their suites silently don't run.
 3. **Declare dependencies in the catalog first**: add versions/libraries/plugins to `gradle/libs.versions.toml`, then reference them via type-safe accessors (`libs.xxx`).
 4. **Respect module boundaries**: no circular dependencies; never violate feature isolation (see Module Rules).
 
