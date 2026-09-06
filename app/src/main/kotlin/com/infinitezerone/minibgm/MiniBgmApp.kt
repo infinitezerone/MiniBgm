@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.di.appModule
 import com.infinitezerone.minibgm.sync.work.initializers.Sync
+import com.infinitezerone.minibgm.widget.WidgetSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -61,6 +62,7 @@ class MiniBgmApp :
 
         // 周期任务统一在冷启动时确保注册：KEEP 策略幂等，是否真正提醒由 Worker 内部按偏好决策
         Sync.enqueueAiringReminders(this@MiniBgmApp)
+        WidgetSync.enqueuePeriodicUpdate(this@MiniBgmApp)
 
         // 监听用户偏好，执行智能冷启动同步与动态注册 WorkManager 周期任务
         val userPreferences: UserPreferencesDataSource by inject()

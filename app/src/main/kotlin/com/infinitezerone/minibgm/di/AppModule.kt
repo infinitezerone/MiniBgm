@@ -11,6 +11,8 @@ import com.infinitezerone.minibgm.feature.search.di.searchModule
 import com.infinitezerone.minibgm.feature.subject.di.subjectModule
 import com.infinitezerone.minibgm.feature.user.di.userModule
 import com.infinitezerone.minibgm.sync.work.di.syncWorkModule
+import com.infinitezerone.minibgm.widget.WidgetUpdateWorker
+import org.koin.androidx.workmanager.dsl.workerOf
 import org.koin.dsl.module
 
 fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
@@ -30,4 +32,5 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             syncWorkModule,
         )
         single { BgmDispatchers() }
+        workerOf(::WidgetUpdateWorker)
     }
