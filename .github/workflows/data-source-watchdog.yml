@@ -1,0 +1,96 @@
+name: Data Source Watchdog
+
+# 时间表依赖三个外部数据源（官方日历 / bangumi-data / ekibot-link）。
+# 数据管道最常见的死法是"上游静默改格式"——每天探测一次，异常自动开 issue。
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # 每天 UTC 01:00（北京时间 09:00）
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Probe data sources
+        id: probe
+        env:
+          UA: "MiniBgm-watchdog/0.1 (android) (https://github.com/infinitezerone/MiniBgm)"
+        run: |
+          failures=""
+
+          # 1. 官方日历：至少 50 部在播
+          count=$(curl -sL --max-time 30 -H "User-Agent: $UA" https://api.bgm.tv/calendar \
+            | jq '[.[].items[]] | length' 2>/dev/null || echo 0)
+          echo "official calendar items: $count"
+          if [ "${count:-0}" -lt 50 ]; then failures="$failures
+          - 官方日历异常：在播条目仅 ${count:-0} 部（预期 ≥50）"; fi
+
+          # 2. bangumi-data：全量数据 ≥5000 条，近 90 天开播的条目 ≥20 且含 broadcast 规则
+          bgm=$(curl -sL --max-time 60 -H "User-Agent: $UA" \
+            "https://cdn.jsdelivr.net/npm/bangumi-data@latest/dist/data.json" || echo "{}")
+          total=$(echo "$bgm" | jq '.items | length' 2>/dev/null || echo 0)
+          recent=$(echo "$bgm" | jq --arg cutoff "$(date -u -d '90 days ago' +%Y-%m-%dT%H:%M)" \
+            '[.items[] | select(.begin >= $cutoff)] | length' 2>/dev/null || echo 0)
+          echo "bangumi-data total: $total, recent-90d: $recent"
+          if [ "${total:-0}" -lt 5000 ]; then failures="$failures
+          - bangumi-data 异常：条目仅 ${total:-0}（预期 ≥5000）"; fi
+          if [ "${recent:-0}" -lt 20 ]; then failures="$failures
+          - bangumi-data 异常：近 90 天开播条目仅 ${recent:-0}（预期 ≥20）"; fi
+
+          # 3. ekibot bangumi-link：日历 ≥100 部且含 weekDayJP 字段
+          ekibot=$(curl -sL --max-time 30 -H "User-Agent: $UA" \
+            "https://raw.githubusercontent.com/ekibot/bangumi-link/master/calendar.json" || echo "{}")
+          ek_count=$(echo "$ekibot" | jq '[.[]?[]?] | length' 2>/dev/null || echo 0)
+          ek_fields=$(echo "$ekibot" | jq '[.[]?[]? | select(.weekDayJP != null)] | length' 2>/dev/null || echo 0)
+          echo "ekibot calendar items: $ek_count, with weekDayJP: $ek_fields"
+          if [ "${ek_count:-0}" -lt 100 ]; then failures="$failures
+          - ekibot bangumi-link 异常：条目仅 ${ek_count:-0}（预期 ≥100）"; fi
+          if [ "${ek_fields:-0}" -lt 50 ]; then failures="$failures
+          - ekibot bangumi-link 异常：含 weekDayJP 的条目仅 ${ek_fields:-0}（预期 ≥50）"; fi
+
+          if [ -n "$failures" ]; then
+            {
+              echo "ISSUE_BODY<<EOF"
+              echo "数据源看门狗检测到异常（$(date -u +%Y-%m-%dT%H:%MZ)）："
+              echo "$failures"
+              echo ""
+              echo "影响：时间表 roster 可能缺失或排期不准。请检查对应数据源并考虑临时降级策略。"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+            echo "has_failure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failure=false" >> "$GITHUB_OUTPUT"
+            echo "所有数据源正常"
+          fi
+
+      - name: Open issue on failure
+        if: env.has_failure == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = process.env.ISSUE_BODY;
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "watchdog",
+            });
+            if (existing.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: "数据源看门狗：检测到上游异常",
+                body,
+                labels: ["watchdog", "bug"],
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                body,
+              });
+            }
