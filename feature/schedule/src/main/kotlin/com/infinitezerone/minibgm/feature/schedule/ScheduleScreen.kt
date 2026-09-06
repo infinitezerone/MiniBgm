@@ -94,6 +94,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
+import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
@@ -624,7 +625,12 @@ private fun ScheduleTimelineSingleCard(
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                             ) {
                                 Text(
-                                    text = "第 ${schedule.nextEpisodeNumber} 话",
+                                    text =
+                                        if (schedule.nextEpisodeKind == AirEventKind.PREDICTED) {
+                                            "第 ${schedule.nextEpisodeNumber} 话 · 预计"
+                                        } else {
+                                            "第 ${schedule.nextEpisodeNumber} 话"
+                                        },
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
                                     fontWeight = FontWeight.Bold,

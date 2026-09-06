@@ -2,10 +2,12 @@ package com.infinitezerone.minibgm.core.database
 
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
+import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
 import com.infinitezerone.minibgm.core.database.dao.EpisodeDao
 import com.infinitezerone.minibgm.core.database.dao.SubjectDao
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
+import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
 import com.infinitezerone.minibgm.core.database.entity.SubjectEntity
@@ -17,8 +19,9 @@ import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
         EpisodeEntity::class,
         AirScheduleEntity::class,
         UserCollectionEntity::class,
+        AirEventEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class BgmDatabase : RoomDatabase() {
@@ -29,4 +32,6 @@ abstract class BgmDatabase : RoomDatabase() {
     abstract fun episodeDao(): EpisodeDao
 
     abstract fun userCollectionDao(): UserCollectionDao
+
+    abstract fun airEventDao(): AirEventDao
 }

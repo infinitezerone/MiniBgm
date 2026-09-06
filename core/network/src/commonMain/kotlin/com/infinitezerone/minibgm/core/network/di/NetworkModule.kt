@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.core.network.di
 
+import com.infinitezerone.minibgm.core.network.AniListService
+import com.infinitezerone.minibgm.core.network.AniListServiceImpl
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
@@ -62,4 +64,5 @@ fun networkModule(
         single<BangumiApiService> { BangumiApiServiceImpl(get()) }
         single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
+        single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }
     }

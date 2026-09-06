@@ -42,6 +42,76 @@ object TimeUtils {
             1
         }
 
+    /** epoch 毫秒 → 日本时区的星期（1=周一 … 7=周日） */
+    fun jstWeekdayOfEpoch(millis: Long): Int =
+        try {
+            Instant
+                .fromEpochMilliseconds(millis)
+                .toLocalDateTime(timeZoneJst)
+                .dayOfWeek.ordinal + 1
+        } catch (_: Exception) {
+            1
+        }
+
+    /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日） */
+    fun cstWeekdayOfEpoch(millis: Long): Int =
+        try {
+            Instant
+                .fromEpochMilliseconds(millis)
+                .toLocalDateTime(timeZoneCst)
+                .dayOfWeek.ordinal + 1
+        } catch (_: Exception) {
+            1
+        }
+
+    /** epoch 毫秒 → UTC ISO-8601 字符串 */
+    fun isoUtcFromEpochMillis(millis: Long): String = Instant.fromEpochMilliseconds(millis).toString()
+
+    /** 解析 UTC ISO-8601 字符串为 epoch 毫秒，失败返回 null */
+    fun epochMillisOfIso(isoUtcString: String): Long? =
+        try {
+            Instant.parse(isoUtcString).toEpochMilliseconds()
+        } catch (_: Exception) {
+            null
+        }
+
+    /**
+     * 解析 bangumi-data 的周期播出规则（ISO 8601 重复区间，如 "R/2026-08-12T14:00:00.000Z/P7D"）。
+     * 支持 R[n]/起始时刻/周期的形式，周期单位支持 D（天）与 W（周）。
+     * @return (起始时刻 epoch 毫秒, 周期毫秒)，无法解析时返回 null
+     */
+    fun parseBroadcastRule(rule: String): Pair<Long, Long>? {
+        if (rule.isBlank()) return null
+        return try {
+            val segments = rule.split("/")
+            if (segments.size < 3) return null
+            val startMillis = Instant.parse(segments[1]).toEpochMilliseconds()
+            val periodPart = segments.last().removePrefix("P").uppercase()
+            val days =
+                Regex("(\\d+)D")
+                    .find(periodPart)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toLongOrNull()
+            val weeks =
+                Regex("(\\d+)W")
+                    .find(periodPart)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.toLongOrNull()
+            val dayMillis = 24L * 60 * 60 * 1000
+            val periodMillis =
+                when {
+                    days != null -> days * dayMillis
+                    weeks != null -> weeks * 7 * dayMillis
+                    else -> return null
+                }
+            if (periodMillis <= 0L) null else startMillis to periodMillis
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun nowEpochMillis(): Long =
         Clock.System
             .now()
