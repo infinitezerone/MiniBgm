@@ -59,6 +59,9 @@ class MiniBgmApp :
             modules(appModule())
         }
 
+        // 周期任务统一在冷启动时确保注册：KEEP 策略幂等，是否真正提醒由 Worker 内部按偏好决策
+        Sync.enqueueAiringReminders(this@MiniBgmApp)
+
         // 监听用户偏好，执行智能冷启动同步与动态注册 WorkManager 周期任务
         val userPreferences: UserPreferencesDataSource by inject()
         appScope.launch {
