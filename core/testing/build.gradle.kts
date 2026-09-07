@@ -31,6 +31,6 @@ kotlin {
 }
 
 tasks.matching { it.name.startsWith("testAndroid") }.configureEach {
-    inputs.files(rootProject.fileTree("feature") { include("*/src/**", "*.gradle.kts") })
-    inputs.files(rootProject.fileTree("core") { include("*/src/**", "*.gradle.kts") })
+    inputs.files(rootProject.fileTree("feature") { include("*/src/**", "*/build.gradle.kts", "*.gradle.kts") })
+    inputs.files(rootProject.fileTree("core") { include("*/src/**", "*/build.gradle.kts", "*.gradle.kts") })
 }

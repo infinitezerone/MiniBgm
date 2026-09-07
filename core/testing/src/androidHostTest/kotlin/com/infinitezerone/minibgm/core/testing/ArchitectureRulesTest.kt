@@ -15,6 +15,7 @@ import kotlin.test.fail
  * 5. 凭据隔离：UserPreferences 绝不包含任何 token / 凭据字段（Token 必须走 AndroidKeyStore）
  * 6. 传输与存储框架隔离：feature 源码严禁 import io.ktor.* 或 androidx.room.*
  * 7. 主题一致性：feature 源码严禁硬编码 Color(0x...)，必须使用 :core:designsystem 主题 token
+ * 8. 裸 IO 隔离：feature 源码严禁手写底层网络传输（HttpURLConnection / java.net.*）与私有磁盘 IO（cacheDir / filesDir / FileOutputStream）
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -73,13 +74,11 @@ class ArchitectureRulesTest {
                 }
             }
 
-        // 2. 检查源码 import
+        // 2. 检查源码 import（传输/存储框架 import 由 feature_sources_never_import_transport_or_storage_frameworks 单独负责）
         val forbiddenPackagePrefixes =
             listOf(
                 "import com.infinitezerone.minibgm.core.network",
                 "import com.infinitezerone.minibgm.core.database",
-                "import io.ktor.",
-                "import androidx.room.",
             )
 
         featureDir
@@ -97,7 +96,7 @@ class ArchitectureRulesTest {
 
         if (violations.isNotEmpty()) {
             fail(
-                "违反单一数据源与分层隔离（UI 层必须通过 :core:data Repositories 协调，严禁直连 network / database 或导入 io.ktor.* / androidx.room.*）：\n" +
+                "违反单一数据源与分层隔离（UI 层必须通过 :core:data Repositories 协调，严禁直连 network 或 database）：\n" +
                     violations.joinToString("\n"),
             )
         }
