@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -62,7 +64,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -80,7 +81,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -89,6 +89,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
@@ -98,6 +99,7 @@ import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.time.ZoneId
@@ -110,6 +112,7 @@ fun ScheduleScreen(
     onSubjectClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
+    scrollToTop: Flow<Unit>? = null,
 ) {
     val viewModel: ScheduleViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -117,14 +120,6 @@ fun ScheduleScreen(
     val context = LocalContext.current
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-
-    // 监听 ViewModel 提示消息（如快捷追番或标记已看反馈）
-    LaunchedEffect(Unit) {
-        viewModel.userMessage.collect { message ->
-            snackbarHostState.showSnackbar(message)
-        }
-    }
 
     // 7天平滑滑动的 Pager，初始定位到今天
     val initialPage = (uiState.todayWeekday - 1).coerceIn(0, 6)
@@ -133,6 +128,41 @@ fun ScheduleScreen(
             initialPage = initialPage,
             pageCount = { 7 },
         )
+
+    val stateMon = rememberLazyListState()
+    val stateTue = rememberLazyListState()
+    val stateWed = rememberLazyListState()
+    val stateThu = rememberLazyListState()
+    val stateFri = rememberLazyListState()
+    val stateSat = rememberLazyListState()
+    val stateSun = rememberLazyListState()
+    val weekdayListStates =
+        remember(stateMon, stateTue, stateWed, stateThu, stateFri, stateSat, stateSun) {
+            mapOf(
+                1 to stateMon,
+                2 to stateTue,
+                3 to stateWed,
+                4 to stateThu,
+                5 to stateFri,
+                6 to stateSat,
+                7 to stateSun,
+            )
+        }
+
+    // 监听底栏「放送」Tab 再次点击回顶
+    LaunchedEffect(scrollToTop) {
+        scrollToTop?.collect {
+            val currentWeekday = pagerState.currentPage + 1
+            weekdayListStates[currentWeekday]?.animateScrollToItem(0)
+        }
+    }
+
+    // 监听 ViewModel 提示消息（如快捷追番或标记已看反馈）
+    LaunchedEffect(Unit) {
+        viewModel.userMessage.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     // 滑动 Pager 时，双向同步选中的星期
     LaunchedEffect(pagerState.currentPage) {
@@ -144,12 +174,10 @@ fun ScheduleScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            BgmTopAppBar(
                 title = {
                     Text(
                         text = "📅 放送时刻表",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
                     )
                 },
                 actions = {
@@ -160,7 +188,6 @@ fun ScheduleScreen(
                         )
                     }
                 },
-                scrollBehavior = scrollBehavior,
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
@@ -168,7 +195,7 @@ fun ScheduleScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = modifier,
     ) { innerPadding ->
         Column(
             modifier =
@@ -182,13 +209,18 @@ fun ScheduleScreen(
                 selectedWeekday = uiState.selectedWeekday,
                 pagerState = pagerState,
                 onSelectWeekday = { weekday ->
-                    viewModel.selectWeekday(weekday)
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(weekday - 1)
+                    if (weekday == uiState.selectedWeekday) {
+                        coroutineScope.launch {
+                            weekdayListStates[weekday]?.animateScrollToItem(0)
+                        }
+                    } else {
+                        viewModel.selectWeekday(weekday)
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(weekday - 1)
+                        }
                     }
                 },
                 watchingCountMap = (1..7).associateWith { uiState.getWatchingCountForWeekday(it) },
-                totalCountMap = (1..7).associateWith { uiState.getTotalCountForWeekday(it) },
             )
 
             val currentWeekdayTotal = uiState.getTotalCountForWeekday(uiState.selectedWeekday)
@@ -250,6 +282,7 @@ fun ScheduleScreen(
                                 onToggleWatching = viewModel::toggleWatching,
                                 onMarkEpisodeWatched = viewModel::markEpisodeWatched,
                                 onShowSources = { selectedScheduleForSources = it },
+                                listState = weekdayListStates[pageWeekday] ?: rememberLazyListState(),
                             )
                         }
                     }
@@ -278,9 +311,11 @@ private fun DayScheduleList(
     onToggleWatching: (Long) -> Unit,
     onMarkEpisodeWatched: (Long, Int) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier.fillMaxSize(),
@@ -1044,7 +1079,6 @@ private fun ModernDateCapsuleStrip(
     pagerState: PagerState,
     onSelectWeekday: (Int) -> Unit,
     watchingCountMap: Map<Int, Int>,
-    totalCountMap: Map<Int, Int>,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
@@ -1058,23 +1092,37 @@ private fun ModernDateCapsuleStrip(
     val capsuleWidthPx = with(density) { capsuleWidthDp.toPx() }
     val paddingPx = with(density) { horizontalPaddingDp.toPx() }
 
-    // 左右手势滑动时刻日期 Pager 时，实时像素级同步滑动顶部的星期胶囊条，使当前选中的日期始终居中平滑跟手展示
+    // 仅当下方的番剧列表 (Pager) 正在被手势滑动时，才像素级同步顶部的星期胶囊条
     LaunchedEffect(containerWidthPx) {
         if (containerWidthPx <= 0) return@LaunchedEffect
         snapshotFlow {
-            val pageFraction = pagerState.currentPage + pagerState.currentPageOffsetFraction
-            val maxScroll = scrollState.maxValue
-            Triple(pageFraction, maxScroll, scrollState.isScrollInProgress)
-        }.collect { (pageFraction, maxScroll, isTabDragging) ->
-            if (maxScroll > 0 && !isTabDragging) {
+            if (pagerState.isScrollInProgress) {
+                pagerState.currentPage + pagerState.currentPageOffsetFraction
+            } else {
+                null
+            }
+        }.collect { pageFraction ->
+            if (pageFraction != null && scrollState.maxValue > 0 && !scrollState.isScrollInProgress) {
                 val centerPx = paddingPx + pageFraction * stridePx + capsuleWidthPx / 2f
                 val targetScrollPx =
                     (centerPx - containerWidthPx / 2f)
-                        .coerceIn(0f, maxScroll.toFloat())
+                        .coerceIn(0f, scrollState.maxValue.toFloat())
                         .roundToInt()
                 scrollState.scrollTo(targetScrollPx)
             }
         }
+    }
+
+    // 当选中的天发生改变（点击胶囊或翻页结束）时，平滑滚动至居中
+    LaunchedEffect(pagerState.currentPage, containerWidthPx) {
+        if (containerWidthPx <= 0 || scrollState.maxValue <= 0) return@LaunchedEffect
+        if (scrollState.isScrollInProgress) return@LaunchedEffect
+        val centerPx = paddingPx + pagerState.currentPage * stridePx + capsuleWidthPx / 2f
+        val targetScrollPx =
+            (centerPx - containerWidthPx / 2f)
+                .coerceIn(0f, scrollState.maxValue.toFloat())
+                .roundToInt()
+        scrollState.animateScrollTo(targetScrollPx)
     }
 
     Row(
@@ -1084,20 +1132,18 @@ private fun ModernDateCapsuleStrip(
                 .onGloballyPositioned { coordinates ->
                     containerWidthPx = coordinates.size.width
                 }.horizontalScroll(scrollState)
-                .padding(horizontal = horizontalPaddingDp, vertical = 6.dp),
+                .padding(horizontal = horizontalPaddingDp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(spacingDp),
     ) {
         val activeWeekday = pagerState.currentPage + 1
         dateItems.forEach { item ->
             val isSelected = item.weekday == activeWeekday
             val watchingCount = watchingCountMap[item.weekday] ?: 0
-            val totalCount = totalCountMap[item.weekday] ?: 0
 
             DateCapsule(
                 item = item,
                 isSelected = isSelected,
                 watchingCount = watchingCount,
-                totalCount = totalCount,
                 onClick = { onSelectWeekday(item.weekday) },
             )
         }
@@ -1109,7 +1155,6 @@ private fun DateCapsule(
     item: WeekdayDateItem,
     isSelected: Boolean,
     watchingCount: Int,
-    totalCount: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1173,7 +1218,7 @@ private fun DateCapsule(
             }
 
             Text(
-                text = "${item.dateLabel} ($totalCount)",
+                text = item.dateLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor.copy(alpha = 0.75f),
             )
