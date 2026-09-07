@@ -8,9 +8,16 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.sync.work.workers.AiringReminderWorker
 import com.infinitezerone.minibgm.sync.work.workers.BgmSyncWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 val SyncConstraints =
@@ -58,6 +65,34 @@ object Sync {
         enqueueStartupSync(context)
         enqueueAiringReminders(context)
         reconfigure(context, interval)
+    }
+
+    /** 结合用户偏好执行智能启动同步（节流与未同步检测），并持续监听偏好变动动态调谐后台节拍 */
+    fun initialize(
+        context: Context,
+        userPreferences: UserPreferencesDataSource,
+        scope: CoroutineScope,
+    ) {
+        enqueueAiringReminders(context)
+
+        scope.launch {
+            val initialPrefs = userPreferences.userPreferences.first()
+            val isNeverSynced = initialPrefs.bangumiDataLastSyncTimestamp == 0L
+            val isAutoSyncEnabled = initialPrefs.syncInterval != SyncInterval.MANUAL_ONLY
+            val intervalMillis = TimeUnit.HOURS.toMillis(initialPrefs.syncInterval.hours)
+            val isExpired = (TimeUtils.nowEpochMillis() - initialPrefs.bangumiDataLastSyncTimestamp) > intervalMillis
+
+            if (isAutoSyncEnabled && (isNeverSynced || isExpired)) {
+                enqueueStartupSync(context)
+            }
+
+            userPreferences.userPreferences
+                .map { it.syncInterval }
+                .distinctUntilChanged()
+                .collect { interval ->
+                    reconfigure(context, interval)
+                }
+        }
     }
 
     /** 注册开播提醒周期任务（15 分钟本地探测：每日汇总去重 + 开播前 15 分钟逐集提醒窗口） */

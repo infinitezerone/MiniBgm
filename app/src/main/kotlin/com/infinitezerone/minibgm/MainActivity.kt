@@ -1,10 +1,12 @@
 package com.infinitezerone.minibgm
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +17,7 @@ import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
+import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -25,6 +28,12 @@ class MainActivity : ComponentActivity() {
 
     /** 通知点击携带的"直达时间表"标记，消费后复位 */
     private var openSchedule by mutableStateOf(false)
+
+    /** 小组件条目点击携带的"直达番剧详情"条目 ID，消费后复位 */
+    private var openSubjectId by mutableStateOf<Long?>(null)
+
+    /** 小组件点击"去登录"携带的"直达个人中心"标记，消费后复位 */
+    private var openUser by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
@@ -41,6 +50,10 @@ class MainActivity : ComponentActivity() {
                     authRepository = authRepository,
                     openSchedule = openSchedule,
                     onScheduleNavigated = { openSchedule = false },
+                    openSubjectId = openSubjectId,
+                    onSubjectNavigated = { openSubjectId = null },
+                    openUser = openUser,
+                    onUserNavigated = { openUser = false },
                 )
             }
         }
@@ -56,10 +69,31 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(EXTRA_OPEN_SCHEDULE, false) == true) {
             openSchedule = true
         }
+        val subjectId = intent?.getLongExtra(EXTRA_SUBJECT_ID, -1L) ?: -1L
+        if (subjectId > 0L) {
+            openSubjectId = subjectId
+        }
+        if (intent?.getBooleanExtra(EXTRA_TRIGGER_LOGIN, false) == true) {
+            openUser = true
+            lifecycleScope.launch {
+                runCatching {
+                    val authorizeUrl = authRepository.beginLogin()
+                    CustomTabsIntent
+                        .Builder()
+                        .setEphemeralBrowsingEnabled(true)
+                        .build()
+                        .launchUrl(this@MainActivity, Uri.parse(authorizeUrl))
+                }.onFailure {
+                    snackbarHostState.showSnackbar("启动登录失败，请重试")
+                }
+            }
+        }
     }
 
     companion object {
-        const val EXTRA_OPEN_SCHEDULE = "open_schedule"
+        const val EXTRA_OPEN_SCHEDULE = BgmNavIntents.EXTRA_OPEN_SCHEDULE
+        const val EXTRA_SUBJECT_ID = BgmNavIntents.EXTRA_SUBJECT_ID
+        const val EXTRA_TRIGGER_LOGIN = BgmNavIntents.EXTRA_TRIGGER_LOGIN
     }
 
     private fun handleOAuthIntent(intent: Intent?) {

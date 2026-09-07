@@ -49,6 +49,7 @@ class FakeScheduleRepository : ScheduleRepository {
     override suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,
         hoursAhead: Long,
+        lookbackHours: Long,
     ): List<UpcomingAiring> {
         upcomingAiringRequestedSubjectIds = subjectIds
         return upcomingAiring.filter { it.subjectId in subjectIds.toSet() }

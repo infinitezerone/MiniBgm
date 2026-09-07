@@ -9,6 +9,7 @@ data class UpcomingAiring(
     /** UTC ISO-8601 时刻 */
     val airAtUtc: String,
     val kind: String,
+    val coverUrl: String = "",
 ) {
     val displayName: String
         get() = titleCn.ifBlank { title }

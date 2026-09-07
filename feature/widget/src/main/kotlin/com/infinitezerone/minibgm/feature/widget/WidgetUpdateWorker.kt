@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.widget
+package com.infinitezerone.minibgm.feature.widget
 
 import android.content.Context
 import android.util.Log

@@ -16,6 +16,9 @@ import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -27,12 +30,14 @@ interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
 
     /**
-     * 查询指定条目（通常为"我追的"）在 [hoursAhead] 小时窗口内的即将播出事件，
+     * 查询指定条目（通常为"我追的"）在时间窗口内的播出事件，
+     * 窗口范围从当前时间回溯 [lookbackHours] 小时至未来 [hoursAhead] 小时，
      * 按播出时间升序；同话多源时按可信度去重（actual/scheduled 优先于 predicted）。
      */
     suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,
         hoursAhead: Long = 24,
+        lookbackHours: Long = 0,
     ): List<UpcomingAiring>
 
     /**
@@ -74,11 +79,12 @@ class ScheduleRepositoryImpl(
     override suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,
         hoursAhead: Long,
+        lookbackHours: Long,
     ): List<UpcomingAiring> {
         if (subjectIds.isEmpty()) return emptyList()
         val nowMillis = TimeUtils.nowEpochMillis()
-        val fromIso = TimeUtils.isoUtcFromEpochMillis(nowMillis)
-        val toIso = TimeUtils.isoUtcFromEpochMillis(nowMillis + hoursAhead * DAY_MILLIS)
+        val fromIso = TimeUtils.isoUtcFromEpochMillis(nowMillis - lookbackHours * HOUR_MILLIS)
+        val toIso = TimeUtils.isoUtcFromEpochMillis(nowMillis + hoursAhead * HOUR_MILLIS)
         val titles = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
         return airEventDao
             .getUpcomingEvents(subjectIds, fromIso, toIso)
@@ -101,6 +107,7 @@ class ScheduleRepositoryImpl(
                     episode = event.episode,
                     airAtUtc = event.airAtUtc,
                     kind = event.kind,
+                    coverUrl = subject.coverUrl,
                 )
             }
     }
@@ -265,7 +272,9 @@ class ScheduleRepositoryImpl(
                         )
                     }
 
-                scheduleDao.insertSchedules(enriched + inserted)
+                val allSchedules = enriched + inserted
+                val finalized = enrichMissingMetadata(allSchedules)
+                scheduleDao.insertSchedules(finalized)
             }
 
             // ③ 逐话事件同步与仲裁：失败只降级为"预计"数据，不阻塞名单同步
@@ -495,8 +504,44 @@ class ScheduleRepositoryImpl(
         )
     }
 
+    /**
+     * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
+     * 仅对 coverUrl 为空的条目并发调用官方接口；获取后落库持久化，后续刷新直接复用。
+     */
+    private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
+        val missing = schedules.filter { it.coverUrl.isBlank() }
+        if (missing.isEmpty()) return schedules
+
+        val metadataByBgmId =
+            coroutineScope {
+                missing
+                    .map { entity ->
+                        async {
+                            runCatching { apiService.getSubject(entity.bgmId) }.getOrNull()
+                        }
+                    }.awaitAll()
+            }.filterNotNull()
+                .associateBy { it.id }
+
+        if (metadataByBgmId.isEmpty()) return schedules
+
+        return schedules.map { entity ->
+            val subject = metadataByBgmId[entity.bgmId] ?: return@map entity
+            val coverUrl = (subject.images?.bestImage ?: "").replace("http://", "https://")
+            val rating = subject.rating?.score ?: 0.0
+            val eps = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes
+            entity.copy(
+                coverUrl = coverUrl.ifBlank { entity.coverUrl },
+                ratingScore = if (entity.ratingScore == 0.0) rating else entity.ratingScore,
+                totalEpisodes = if (entity.totalEpisodes == 0) eps else entity.totalEpisodes,
+                titleCn = entity.titleCn.ifBlank { subject.nameCn },
+            )
+        }
+    }
+
     private companion object {
-        const val DAY_MILLIS = 24L * 60 * 60 * 1000
+        const val HOUR_MILLIS = 60L * 60 * 1000
+        const val DAY_MILLIS = 24L * HOUR_MILLIS
         const val WEEK_MILLIS = 7L * DAY_MILLIS
         const val ANILIST_SITE = "anilist"
         const val EVENT_SOURCE_ANILIST = "anilist"

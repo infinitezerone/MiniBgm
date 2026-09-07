@@ -9,9 +9,11 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
+import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
+import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
@@ -78,11 +80,13 @@ class ScheduleRepositoryImplTest {
     private class FakeAirEventDao : AirEventDao {
         val events = MutableStateFlow<List<AirEventEntity>>(emptyList())
 
-        override suspend fun insertAirEvents(newEvents: List<AirEventEntity>) {
+        override suspend fun insertAirEvents(events: List<AirEventEntity>) {
             val current =
-                events.value.associateBy { Triple(it.subjectId, it.episode, it.kind + "@" + it.source) }.toMutableMap()
-            newEvents.forEach { current[Triple(it.subjectId, it.episode, it.kind + "@" + it.source)] = it }
-            events.value = current.values.toList()
+                this.events.value
+                    .associateBy { Triple(it.subjectId, it.episode, it.kind + "@" + it.source) }
+                    .toMutableMap()
+            events.forEach { current[Triple(it.subjectId, it.episode, it.kind + "@" + it.source)] = it }
+            this.events.value = current.values.toList()
         }
 
         override suspend fun getAllAirEvents(): List<AirEventEntity> = events.value
@@ -119,10 +123,11 @@ class ScheduleRepositoryImplTest {
 
     private class FakeBangumiApiService : BangumiApiService {
         var calendarDays: List<CalendarDayResponse> = emptyList()
+        var subjects: Map<Long, Subject> = emptyMap()
 
         override suspend fun getCalendar(): List<CalendarDayResponse> = calendarDays
 
-        override suspend fun getSubject(id: Long): Subject = error("Not implemented")
+        override suspend fun getSubject(id: Long): Subject = subjects[id] ?: error("Not implemented for id: $id")
 
         override suspend fun getSubjectCharacters(id: Long): List<SubjectCharacter> = error("Not implemented")
 
@@ -602,6 +607,82 @@ class ScheduleRepositoryImplTest {
             assertTrue(webOnly.broadcastRule.contains("P7D"))
             assertEquals(AirScheduleEntity.SOURCE_BGM_DATA, webOnly.source)
             assertTrue(webOnly.sitesJson.contains("巴哈姆特"))
+        }
+
+    @Test
+    fun syncBangumiData_enrichesMissingMetadata_forWebOnlyShow() =
+        runTest {
+            val beginMillis = TimeUtils.nowEpochMillis() - 5 * DAY_MILLIS
+            val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
+
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
+                                items = listOf(Subject(id = 1001L, name = "常规番", nameCn = "常规番")),
+                            ),
+                        )
+                    subjects =
+                        mapOf(
+                            633836L to
+                                Subject(
+                                    id = 633836L,
+                                    name = "Re:ゼロから始める異世界生活 4th season 奪還編",
+                                    nameCn = "Re：从零开始的异世界生活 第四季 夺还篇",
+                                    images =
+                                        SubjectImages(
+                                            common = "https://lain.bgm.tv/pic/cover/c/sample_rezero.jpg",
+                                        ),
+                                    rating = Rating(score = 8.6),
+                                    eps = 16,
+                                ),
+                        )
+                }
+            val dataService =
+                FakeBangumiDataService().apply {
+                    dataResult =
+                        BangumiDataResult.Success(
+                            items =
+                                listOf(
+                                    BangumiDataItem(
+                                        title = "Re:ゼロから始める異世界生活 4th season 奪還編",
+                                        titleTranslate = mapOf("zh-Hans" to listOf("Re：从零开始的异世界生活 第四季 夺还篇")),
+                                        begin = beginIso,
+                                        broadcast = "R/$beginIso/P7D",
+                                        sites =
+                                            listOf(
+                                                BangumiDataSite(site = "bangumi", id = "633836"),
+                                                BangumiDataSite(site = "anilist", id = "189046"),
+                                            ),
+                                    ),
+                                ),
+                            etag = "W/\"etag-enrich\"",
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+            val userPrefs = createTestUserPreferencesDataSource()
+
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = userPrefs,
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val stored = dao.getAllSchedulesList()
+            val webOnly = stored.first { it.bgmId == 633836L }
+            assertEquals("https://lain.bgm.tv/pic/cover/c/sample_rezero.jpg", webOnly.coverUrl)
+            assertEquals(8.6, webOnly.ratingScore)
+            assertEquals(16, webOnly.totalEpisodes)
+            assertEquals("Re：从零开始的异世界生活 第四季 夺还篇", webOnly.titleCn)
         }
 
     @Test

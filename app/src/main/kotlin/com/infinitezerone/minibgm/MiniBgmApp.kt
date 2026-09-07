@@ -1,54 +1,32 @@
 package com.infinitezerone.minibgm
 
 import android.app.Application
+import android.content.ComponentCallbacks2
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
-import coil3.disk.DiskCache
-import coil3.disk.directory
-import coil3.memory.MemoryCache
-import coil3.request.crossfade
-import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
-import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.di.appModule
+import com.infinitezerone.minibgm.feature.widget.WidgetSync
 import com.infinitezerone.minibgm.sync.work.initializers.Sync
-import com.infinitezerone.minibgm.widget.WidgetSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.get
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
-import java.util.concurrent.TimeUnit
 
 class MiniBgmApp :
     Application(),
     SingletonImageLoader.Factory {
-    private val appScope = CoroutineScope(Dispatchers.Main.immediate)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader
-            .Builder(context)
-            .memoryCache {
-                MemoryCache
-                    .Builder()
-                    .maxSizePercent(context, 0.25)
-                    .build()
-            }.diskCache {
-                DiskCache
-                    .Builder()
-                    .directory(cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(250L * 1024 * 1024) // 250 MB 磁盘缓存
-                    .build()
-            }.crossfade(true)
-            .build()
+    override fun newImageLoader(context: PlatformContext): ImageLoader = get()
 
     override fun onCreate() {
         super.onCreate()
@@ -60,30 +38,18 @@ class MiniBgmApp :
             modules(appModule())
         }
 
-        // 周期任务统一在冷启动时确保注册：KEEP 策略幂等，是否真正提醒由 Worker 内部按偏好决策
-        Sync.enqueueAiringReminders(this@MiniBgmApp)
-        WidgetSync.enqueuePeriodicUpdate(this@MiniBgmApp)
-
-        // 监听用户偏好，执行智能冷启动同步与动态注册 WorkManager 周期任务
+        // 初始化后台同步与开播提醒调度（封装在 :sync:work 内部，按偏好动态配置）
         val userPreferences: UserPreferencesDataSource by inject()
-        appScope.launch {
-            val initialPrefs = userPreferences.userPreferences.first()
-            val isNeverSynced = initialPrefs.bangumiDataLastSyncTimestamp == 0L
-            val isAutoSyncEnabled = initialPrefs.syncInterval != SyncInterval.MANUAL_ONLY
-            val intervalMillis = TimeUnit.HOURS.toMillis(initialPrefs.syncInterval.hours)
-            val isExpired = (TimeUtils.nowEpochMillis() - initialPrefs.bangumiDataLastSyncTimestamp) > intervalMillis
+        Sync.initialize(this@MiniBgmApp, userPreferences, appScope)
+    }
 
-            // 智能节流：仅在首次冷启动（新安装未同步）或距上次同步已超过周期且未设为手动模式时，才发起冷启动补偿同步
-            if (isAutoSyncEnabled && (isNeverSynced || isExpired)) {
-                Sync.enqueueStartupSync(this@MiniBgmApp)
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // 当用户切换出应用返回桌面时，智能按需刷新一次小组件（内部带有 hasActiveWidgets 守卫）
+        if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            appScope.launch {
+                WidgetSync.requestUpdate(this@MiniBgmApp)
             }
-
-            userPreferences.userPreferences
-                .map { it.syncInterval }
-                .distinctUntilChanged()
-                .collect { interval ->
-                    Sync.reconfigure(this@MiniBgmApp, interval)
-                }
         }
     }
 }

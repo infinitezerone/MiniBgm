@@ -69,6 +69,7 @@ dependencies {
     implementation(project(":feature:schedule"))
     implementation(project(":feature:subject"))
     implementation(project(":feature:search"))
+    implementation(project(":feature:widget"))
     implementation(project(":sync:work"))
 
     implementation(libs.koin.androidx.workmanager)
@@ -82,8 +83,6 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
-    implementation(libs.androidx.glance.appwidget)
-    implementation(libs.androidx.glance.material3)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(platform(libs.androidx.compose.bom))
@@ -96,6 +95,8 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.ktor3)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
 
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
