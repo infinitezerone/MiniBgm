@@ -12,6 +12,7 @@ The rules below are **deterministically enforced by `ArchitectureRulesTest`** in
 4. **MVI**: ViewModels expose a single, immutable `StateFlow<UiState>` — never a public `MutableStateFlow`; one-off events (snackbars, navigation) go through `Channel`/`SharedFlow`.
 5. **Credential isolation**: OAuth tokens only ever live in `AuthTokensDataSource` (AndroidKeyStore-encrypted, excluded from backups) — never in `UserPreferences` or plain DataStore keys.
 6. **Theming**: no hardcoded `Color(0x...)` in features — build under `MiniBgmTheme` with tokens from `:core:designsystem`.
+7. **No raw IO in features**: feature sources must never hand-roll raw networking (`HttpURLConnection`, `java.net.URL`, `java.net.Socket`) or private disk I/O (`context.cacheDir`, `context.filesDir`, `FileOutputStream`) — all networking and persistence belong in `:core:network` / `:core:database` / `:core:datastore` and are coordinated exclusively through `:core:data` repositories.
 
 Equally binding, but enforced by build config or code structure rather than the test suite:
 

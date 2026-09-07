@@ -252,4 +252,45 @@ class ArchitectureRulesTest {
             )
         }
     }
+
+    @Test
+    fun feature_sources_never_perform_raw_network_or_private_disk_io() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到")
+
+        val violations = mutableListOf<String>()
+        val forbiddenTokens =
+            listOf(
+                "HttpURLConnection" to "手写 HttpURLConnection 裸网络连接",
+                "import java.net." to "直接引入 java.net.* 底层网络传输类",
+                "java.net.URL" to "直接使用 java.net.URL",
+                "java.net.Socket" to "直接使用 java.net.Socket",
+                ".cacheDir" to "私自操作 context.cacheDir 磁盘缓存",
+                ".filesDir" to "私自操作 context.filesDir 内部存储",
+                "FileOutputStream" to "手写文件流写入",
+            )
+
+        featureDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val relPath = sourceFile.relativeTo(projectRoot).path
+                sourceFile.readLines().forEachIndexed { index, line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
+                    for ((token, reason) in forbiddenTokens) {
+                        if (line.contains(token)) {
+                            violations.add("$relPath:${index + 1} $reason -> $trimmed")
+                        }
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反单一数据源与离线设计原则（Feature 层严禁手写底层网络传输与私有磁盘缓存，网络与持久化必须经由 :core:data Repositories 统一调度）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
 }
