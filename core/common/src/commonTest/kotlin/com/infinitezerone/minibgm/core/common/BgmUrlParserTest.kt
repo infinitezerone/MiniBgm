@@ -111,12 +111,37 @@ class BgmUrlParserTest {
                 "https://github.com/infinitezerone/MiniBgm",
                 "https://google.com",
                 "https://other-bgm.tv/subject/123",
+                "other-bgm.tv/subject/123",
+                "fakebgm.tv/ep/100",
                 "plain text without url",
+                "",
+                "   ",
             )
 
         for (url in external) {
             val result = BgmUrlParser.parse(url)
             assertIs<BgmLink.External>(result, "Expected External for $url")
+        }
+    }
+
+    @Test
+    fun parse_nonPositiveOrInvalidIds_returnsExternalLink() {
+        val invalidIdUrls =
+            listOf(
+                "https://bgm.tv/subject/0",
+                "/subject/0",
+                "https://bgm.tv/character/0",
+                "/crt/0",
+                "https://bgm.tv/person/0",
+                "/prsn/0",
+                "https://bgm.tv/ep/0",
+                "/ep/0",
+                "https://bgm.tv/subject/topic/0",
+            )
+
+        for (url in invalidIdUrls) {
+            val result = BgmUrlParser.parse(url)
+            assertIs<BgmLink.External>(result, "Expected External for invalid ID: $url")
         }
     }
 
