@@ -12,6 +12,7 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
             // 回调注册 Android target，若 KGP 由 KSP 等后续插件触发会导致初始化崩溃
             apply("com.android.kotlin.multiplatform.library")
             apply("org.jetbrains.kotlin.multiplatform")
+            apply("org.jetbrains.kotlinx.kover")
         }
 
         // KotlinMultiplatformAndroidLibraryExtension 未注册为顶层 extension，

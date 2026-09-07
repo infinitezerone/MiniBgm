@@ -13,6 +13,8 @@ import kotlin.test.fail
  * 3. 纯模型层：:core:model 为纯 Kotlin，严禁引入任何 android.* / androidx.* / UI 框架依赖
  * 4. MVI 单向流：所有 ViewModel 严禁对外暴露 MutableStateFlow，必须暴露不可变 StateFlow
  * 5. 凭据隔离：UserPreferences 绝不包含任何 token / 凭据字段（Token 必须走 AndroidKeyStore）
+ * 6. 传输与存储框架隔离：feature 源码严禁 import io.ktor.* 或 androidx.room.*
+ * 7. 主题一致性：feature 源码严禁硬编码 Color(0x...)，必须使用 :core:designsystem 主题 token
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -76,6 +78,8 @@ class ArchitectureRulesTest {
             listOf(
                 "import com.infinitezerone.minibgm.core.network",
                 "import com.infinitezerone.minibgm.core.database",
+                "import io.ktor.",
+                "import androidx.room.",
             )
 
         featureDir
@@ -86,14 +90,14 @@ class ArchitectureRulesTest {
                 sourceFile.readLines().forEachIndexed { index, line ->
                     val trimmed = line.trim()
                     if (forbiddenPackagePrefixes.any { trimmed.startsWith(it) }) {
-                        violations.add("$relPath:${index + 1} 违规直连底库 -> $trimmed")
+                        violations.add("$relPath:${index + 1} 违规直接引入底层库或协议 -> $trimmed")
                     }
                 }
             }
 
         if (violations.isNotEmpty()) {
             fail(
-                "违反单一数据源与分层隔离（UI 层必须通过 :core:data Repositories 协调，严禁直连 network 或 database）：\n" +
+                "违反单一数据源与分层隔离（UI 层必须通过 :core:data Repositories 协调，严禁直连 network / database 或导入 io.ktor.* / androidx.room.*）：\n" +
                     violations.joinToString("\n"),
             )
         }
@@ -149,7 +153,7 @@ class ArchitectureRulesTest {
                 vmFile.readLines().forEachIndexed { index, line ->
                     val trimmed = line.trim()
                     val isProperty = trimmed.startsWith("val ") || trimmed.startsWith("var ")
-                    val isPublic = !trimmed.startsWith("private ") && !trimmed.startsWith("internal private ")
+                    val isPublic = !trimmed.startsWith("private ")
                     if (isProperty && isPublic) {
                         if (trimmed.contains("MutableStateFlow") || trimmed.contains(": MutableStateFlow")) {
                             violations.add("$relPath:${index + 1} 暴露了可变状态流 -> $trimmed")
@@ -183,6 +187,68 @@ class ArchitectureRulesTest {
                 "安全边界违规：UserPreferences 中检测到敏感凭据属性: " +
                     violatedFields.map { it.name } +
                     "（根据 AGENTS.md，OAuth Token 必须通过 AndroidKeyStore 加密的 AuthTokensDataSource 独立保存！）",
+            )
+        }
+    }
+
+    @Test
+    fun feature_sources_never_import_transport_or_storage_frameworks() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到")
+
+        val violations = mutableListOf<String>()
+        // 即便 :core:data 以 api 暴露传递依赖，UI 层也不得直接触碰传输/存储框架
+        val forbiddenImportPrefixes =
+            listOf(
+                "import io.ktor",
+                "import androidx.room",
+            )
+
+        featureDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val relPath = sourceFile.relativeTo(projectRoot).path
+                sourceFile.readLines().forEachIndexed { index, line ->
+                    val trimmed = line.trim()
+                    if (forbiddenImportPrefixes.any { trimmed.startsWith(it) }) {
+                        violations.add("$relPath:${index + 1} 违规引入传输/存储框架 -> $trimmed")
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反分层隔离（feature 只经 :core:data Repository 访问网络与数据库，严禁直接 import io.ktor / androidx.room）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun feature_sources_never_hardcode_compose_colors() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到")
+
+        val violations = mutableListOf<String>()
+        val forbiddenColorPattern = Regex("""Color\(0x""")
+
+        featureDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val relPath = sourceFile.relativeTo(projectRoot).path
+                sourceFile.readLines().forEachIndexed { index, line ->
+                    if (forbiddenColorPattern.containsMatchIn(line)) {
+                        violations.add("$relPath:${index + 1} 硬编码颜色 -> ${line.trim()}")
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反主题一致性规范（feature 必须使用 :core:designsystem 的 MiniBgmTheme token，严禁硬编码 Color(0x...)）：\n" +
+                    violations.joinToString("\n"),
             )
         }
     }
