@@ -29,3 +29,8 @@ kotlin {
         }
     }
 }
+
+tasks.matching { it.name.startsWith("testAndroid") }.configureEach {
+    inputs.dir(rootProject.file("feature"))
+    inputs.dir(rootProject.file("core"))
+}
