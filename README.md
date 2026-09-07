@@ -11,7 +11,7 @@
 
 </div>
 
-> 🚧 项目处于公开测试阶段（v0.1.0），欢迎试用并反馈问题。
+> 🚧 项目处于公开测试阶段（v0.2.0），欢迎试用并反馈问题。
 
 ## 📸 截图
 
@@ -55,7 +55,7 @@ cd MiniBgm
 
 Kotlin Multiplatform（core 层跨平台）· Jetpack Compose（Material 3 Expressive）· Navigation 3 · Ktor 3 · Room 3 · DataStore · Coil 3 · Koin 4 · WorkManager · AGP 9
 
-模块化 Clean Architecture（modeled on Google's [*Now in Android*](https://github.com/android/nowinandroid)）：`app` + `core`（model / common / network / database / datastore / data / designsystem / navigation / testing）+ `feature`（schedule / subject / search / user）+ `sync:work`。
+模块化 Clean Architecture（modeled on Google's [*Now in Android*](https://github.com/android/nowinandroid)）：`app` + `core`（model / common / network / database / datastore / data / designsystem / navigation / testing）+ `feature`（schedule / subject / search / user / widget）+ `sync:work`。
 
 ## 🤝 参与贡献
 
