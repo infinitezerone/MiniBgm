@@ -153,8 +153,12 @@ class BgmHttpClientAuthTest {
             assertEquals(1, provider.clearCount)
         }
 
+    /**
+     * Bangumi v0 API 硬性要求必须携带唯一合规的 User-Agent，否则网关会直接返回 403 Forbidden。
+     * 此测试验证 BgmHttpClient 的 DefaultRequest 能够可靠注入该 Header，避免业务调用受阻。
+     */
     @Test
-    fun `所有请求强制携带合规的 User-Agent 与 Accept 请求头`() =
+    fun `BgmHttpClient 请求默认携带满足 Bangumi 要求的 User-Agent 与 Accept 请求头`() =
         runTest {
             val expectedUserAgent = "MiniBgm/1.2.3 (android) (https://github.com/infinitezerone/MiniBgm)"
             var capturedUserAgent: String? = null
