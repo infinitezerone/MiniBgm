@@ -152,4 +152,35 @@ class BgmHttpClientAuthTest {
             }
             assertEquals(1, provider.clearCount)
         }
+
+    @Test
+    fun `所有请求强制携带合规的 User-Agent 与 Accept 请求头`() =
+        runTest {
+            val expectedUserAgent = "MiniBgm/1.2.3 (android) (https://github.com/infinitezerone/MiniBgm)"
+            var capturedUserAgent: String? = null
+            var capturedAccept: String? = null
+
+            val engine =
+                MockEngine { request ->
+                    capturedUserAgent = request.headers[HttpHeaders.UserAgent]
+                    capturedAccept = request.headers[HttpHeaders.Accept]
+                    respond(
+                        content = """{"id":1}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val client =
+                BgmHttpClient.create(
+                    userAgent = expectedUserAgent,
+                    tokenProvider = FakeTokenProvider(null, null),
+                    engine = engine,
+                )
+
+            client.get("https://api.bgm.tv/v0/subjects/1")
+
+            assertEquals(expectedUserAgent, capturedUserAgent)
+            assertEquals("application/json", capturedAccept)
+        }
 }

@@ -44,7 +44,7 @@ import androidx.glance.text.TextStyle
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
-import com.infinitezerone.minibgm.core.database.dao.SubjectDao
+import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmDarkColors
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmLightColors
@@ -98,7 +98,7 @@ class ScheduleWidget : GlanceAppWidget() {
                 emptyList()
             }
         val scheduleRepo = koin?.getOrNull<ScheduleRepository>()
-        val subjectDao = koin?.getOrNull<SubjectDao>()
+        val subjectRepo = koin?.getOrNull<SubjectRepository>()
         val upcoming =
             if (isLoggedIn && trackedSubjectIds.isNotEmpty()) {
                 scheduleRepo
@@ -135,12 +135,13 @@ class ScheduleWidget : GlanceAppWidget() {
                     .map { item ->
                         async {
                             var url = item.coverUrl
-                            if (url.isBlank() && subjectDao != null) {
+                            if (url.isBlank() && subjectRepo != null) {
                                 url =
-                                    subjectDao
-                                        .getSubjectById(item.subjectId)
+                                    subjectRepo
+                                        .getSubjectStream(item.subjectId)
                                         .firstOrNull()
-                                        ?.coverUrl
+                                        ?.images
+                                        ?.bestImage
                                         .orEmpty()
                             }
                             item.subjectId to WidgetImageLoader.loadThumbnailBitmap(context, url)
