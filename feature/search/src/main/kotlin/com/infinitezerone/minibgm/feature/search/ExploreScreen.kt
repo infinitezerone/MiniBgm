@@ -2,19 +2,29 @@ package com.infinitezerone.minibgm.feature.search
 
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -31,6 +41,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -45,7 +57,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -59,15 +70,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.feature.search.components.ExploreFilterBottomSheet
 import com.infinitezerone.minibgm.feature.search.components.ExploreSpotlightCard
 import com.infinitezerone.minibgm.feature.search.components.WaterfallSubjectCard
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -84,6 +99,7 @@ fun ExploreScreen(
     onSubjectClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
+    scrollToTop: Flow<Unit>? = null,
     viewModel: ExploreViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -91,6 +107,13 @@ fun ExploreScreen(
     val coroutineScope = rememberCoroutineScope()
     var showFilterBottomSheet by remember { mutableStateOf(false) }
     val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val gridState = rememberLazyStaggeredGridState()
+
+    LaunchedEffect(scrollToTop) {
+        scrollToTop?.collect {
+            gridState.animateScrollToItem(0)
+        }
+    }
 
     val isFilterActive =
         uiState.selectedSeason != CURRENT_SEASON ||
@@ -109,12 +132,10 @@ fun ExploreScreen(
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
+                BgmTopAppBar(
                     title = {
                         Text(
                             text = "探索发现",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
                         )
                     },
                     actions = {
@@ -197,7 +218,7 @@ fun ExploreScreen(
                 ) {
                     when {
                         uiState.isLoading && uiState.subjects.isEmpty() -> {
-                            ExploreLoadingState(modifier = Modifier.fillMaxSize())
+                            ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
                         }
 
                         uiState.error != null && uiState.subjects.isEmpty() -> {
@@ -227,6 +248,7 @@ fun ExploreScreen(
                                 onLoadMore = viewModel::loadMore,
                                 onSubjectClick = onSubjectClick,
                                 onToggleWish = viewModel::toggleWish,
+                                gridState = gridState,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -463,10 +485,9 @@ private fun WaterfallGridList(
     onLoadMore: () -> Unit,
     onSubjectClick: (Long) -> Unit,
     onToggleWish: (Long) -> Unit,
+    gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     modifier: Modifier = Modifier,
 ) {
-    val gridState = rememberLazyStaggeredGridState()
-
     // 监听触底自动触发加载下一页
     LaunchedEffect(gridState, subjects.size, hasMore, isLoadingMore) {
         snapshotFlow {
@@ -557,13 +578,272 @@ private fun WaterfallGridList(
     }
 }
 
+/** 探索页双列瀑布流与焦点大卡骨架屏加载状态 */
 @Composable
-private fun ExploreLoadingState(modifier: Modifier = Modifier) {
-    Box(
+private fun ExploreSkeletonLoading(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "skeletonPulse")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "skeletonAlpha",
+    )
+    val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = alpha)
+
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalItemSpacing = 10.dp,
+        userScrollEnabled = false,
         modifier = modifier,
-        contentAlignment = Alignment.Center,
     ) {
-        CircularProgressIndicator()
+        // 1. 顶部焦点大卡骨架
+        item(span = StaggeredGridItemSpan.FullLine) {
+            SpotlightSkeletonCard(
+                placeholderColor = placeholderColor,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+
+        // 2. 双列瀑布流骨架卡片（模拟不同高度的参差节奏）
+        val variations =
+            listOf(
+                WaterfallCardVariation(hookLines = 2),
+                WaterfallCardVariation(hookLines = 1),
+                WaterfallCardVariation(hookLines = 3),
+                WaterfallCardVariation(hookLines = 0),
+                WaterfallCardVariation(hookLines = 2),
+                WaterfallCardVariation(hookLines = 1),
+            )
+        items(variations.size) { index ->
+            WaterfallSkeletonCard(
+                variation = variations[index],
+                placeholderColor = placeholderColor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpotlightSkeletonCard(
+    placeholderColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(220.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+        ) {
+            // 左上角徽章与热度占位
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(width = 64.dp, height = 20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(placeholderColor),
+                )
+                Box(
+                    modifier =
+                        Modifier
+                            .size(width = 46.dp, height = 20.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(placeholderColor),
+                )
+            }
+
+            // 底部标题、标签、剧情钩子安利占位
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // 标题占位
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(placeholderColor),
+                )
+
+                // 标签占位行
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 44.dp, height = 18.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(placeholderColor),
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 52.dp, height = 18.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(placeholderColor),
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 40.dp, height = 18.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(placeholderColor),
+                    )
+                }
+
+                // 剧情钩子引言占位
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.92f)
+                            .height(13.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(placeholderColor),
+                )
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.58f)
+                            .height(13.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(placeholderColor),
+                )
+            }
+        }
+    }
+}
+
+private data class WaterfallCardVariation(
+    val hookLines: Int = 1,
+)
+
+@Composable
+private fun WaterfallSkeletonCard(
+    variation: WaterfallCardVariation,
+    placeholderColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // 封面海报占位
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(0.72f)
+                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                        .background(placeholderColor),
+            ) {
+                // 左上角评分角标占位
+                Box(
+                    modifier =
+                        Modifier
+                            .padding(6.dp)
+                            .size(width = 38.dp, height = 18.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)),
+                )
+            }
+
+            // 文本区域占位
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // 标题占位
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.82f)
+                            .height(15.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(placeholderColor),
+                )
+
+                // 标签占位行
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 36.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(placeholderColor),
+                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(width = 44.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(placeholderColor),
+                    )
+                }
+
+                // 参差安利文案行
+                if (variation.hookLines >= 1) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.92f)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(placeholderColor),
+                    )
+                }
+                if (variation.hookLines >= 2) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.68f)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(placeholderColor),
+                    )
+                }
+                if (variation.hookLines >= 3) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.46f)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(placeholderColor),
+                    )
+                }
+            }
+        }
     }
 }
 
