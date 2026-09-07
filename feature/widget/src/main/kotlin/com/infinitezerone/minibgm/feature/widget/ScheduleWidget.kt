@@ -54,7 +54,7 @@ import org.koin.core.context.GlobalContext
  * 现代化「今日更新」极简桌面排期小组件：
  * 1. 响应式布局：基于 SizeMode.Responsive 自适应 2x2（焦点排期卡片）、4x2（英雄双列时间线）、4x4（全天排期看板）；
  * 2. 纯文本与时间轴：零 Bitmap、零网络延迟，彻底避免 IPC Binder 1MB 事务超限 (TransactionTooLargeException)；
- * 3. 全天覆盖与空间补全：当天已播剧集常驻展示「已更新」，追番不足时自动以今日新番日历平滑填补；
+ * 3. 事件驱动内容：hero 永远是「我的下一部」，今日无更新时跨天补位并标注周几，登录用户绝不掺入陌生番剧；
  * 4. 细粒度深链：单项点击直达番剧详情页，右上角无感刷新回调。
  */
 class ScheduleWidget : GlanceAppWidget() {
@@ -62,7 +62,9 @@ class ScheduleWidget : GlanceAppWidget() {
         val SMALL_SQUARE = DpSize(100.dp, 100.dp) // 2x2: 焦点卡片
         val MEDIUM_CARD = DpSize(220.dp, 100.dp) // 4x2: 英雄双列
         val LARGE_CARD = DpSize(220.dp, 220.dp) // 4x4: 全天排期看板
-        const val HOURS_AHEAD = 24L
+
+        /** 向前看 7 天：动画周更，「今日无更新」时也能回答「下一部是周几」 */
+        const val HOURS_AHEAD = 7 * 24L
         const val LOOKBACK_HOURS = 18L
     }
 
@@ -143,7 +145,7 @@ private fun WidgetRoot(uiState: ScheduleWidgetUiState) {
                 )
             } else {
                 WidgetPlaceholder(
-                    message = "今日暂无更新或正在同步时间表",
+                    message = "追番近期暂无更新，去时间表看看新番",
                     ctaText = "查看全部时间表 ›",
                     action = openScheduleAction(),
                 )
@@ -190,12 +192,12 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = if (uiState.hasTrackedItems) "今日追番" else "今日新番",
+                text = uiState.headerTitle,
                 maxLines = 1,
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.primary,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                     ),
             )
@@ -206,7 +208,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.outline,
-                        fontSize = 9.sp,
+                        fontSize = 11.sp,
                     ),
             )
         }
@@ -233,12 +235,15 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                     airTimeCst = heroItem.airTimeCst,
                     countdownBadge = heroItem.countdownBadge,
                 )
-                if (!heroItem.isAiredToday && heroItem.countdownBadge.isNotBlank() && heroItem.airTimeCst.isNotBlank()) {
+                if (!heroItem.isAiredToday &&
+                    heroItem.countdownBadge.isNotBlank() &&
+                    heroItem.countdownBadge != "待播" &&
+                    heroItem.airTimeCst.isNotBlank()
+                ) {
                     Spacer(modifier = GlanceModifier.width(4.dp))
                     CountdownBadgeView(
                         text = heroItem.countdownBadge,
                         isAiredToday = false,
-                        fontSize = 8.sp,
                     )
                 }
             }
@@ -251,7 +256,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.onBackground,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     ),
                 modifier = GlanceModifier.defaultWeight(),
@@ -269,7 +274,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.primary,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                 )
@@ -281,7 +286,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                         style =
                             TextStyle(
                                 color = GlanceTheme.colors.outline,
-                                fontSize = 9.sp,
+                                fontSize = 11.sp,
                             ),
                     )
                 }
@@ -304,7 +309,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.outline,
-                            fontSize = 8.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                 )
@@ -315,7 +320,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.onBackground,
-                            fontSize = 9.sp,
+                            fontSize = 12.sp,
                         ),
                     modifier = GlanceModifier.defaultWeight(),
                 )
@@ -325,7 +330,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                         style =
                             TextStyle(
                                 color = GlanceTheme.colors.primary,
-                                fontSize = 8.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
                     )
@@ -386,12 +391,15 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                         airTimeCst = heroItem.airTimeCst,
                         countdownBadge = heroItem.countdownBadge,
                     )
-                    if (!heroItem.isAiredToday && heroItem.countdownBadge.isNotBlank() && heroItem.airTimeCst.isNotBlank()) {
+                    if (!heroItem.isAiredToday &&
+                        heroItem.countdownBadge.isNotBlank() &&
+                        heroItem.countdownBadge != "待播" &&
+                        heroItem.airTimeCst.isNotBlank()
+                    ) {
                         Spacer(modifier = GlanceModifier.width(4.dp))
                         CountdownBadgeView(
                             text = heroItem.countdownBadge,
                             isAiredToday = false,
-                            fontSize = 8.sp,
                         )
                     }
                 }
@@ -404,7 +412,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.onBackground,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                     modifier = GlanceModifier.defaultWeight(),
@@ -422,7 +430,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                         style =
                             TextStyle(
                                 color = GlanceTheme.colors.primary,
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                             ),
                     )
@@ -434,7 +442,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.outline,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                 ),
                         )
                     }
@@ -466,7 +474,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.onBackground,
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                 ),
                         )
@@ -477,7 +485,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.outline,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                 ),
                         )
                         Spacer(modifier = GlanceModifier.height(4.dp))
@@ -487,7 +495,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.primary,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                 ),
                         )
@@ -516,7 +524,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                     style =
                                         TextStyle(
                                             color = GlanceTheme.colors.onSurfaceVariant,
-                                            fontSize = 8.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                         ),
                                 )
@@ -528,7 +536,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                 style =
                                     TextStyle(
                                         color = GlanceTheme.colors.onBackground,
-                                        fontSize = 10.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                     ),
                                 modifier = GlanceModifier.defaultWeight(),
@@ -540,7 +548,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                 style =
                                     TextStyle(
                                         color = GlanceTheme.colors.outline,
-                                        fontSize = 9.sp,
+                                        fontSize = 11.sp,
                                     ),
                             )
                         }
@@ -564,7 +572,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                 style =
                                     TextStyle(
                                         color = GlanceTheme.colors.primary,
-                                        fontSize = 8.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                     ),
                             )
@@ -573,7 +581,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                 style =
                                     TextStyle(
                                         color = GlanceTheme.colors.primary,
-                                        fontSize = 9.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                     ),
                             )
@@ -627,12 +635,15 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                     airTimeCst = heroItem.airTimeCst,
                     countdownBadge = heroItem.countdownBadge,
                 )
-                if (!heroItem.isAiredToday && heroItem.countdownBadge.isNotBlank() && heroItem.airTimeCst.isNotBlank()) {
+                if (!heroItem.isAiredToday &&
+                    heroItem.countdownBadge.isNotBlank() &&
+                    heroItem.countdownBadge != "待播" &&
+                    heroItem.airTimeCst.isNotBlank()
+                ) {
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     CountdownBadgeView(
                         text = heroItem.countdownBadge,
                         isAiredToday = false,
-                        fontSize = 8.sp,
                     )
                 }
                 Spacer(modifier = GlanceModifier.defaultWeight())
@@ -641,7 +652,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.primary,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                 )
@@ -655,7 +666,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.onBackground,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                     ),
             )
@@ -673,7 +684,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.outline,
-                        fontSize = 9.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                     ),
             )
@@ -684,7 +695,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.outline,
-                            fontSize = 8.sp,
+                            fontSize = 11.sp,
                         ),
                 )
             }
@@ -708,7 +719,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.outline,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                         ),
                 )
                 Spacer(modifier = GlanceModifier.height(4.dp))
@@ -717,7 +728,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                     style =
                         TextStyle(
                             color = GlanceTheme.colors.primary,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                         ),
                 )
@@ -750,7 +761,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                                 style =
                                     TextStyle(
                                         color = GlanceTheme.colors.onSurfaceVariant,
-                                        fontSize = 8.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                     ),
                             )
@@ -765,7 +776,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.onBackground,
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                 ),
                             modifier = GlanceModifier.defaultWeight(),
@@ -780,7 +791,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                             style =
                                 TextStyle(
                                     color = GlanceTheme.colors.outline,
-                                    fontSize = 9.sp,
+                                    fontSize = 11.sp,
                                 ),
                         )
 
@@ -798,7 +809,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                                         } else {
                                             GlanceTheme.colors.outline
                                         },
-                                    fontSize = 8.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                 ),
                         )
@@ -832,12 +843,10 @@ private fun StatusBadge(
     ) {
         Text(
             text =
-                if (isAiredToday) {
-                    "✔ 已更新"
-                } else if (airTimeCst.isNotBlank()) {
-                    "● $airTimeCst 待播"
-                } else {
-                    countdownBadge
+                when {
+                    isAiredToday -> "已更新"
+                    airTimeCst.isNotBlank() -> "$airTimeCst 待播"
+                    else -> countdownBadge
                 },
             maxLines = 1,
             style =
@@ -848,7 +857,7 @@ private fun StatusBadge(
                         } else {
                             GlanceTheme.colors.onPrimaryContainer
                         },
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 ),
         )
@@ -884,31 +893,42 @@ private fun WidgetHeader(
                 style =
                     TextStyle(
                         color = GlanceTheme.colors.outline,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                     ),
             )
         }
         Spacer(modifier = GlanceModifier.defaultWeight())
-        Image(
-            provider = ImageProvider(R.drawable.ic_widget_refresh),
-            contentDescription = "刷新",
+        // 40dp 热区承载 16dp 图标：视觉不变，触控面积符合最低标准
+        Box(
             modifier =
                 GlanceModifier
-                    .size(16.dp)
+                    .size(40.dp)
                     .clickable(onRefreshClick),
-        )
-        Spacer(modifier = GlanceModifier.width(10.dp))
-        Text(
-            text = "时间表 ›",
-            maxLines = 1,
-            modifier = GlanceModifier.clickable(onScheduleClick),
-            style =
-                TextStyle(
-                    color = GlanceTheme.colors.primary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.ic_widget_refresh),
+                contentDescription = "刷新",
+                modifier = GlanceModifier.size(16.dp),
+            )
+        }
+        Box(
+            modifier =
+                GlanceModifier
+                    .clickable(onScheduleClick)
+                    .padding(horizontal = 4.dp, vertical = 12.dp),
+        ) {
+            Text(
+                text = "时间表 ›",
+                maxLines = 1,
+                style =
+                    TextStyle(
+                        color = GlanceTheme.colors.primary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+            )
+        }
     }
 }
 
@@ -916,13 +936,15 @@ private fun WidgetHeader(
 private fun CountdownBadgeView(
     text: String,
     isAiredToday: Boolean,
-    fontSize: TextUnit = 8.sp,
+    fontSize: TextUnit = 11.sp,
 ) {
     if (text.isBlank()) return
+    // 「刚刚开播」是正向状态（现在就能看），与「已更新」同属 tertiary 家族；
+    // error 红色只保留给真正的异常语义，避免用户把更新误读为出错
     val (bgColor, textColor) =
         when {
             isAiredToday -> GlanceTheme.colors.tertiaryContainer to GlanceTheme.colors.onTertiaryContainer
-            text == "刚刚开播" -> GlanceTheme.colors.errorContainer to GlanceTheme.colors.onErrorContainer
+            text == "刚刚开播" -> GlanceTheme.colors.tertiaryContainer to GlanceTheme.colors.onTertiaryContainer
             else -> GlanceTheme.colors.primaryContainer to GlanceTheme.colors.onPrimaryContainer
         }
 
@@ -979,7 +1001,7 @@ private fun WidgetPlaceholder(
             style =
                 TextStyle(
                     color = GlanceTheme.colors.primary,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 ),
         )
