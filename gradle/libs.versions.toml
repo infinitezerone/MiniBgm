@@ -24,6 +24,7 @@ androidx-navigation3 = "1.1.7"
 androidxWork = "2.10.0"
 androidx-core-splashscreen = "1.0.1"
 androidx-glance = "1.2.0"
+kover = "0.9.9"
 
 [libraries]
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
@@ -103,6 +104,7 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room3", version.ref = "room" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 
 
 
