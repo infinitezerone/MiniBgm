@@ -70,7 +70,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +93,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionDoing
@@ -282,7 +282,7 @@ private fun SearchTopHeader(
     onBackClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    TopAppBar(
+    BgmTopAppBar(
         title = {
             // 胶囊搜索框
             Row(
@@ -290,22 +290,22 @@ private fun SearchTopHeader(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(42.dp)
-                        .clip(RoundedCornerShape(21.dp))
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(18.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .border(
                             BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                            RoundedCornerShape(21.dp),
-                        ).padding(horizontal = 12.dp),
+                            RoundedCornerShape(18.dp),
+                        ).padding(horizontal = 10.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 Box(
                     modifier = Modifier.weight(1f),
@@ -344,13 +344,13 @@ private fun SearchTopHeader(
                 ) {
                     IconButton(
                         onClick = onClear,
-                        modifier = Modifier.size(26.dp),
+                        modifier = Modifier.size(24.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Clear,
                             contentDescription = "清空输入",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(15.dp),
                         )
                     }
                 }
@@ -385,6 +385,7 @@ private fun SearchTopHeader(
                 containerColor = MaterialTheme.colorScheme.surface,
             ),
         windowInsets = TopAppBarDefaults.windowInsets,
+        height = 48.dp,
         modifier = modifier,
     )
 }

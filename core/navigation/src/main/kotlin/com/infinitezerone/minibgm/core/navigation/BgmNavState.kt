@@ -14,6 +14,9 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * 创建可在配置变更与进程死亡后恢复的导航状态（对齐 NiA 的 core:navigation 模式）：
@@ -62,13 +65,25 @@ class BgmNavState(
     /** 当前 Tab 栈顶 key，即屏幕上可见的目的地 */
     val currentKey: NavKey by derivedStateOf { currentSubStack.last() }
 
+    private val _tabReselectionEvents = MutableSharedFlow<NavKey>(extraBufferCapacity = 1)
+
+    /** 当在顶层 Tab 根页面再次点击当前 Tab 时分发的重选事件流（用于列表平滑回顶等手势） */
+    val tabReselectionEvents: SharedFlow<NavKey> = _tabReselectionEvents.asSharedFlow()
+
     /**
-     * 重复点击当前 Tab → 其子栈重置到根部；点击其他 Tab → 记入顶层历史并切换；
+     * 重复点击当前 Tab → 若在子栈则重置到根部，若已在根部则派发重选回顶事件；
+     * 点击其他 Tab → 记入顶层历史并切换；
      * 其余 key → 以 single-top 方式压入当前 Tab 子栈
      */
     fun navigateTo(key: NavKey) {
         when (key) {
-            currentTopLevelKey -> clearSubStack()
+            currentTopLevelKey -> {
+                if (currentSubStack.size > 1) {
+                    clearSubStack()
+                } else {
+                    _tabReselectionEvents.tryEmit(key)
+                }
+            }
             in topLevelKeys -> goToTopLevel(key)
             else -> goToKey(key)
         }
