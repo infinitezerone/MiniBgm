@@ -16,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
+import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.core.navigation.rememberBgmNavState
 import com.infinitezerone.minibgm.navigation.BgmNavHost
 
@@ -26,6 +28,10 @@ fun BgmApp(
     authRepository: AuthRepository,
     openSchedule: Boolean = false,
     onScheduleNavigated: () -> Unit = {},
+    openSubjectId: Long? = null,
+    onSubjectNavigated: () -> Unit = {},
+    openUser: Boolean = false,
+    onUserNavigated: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val isAuthenticating by authRepository.isAuthenticating.collectAsStateWithLifecycle()
@@ -41,6 +47,23 @@ fun BgmApp(
         if (openSchedule) {
             navState.navigateTo(ScheduleRoute)
             onScheduleNavigated()
+        }
+    }
+
+    // 小组件单项点击直达番剧详情页：消费标记后直达对应番剧
+    androidx.compose.runtime.LaunchedEffect(openSubjectId) {
+        val subjectId = openSubjectId
+        if (subjectId != null && subjectId > 0L) {
+            navState.navigateTo(SubjectDetailRoute(subjectId))
+            onSubjectNavigated()
+        }
+    }
+
+    // 小组件点击去登录直达"我的"Tab：消费标记后切到用户中心
+    androidx.compose.runtime.LaunchedEffect(openUser) {
+        if (openUser) {
+            navState.navigateTo(UserRoute)
+            onUserNavigated()
         }
     }
 

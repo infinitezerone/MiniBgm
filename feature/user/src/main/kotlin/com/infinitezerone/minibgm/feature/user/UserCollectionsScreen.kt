@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,8 +44,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -119,6 +119,7 @@ fun UserCollectionsContent(
             COLLECTION_TYPES.size
         }
     val coroutineScope = rememberCoroutineScope()
+    val listStates = List(COLLECTION_TYPES.size) { rememberLazyListState() }
 
     // 左右滑动手势翻页时，通知外层加载新分类数据
     LaunchedEffect(pagerState.currentPage) {
@@ -138,12 +139,10 @@ fun UserCollectionsContent(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            BgmTopAppBar(
                 title = {
                     Text(
                         text = "我的收藏",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
                     )
                 },
                 navigationIcon = {
@@ -154,10 +153,6 @@ fun UserCollectionsContent(
                         )
                     }
                 },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
             )
         },
         modifier = modifier,
@@ -173,9 +168,15 @@ fun UserCollectionsContent(
                 selectedIndex = pagerState.currentPage,
                 onSelectType = { type ->
                     val targetIndex = COLLECTION_TYPES.indexOf(type)
-                    if (targetIndex >= 0 && pagerState.currentPage != targetIndex) {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(targetIndex)
+                    if (targetIndex >= 0) {
+                        if (pagerState.currentPage != targetIndex) {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(targetIndex)
+                            }
+                        } else {
+                            coroutineScope.launch {
+                                listStates.getOrNull(targetIndex)?.animateScrollToItem(0)
+                            }
                         }
                     }
                     onTypeSelect(type)
@@ -222,6 +223,7 @@ fun UserCollectionsContent(
 
                         else -> {
                             LazyColumn(
+                                state = listStates[page],
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),

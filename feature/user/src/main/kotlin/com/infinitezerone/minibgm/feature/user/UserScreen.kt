@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,11 +73,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,6 +96,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -104,6 +105,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserProfile
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -114,6 +116,7 @@ private const val PROJECT_GITHUB_URL = "https://github.com/infinitezerone/MiniBg
 @Composable
 fun UserScreen(
     onCollectionClick: (CollectionType) -> Unit = {},
+    scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
 ) {
@@ -187,6 +190,7 @@ fun UserScreen(
         onToggleAiringReminder = toggleAiringReminder,
         airingReminderHour = uiState.airingReminderHour,
         onSelectReminderHour = viewModel::setAiringReminderHour,
+        scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -210,6 +214,7 @@ fun UserScreenContent(
     onToggleAiringReminder: (Boolean) -> Unit = {},
     airingReminderHour: Int = 8,
     onSelectReminderHour: (Int) -> Unit = {},
+    scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
@@ -220,14 +225,20 @@ fun UserScreenContent(
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(scrollToTop) {
+        scrollToTop?.collect {
+            listState.animateScrollToItem(0)
+        }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
+            BgmTopAppBar(
                 title = {
                     Text(
                         text = "个人中心",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
                     )
                 },
                 actions = {
@@ -255,10 +266,6 @@ fun UserScreenContent(
                         }
                     }
                 },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -273,6 +280,7 @@ fun UserScreenContent(
                     .padding(innerPadding),
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),

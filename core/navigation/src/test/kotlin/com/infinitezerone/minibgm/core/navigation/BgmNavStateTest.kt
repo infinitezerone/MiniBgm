@@ -2,6 +2,9 @@ package com.infinitezerone.minibgm.core.navigation
 
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -63,6 +66,20 @@ class BgmNavStateTest {
         assertEquals(ScheduleRoute, state.currentKey)
         assertEquals(listOf<NavKey>(ScheduleRoute), state.currentSubStack.toList())
     }
+
+    @Test
+    fun reselectCurrentTabAtRoot_emitsReselectionEvent() =
+        runTest {
+            val state = newState()
+            var eventReceived: NavKey? = null
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                state.tabReselectionEvents.collect { eventReceived = it }
+            }
+
+            state.navigateTo(ScheduleRoute)
+
+            assertEquals(ScheduleRoute, eventReceived)
+        }
 
     @Test
     fun goBackFromDetail_popsDetail() {
