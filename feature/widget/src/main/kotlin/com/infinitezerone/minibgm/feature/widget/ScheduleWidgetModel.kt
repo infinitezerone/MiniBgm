@@ -16,6 +16,8 @@ data class ScheduleWidgetItemUiModel(
     val isTracked: Boolean = false,
     /** 是否今天已经播出 */
     val isAiredToday: Boolean = false,
+    /** 播出时刻是否落在今天（用于区分「今日追番」与「下一部更新」） */
+    val isToday: Boolean = false,
     /** 格式化播出时刻，例如 "23:00" */
     val airTimeCst: String = "",
 )

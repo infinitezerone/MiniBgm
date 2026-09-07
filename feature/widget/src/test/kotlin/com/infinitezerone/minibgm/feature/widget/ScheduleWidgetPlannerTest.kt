@@ -80,7 +80,7 @@ class ScheduleWidgetPlannerTest {
         assertEquals(1001L, item1.subjectId)
         assertEquals("葬送的芙莉莲", item1.title)
         assertEquals("第28集 · 12:30", item1.episodeSubtitle)
-        assertEquals("30分钟后", item1.countdownBadge)
+        assertEquals("即将开播", item1.countdownBadge)
         assertEquals("表定", item1.kindTag)
         assertEquals("https://example.com/cover1.jpg", item1.coverUrl)
 
@@ -88,14 +88,14 @@ class ScheduleWidgetPlannerTest {
         val item2 = state.items[1]
         assertEquals("Re:从零开始的异世界生活", item2.title)
         assertEquals("第4集 · 15:00", item2.episodeSubtitle)
-        assertEquals("3小时后", item2.countdownBadge)
+        assertEquals("待播", item2.countdownBadge)
         assertEquals("预估", item2.kindTag)
 
         // Item 3: 明天
         val item3 = state.items[2]
         assertEquals("迷宫饭", item3.title)
         assertEquals("第12集 · 明天 01:30", item3.episodeSubtitle)
-        assertEquals("13小时后", item3.countdownBadge)
+        assertEquals("待播", item3.countdownBadge)
         assertNull(item3.kindTag)
     }
 
@@ -234,7 +234,7 @@ class ScheduleWidgetPlannerTest {
     }
 
     @Test
-    fun plan_loggedInWithoutTracked_fallsBackToTodaySchedules() {
+    fun plan_loggedInWithoutTracked_showsEmptyInsteadOfPublicCalendar() {
         val todaySchedules =
             listOf(
                 com.infinitezerone.minibgm.core.model.AirSchedule(
@@ -256,10 +256,41 @@ class ScheduleWidgetPlannerTest {
                 maxItems = 3,
             )
 
+        // 登录用户视野内绝不掺入陌生番剧：无追番更新时返回空态，由占位视图引导
+        assertTrue(state.items.isEmpty())
+        assertTrue(state.isLoggedIn)
+    }
+
+    @Test
+    fun plan_loggedInTrackedOnlyLaterWeek_answersNextAiring() {
+        // 唯一追番在 3 天后（周四 11:00 CST）：widget 应跨天回答「下一部」而不是落入空态
+        val items =
+            listOf(
+                UpcomingAiring(
+                    subjectId = 301L,
+                    title = "周四番",
+                    titleCn = "周四番",
+                    episode = 7,
+                    airAtUtc = "2026-09-09T03:00:00Z", // 2026-09-09 11:00 CST（周三，距现在 47 小时）
+                    kind = AirEventKind.SCHEDULED,
+                ),
+            )
+
+        val state =
+            ScheduleWidgetPlanner.plan(
+                isLoggedIn = true,
+                upcoming = items,
+                nowEpochMillis = nowEpochMillis,
+                zoneId = zoneId,
+            )
+
         assertEquals(1, state.items.size)
-        assertEquals(102L, state.items[0].subjectId)
-        assertFalse(state.items[0].isTracked)
-        assertEquals("今日新番日历", state.headerTitle)
+        val item = state.items[0]
+        assertEquals(301L, item.subjectId)
+        assertFalse(item.isToday)
+        assertEquals("第7集 · 周三 11:00", item.episodeSubtitle)
+        assertEquals("周三", item.countdownBadge)
+        assertEquals("下一部更新", state.headerTitle)
     }
 
     @Test
@@ -298,13 +329,13 @@ class ScheduleWidgetPlannerTest {
         assertEquals("已更新", ScheduleWidgetPlanner.formatCountdown(-3 * 3600 * 1000L, isToday = true))
         // 10分钟前播
         assertEquals("刚刚开播", ScheduleWidgetPlanner.formatCountdown(-10 * 60 * 1000L))
-        // 15分钟后
-        assertEquals("15分钟后", ScheduleWidgetPlanner.formatCountdown(15 * 60 * 1000L))
-        // 45秒后 (minOf 1m)
-        assertEquals("1分钟后", ScheduleWidgetPlanner.formatCountdown(45 * 1000L))
+        // 15分钟后：报档位，不报分钟（刷新间隔 30 分钟，分钟级倒数必然失真）
+        assertEquals("即将开播", ScheduleWidgetPlanner.formatCountdown(15 * 60 * 1000L))
+        // 45秒后
+        assertEquals("即将开播", ScheduleWidgetPlanner.formatCountdown(45 * 1000L))
         // 2小时后
-        assertEquals("2小时后", ScheduleWidgetPlanner.formatCountdown(2 * 3600 * 1000L))
-        // 30小时后
+        assertEquals("待播", ScheduleWidgetPlanner.formatCountdown(2 * 3600 * 1000L))
+        // 30小时后（跨天场景由调用方以周几徽章覆盖）
         assertEquals("明天", ScheduleWidgetPlanner.formatCountdown(30 * 3600 * 1000L))
     }
 

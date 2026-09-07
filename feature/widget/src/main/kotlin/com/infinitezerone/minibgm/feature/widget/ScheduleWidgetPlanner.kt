@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.widget
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -10,6 +11,10 @@ import java.time.format.DateTimeFormatter
 
 object ScheduleWidgetPlanner {
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+    private const val TWO_HOURS_MILLIS = 2 * 60 * 60 * 1000L
+    private const val ONE_HOUR_MILLIS = 60 * 60 * 1000L
+    private const val ONE_DAY_MILLIS = 24 * ONE_HOUR_MILLIS
 
     private data class AiringMeta(
         val subtitle: String,
@@ -42,23 +47,29 @@ object ScheduleWidgetPlanner {
         val rankedTracked =
             upcoming.map { item ->
                 val airInstant = runCatching { Instant.parse(item.airAtUtc) }.getOrNull()
+                val airZoned = airInstant?.atZone(zoneId)
+                val todayFlag = airZoned?.toLocalDate() == today
                 val meta =
-                    if (airInstant != null) {
-                        val airZoned = airInstant.atZone(zoneId)
+                    if (airZoned != null) {
                         val airDate = airZoned.toLocalDate()
                         val diff = airInstant.toEpochMilli() - nowEpochMillis
-                        val todayFlag = (airDate == today)
                         val tomorrowFlag = (airDate == tomorrow)
                         val airedFlag = todayFlag && (diff <= 0)
                         val dayPrefix =
                             when {
                                 tomorrowFlag -> "明天 "
+                                airDate.isAfter(today) -> "${weekdayCn(airZoned.dayOfWeek)} "
                                 else -> ""
                             }
                         val timeStr = airZoned.format(timeFormatter)
                         val epStr = if (item.episode > 0) "第${item.episode}集 · " else ""
                         val sub = "$epStr$dayPrefix$timeStr"
-                        val b = formatCountdown(diff, isToday = todayFlag)
+                        val b =
+                            if (diff >= ONE_DAY_MILLIS) {
+                                weekdayCn(airZoned.dayOfWeek)
+                            } else {
+                                formatCountdown(diff, isToday = todayFlag)
+                            }
                         Triple(sub, b, timeStr) to Pair(airedFlag, diff)
                     } else {
                         val sub = if (item.episode > 0) "第${item.episode}集" else "更新中"
@@ -77,10 +88,11 @@ object ScheduleWidgetPlanner {
                             kindTag = mapKindTag(item.kind),
                             isTracked = true,
                             isAiredToday = meta.second.first,
+                            isToday = todayFlag,
                             airTimeCst = meta.first.third,
                         ),
                     diffMillis = meta.second.second,
-                    isToday = airInstant?.atZone(zoneId)?.toLocalDate() == today,
+                    isToday = todayFlag,
                 )
             }
 
@@ -143,6 +155,7 @@ object ScheduleWidgetPlanner {
                                 kindTag = mapKindTag(schedule.nextEpisodeKind),
                                 isTracked = false,
                                 isAiredToday = aired,
+                                isToday = true,
                                 airTimeCst = timeStr,
                             ),
                         diffMillis = diff,
@@ -155,39 +168,28 @@ object ScheduleWidgetPlanner {
                     ),
                 ).map { it.model }
 
-        // 核心设计原则：用户已登录且有追番时，坚决只展示用户自己的追番列表，杜绝掺入不相干陌生番剧
+        // 内容模型：widget 回答「我的下一部怎么样了」——登录用户永远只看追番（今日优先，跨天补位），
+        // 陌生番日历仅作为未登录用户的获客面，绝不掺入登录用户视野
         val allItems =
             if (isLoggedIn) {
-                if (sortedTracked.isNotEmpty()) {
-                    sortedTracked.take(maxItems)
-                } else {
-                    // 今日无在看更新，以今日新番日历作为参考
-                    fallbackItems.take(maxItems)
-                }
+                sortedTracked.take(maxItems)
             } else {
                 fallbackItems.take(maxItems)
             }
 
         val hasTracked = sortedTracked.isNotEmpty()
+        val hero = allItems.firstOrNull()
         val headerTitle =
             when {
-                hasTracked -> "今日追番"
-                isLoggedIn -> "今日新番日历"
+                hero == null -> "今日追番"
+                hero.isTracked && !hero.isToday -> "下一部更新"
+                hero.isTracked -> "今日追番"
                 else -> "今日新番日历"
             }
 
-        val weekdayCn =
-            when (nowZoned.dayOfWeek) {
-                java.time.DayOfWeek.MONDAY -> "周一"
-                java.time.DayOfWeek.TUESDAY -> "周二"
-                java.time.DayOfWeek.WEDNESDAY -> "周三"
-                java.time.DayOfWeek.THURSDAY -> "周四"
-                java.time.DayOfWeek.FRIDAY -> "周五"
-                java.time.DayOfWeek.SATURDAY -> "周六"
-                java.time.DayOfWeek.SUNDAY -> "周日"
-            }
+        val todayWeekdayCn = weekdayCn(nowZoned.dayOfWeek)
         val formattedDate = "${nowZoned.monthValue}月${nowZoned.dayOfMonth}日"
-        val headerSubtitle = "$weekdayCn · $formattedDate"
+        val headerSubtitle = "$todayWeekdayCn · $formattedDate"
         val formattedTime = nowZoned.format(timeFormatter)
 
         return ScheduleWidgetUiState(
@@ -208,21 +210,19 @@ object ScheduleWidgetPlanner {
         val time: String,
     )
 
+    /**
+     * 档位词而非分钟级倒计时：小组件刷新周期为 30 分钟，精确到分钟的倒数在两次刷新之间必然失真。
+     * 精确时刻由条目的 airTimeCst 呈现，此处只回答状态档位。
+     */
     fun formatCountdown(
         diffMillis: Long,
         isToday: Boolean = false,
     ): String =
         when {
-            diffMillis <= -2 * 60 * 60 * 1000L -> if (isToday) "已更新" else "已开播"
+            diffMillis <= -TWO_HOURS_MILLIS -> if (isToday) "已更新" else "已开播"
             diffMillis < 0L -> "刚刚开播"
-            diffMillis < 60 * 60 * 1000L -> {
-                val minutes = maxOf(1L, diffMillis / (60 * 1000L))
-                "${minutes}分钟后"
-            }
-            diffMillis < 24 * 60 * 60 * 1000L -> {
-                val hours = diffMillis / (60 * 60 * 1000L)
-                if (hours < 1L) "1小时内" else "${hours}小时后"
-            }
+            diffMillis < ONE_HOUR_MILLIS -> "即将开播"
+            diffMillis < ONE_DAY_MILLIS -> "待播"
             else -> "明天"
         }
 
@@ -231,5 +231,16 @@ object ScheduleWidgetPlanner {
             AirEventKind.PREDICTED -> "预估"
             AirEventKind.SCHEDULED -> "表定"
             else -> null
+        }
+
+    private fun weekdayCn(dayOfWeek: DayOfWeek): String =
+        when (dayOfWeek) {
+            DayOfWeek.MONDAY -> "周一"
+            DayOfWeek.TUESDAY -> "周二"
+            DayOfWeek.WEDNESDAY -> "周三"
+            DayOfWeek.THURSDAY -> "周四"
+            DayOfWeek.FRIDAY -> "周五"
+            DayOfWeek.SATURDAY -> "周六"
+            DayOfWeek.SUNDAY -> "周日"
         }
 }
