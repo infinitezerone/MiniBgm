@@ -54,8 +54,8 @@ data class SubjectDetailUiState(
 class SubjectDetailViewModel(
     private val subjectRepository: SubjectRepository,
     private val subjectId: Long,
-    private val collectionRepository: CollectionRepository? = null,
-    private val communityRepository: CommunityRepository? = null,
+    private val collectionRepository: CollectionRepository,
+    private val communityRepository: CommunityRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
@@ -74,11 +74,9 @@ class SubjectDetailViewModel(
                 _uiState.update { it.copy(episodes = episodes) }
             }
         }
-        if (collectionRepository != null) {
-            viewModelScope.launch {
-                collectionRepository.getCollectionStream(subjectId).collect { collection ->
-                    _uiState.update { it.copy(collection = collection) }
-                }
+        viewModelScope.launch {
+            collectionRepository.getCollectionStream(subjectId).collect { collection ->
+                _uiState.update { it.copy(collection = collection) }
             }
         }
     }
@@ -90,12 +88,12 @@ class SubjectDetailViewModel(
 
             val subjectDeferred = async { subjectRepository.fetchSubjectDetail(subjectId) }
             val episodesDeferred = async { subjectRepository.fetchEpisodes(subjectId) }
-            val collectionDeferred = async { collectionRepository?.fetchCollection(subjectId) }
+            val collectionDeferred = async { collectionRepository.fetchCollection(subjectId) }
             val charactersDeferred = async { subjectRepository.fetchCharacters(subjectId) }
             val personsDeferred = async { subjectRepository.fetchPersons(subjectId) }
             val relationsDeferred = async { subjectRepository.fetchRelations(subjectId) }
-            val subjectCommentsDeferred = async { communityRepository?.getSubjectComments(subjectId, limit = 15) }
-            val subjectTopicsDeferred = async { communityRepository?.getSubjectTopics(subjectId, limit = 5) }
+            val subjectCommentsDeferred = async { communityRepository.getSubjectComments(subjectId, limit = 15) }
+            val subjectTopicsDeferred = async { communityRepository.getSubjectTopics(subjectId, limit = 5) }
 
             val subjectResult = subjectDeferred.await()
             val episodesResult = episodesDeferred.await()
@@ -108,7 +106,7 @@ class SubjectDetailViewModel(
 
             subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
             episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
-            collectionResult?.onError { _, message -> _uiState.update { it.copy(error = message) } }
+            collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
 
             val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
             val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
@@ -160,7 +158,7 @@ class SubjectDetailViewModel(
 
         viewModelScope.launch {
             val result =
-                collectionRepository?.updateCollectionStatus(
+                collectionRepository.updateCollectionStatus(
                     subjectId = subjectId,
                     type = type,
                     rate = rate,
@@ -168,7 +166,7 @@ class SubjectDetailViewModel(
                     private = private,
                     subjectType = resolvedSubjectType,
                 )
-            result?.onError { _, message ->
+            result.onError { _, message ->
                 // 2. 失败回滚为原状态并提示错误
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
             }
@@ -212,13 +210,13 @@ class SubjectDetailViewModel(
 
         viewModelScope.launch {
             val result =
-                collectionRepository?.updateEpisodeStatus(
+                collectionRepository.updateEpisodeStatus(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     isWatched = isWatched,
                     epNumber = epNumber,
                 )
-            result?.onError { _, message ->
+            result.onError { _, message ->
                 // 回滚
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
             }
