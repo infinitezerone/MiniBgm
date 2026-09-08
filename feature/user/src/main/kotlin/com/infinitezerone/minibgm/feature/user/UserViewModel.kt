@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,28 @@ data class UserUiState(
     val isCountsLoading: Boolean = false,
     val airingReminderEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
+)
+
+/** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
+private data class AuthSlice(
+    val isLoggedIn: Boolean,
+    val activeProfile: UserProfile?,
+    val savedAccounts: List<UserProfile>,
+    val isAuthenticating: Boolean,
+)
+
+/** 同步域切片：播放源设置与后台同步状态 */
+private data class SyncSlice(
+    val settings: UserSettings,
+    val workSyncing: Boolean,
+)
+
+/** 本地 UI 域切片：手动同步、收藏统计与刷新标记 */
+private data class LocalSlice(
+    val manualSyncing: Boolean,
+    val collectionCounts: Map<CollectionType, Int>,
+    val isCountsLoading: Boolean,
+    val isRefreshing: Boolean,
 )
 
 class UserViewModel(
@@ -62,47 +85,58 @@ class UserViewModel(
         }
     }
 
-    val uiState: StateFlow<UserUiState> =
+    /**
+     * uiState 组装：combine 的类型安全重载最多 5 路，超出部分按域分组为
+     * 中间切片（auth / sync / local）后再做一次 3 路合并，避免
+     * Array<Any?> + unchecked cast。
+     */
+    private val authSlice: Flow<AuthSlice> =
         combine(
             authRepository.isLoggedIn,
             authRepository.activeProfile,
             authRepository.savedAccounts,
             authRepository.isAuthenticating,
+        ) { isLoggedIn, activeProfile, savedAccounts, isAuthenticating ->
+            AuthSlice(isLoggedIn, activeProfile, savedAccounts, isAuthenticating)
+        }
+
+    private val syncSlice: Flow<SyncSlice> =
+        combine(
             settingsRepository.settings,
             syncManager.isSyncing,
+        ) { settings, workSyncing ->
+            SyncSlice(settings, workSyncing)
+        }
+
+    private val localSlice: Flow<LocalSlice> =
+        combine(
             isManualSyncing,
             collectionCountsFlow,
             isCountsLoadingFlow,
             isRefreshingFlow,
-        ) { args: Array<Any?> ->
-            val isLoggedIn = args[0] as Boolean
-            val activeProfile = args[1] as? UserProfile
+        ) { manualSyncing, collectionCounts, isCountsLoading, isRefreshing ->
+            LocalSlice(manualSyncing, collectionCounts, isCountsLoading, isRefreshing)
+        }
 
-            @Suppress("UNCHECKED_CAST")
-            val savedAccounts = args[2] as List<UserProfile>
-            val isAuthenticating = args[3] as Boolean
-            val settings = args[4] as UserSettings
-            val workSyncing = args[5] as Boolean
-            val manualSyncing = args[6] as Boolean
-
-            @Suppress("UNCHECKED_CAST")
-            val collectionCounts = args[7] as Map<CollectionType, Int>
-            val isCountsLoading = args[8] as Boolean
-            val isRefreshing = args[9] as Boolean
-
+    val uiState: StateFlow<UserUiState> =
+        combine(
+            authSlice,
+            syncSlice,
+            localSlice,
+        ) { auth, sync, local ->
             UserUiState(
-                isLoggedIn = isLoggedIn,
-                activeProfile = activeProfile,
-                savedAccounts = savedAccounts,
-                isAuthenticating = isAuthenticating,
-                isRefreshing = isRefreshing,
-                syncInterval = settings.syncInterval,
-                lastSyncTimestamp = settings.bangumiDataLastSyncTimestamp,
-                isSyncing = workSyncing || manualSyncing,
-                collectionCounts = collectionCounts,
-                isCountsLoading = isCountsLoading,
-                airingReminderEnabled = settings.airingReminderEnabled,
-                airingReminderHour = settings.airingReminderHour,
+                isLoggedIn = auth.isLoggedIn,
+                activeProfile = auth.activeProfile,
+                savedAccounts = auth.savedAccounts,
+                isAuthenticating = auth.isAuthenticating,
+                isRefreshing = local.isRefreshing,
+                syncInterval = sync.settings.syncInterval,
+                lastSyncTimestamp = sync.settings.bangumiDataLastSyncTimestamp,
+                isSyncing = sync.workSyncing || local.manualSyncing,
+                collectionCounts = local.collectionCounts,
+                isCountsLoading = local.isCountsLoading,
+                airingReminderEnabled = sync.settings.airingReminderEnabled,
+                airingReminderHour = sync.settings.airingReminderHour,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
