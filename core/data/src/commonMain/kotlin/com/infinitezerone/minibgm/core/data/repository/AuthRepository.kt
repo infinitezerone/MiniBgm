@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -9,7 +10,6 @@ import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
-import com.infinitezerone.minibgm.core.network.TokenProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

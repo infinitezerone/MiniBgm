@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.get

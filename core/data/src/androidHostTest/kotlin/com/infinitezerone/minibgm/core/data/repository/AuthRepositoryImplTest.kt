@@ -8,13 +8,13 @@ import androidx.datastore.core.Storage
 import androidx.datastore.core.StorageConnection
 import androidx.datastore.core.WriteScope
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
-import com.infinitezerone.minibgm.core.network.TokenProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
