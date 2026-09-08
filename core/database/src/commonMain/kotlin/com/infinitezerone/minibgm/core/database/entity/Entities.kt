@@ -103,10 +103,7 @@ data class UserCollectionEntity(
     val userId: Long,
     val subjectId: Long,
     val subjectType: Int,
-    val rate: Int,
     val type: Int,
-    val comment: String,
     val epStatus: Int,
-    val volStatus: Int,
     val updatedAt: String,
 )

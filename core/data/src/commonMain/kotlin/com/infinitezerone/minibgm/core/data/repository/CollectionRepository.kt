@@ -2,10 +2,10 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.common.UserDataClearable
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
-import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.network.BangumiApiService
@@ -68,18 +68,25 @@ interface CollectionRepository : UserDataClearable {
         isWatched: Boolean,
         epNumber: Int = 1,
     ): AppResult<Unit>
+
+    /**
+     * 登录会话建立后，把云端「在看」（动画类）收藏全量分页同步进本地 Room。
+     * 时刻表「我追的」、待补更新、桌面小组件与开播提醒均消费本地收藏流，
+     * 本地无数据即表现为「没有在追的番」，故会话建立时必须先执行本同步。
+     */
+    suspend fun syncWatchingCollections(): AppResult<Unit>
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CollectionRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userCollectionDao: UserCollectionDao,
-    private val userPreferences: UserPreferencesDataSource,
+    private val tokenProvider: TokenProvider,
 ) : CollectionRepository {
+    // 活跃用户由凭据库派生（token 存在才有会话）：偏好文件不参与登录判定，
+    // 避免云备份恢复出的陈旧标记让未登录设备渲染「在追/待补」内容
     private val activeUserIdFlow: Flow<Long?> =
-        userPreferences.userPreferences
-            .map { it.activeUserId.takeIf { id -> id != 0L } }
-            .distinctUntilChanged()
+        tokenProvider.activeUserId.distinctUntilChanged()
 
     override fun getCollectionStream(subjectId: Long): Flow<UserCollection?> =
         activeUserIdFlow.flatMapLatest { userId ->
@@ -147,8 +154,7 @@ class CollectionRepositoryImpl(
         }
 
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> {
-        val activeUid = userPreferences.userPreferences.first().activeUserId
-        if (activeUid == 0L) return AppResult.Success(null)
+        val activeUid = tokenProvider.activeUserId.first() ?: return AppResult.Success(null)
         return try {
             val collection = apiService.getCollection(activeUid.toString(), subjectId)
             if (collection != null) {
@@ -172,8 +178,8 @@ class CollectionRepositoryImpl(
         subjectType: Int,
     ): AppResult<Unit> =
         withContext(NonCancellable) {
-            val activeUid = userPreferences.userPreferences.first().activeUserId
-            if (activeUid == 0L) return@withContext AppResult.Error(IllegalStateException("未登录账号，无法更新收藏"))
+            val activeUid = tokenProvider.activeUserId.first()
+            if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("未登录账号，无法更新收藏"))
             try {
                 apiService.updateCollection(
                     subjectId = subjectId,
@@ -183,7 +189,7 @@ class CollectionRepositoryImpl(
                     private = private,
                     epStatus = epStatus,
                 )
-                // 写入本地 Room 数据库
+                // 写入本地 Room 数据库（仅保留纯追番状态）
                 val existing = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
                 val resolvedSubjectType = if (subjectType > 0) subjectType else (existing?.subjectType ?: 2)
                 userCollectionDao.insertCollection(
@@ -191,11 +197,8 @@ class CollectionRepositoryImpl(
                         userId = activeUid,
                         subjectId = subjectId,
                         subjectType = resolvedSubjectType,
-                        rate = rate ?: (existing?.rate ?: 0),
                         type = type.value,
-                        comment = comment ?: (existing?.comment.orEmpty()),
                         epStatus = epStatus ?: (existing?.epStatus ?: 0),
-                        volStatus = existing?.volStatus ?: 0,
                         updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
@@ -214,10 +217,11 @@ class CollectionRepositoryImpl(
         epNumber: Int,
     ): AppResult<Unit> =
         withContext(NonCancellable) {
-            val activeUid = userPreferences.userPreferences.first().activeUserId
-            if (activeUid == 0L) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
+            val activeUid = tokenProvider.activeUserId.first()
+            if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
             try {
-                // 1. 获取当前远端收藏状态
+                // 1. 获取当前远端及本地收藏状态
+                val localExisting = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
                 val existing =
                     try {
                         apiService.getCollection(activeUid.toString(), subjectId)
@@ -225,17 +229,33 @@ class CollectionRepositoryImpl(
                         null
                     }
 
-                val targetType = existing?.type?.takeIf { it > 0 } ?: CollectionType.DOING.value
+                // 2. 状态流转：打卡若原本未收藏或为「想看」，自动流转至「在看」
+                val existingType = existing?.type?.takeIf { it > 0 } ?: (localExisting?.type?.takeIf { it > 0 } ?: 0)
+                val targetType =
+                    if (isWatched && (existingType == 0 || existingType == CollectionType.WISH.value)) {
+                        CollectionType.DOING.value
+                    } else if (existingType > 0) {
+                        existingType
+                    } else {
+                        CollectionType.DOING.value
+                    }
+
+                val currentEpStatus = existing?.epStatus ?: (localExisting?.epStatus ?: 0)
                 val targetEpStatus =
                     if (isWatched) {
-                        maxOf(existing?.epStatus ?: 0, epNumber)
+                        maxOf(currentEpStatus, epNumber)
                     } else {
-                        maxOf(0, epNumber - 1)
+                        // 撤销打卡：仅当撤销的是当前最大进度时才回退，防止撤销中间历史集数导致进度暴跌
+                        if (epNumber >= currentEpStatus) {
+                            maxOf(0, epNumber - 1)
+                        } else {
+                            currentEpStatus
+                        }
                     }
 
                 if (episodeId == null || episodeId <= 0L) {
-                    // 2a. 时间表待补清单等场景仅有话数、无单集 ID：
-                    //    episode_id=0 的打卡会被远端拒绝，按话数从单集列表解析真实 ID
+                    // 时间表待补清单等场景仅有话数、无单集 ID：
+                    // episode_id=0 的打卡会被远端拒绝，按话数从单集列表解析真实 ID
                     val episodes = apiService.getEpisodes(subjectId).data
                     val resolvedEpisodeId =
                         episodes.firstOrNull { it.ep.toInt() == epNumber }?.id
@@ -248,17 +268,14 @@ class CollectionRepositoryImpl(
                     ensureCollectionAndCheckIn(subjectId, existing, targetType, episodeId, isWatched)
                 }
 
-                // 3. 远端打卡成功后，将最新的 UserCollectionEntity 存入本地 Room 数据库
+                // 3. 远端打卡成功后，将最新的纯追番状态存入本地 Room 数据库
                 userCollectionDao.insertCollection(
                     UserCollectionEntity(
                         userId = activeUid,
                         subjectId = subjectId,
-                        subjectType = 2,
-                        rate = existing?.rate ?: 0,
+                        subjectType = localExisting?.subjectType ?: 2,
                         type = targetType,
-                        comment = existing?.comment.orEmpty(),
                         epStatus = targetEpStatus,
-                        volStatus = 0,
                         updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
@@ -270,7 +287,7 @@ class CollectionRepositoryImpl(
             }
         }
 
-    /** 确保条目已在用户收藏中（未收藏则置为在看），随后执行单集打卡（type = 2 已看过，0 撤销） */
+    /** 确保条目已在用户收藏中（未收藏或想看则置为在看），随后执行单集打卡（type = 2 已看过，0 撤销） */
     private suspend fun ensureCollectionAndCheckIn(
         subjectId: Long,
         existing: UserCollection?,
@@ -278,7 +295,7 @@ class CollectionRepositoryImpl(
         episodeId: Long,
         isWatched: Boolean,
     ) {
-        if (existing == null || existing.type == 0) {
+        if (existing == null || existing.type == 0 || (isWatched && existing.type == CollectionType.WISH.value)) {
             apiService.updateCollection(
                 subjectId = subjectId,
                 type = targetType,
@@ -294,6 +311,46 @@ class CollectionRepositoryImpl(
         )
     }
 
+    override suspend fun syncWatchingCollections(): AppResult<Unit> =
+        try {
+            val activeUid =
+                tokenProvider.activeUserId.first()
+                    ?: return AppResult.Error(IllegalStateException("未登录账号，无法同步收藏"))
+            val pageSize = 50
+            // 防御服务端 total 异常：最多 20 页（1000 条）封顶
+            val maxPages = 20
+            var offset = 0
+            var total = Int.MAX_VALUE
+            var pages = 0
+            val allDoingCollections = mutableListOf<UserCollectionEntity>()
+            while (offset < total && pages < maxPages) {
+                val page =
+                    apiService.getUserCollections(
+                        username = activeUid.toString(),
+                        // 时刻表/待补/提醒的消费面只有动画条目，无需同步全类型
+                        subjectType = 2,
+                        type = CollectionType.DOING.value,
+                        limit = pageSize,
+                        offset = offset,
+                    )
+                total = page.total
+                allDoingCollections.addAll(page.data.map { it.asEntity(activeUid) })
+                offset += pageSize
+                pages++
+            }
+            // 全部页面拉取成功后，单事务整体替换本地 DOING 列表，彻底消除已弃番/已看过的陈旧脏数据
+            userCollectionDao.replaceCollectionsByType(
+                userId = activeUid,
+                type = CollectionType.DOING.value,
+                collections = allDoingCollections,
+            )
+            AppResult.Success(Unit)
+        } catch (e: BgmNetworkException) {
+            AppResult.Error(e, "同步在看收藏失败：${e.message}")
+        } catch (e: Exception) {
+            AppResult.Error(e, "同步在看收藏异常：${e.message}")
+        }
+
     override suspend fun clearUserData(userId: Long) {
         userCollectionDao.clearByUserId(userId)
     }
@@ -308,11 +365,11 @@ fun UserCollectionEntity.asExternalModel(): UserCollection =
         userId = userId,
         subjectId = subjectId,
         subjectType = subjectType,
-        rate = rate,
+        rate = 0,
         type = type,
-        comment = comment,
+        comment = "",
         epStatus = epStatus,
-        volStatus = volStatus,
+        volStatus = 0,
         updatedAt = updatedAt,
     )
 
@@ -321,10 +378,7 @@ fun UserCollection.asEntity(userId: Long): UserCollectionEntity =
         userId = userId,
         subjectId = subjectId,
         subjectType = subjectType,
-        rate = rate,
         type = type,
-        comment = comment,
         epStatus = epStatus,
-        volStatus = volStatus,
         updatedAt = updatedAt,
     )

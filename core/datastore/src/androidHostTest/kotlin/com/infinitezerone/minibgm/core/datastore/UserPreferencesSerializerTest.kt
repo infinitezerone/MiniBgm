@@ -6,15 +6,14 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class UserPreferencesSerializerTest {
     @Test
-    fun defaultValue_isNotLoggedIn() {
+    fun defaultValue_hasNoSessionFields() {
         val default = UserPreferencesSerializer.defaultValue
-        assertFalse(default.isLoggedIn)
-        assertEquals(0L, default.activeUserId)
+        assertTrue(default.savedProfiles.isEmpty())
+        assertEquals("", default.pendingOAuthVerifier)
     }
 
     @Test
@@ -30,7 +29,6 @@ class UserPreferencesSerializerTest {
         runTest {
             val original =
                 UserPreferences(
-                    activeUserId = 42L,
                     savedProfiles =
                         mapOf(
                             42L to
@@ -41,7 +39,6 @@ class UserPreferencesSerializerTest {
                                     sign = "Testing",
                                 ),
                         ),
-                    isLoggedIn = true,
                     pendingOAuthVerifier = "test_verifier",
                     isDarkMode = true,
                     notifyBeforeAirMinutes = 30,
@@ -54,19 +51,20 @@ class UserPreferencesSerializerTest {
             val readBack = UserPreferencesSerializer.readFrom(inputStream)
 
             assertEquals(original, readBack)
-            assertTrue(readBack.isLoggedIn)
-            assertEquals("infinitezerone", readBack.activeProfile?.username)
+            assertEquals("infinitezerone", readBack.savedProfiles[42L]?.username)
         }
 
     @Test
-    fun readFrom_legacyJsonWithUnknownKeys_dropsLegacyAccountFields() =
+    fun readFrom_legacyJsonWithSessionFields_dropsSessionFields() =
         runTest {
-            // 旧版本 JSON 带已删除的平铺账号字段：读取时忽略未知键，不视为损坏
+            // 旧版本 JSON 带已删除的会话字段（activeUserId/isLoggedIn）：读取时忽略
+            // 未知键，不视为损坏——会话事实自本版本起唯一由凭据库承载
             val legacyJson =
-                """{"activeUserId":42,"isLoggedIn":true,"userId":42,"username":"old","nickname":"旧","isDarkMode":true}"""
+                """{"activeUserId":42,"isLoggedIn":true,"savedProfiles":{"42":{"id":42,"username":"old","nickname":"旧"}},"isDarkMode":true}"""
             val result = UserPreferencesSerializer.readFrom(ByteArrayInputStream(legacyJson.encodeToByteArray()))
 
-            assertTrue(result.isLoggedIn)
+            assertEquals(1, result.savedProfiles.size)
+            assertEquals("旧", result.savedProfiles[42L]?.nickname)
             assertEquals(true, result.isDarkMode)
         }
 }

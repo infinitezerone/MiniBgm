@@ -4,6 +4,7 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
+import androidx.room3.Transaction
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
@@ -109,6 +110,22 @@ interface UserCollectionDao {
         userId: Long,
         subjectId: Long,
     )
+
+    @Query("DELETE FROM user_collections WHERE userId = :userId AND type = :type")
+    suspend fun deleteByType(
+        userId: Long,
+        type: Int,
+    )
+
+    @Transaction
+    suspend fun replaceCollectionsByType(
+        userId: Long,
+        type: Int,
+        collections: List<UserCollectionEntity>,
+    ) {
+        deleteByType(userId, type)
+        insertCollections(collections)
+    }
 
     @Query("DELETE FROM user_collections WHERE userId = :userId")
     suspend fun clearByUserId(userId: Long)

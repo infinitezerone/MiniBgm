@@ -91,18 +91,14 @@ class UserPreferencesDataSourceTest {
 
     private fun createDataSource(
         initial: UserPreferences =
-            UserPreferences(
-                isLoggedIn = true,
-                activeUserId = 42L,
-                savedProfiles = mapOf(42L to existingAccount),
-            ),
+            UserPreferences(savedProfiles = mapOf(42L to existingAccount)),
     ): Pair<UserPreferencesDataSource, DataStore<UserPreferences>> {
         val dataStore = DataStoreFactory.create(storage = InMemoryStorage(initial))
         return UserPreferencesDataSource(dataStore) to dataStore
     }
 
     @Test
-    fun `saveUserProfile upserts profile and switches active account`() =
+    fun `saveUserProfile upserts profile into pool without touching session`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
 
@@ -110,29 +106,12 @@ class UserPreferencesDataSourceTest {
 
             val stored = dataStore.data.first()
             assertEquals(2, stored.savedProfiles.size)
-            assertEquals(999L, stored.activeUserId)
-            assertTrue(stored.isLoggedIn)
             assertEquals("infinitezerone", stored.savedProfiles[42L]?.username)
-            assertEquals("马甲", stored.activeProfile?.nickname)
+            assertEquals("马甲", stored.savedProfiles[999L]?.nickname)
         }
 
     @Test
-    fun `markLoggedIn activates account without profile`() =
-        runTest {
-            val (dataSource, dataStore) =
-                createDataSource(initial = UserPreferences())
-
-            dataSource.markLoggedIn(42L)
-
-            val stored = dataStore.data.first()
-            assertTrue(stored.isLoggedIn)
-            assertEquals(42L, stored.activeUserId)
-            // 资料尚未拉取：activeProfile 为空属预期，等 saveUserProfile 到达
-            assertEquals(null, stored.activeProfile)
-        }
-
-    @Test
-    fun `removeAccount clears login state when last account removed`() =
+    fun `removeAccount removes profile from pool`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
 
@@ -140,12 +119,10 @@ class UserPreferencesDataSourceTest {
 
             val stored = dataStore.data.first()
             assertEquals(0, stored.savedProfiles.size)
-            assertEquals(0L, stored.activeUserId)
-            assertEquals(false, stored.isLoggedIn)
         }
 
     @Test
-    fun `removeAccount keeps login state when other accounts remain`() =
+    fun `removeAccount keeps other profiles in pool`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
             dataSource.saveUserProfile(UserProfile(id = 999L, username = "alt", nickname = "马甲"))
@@ -153,21 +130,24 @@ class UserPreferencesDataSourceTest {
             dataSource.removeAccount(42L)
 
             val stored = dataStore.data.first()
-            assertEquals(999L, stored.activeUserId)
-            assertTrue(stored.isLoggedIn)
+            assertEquals(1, stored.savedProfiles.size)
+            assertEquals("马甲", stored.savedProfiles[999L]?.nickname)
         }
 
     @Test
-    fun `clearAuth preserves ordinary preferences only`() =
+    fun `clearAllUserData clears pool and verifier but preserves device preferences`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
             dataSource.setDarkMode(true)
             dataSource.setNotifyBeforeAirMinutes(30)
+            dataSource.setPendingOAuthVerifier("verifier-1")
 
-            dataSource.clearAuth()
+            dataSource.clearAllUserData()
 
             val stored = dataStore.data.first()
-            assertEquals(false, stored.isLoggedIn)
-            assertEquals(true, stored.isDarkMode)
+            assertTrue(stored.savedProfiles.isEmpty())
+            assertEquals("", stored.pendingOAuthVerifier)
+            assertTrue(stored.isDarkMode)
+            assertEquals(30, stored.notifyBeforeAirMinutes)
         }
 }

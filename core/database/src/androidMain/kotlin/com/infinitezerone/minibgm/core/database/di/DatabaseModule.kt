@@ -32,6 +32,29 @@ private val MIGRATION_1_2 =
         }
     }
 
+/** v2 → v3：user_collections 瘦身，移除 comment / rate / volStatus 字段，仅保留纯追番状态 */
+private val MIGRATION_2_3 =
+    object : Migration(2, 3) {
+        override suspend fun migrate(connection: SQLiteConnection) {
+            listOf(
+                "CREATE TABLE IF NOT EXISTS `user_collections_new` (" +
+                    "`userId` INTEGER NOT NULL, " +
+                    "`subjectId` INTEGER NOT NULL, " +
+                    "`subjectType` INTEGER NOT NULL, " +
+                    "`type` INTEGER NOT NULL, " +
+                    "`epStatus` INTEGER NOT NULL, " +
+                    "`updatedAt` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`userId`, `subjectId`))",
+                "INSERT INTO `user_collections_new` (`userId`, `subjectId`, `subjectType`, `type`, `epStatus`, `updatedAt`) " +
+                    "SELECT `userId`, `subjectId`, `subjectType`, `type`, `epStatus`, `updatedAt` FROM `user_collections`",
+                "DROP TABLE `user_collections`",
+                "ALTER TABLE `user_collections_new` RENAME TO `user_collections`",
+            ).forEach { sql ->
+                connection.prepare(sql).use { it.step() }
+            }
+        }
+    }
+
 val databaseModule =
     module {
         single {
@@ -40,7 +63,7 @@ val databaseModule =
                     androidContext(),
                     BgmDatabase::class.java,
                     "minibgm.db",
-                ).addMigrations(MIGRATION_1_2)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -12,6 +13,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.sync.work.reminders.AiringReminderNotifier
 import com.infinitezerone.minibgm.sync.work.reminders.AiringReminderPlanner
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 
 /**
@@ -27,10 +29,13 @@ class AiringReminderWorker(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
     private val userPreferences: UserPreferencesDataSource,
+    private val tokenProvider: TokenProvider,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         Log.d(TAG, "AiringReminderWorker starting doWork...")
         val prefs = userPreferences.userPreferences.firstOrNull() ?: return Result.success()
+        // 会话事实来自凭据库（与各 Repository 同一判据）
+        val isLoggedIn = tokenProvider.activeUserId.first() != null
         val today: String =
             java.time.LocalDate
                 .now()
@@ -59,7 +64,7 @@ class AiringReminderWorker(
         val dailySummary =
             AiringReminderPlanner.plan(
                 enabled = prefs.airingReminderEnabled,
-                isLoggedIn = prefs.isLoggedIn,
+                isLoggedIn = isLoggedIn,
                 lastNotifiedDate = prefs.airingReminderLastNotifiedDate,
                 today = today,
                 currentHour =
@@ -83,7 +88,7 @@ class AiringReminderWorker(
         val preAir =
             AiringReminderPlanner.pickPreAir(
                 enabled = prefs.airingReminderEnabled,
-                isLoggedIn = prefs.isLoggedIn,
+                isLoggedIn = isLoggedIn,
                 notifiedKeys = prefs.airingReminderNotifiedKeys,
                 today = today,
                 nowEpochMillis = TimeUtils.nowEpochMillis(),

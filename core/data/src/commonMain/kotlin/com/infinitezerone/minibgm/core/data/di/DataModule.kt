@@ -53,7 +53,7 @@ val dataModule =
             CollectionRepositoryImpl(
                 apiService = get<BangumiApiService>(),
                 userCollectionDao = get<UserCollectionDao>(),
-                userPreferences = get<UserPreferencesDataSource>(),
+                tokenProvider = get<TokenProvider>(),
             )
         }
         single<SearchRepository> {

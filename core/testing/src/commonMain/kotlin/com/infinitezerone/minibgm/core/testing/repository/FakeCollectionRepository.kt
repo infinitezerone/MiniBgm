@@ -19,6 +19,9 @@ class FakeCollectionRepository : CollectionRepository {
         private set
     var updateEpisodeCallCount: Int = 0
         private set
+    var syncWatchingResult: AppResult<Unit>? = null
+    var syncWatchingCallCount: Int = 0
+        private set
     var clearUserDataCallCount: Int = 0
         private set
 
@@ -97,6 +100,12 @@ class FakeCollectionRepository : CollectionRepository {
         epNumber: Int,
     ): AppResult<Unit> {
         updateEpisodeCallCount++
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun syncWatchingCollections(): AppResult<Unit> {
+        syncWatchingCallCount++
+        syncWatchingResult?.let { return it }
         return AppResult.Success(Unit)
     }
 
