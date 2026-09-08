@@ -5,6 +5,8 @@ import android.content.ComponentCallbacks2
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
+import com.infinitezerone.minibgm.core.data.repository.AuthRepository
+import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.di.appModule
 import com.infinitezerone.minibgm.feature.widget.WidgetSync
@@ -12,6 +14,7 @@ import com.infinitezerone.minibgm.sync.work.initializers.Sync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 import org.koin.android.ext.android.inject
@@ -41,6 +44,19 @@ class MiniBgmApp :
         // 初始化后台同步与开播提醒调度（封装在 :sync:work 内部，按偏好动态配置）
         val userPreferences: UserPreferencesDataSource by inject()
         Sync.initialize(this@MiniBgmApp, userPreferences, appScope)
+
+        // 登录会话建立（含冷启动时已登录）后同步一次云端「在看」收藏到本地库：
+        // 时刻表「我追的」、待补更新、小组件与开播提醒都消费本地收藏流，
+        // 本地无数据即表现为「没有在追的番」
+        val authRepository: AuthRepository by inject()
+        val collectionRepository: CollectionRepository by inject()
+        appScope.launch {
+            authRepository.isLoggedIn
+                .distinctUntilChanged()
+                .collect { loggedIn ->
+                    if (loggedIn) collectionRepository.syncWatchingCollections()
+                }
+        }
     }
 
     override fun onTrimMemory(level: Int) {

@@ -246,13 +246,24 @@ class UserCollectionsViewModel(
             }
 
             val result =
-                collectionRepository.updateCollectionStatus(
-                    subjectId = subjectId,
-                    type = type,
-                    rate = collection.rate.takeIf { it > 0 },
-                    comment = collection.comment.ifBlank { null },
-                    epStatus = nextEp,
-                )
+                if (collection.subjectType == 1) {
+                    // 书籍类条目：通过 updateCollectionStatus 提交话数进度
+                    collectionRepository.updateCollectionStatus(
+                        subjectId = subjectId,
+                        type = type,
+                        rate = collection.rate.takeIf { it > 0 },
+                        comment = collection.comment.ifBlank { null },
+                        epStatus = nextEp,
+                    )
+                } else {
+                    // 动画/剧集类条目：遵循 Bangumi 规范，通过 updateEpisodeStatus 单集打卡驱动完成度
+                    collectionRepository.updateEpisodeStatus(
+                        subjectId = subjectId,
+                        episodeId = null,
+                        isWatched = true,
+                        epNumber = nextEp,
+                    )
+                }
 
             result.onError { _, message ->
                 _uiState.update { state ->
