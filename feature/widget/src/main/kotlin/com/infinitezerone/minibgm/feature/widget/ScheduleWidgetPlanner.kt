@@ -1,244 +1,187 @@
 package com.infinitezerone.minibgm.feature.widget
 
-import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
-import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/**
+ * 把播出事件规划成「状态分区」的小组件展示态。
+ *
+ * 信息主体是状态而非时刻表：WATCHABLE（现在可看）-> UPCOMING_TODAY（今天待播）-> LATER（未来 7 天），
+ * 直接回答「我现在有什么可看」。分区列表不截断，计数即真实值，展示条数由 UI 层按尺寸自行取舍。
+ * 本类零用户文案：状态输出结构化 [AirStatusLine]，文案由 UI 按语言资源渲染。
+ */
 object ScheduleWidgetPlanner {
+    /** HH:mm 数据格式（非文案） */
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-    private const val TWO_HOURS_MILLIS = 2 * 60 * 60 * 1000L
-    private const val ONE_HOUR_MILLIS = 60 * 60 * 1000L
-    private const val ONE_DAY_MILLIS = 24 * ONE_HOUR_MILLIS
-
-    private data class AiringMeta(
-        val subtitle: String,
-        val badge: String,
-        val isAiredToday: Boolean,
-        val diffMillis: Long,
-        val isToday: Boolean,
-    )
-
-    private data class RankedItem(
+    private data class RankedEntry(
         val model: ScheduleWidgetItemUiModel,
+        val section: ScheduleWidgetSection,
         val diffMillis: Long,
-        val isToday: Boolean,
     )
 
     fun plan(
         isLoggedIn: Boolean,
+        hasTrackedSubjects: Boolean = false,
         upcoming: List<UpcomingAiring>,
         todaySchedules: List<AirSchedule> = emptyList(),
         nowEpochMillis: Long,
         zoneId: ZoneId = ZoneId.systemDefault(),
-        maxItems: Int = 6,
     ): ScheduleWidgetUiState {
-        val nowInstant = Instant.ofEpochMilli(nowEpochMillis)
-        val nowZoned = nowInstant.atZone(zoneId)
+        val nowZoned = Instant.ofEpochMilli(nowEpochMillis).atZone(zoneId)
         val today = nowZoned.toLocalDate()
         val tomorrow = today.plusDays(1)
 
-        // 1. 处理追番条目 (upcoming)
-        val rankedTracked =
-            upcoming.map { item ->
-                val airInstant = runCatching { Instant.parse(item.airAtUtc) }.getOrNull()
-                val airZoned = airInstant?.atZone(zoneId)
-                val todayFlag = airZoned?.toLocalDate() == today
-                val meta =
-                    if (airZoned != null) {
-                        val airDate = airZoned.toLocalDate()
-                        val diff = airInstant.toEpochMilli() - nowEpochMillis
-                        val tomorrowFlag = (airDate == tomorrow)
-                        val airedFlag = todayFlag && (diff <= 0)
-                        val dayPrefix =
-                            when {
-                                tomorrowFlag -> "明天 "
-                                airDate.isAfter(today) -> "${weekdayCn(airZoned.dayOfWeek)} "
-                                else -> ""
-                            }
-                        val timeStr = airZoned.format(timeFormatter)
-                        val epStr = if (item.episode > 0) "第${item.episode}集 · " else ""
-                        val sub = "$epStr$dayPrefix$timeStr"
-                        val b =
-                            if (diff >= ONE_DAY_MILLIS) {
-                                weekdayCn(airZoned.dayOfWeek)
-                            } else {
-                                formatCountdown(diff, isToday = todayFlag)
-                            }
-                        Triple(sub, b, timeStr) to Pair(airedFlag, diff)
-                    } else {
-                        val sub = if (item.episode > 0) "第${item.episode}集" else "更新中"
-                        Triple(sub, "在看", "") to Pair(false, Long.MAX_VALUE)
-                    }
-
-                RankedItem(
-                    model =
-                        ScheduleWidgetItemUiModel(
-                            subjectId = item.subjectId,
-                            title = item.displayName,
-                            episode = item.episode,
-                            episodeSubtitle = meta.first.first,
-                            countdownBadge = meta.first.second,
-                            coverUrl = item.coverUrl,
-                            kindTag = mapKindTag(item.kind),
-                            isTracked = true,
-                            isAiredToday = meta.second.first,
-                            isToday = todayFlag,
-                            airTimeLocal = meta.first.third,
-                        ),
-                    diffMillis = meta.second.second,
-                    isToday = todayFlag,
-                )
-            }
-
-        // 智能排序：今日即将播出 (diff > 0 升序) -> 今日已播 (diff <= 0 降序，刚播的在前) -> 明天/后续 (升序)
-        val upcomingToday = rankedTracked.filter { it.isToday && it.diffMillis > 0 }.sortedBy { it.diffMillis }
-        val airedToday = rankedTracked.filter { it.isToday && it.diffMillis <= 0 }.sortedByDescending { it.diffMillis }
-        val upcomingFuture = rankedTracked.filter { !it.isToday && it.diffMillis > 0 }.sortedBy { it.diffMillis }
-        val otherTracked = rankedTracked.filter { !it.isToday && it.diffMillis <= 0 }.sortedByDescending { it.diffMillis }
-
-        val sortedTracked = (upcomingToday + airedToday + upcomingFuture + otherTracked).map { it.model }
-
-        // 今日全局日历备选项
-        val trackedSubjectIds = sortedTracked.map { it.subjectId }.toSet()
-        val fallbackItems =
-            todaySchedules
-                .filter { it.bgmId !in trackedSubjectIds }
-                .map { schedule ->
-                    val airInstant = runCatching { Instant.parse(schedule.nextEpisodeAtUtc) }.getOrNull()
-                    val (sub, badge, aired, diff, timeStr) =
-                        if (airInstant != null) {
-                            val airZoned = airInstant.atZone(zoneId)
-                            val d = airInstant.toEpochMilli() - nowEpochMillis
-                            val t = airZoned.format(timeFormatter)
-                            val epStr = if (schedule.nextEpisodeNumber > 0) "第${schedule.nextEpisodeNumber}集 · " else ""
-                            val s = "$epStr$t"
-                            val b = formatCountdown(d, isToday = true)
-                            AiringQuad(s, b, d <= 0, d, t)
-                        } else if (schedule.timeCst.isNotBlank()) {
-                            val epStr = if (schedule.nextEpisodeNumber > 0) "第${schedule.nextEpisodeNumber}集 · " else ""
-                            val s = "$epStr${schedule.timeCst}"
-                            val parsedTime = runCatching { LocalTime.parse(schedule.timeCst) }.getOrNull()
-                            val d =
-                                if (parsedTime != null) {
-                                    val scheduleZoned = today.atTime(parsedTime).atZone(zoneId)
-                                    scheduleZoned.toInstant().toEpochMilli() - nowEpochMillis
-                                } else {
-                                    Long.MAX_VALUE
-                                }
-                            val b =
-                                if (d != Long.MAX_VALUE) {
-                                    formatCountdown(d, isToday = true)
-                                } else {
-                                    schedule.timeCst
-                                }
-                            AiringQuad(s, b, d <= 0, d, schedule.timeCst)
-                        } else {
-                            val epStr = if (schedule.nextEpisodeNumber > 0) "第${schedule.nextEpisodeNumber}集" else "放送中"
-                            AiringQuad(epStr, "新番", false, Long.MAX_VALUE, "")
-                        }
-
-                    RankedItem(
-                        model =
-                            ScheduleWidgetItemUiModel(
-                                subjectId = schedule.bgmId,
-                                title = schedule.titleCn.ifBlank { schedule.title },
-                                episode = schedule.nextEpisodeNumber,
-                                episodeSubtitle = sub,
-                                countdownBadge = badge,
-                                coverUrl = schedule.coverUrl,
-                                kindTag = mapKindTag(schedule.nextEpisodeKind),
-                                isTracked = false,
-                                isAiredToday = aired,
-                                isToday = true,
-                                airTimeLocal = timeStr,
-                            ),
-                        diffMillis = diff,
-                        isToday = true,
-                    )
-                }.sortedWith(
-                    compareBy(
-                        { if (it.diffMillis > 0) 0 else 1 },
-                        { if (it.diffMillis > 0) it.diffMillis else -it.diffMillis },
-                    ),
-                ).map { it.model }
-
-        // 内容模型：widget 回答「我的下一部怎么样了」——登录用户永远只看追番（今日优先，跨天补位），
-        // 陌生番日历仅作为未登录用户的获客面，绝不掺入登录用户视野
-        val allItems =
+        val entries =
             if (isLoggedIn) {
-                sortedTracked.take(maxItems)
+                // 内容模型：widget 回答「我追的怎么样了」——登录用户只看追番，绝不掺入公共日历的陌生番剧
+                upcoming.map { item ->
+                    buildEntry(
+                        subjectId = item.subjectId,
+                        title = item.displayName,
+                        episode = item.episode,
+                        airKind = item.kind,
+                        isTracked = true,
+                        coverUrl = item.coverUrl,
+                        airAtUtc = item.airAtUtc,
+                        fallbackTimeCst = "",
+                        unknownTimeStatus = AirStatusLine.Watching,
+                        nowEpochMillis = nowEpochMillis,
+                        today = today,
+                        tomorrow = tomorrow,
+                        zoneId = zoneId,
+                    )
+                }
             } else {
-                fallbackItems.take(maxItems)
+                // 未登录的获客面：今日公共新番日历
+                todaySchedules.map { schedule ->
+                    buildEntry(
+                        subjectId = schedule.bgmId,
+                        title = schedule.titleCn.ifBlank { schedule.title },
+                        episode = schedule.nextEpisodeNumber,
+                        airKind = schedule.nextEpisodeKind,
+                        isTracked = false,
+                        coverUrl = schedule.coverUrl,
+                        airAtUtc = schedule.nextEpisodeAtUtc,
+                        fallbackTimeCst = schedule.timeCst,
+                        unknownTimeStatus = AirStatusLine.OnAir,
+                        nowEpochMillis = nowEpochMillis,
+                        today = today,
+                        tomorrow = tomorrow,
+                        zoneId = zoneId,
+                    )
+                }
             }
 
-        val hasTracked = sortedTracked.isNotEmpty()
-        val hero = allItems.firstOrNull()
-        val headerTitle =
-            when {
-                hero == null -> "今日追番"
-                hero.isTracked && !hero.isToday -> "下一部更新"
-                hero.isTracked -> "今日追番"
-                else -> "今日新番日历"
-            }
-
-        val todayWeekdayCn = weekdayCn(nowZoned.dayOfWeek)
-        val formattedDate = "${nowZoned.monthValue}月${nowZoned.dayOfMonth}日"
-        val headerSubtitle = "$todayWeekdayCn · $formattedDate"
+        val watchable =
+            entries
+                .filter { it.section == ScheduleWidgetSection.WATCHABLE }
+                .sortedByDescending { it.diffMillis }
+        val upcomingToday =
+            entries
+                .filter { it.section == ScheduleWidgetSection.UPCOMING_TODAY }
+                .sortedBy { it.diffMillis }
+        val later =
+            entries
+                .filter { it.section == ScheduleWidgetSection.LATER }
+                .sortedWith(compareBy({ it.diffMillis == Long.MAX_VALUE }, { it.diffMillis }))
 
         return ScheduleWidgetUiState(
             isLoggedIn = isLoggedIn,
-            items = allItems,
-            headerTitle = headerTitle,
-            headerSubtitle = headerSubtitle,
-            hasTrackedItems = hasTracked,
+            hasTrackedSubjects = hasTrackedSubjects,
+            todayEpochDay = today.toEpochDay(),
+            watchable = watchable.map { it.model },
+            upcomingToday = upcomingToday.map { it.model },
+            later = later.map { it.model },
         )
     }
 
-    private data class AiringQuad(
-        val sub: String,
-        val badge: String,
-        val aired: Boolean,
-        val diff: Long,
-        val time: String,
-    )
+    private fun buildEntry(
+        subjectId: Long,
+        title: String,
+        episode: Int,
+        airKind: String?,
+        isTracked: Boolean,
+        coverUrl: String,
+        airAtUtc: String,
+        fallbackTimeCst: String,
+        unknownTimeStatus: AirStatusLine,
+        nowEpochMillis: Long,
+        today: LocalDate,
+        tomorrow: LocalDate,
+        zoneId: ZoneId,
+    ): RankedEntry {
+        fun entry(
+            status: AirStatusLine,
+            section: ScheduleWidgetSection,
+            diffMillis: Long,
+        ) = RankedEntry(
+            ScheduleWidgetItemUiModel(
+                subjectId = subjectId,
+                title = title,
+                episode = episode,
+                status = status,
+                airKind = airKind,
+                coverUrl = coverUrl,
+                isTracked = isTracked,
+            ),
+            section,
+            diffMillis,
+        )
 
-    /**
-     * 档位词而非分钟级倒计时：小组件刷新周期为 30 分钟，精确到分钟的倒数在两次刷新之间必然失真。
-     * 精确时刻由条目的 airTimeLocal 呈现，此处只回答状态档位。
-     */
-    fun formatCountdown(
-        diffMillis: Long,
-        isToday: Boolean = false,
-    ): String =
-        when {
-            diffMillis <= -TWO_HOURS_MILLIS -> if (isToday) "已更新" else "已开播"
-            diffMillis < 0L -> "刚刚开播"
-            diffMillis < ONE_HOUR_MILLIS -> "即将开播"
-            diffMillis < ONE_DAY_MILLIS -> "待播"
-            else -> "明天"
+        val airInstant = runCatching { Instant.parse(airAtUtc) }.getOrNull()
+        if (airInstant == null) {
+            // 无精确时刻：未登录条目回退到日历表定时间；追番条目标记「在看」垫底
+            val parsedTime = runCatching { LocalTime.parse(fallbackTimeCst) }.getOrNull()
+            return if (parsedTime != null) {
+                val diff =
+                    today
+                        .atTime(parsedTime)
+                        .atZone(zoneId)
+                        .toInstant()
+                        .toEpochMilli() - nowEpochMillis
+                if (diff <= 0) {
+                    entry(AirStatusLine.AiredToday, ScheduleWidgetSection.WATCHABLE, diff)
+                } else {
+                    entry(AirStatusLine.TodayAt(fallbackTimeCst), ScheduleWidgetSection.UPCOMING_TODAY, diff)
+                }
+            } else {
+                entry(unknownTimeStatus, ScheduleWidgetSection.LATER, Long.MAX_VALUE)
+            }
         }
 
-    fun mapKindTag(kind: String): String? =
-        when (kind) {
-            AirEventKind.PREDICTED -> "预估"
-            AirEventKind.SCHEDULED -> "表定"
-            else -> null
+        val airZoned = airInstant.atZone(zoneId)
+        val diff = airInstant.toEpochMilli() - nowEpochMillis
+        val isToday = airZoned.toLocalDate() == today
+        val isYesterday = airZoned.toLocalDate() == today.minusDays(1)
+        val timeStr = airZoned.format(timeFormatter)
+        return when {
+            // lookback 窗口内已播出的都算「现在可看」，含跨天临界（昨天深夜播的仍是最新可看话数）
+            diff <= 0 ->
+                entry(
+                    status =
+                        when {
+                            isToday -> AirStatusLine.AiredToday
+                            isYesterday -> AirStatusLine.Aired(AirDay.Yesterday, timeStr)
+                            else -> AirStatusLine.Aired(AirDay.Weekday(airZoned.dayOfWeek.value), timeStr)
+                        },
+                    section = ScheduleWidgetSection.WATCHABLE,
+                    diffMillis = diff,
+                )
+            isToday -> entry(AirStatusLine.TodayAt(timeStr), ScheduleWidgetSection.UPCOMING_TODAY, diff)
+            airZoned.toLocalDate() == tomorrow ->
+                entry(AirStatusLine.Upcoming(AirDay.Tomorrow, timeStr), ScheduleWidgetSection.LATER, diff)
+            else ->
+                entry(
+                    AirStatusLine.Upcoming(AirDay.Weekday(airZoned.dayOfWeek.value), timeStr),
+                    ScheduleWidgetSection.LATER,
+                    diff,
+                )
         }
-
-    private fun weekdayCn(dayOfWeek: DayOfWeek): String =
-        when (dayOfWeek) {
-            DayOfWeek.MONDAY -> "周一"
-            DayOfWeek.TUESDAY -> "周二"
-            DayOfWeek.WEDNESDAY -> "周三"
-            DayOfWeek.THURSDAY -> "周四"
-            DayOfWeek.FRIDAY -> "周五"
-            DayOfWeek.SATURDAY -> "周六"
-            DayOfWeek.SUNDAY -> "周日"
-        }
+    }
 }
