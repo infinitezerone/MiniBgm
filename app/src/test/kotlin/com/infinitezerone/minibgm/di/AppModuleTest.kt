@@ -4,11 +4,13 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.feature.search.SearchViewModel
 import com.infinitezerone.minibgm.feature.user.UserViewModel
@@ -41,9 +43,6 @@ class AppModuleTest : KoinTest {
             val fakeAuth = FakeAuthRepository(initialLoggedIn = false)
             val fakeSchedule = FakeScheduleRepository()
             val fakeCollection = FakeCollectionRepository()
-            val fakeUserPrefs =
-                com.infinitezerone.minibgm.core.testing.datastore
-                    .createTestUserPreferencesDataSource()
             val fakeSync =
                 com.infinitezerone.minibgm.core.testing.repository
                     .FakeSyncManager()
@@ -53,7 +52,7 @@ class AppModuleTest : KoinTest {
                         single<AuthRepository> { fakeAuth }
                         single<ScheduleRepository> { fakeSchedule }
                         single<CollectionRepository> { fakeCollection }
-                        single { fakeUserPrefs }
+                        single<SettingsRepository> { FakeSettingsRepository() }
                         single<com.infinitezerone.minibgm.core.data.util.SyncManager> { fakeSync }
                         single { UserViewModel(get(), get(), get(), get(), get()) }
                     },
