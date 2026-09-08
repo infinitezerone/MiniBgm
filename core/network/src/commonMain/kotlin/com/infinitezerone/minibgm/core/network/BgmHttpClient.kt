@@ -39,7 +39,7 @@ object BgmHttpClient {
      *   专供 [BgmTokenService] 走 Worker 兑换/刷新，避免刷新请求自身携带
      *   过期凭据引发 401 递归；非 null 时构建业务 API client：自动注入
      *   Bearer，401 时经 [tokenRefresher] 刷新并重试。刷新成功时写入新凭据；
-     *   回调返回 null 表示凭据已不可恢复：清除本地凭据（登录态随之翻转，
+     *   回调返回 null 表示凭据已不可恢复：清除本地凭据（登录态随凭据库翻转，
      *   完成自动登出闭环）并沿用原始 401 上抛。
      * @param enableLogging 仅 debug 构建开启；LogLevel.INFO 只记录请求
      *   生命周期，不含 header 与 body，不会泄漏凭据。
@@ -89,7 +89,7 @@ object BgmHttpClient {
                                     ?.let { tokenRefresher(it) }
                             if (refreshed == null) {
                                 // 凭据已不可恢复（无 refresh token 或刷新被拒）：清除本地
-                                // token 让 isLoggedIn 翻转为 false，完成自动登出闭环——
+                                // token 让登录态（由凭据库派生）翻转，完成自动登出闭环——
                                 // 响应式登录态只能由凭据存储驱动，Unauthorized 仅用于错误提示
                                 tokenProvider.clearTokens()
                                 return@refreshTokens null

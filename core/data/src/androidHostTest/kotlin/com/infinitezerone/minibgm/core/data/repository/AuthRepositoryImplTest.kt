@@ -65,7 +65,8 @@ class AuthRepositoryImplTest {
         ) {
             this.accessToken = accessToken
             this.refreshToken = refreshToken
-            this.activeUserIdState.value = userId
+            // 对齐真实实现：activeUserId=0 等价于无会话（KeystoreTokenProvider 会收敛为 null）
+            this.activeUserIdState.value = userId.takeIf { it != 0L }
             hasTokensState.value = true
         }
 
@@ -265,7 +266,7 @@ class AuthRepositoryImplTest {
             assertIs<AppResult.Error>(result)
             assertEquals(0, api.requestCount)
             assertNull(harness.tokenProvider.accessToken)
-            assertTrue(!harness.prefs().isLoggedIn)
+            assertTrue(!harness.repository.isLoggedIn.first())
         }
 
     @Test
@@ -293,7 +294,7 @@ class AuthRepositoryImplTest {
             assertIs<AppResult.Error>(result)
             assertEquals(0, api.requestCount)
             assertNull(harness.tokenProvider.accessToken)
-            assertTrue(!harness.prefs().isLoggedIn)
+            assertTrue(!harness.repository.isLoggedIn.first())
         }
 
     @Test
@@ -316,10 +317,10 @@ class AuthRepositoryImplTest {
             assertEquals(BgmPkce.challenge(verifier ?: ""), state)
             assertEquals("at1", harness.tokenProvider.accessToken)
             assertEquals("rt1", harness.tokenProvider.refreshToken)
-            val prefs = harness.prefs()
-            assertTrue(prefs.isLoggedIn)
-            assertEquals(42L, prefs.activeUserId)
-            assertEquals("", prefs.pendingOAuthVerifier)
+            // 会话事实在凭据库：saveTokens 同时置活跃账号，登录态随之成立
+            assertEquals(42L, harness.tokenProvider.activeUserId.first())
+            assertTrue(harness.repository.isLoggedIn.first())
+            assertEquals("", harness.prefs().pendingOAuthVerifier)
         }
 
     @Test
@@ -334,7 +335,7 @@ class AuthRepositoryImplTest {
             assertIs<AppResult.Error>(result)
             assertEquals(1, api.requestCount)
             assertNull(harness.tokenProvider.accessToken)
-            assertTrue(!harness.prefs().isLoggedIn)
+            assertTrue(!harness.repository.isLoggedIn.first())
         }
 
     @Test
@@ -348,11 +349,11 @@ class AuthRepositoryImplTest {
 
             assertIs<AppResult.Error>(result)
             assertNull(harness.tokenProvider.accessToken)
-            assertTrue(!harness.prefs().isLoggedIn)
+            assertTrue(!harness.repository.isLoggedIn.first())
         }
 
     @Test
-    fun `logout 清除 token 与登录态但保留普通偏好`() =
+    fun `logout 清除 token 与账号资料但保留普通偏好`() =
         runTest {
             val api = apiWith(HttpStatusCode.OK, SUCCESS_BODY)
             val harness = harness(api)
@@ -367,8 +368,8 @@ class AuthRepositoryImplTest {
             assertNull(harness.tokenProvider.accessToken)
             assertNull(harness.tokenProvider.refreshToken)
             val prefs = harness.prefs()
-            assertTrue(!prefs.isLoggedIn)
-            assertEquals(null, prefs.activeProfile)
+            assertTrue(!harness.repository.isLoggedIn.first())
+            assertEquals(null, harness.repository.activeProfile.first())
             assertTrue(prefs.savedProfiles.isEmpty())
             assertEquals("", prefs.pendingOAuthVerifier)
             assertTrue(prefs.isDarkMode)
@@ -387,30 +388,47 @@ class AuthRepositoryImplTest {
         }
 
     @Test
-    fun `偏好标记登录但 token 缺失时（备份恢复场景）不视为已登录`() =
+    fun `备份恢复出账号池但凭据缺失时仍视为未登录`() =
         runTest {
             val harness = harness(apiWith(HttpStatusCode.OK, SUCCESS_BODY))
-            // 模拟云备份把 user_preferences.pb 恢复到新设备、auth_tokens.pb 被排除
-            harness.dataStore.updateData { it.copy(isLoggedIn = true, activeUserId = 42L) }
+            // 模拟云备份把偏好文件恢复到新设备（含账号资料池）、auth_tokens 被排除
+            harness.dataStore.updateData {
+                it.copy(
+                    savedProfiles =
+                        mapOf(
+                            42L to
+                                com.infinitezerone.minibgm.core.model
+                                    .UserProfile(id = 42L, username = "u"),
+                        ),
+                )
+            }
             assertNull(harness.tokenProvider.accessToken)
             assertTrue(!harness.repository.isLoggedIn.first())
+            // 资料池存在但没有活跃会话，activeProfile 不得泄漏
+            assertEquals(null, harness.repository.activeProfile.first())
 
-            // token 到位后登录态成立
-            harness.tokenProvider.saveTokens("at1", "rt1")
+            // 同账号 token 到位后登录态与资料立即成立
+            harness.tokenProvider.saveTokens(42L, "at1", "rt1")
             assertTrue(harness.repository.isLoggedIn.first())
+            assertEquals(
+                42L,
+                harness.repository.activeProfile
+                    .first()
+                    ?.id,
+            )
         }
 
     @Test
-    fun `token 被清除而偏好残留时也不视为已登录`() =
+    fun `token 被清除后立即退出登录态`() =
         runTest {
             val harness = harness(apiWith(HttpStatusCode.OK, SUCCESS_BODY))
             val state = harness.repository.beginLogin().substringAfter("state=")
             harness.repository.completeLogin(code = "code", state = state)
-            // 模拟密文损坏被 decode 兜底清空的场景：偏好已 clearAuth 前的中间态
+            // 模拟自动登出：刷新被拒，凭据库整体清空
             harness.tokenProvider.clearTokens()
-            harness.dataStore.updateData { it.copy(isLoggedIn = true) }
 
             assertTrue(!harness.repository.isLoggedIn.first())
+            assertEquals(null, harness.repository.activeProfile.first())
         }
 
     @Test

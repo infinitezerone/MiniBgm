@@ -21,6 +21,8 @@ import kotlinx.serialization.SerializationException
 
 interface AuthRepository {
     val activeUserId: Flow<Long?>
+
+    /** 登录态由凭据库直接派生：凭据在即已登录，结构上不存在假登录态 */
     val isLoggedIn: Flow<Boolean>
     val activeProfile: Flow<UserProfile?>
     val savedAccounts: Flow<List<UserProfile>>
@@ -62,11 +64,20 @@ class AuthRepositoryImpl(
     private val _isAuthenticating = MutableStateFlow(false)
     override val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
 
-    override val activeUserId: Flow<Long?> =
-        userPreferences.userPreferences.map { it.activeUserId.takeIf { id -> id != 0L } }
+    // 会话事实唯一存放在凭据库（AuthTokensDataSource）：activeUserId 只在有可用
+    // token 时非空，结构上不存在「标记已登录但凭据缺失」的假登录态——
+    // 云备份可恢复偏好文件，但不会凭空恢复出会话
+    override val activeUserId: Flow<Long?> = tokenProvider.activeUserId
+
+    override val isLoggedIn: Flow<Boolean> =
+        tokenProvider.activeUserId
+            .map { it != null }
 
     override val activeProfile: Flow<UserProfile?> =
-        userPreferences.userPreferences.map { it.activeProfile }
+        combine(
+            tokenProvider.activeUserId,
+            userPreferences.userPreferences,
+        ) { userId, prefs -> userId?.let { prefs.savedProfiles[it] } }
 
     override val savedAccounts: Flow<List<UserProfile>> =
         userPreferences.userPreferences.map { it.allProfiles }
@@ -94,9 +105,8 @@ class AuthRepositoryImpl(
                     return AppResult.Error(IllegalStateException("state 校验失败，疑似伪造回调"))
             }
             val tokens = tokenService.exchangeCode(code, state, verifier)
+            // saveTokens 同时把该用户置为凭据库的活跃账号，登录态随之成立
             tokenProvider.saveTokens(tokens.userId, tokens.accessToken, tokens.refreshToken)
-            tokenProvider.setActiveUser(tokens.userId)
-            userPreferences.markLoggedIn(tokens.userId)
             userPreferences.setPendingOAuthVerifier("")
 
             // 异步拉取个人资料并落盘（拉取失败不阻断登录完成）
@@ -116,12 +126,11 @@ class AuthRepositoryImpl(
 
     override suspend fun switchAccount(userId: Long) {
         tokenProvider.setActiveUser(userId)
-        userPreferences.switchAccount(userId)
     }
 
     override suspend fun logout() {
-        val currentUserId = userPreferences.userPreferences.first().activeUserId
-        if (currentUserId != 0L) {
+        val currentUserId = tokenProvider.activeUserId.first()
+        if (currentUserId != null) {
             logout(currentUserId)
         } else {
             logoutAll()
@@ -137,17 +146,6 @@ class AuthRepositoryImpl(
         tokenProvider.clearTokens()
         userDataCleaner.clearAll()
     }
-
-    // 登录态要求"偏好已标记"且"token 实际存在"：云备份/设备迁移会把
-    // user_preferences.pb 恢复到新设备，而 auth_tokens.pb 被排除在备份之外，
-    // 仅看偏好会呈现"已登录但无凭据"的假登录态（API 全 401 且无法刷新）。
-    override val isLoggedIn: Flow<Boolean> =
-        combine(
-            userPreferences.userPreferences,
-            tokenProvider.hasTokens,
-        ) { prefs, hasTokens ->
-            prefs.isLoggedIn && hasTokens
-        }
 
     override suspend fun refreshProfile(): AppResult<UserProfile> =
         try {

@@ -4,14 +4,14 @@ import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.serialization.Serializable
 
 /**
- * 普通用户偏好。OAuth token 不在此处存储——它们由 AuthTokensDataSource
- * 经 AndroidKeyStore 加密后写入独立文件，并被备份规则整体排除。
+ * 设备侧偏好 + 账号资料池。会话事实（活跃用户、登录与否）唯一存放在
+ * AuthTokensDataSource（加密、备份排除），本模型不承载任何登录标记——
+ * 云备份/设备迁移即使恢复本文件也不会产生「假登录态」。
  */
 @Serializable
 data class UserPreferences(
-    val activeUserId: Long = 0L,
+    /** 账号资料池：曾登录过的资料缓存（展示与快捷切换用），会话有效性以凭据库为准 */
     val savedProfiles: Map<Long, UserProfile> = emptyMap(),
-    val isLoggedIn: Boolean = false,
     /** 进行中登录的 PKCE 等价 verifier（其 sha256 指纹作为 OAuth state，见 BgmPkce） */
     val pendingOAuthVerifier: String = "",
     val isDarkMode: Boolean = false,
@@ -35,9 +35,6 @@ data class UserPreferences(
     /** 本地最近搜索历史词条列表（按最近使用降序，最多 20 条） */
     val searchHistory: List<String> = emptyList(),
 ) {
-    val activeProfile: UserProfile?
-        get() = if (isLoggedIn) savedProfiles[activeUserId] else null
-
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()
 }

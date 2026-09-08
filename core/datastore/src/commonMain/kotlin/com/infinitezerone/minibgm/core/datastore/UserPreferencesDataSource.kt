@@ -5,51 +5,26 @@ import com.infinitezerone.minibgm.core.common.UserDataClearable
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * 设备侧偏好与账号资料池。会话事实（活跃用户、登录与否）由 AuthTokensDataSource
+ * 承载——本类不写任何登录标记，从结构上杜绝「偏好标记已登录而凭据缺失」的假登录态。
+ */
 class UserPreferencesDataSource(
     private val dataStore: DataStore<UserPreferences>,
 ) : UserDataClearable {
     val userPreferences: Flow<UserPreferences> = dataStore.data
 
-    /** token 已由 AuthTokensDataSource 落盘后调用，二者共同构成登录态 */
-    suspend fun markLoggedIn(userId: Long = 0L) {
-        dataStore.updateData { current ->
-            current.copy(isLoggedIn = true, activeUserId = userId)
-        }
-    }
-
-    /** 登录后或资料刷新时调用：将用户 Profile 存入账号池，并设为当前活跃账号 */
+    /** 将资料存入账号池（展示与快捷切换用），不影响会话状态 */
     suspend fun saveUserProfile(profile: UserProfile) {
         dataStore.updateData { current ->
-            current.copy(
-                activeUserId = profile.id,
-                savedProfiles = current.savedProfiles + (profile.id to profile),
-                isLoggedIn = true,
-            )
+            current.copy(savedProfiles = current.savedProfiles + (profile.id to profile))
         }
     }
 
-    /** 切换当前活跃账号 */
-    suspend fun switchAccount(userId: Long) {
-        dataStore.updateData { current ->
-            current.copy(activeUserId = userId, isLoggedIn = true)
-        }
-    }
-
-    /** 移除/注销某个账号 */
+    /** 从账号池移除指定资料 */
     suspend fun removeAccount(userId: Long) {
         dataStore.updateData { current ->
-            val updatedMap = current.savedProfiles - userId
-            val newActiveId =
-                if (current.activeUserId == userId) {
-                    updatedMap.keys.firstOrNull() ?: 0L
-                } else {
-                    current.activeUserId
-                }
-            current.copy(
-                activeUserId = newActiveId,
-                savedProfiles = updatedMap,
-                isLoggedIn = newActiveId != 0L,
-            )
+            current.copy(savedProfiles = current.savedProfiles - userId)
         }
     }
 
@@ -59,21 +34,17 @@ class UserPreferencesDataSource(
         }
     }
 
-    suspend fun clearAuth() {
-        dataStore.updateData { current ->
-            UserPreferences(
-                isDarkMode = current.isDarkMode,
-                notifyBeforeAirMinutes = current.notifyBeforeAirMinutes,
-            )
-        }
-    }
-
     override suspend fun clearUserData(userId: Long) {
         removeAccount(userId)
     }
 
     override suspend fun clearAllUserData() {
-        clearAuth()
+        dataStore.updateData { current ->
+            current.copy(
+                savedProfiles = emptyMap(),
+                pendingOAuthVerifier = "",
+            )
+        }
     }
 
     suspend fun setDarkMode(isDark: Boolean) {
