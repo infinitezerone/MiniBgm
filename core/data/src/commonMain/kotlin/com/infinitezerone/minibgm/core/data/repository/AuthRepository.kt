@@ -56,8 +56,8 @@ class AuthRepositoryImpl(
     private val tokenProvider: TokenProvider,
     private val userPreferences: UserPreferencesDataSource,
     private val authConfig: BgmAuthConfig,
-    private val apiService: BangumiApiService? = null,
-    private val userDataCleaner: UserDataCleaner? = null,
+    private val apiService: BangumiApiService,
+    private val userDataCleaner: UserDataCleaner,
 ) : AuthRepository {
     private val _isAuthenticating = MutableStateFlow(false)
     override val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
@@ -100,12 +100,9 @@ class AuthRepositoryImpl(
             userPreferences.setPendingOAuthVerifier("")
 
             // 异步拉取个人资料并落盘（拉取失败不阻断登录完成）
-            val api = apiService
-            if (api != null) {
-                runCatching { api.getMe() }
-                    .getOrNull()
-                    ?.let { profile -> userPreferences.saveUserProfile(profile) }
-            }
+            runCatching { apiService.getMe() }
+                .getOrNull()
+                ?.let { profile -> userPreferences.saveUserProfile(profile) }
 
             AppResult.Success(Unit)
         } catch (e: BgmNetworkException) {
@@ -133,12 +130,12 @@ class AuthRepositoryImpl(
 
     override suspend fun logout(userId: Long) {
         tokenProvider.removeTokens(userId)
-        userDataCleaner?.clear(userId)
+        userDataCleaner.clear(userId)
     }
 
     override suspend fun logoutAll() {
         tokenProvider.clearTokens()
-        userDataCleaner?.clearAll()
+        userDataCleaner.clearAll()
     }
 
     // 登录态要求"偏好已标记"且"token 实际存在"：云备份/设备迁移会把
@@ -152,10 +149,9 @@ class AuthRepositoryImpl(
             prefs.isLoggedIn && hasTokens
         }
 
-    override suspend fun refreshProfile(): AppResult<UserProfile> {
-        val api = apiService ?: return AppResult.Error(IllegalStateException("API 服务未配置"))
-        return try {
-            val profile = api.getMe()
+    override suspend fun refreshProfile(): AppResult<UserProfile> =
+        try {
+            val profile = apiService.getMe()
             userPreferences.saveUserProfile(profile)
             AppResult.Success(profile)
         } catch (e: BgmNetworkException) {
@@ -163,5 +159,4 @@ class AuthRepositoryImpl(
         } catch (e: Exception) {
             AppResult.Error(e, "个人资料同步异常：${e.message}")
         }
-    }
 }
