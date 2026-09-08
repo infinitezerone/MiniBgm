@@ -11,7 +11,10 @@ import androidx.work.impl.utils.taskexecutor.SerialExecutor
 import androidx.work.impl.utils.taskexecutor.TaskExecutor
 import com.google.common.util.concurrent.ListenableFuture
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.util.SyncCompletionObserver
+import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
+import com.infinitezerone.minibgm.core.testing.util.FakeTokenProvider
 import com.infinitezerone.minibgm.core.testing.util.testBgmDispatchers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -28,12 +31,26 @@ import kotlin.coroutines.CoroutineContext
 
 class BgmSyncWorkerTest {
     private lateinit var scheduleRepository: FakeScheduleRepository
+    private lateinit var collectionRepository: FakeCollectionRepository
+    private lateinit var tokenProvider: FakeTokenProvider
+    private lateinit var syncCompletionObserver: FakeSyncCompletionObserver
     private val testDispatcher = StandardTestDispatcher()
     private val testDispatchers = testBgmDispatchers(testDispatcher)
 
     @Before
     fun setUp() {
         scheduleRepository = FakeScheduleRepository()
+        collectionRepository = FakeCollectionRepository()
+        tokenProvider = FakeTokenProvider(42L)
+        syncCompletionObserver = FakeSyncCompletionObserver()
+    }
+
+    private class FakeSyncCompletionObserver : SyncCompletionObserver {
+        var callCount = 0
+
+        override suspend fun onSyncSucceeded() {
+            callCount++
+        }
     }
 
     private fun createWorker(runAttemptCount: Int = 0): BgmSyncWorker {
@@ -64,7 +81,10 @@ class BgmSyncWorkerTest {
             appContext = ContextWrapper(null),
             workerParams = params,
             scheduleRepository = scheduleRepository,
+            collectionRepository = collectionRepository,
+            tokenProvider = tokenProvider,
             dispatchers = testDispatchers,
+            syncCompletionObserver = syncCompletionObserver,
         )
     }
 
@@ -122,6 +142,8 @@ class BgmSyncWorkerTest {
 
             assertEquals(ListenableWorker.Result.success(), result)
             assertEquals(1, scheduleRepository.syncBangumiDataCallCount)
+            // 同步成功后必须通知下游（小组件等）自行刷新
+            assertEquals(1, syncCompletionObserver.callCount)
         }
 
     @Test
@@ -134,5 +156,20 @@ class BgmSyncWorkerTest {
 
             assertEquals(ListenableWorker.Result.retry(), result)
             assertEquals(1, scheduleRepository.syncBangumiDataCallCount)
+            // 失败路径不产生新数据，不应通知下游刷新
+            assertEquals(0, syncCompletionObserver.callCount)
+        }
+
+    @Test
+    fun doWork_syncsWatchingCollections_whenUserLoggedIn() =
+        runTest(testDispatcher) {
+            scheduleRepository.syncBangumiDataResult = AppResult.Success(Unit)
+            tokenProvider.uidFlow.value = 42L
+            val worker = createWorker()
+
+            val result = worker.doWork()
+
+            assertEquals(ListenableWorker.Result.success(), result)
+            assertEquals(1, collectionRepository.syncWatchingCallCount)
         }
 }
