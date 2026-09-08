@@ -160,6 +160,7 @@ class UserViewModel(
                     if (currentProfile != null) {
                         refreshCollectionCounts(currentProfile)
                     }
+                    collectionRepository.syncWatchingCollections()
                 }
             } catch (_: Exception) {
                 success = false

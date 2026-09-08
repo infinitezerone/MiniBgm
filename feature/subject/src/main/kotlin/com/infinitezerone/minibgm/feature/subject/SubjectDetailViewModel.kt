@@ -75,8 +75,19 @@ class SubjectDetailViewModel(
             }
         }
         viewModelScope.launch {
-            collectionRepository.getCollectionStream(subjectId).collect { collection ->
-                _uiState.update { it.copy(collection = collection) }
+            collectionRepository.getCollectionStream(subjectId).collect { localCollection ->
+                _uiState.update { state ->
+                    val mergedCollection =
+                        if (localCollection == null) {
+                            null
+                        } else {
+                            state.collection?.copy(
+                                type = localCollection.type,
+                                epStatus = localCollection.epStatus,
+                            ) ?: localCollection
+                        }
+                    state.copy(collection = mergedCollection)
+                }
             }
         }
     }
@@ -110,11 +121,13 @@ class SubjectDetailViewModel(
 
             val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
             val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
+            val remoteCollection = (collectionResult as? AppResult.Success)?.data
 
             _uiState.update { current ->
                 current.copy(
                     isLoading = false,
                     subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
+                    collection = remoteCollection ?: current.collection,
                     characters = (charactersResult as? AppResult.Success)?.data ?: current.characters,
                     persons = (personsResult as? AppResult.Success)?.data ?: current.persons,
                     relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
@@ -187,19 +200,33 @@ class SubjectDetailViewModel(
         epNumber: Int = 1,
     ) {
         val previousCollection = _uiState.value.collection
+        val currentEp = previousCollection?.epStatus ?: 0
         // 乐观更新 UI 状态中的 collection.epStatus
-        val newEpStatus = if (isWatched) maxOf(previousCollection?.epStatus ?: 0, epNumber) else maxOf(0, epNumber - 1)
+        val newEpStatus =
+            if (isWatched) {
+                maxOf(currentEp, epNumber)
+            } else {
+                if (epNumber >= currentEp) maxOf(0, epNumber - 1) else currentEp
+            }
+        val targetType =
+            if (isWatched &&
+                (previousCollection == null || previousCollection.type == 0 || previousCollection.type == CollectionType.WISH.value)
+            ) {
+                CollectionType.DOING.value
+            } else {
+                previousCollection?.type ?: CollectionType.DOING.value
+            }
         _uiState.update { state ->
             val updatedCollection =
                 state.collection?.copy(
                     epStatus = newEpStatus,
-                    type = if (state.collection.type == 0) CollectionType.DOING.value else state.collection.type,
+                    type = targetType,
                 ) ?: UserCollection(
                     userId = 0L,
                     subjectId = subjectId,
                     subjectType = _uiState.value.subject?.type ?: 2,
                     rate = 0,
-                    type = CollectionType.DOING.value,
+                    type = targetType,
                     comment = "",
                     epStatus = newEpStatus,
                     volStatus = 0,
@@ -226,10 +253,9 @@ class SubjectDetailViewModel(
     /** 按需加载单集吐槽（带本地内存缓存，避免重复网络请求） */
     fun loadEpisodeComments(episodeId: Long) {
         if (_uiState.value.episodeComments.containsKey(episodeId)) return
-        val community = communityRepository ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isEpisodeCommentsLoading = true) }
-            val result = community.getEpisodeComments(episodeId)
+            val result = communityRepository.getEpisodeComments(episodeId)
             _uiState.update { state ->
                 val comments = (result as? AppResult.Success)?.data.orEmpty()
                 state.copy(
@@ -244,12 +270,11 @@ class SubjectDetailViewModel(
     fun loadMoreSubjectComments() {
         val currentState = _uiState.value
         if (currentState.isLoadingMoreComments || !currentState.hasMoreComments) return
-        val community = communityRepository ?: return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMoreComments = true) }
             val offset = currentState.subjectComments.size
-            val result = community.getSubjectComments(subjectId = subjectId, limit = 20, offset = offset)
+            val result = communityRepository.getSubjectComments(subjectId = subjectId, limit = 20, offset = offset)
             _uiState.update { state ->
                 when (result) {
                     is AppResult.Success -> {

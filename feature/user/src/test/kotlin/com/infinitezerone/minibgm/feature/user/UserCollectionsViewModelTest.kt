@@ -164,7 +164,7 @@ class UserCollectionsViewModelTest {
 
             val updated = viewModel.uiState.first { it.collections.firstOrNull()?.epStatus == 13 }
             assertEquals(13, updated.collections.first().epStatus)
-            assertEquals(1, collectionRepo.updateCollectionCallCount)
+            assertEquals(1, collectionRepo.updateEpisodeCallCount)
         }
 
     @Test
