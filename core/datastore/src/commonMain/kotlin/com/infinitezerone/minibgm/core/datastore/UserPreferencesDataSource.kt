@@ -13,23 +13,17 @@ class UserPreferencesDataSource(
     /** token 已由 AuthTokensDataSource 落盘后调用，二者共同构成登录态 */
     suspend fun markLoggedIn(userId: Long = 0L) {
         dataStore.updateData { current ->
-            current.copy(isLoggedIn = true, activeUserId = userId, userId = userId)
+            current.copy(isLoggedIn = true, activeUserId = userId)
         }
     }
 
     /** 登录后或资料刷新时调用：将用户 Profile 存入账号池，并设为当前活跃账号 */
     suspend fun saveUserProfile(profile: UserProfile) {
         dataStore.updateData { current ->
-            val updatedMap = current.savedProfiles + (profile.id to profile)
             current.copy(
                 activeUserId = profile.id,
-                savedProfiles = updatedMap,
+                savedProfiles = current.savedProfiles + (profile.id to profile),
                 isLoggedIn = true,
-                userId = profile.id,
-                username = profile.username,
-                nickname = profile.nickname,
-                avatarUrl = profile.avatar?.bestAvatar.orEmpty(),
-                sign = profile.sign,
             )
         }
     }
@@ -37,20 +31,7 @@ class UserPreferencesDataSource(
     /** 切换当前活跃账号 */
     suspend fun switchAccount(userId: Long) {
         dataStore.updateData { current ->
-            if (current.savedProfiles.containsKey(userId)) {
-                val profile = current.savedProfiles[userId]
-                current.copy(
-                    activeUserId = userId,
-                    isLoggedIn = true,
-                    userId = userId,
-                    username = profile?.username.orEmpty(),
-                    nickname = profile?.nickname.orEmpty(),
-                    avatarUrl = profile?.avatar?.bestAvatar.orEmpty(),
-                    sign = profile?.sign.orEmpty(),
-                )
-            } else {
-                current.copy(activeUserId = userId, userId = userId, isLoggedIn = true)
-            }
+            current.copy(activeUserId = userId, isLoggedIn = true)
         }
     }
 
@@ -64,16 +45,10 @@ class UserPreferencesDataSource(
                 } else {
                     current.activeUserId
                 }
-            val newProfile = updatedMap[newActiveId]
             current.copy(
                 activeUserId = newActiveId,
                 savedProfiles = updatedMap,
                 isLoggedIn = newActiveId != 0L,
-                userId = newActiveId,
-                username = newProfile?.username.orEmpty(),
-                nickname = newProfile?.nickname.orEmpty(),
-                avatarUrl = newProfile?.avatar?.bestAvatar.orEmpty(),
-                sign = newProfile?.sign.orEmpty(),
             )
         }
     }

@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.core.datastore
 
-import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.serialization.Serializable
 
@@ -35,35 +34,10 @@ data class UserPreferences(
     val scheduleDefaultOnlyWatching: Boolean = false,
     /** 本地最近搜索历史词条列表（按最近使用降序，最多 20 条） */
     val searchHistory: List<String> = emptyList(),
-    // 兼容旧字段
-    val userId: Long = 0L,
-    val username: String = "",
-    val nickname: String = "",
-    val avatarUrl: String = "",
-    val sign: String = "",
 ) {
     val activeProfile: UserProfile?
-        get() {
-            if (!isLoggedIn) return null
-            val uid = if (activeUserId != 0L) activeUserId else userId
-            if (uid == 0L) return null
-            return savedProfiles[uid] ?: UserProfile(
-                id = uid,
-                username = username,
-                nickname = nickname,
-                avatar = if (avatarUrl.isNotBlank()) UserAvatar(large = avatarUrl) else null,
-                sign = sign,
-            )
-        }
-
-    val userProfile: UserProfile?
-        get() = activeProfile
+        get() = if (isLoggedIn) savedProfiles[activeUserId] else null
 
     val allProfiles: List<UserProfile>
-        get() =
-            if (savedProfiles.isNotEmpty()) {
-                savedProfiles.values.toList()
-            } else {
-                listOfNotNull(activeProfile)
-            }
+        get() = savedProfiles.values.toList()
 }

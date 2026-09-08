@@ -318,7 +318,7 @@ class AuthRepositoryImplTest {
             assertEquals("rt1", harness.tokenProvider.refreshToken)
             val prefs = harness.prefs()
             assertTrue(prefs.isLoggedIn)
-            assertEquals(42L, prefs.userId)
+            assertEquals(42L, prefs.activeUserId)
             assertEquals("", prefs.pendingOAuthVerifier)
         }
 
@@ -358,8 +358,8 @@ class AuthRepositoryImplTest {
             val harness = harness(api)
             val state = harness.repository.beginLogin().substringAfter("state=")
             harness.repository.completeLogin(code = "code", state = state)
-            // 直接改普通偏好，模拟用户在登录之外还设置了深色模式、昵称
-            harness.dataStore.updateData { it.copy(isDarkMode = true, nickname = "某人") }
+            // 直接改普通偏好，模拟用户在登录之外还设置了深色模式
+            harness.dataStore.updateData { it.copy(isDarkMode = true) }
 
             harness.repository.logout()
 
@@ -368,7 +368,8 @@ class AuthRepositoryImplTest {
             assertNull(harness.tokenProvider.refreshToken)
             val prefs = harness.prefs()
             assertTrue(!prefs.isLoggedIn)
-            assertEquals("", prefs.nickname)
+            assertEquals(null, prefs.activeProfile)
+            assertTrue(prefs.savedProfiles.isEmpty())
             assertEquals("", prefs.pendingOAuthVerifier)
             assertTrue(prefs.isDarkMode)
         }
@@ -390,7 +391,7 @@ class AuthRepositoryImplTest {
         runTest {
             val harness = harness(apiWith(HttpStatusCode.OK, SUCCESS_BODY))
             // 模拟云备份把 user_preferences.pb 恢复到新设备、auth_tokens.pb 被排除
-            harness.dataStore.updateData { it.copy(isLoggedIn = true, userId = 42L) }
+            harness.dataStore.updateData { it.copy(isLoggedIn = true, activeUserId = 42L) }
             assertNull(harness.tokenProvider.accessToken)
             assertTrue(!harness.repository.isLoggedIn.first())
 
