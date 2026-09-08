@@ -378,7 +378,8 @@ class ScheduleViewModel(
             collectionRepository
                 .updateEpisodeStatus(
                     subjectId = subjectId,
-                    episodeId = 0L,
+                    // 时间表数据无单集 ID：由仓库按话数解析真实单集 ID
+                    episodeId = null,
                     isWatched = true,
                     epNumber = epNumber,
                 ).onSuccess {
