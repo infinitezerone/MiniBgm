@@ -92,7 +92,7 @@ class FakeCollectionRepository : CollectionRepository {
 
     override suspend fun updateEpisodeStatus(
         subjectId: Long,
-        episodeId: Long,
+        episodeId: Long?,
         isWatched: Boolean,
         epNumber: Int,
     ): AppResult<Unit> {

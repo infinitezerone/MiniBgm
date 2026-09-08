@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.UserDataClearable
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
@@ -56,10 +57,14 @@ interface CollectionRepository : UserDataClearable {
         subjectType: Int = 0,
     ): AppResult<Unit>
 
-    /** 更新单集观看进度（看过了 / 撤销） */
+    /**
+     * 更新单集观看进度（看过了 / 撤销）。
+     * [episodeId] 为 null 时（如时间表待补清单仅有话数、无单集 ID），
+     * 按话数从远端单集列表解析真实 ID 后打卡。
+     */
     suspend fun updateEpisodeStatus(
         subjectId: Long,
-        episodeId: Long,
+        episodeId: Long?,
         isWatched: Boolean,
         epNumber: Int = 1,
     ): AppResult<Unit>
@@ -191,7 +196,7 @@ class CollectionRepositoryImpl(
                         comment = comment ?: (existing?.comment.orEmpty()),
                         epStatus = epStatus ?: (existing?.epStatus ?: 0),
                         volStatus = existing?.volStatus ?: 0,
-                        updatedAt = "",
+                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
                 AppResult.Success(Unit)
@@ -204,7 +209,7 @@ class CollectionRepositoryImpl(
 
     override suspend fun updateEpisodeStatus(
         subjectId: Long,
-        episodeId: Long,
+        episodeId: Long?,
         isWatched: Boolean,
         epNumber: Int,
     ): AppResult<Unit> =
@@ -228,25 +233,22 @@ class CollectionRepositoryImpl(
                         maxOf(0, epNumber - 1)
                     }
 
-                // 2. 确保条目已在用户收藏中（若未收藏则置为在看）
-                if (existing == null || existing.type == 0) {
-                    apiService.updateCollection(
-                        subjectId = subjectId,
-                        type = targetType,
-                        rate = existing?.rate?.takeIf { it > 0 },
-                        comment = existing?.comment?.ifBlank { null },
-                        private = false,
-                    )
+                if (episodeId == null || episodeId <= 0L) {
+                    // 2a. 时间表待补清单等场景仅有话数、无单集 ID：
+                    //    episode_id=0 的打卡会被远端拒绝，按话数从单集列表解析真实 ID
+                    val episodes = apiService.getEpisodes(subjectId).data
+                    val resolvedEpisodeId =
+                        episodes.firstOrNull { it.ep.toInt() == epNumber }?.id
+                            ?: episodes.firstOrNull { it.sort.toInt() == epNumber }?.id
+                            ?: return@withContext AppResult.Error(
+                                IllegalStateException("未找到第 $epNumber 话的单集，无法打卡"),
+                            )
+                    ensureCollectionAndCheckIn(subjectId, existing, targetType, resolvedEpisodeId, isWatched)
+                } else {
+                    ensureCollectionAndCheckIn(subjectId, existing, targetType, episodeId, isWatched)
                 }
 
-                // 3. 然后调用分集打卡接口 (type = 2 为已看过，0 为撤销/未看)
-                apiService.updateEpisodeStatus(
-                    subjectId = subjectId,
-                    episodeId = episodeId,
-                    type = if (isWatched) 2 else 0,
-                )
-
-                // 4. 远端打卡并更新收藏成功后，将最新的 UserCollectionEntity 存入本地 Room 数据库
+                // 3. 远端打卡成功后，将最新的 UserCollectionEntity 存入本地 Room 数据库
                 userCollectionDao.insertCollection(
                     UserCollectionEntity(
                         userId = activeUid,
@@ -257,7 +259,7 @@ class CollectionRepositoryImpl(
                         comment = existing?.comment.orEmpty(),
                         epStatus = targetEpStatus,
                         volStatus = 0,
-                        updatedAt = "",
+                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
                 AppResult.Success(Unit)
@@ -267,6 +269,30 @@ class CollectionRepositoryImpl(
                 AppResult.Error(e, "打卡异常：${e.message}")
             }
         }
+
+    /** 确保条目已在用户收藏中（未收藏则置为在看），随后执行单集打卡（type = 2 已看过，0 撤销） */
+    private suspend fun ensureCollectionAndCheckIn(
+        subjectId: Long,
+        existing: UserCollection?,
+        targetType: Int,
+        episodeId: Long,
+        isWatched: Boolean,
+    ) {
+        if (existing == null || existing.type == 0) {
+            apiService.updateCollection(
+                subjectId = subjectId,
+                type = targetType,
+                rate = existing?.rate?.takeIf { it > 0 },
+                comment = existing?.comment?.ifBlank { null },
+                private = false,
+            )
+        }
+        apiService.updateEpisodeStatus(
+            subjectId = subjectId,
+            episodeId = episodeId,
+            type = if (isWatched) 2 else 0,
+        )
+    }
 
     override suspend fun clearUserData(userId: Long) {
         userCollectionDao.clearByUserId(userId)
