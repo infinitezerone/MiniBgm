@@ -1,11 +1,10 @@
 package com.infinitezerone.minibgm.feature.widget
 
 import android.content.Context
-import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -30,7 +29,6 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -41,696 +39,441 @@ import androidx.glance.material3.ColorProviders
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import coil3.SingletonImageLoader
+import coil3.asDrawable
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmDarkColors
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmLightColors
+import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.feature.widget.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.withContext
 import org.koin.core.context.GlobalContext
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * 现代化「今日更新」极简桌面排期小组件：
- * 1. 响应式布局：基于 SizeMode.Responsive 自适应 2x2（焦点排期卡片）、4x2（英雄双列时间线）、4x4（全天排期看板）；
- * 2. 纯文本与时间轴：零 Bitmap、零网络延迟，彻底避免 IPC Binder 1MB 事务超限 (TransactionTooLargeException)；
- * 3. 事件驱动内容：hero 永远是「我的下一部」，今日无更新时跨天补位并标注周几，登录用户绝不掺入陌生番剧；
- * 4. 细粒度深链：单项点击直达番剧详情页，右上角无感刷新回调。
+ * 「今日追番」桌面小组件：
+ * 1. 信息主体是状态而非时刻表：已更新可看 -> 今天待播 -> 未来 7 天三个分区，回答「我现在有什么可看」；
+ * 2. 响应式四档：2x1/4x1 单行条 / 2x2 焦点卡 / 4x2 摘要列表 / 4x4 分区看板，断点常量与 SizeMode 候选尺寸共用单一来源；
+ * 3. 条目单一状态胶囊（结构化 [AirStatusLine] + 语言资源渲染），溢出计数来自截断前的真实总数；
+ * 4. 单项深链番剧详情；溢出计数行与「时间表」入口深链时间表页；
+ * 5. 仅 4x4 hero 加载封面小图（Coil 异步 + 失败回退纯文本），其余尺寸保持零图片。
  */
 class ScheduleWidget : GlanceAppWidget() {
     companion object {
-        val SMALL_SQUARE = DpSize(100.dp, 100.dp) // 2x2: 焦点卡片
-        val MEDIUM_CARD = DpSize(220.dp, 100.dp) // 4x2: 英雄双列
-        val LARGE_CARD = DpSize(220.dp, 220.dp) // 4x4: 全天排期看板
+        // 响应式断点（单一来源）：SizeMode.Responsive 候选尺寸与 WidgetRoot 布局判断阈值共用，
+        // 包含超矮单行条，避免系统无法映射到扁长档位导致 2x1/4x1 裁剪
+        val LINE_MIN = DpSize(100.dp, 48.dp) // 2x1 / 4x1: 超矮单行条
+        val SMALL_MIN = DpSize(100.dp, 100.dp) // 2x2: 焦点卡
+        val MEDIUM_MIN = DpSize(220.dp, 100.dp) // 4x2: 摘要列表
+        val LARGE_MIN = DpSize(220.dp, 220.dp) // 4x4: 分区看板
 
         /** 向前看 7 天：动画周更，「今日无更新」时也能回答「下一部是周几」 */
         const val HOURS_AHEAD = 7 * 24L
         const val LOOKBACK_HOURS = 18L
     }
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL_SQUARE, MEDIUM_CARD, LARGE_CARD))
+    override val sizeMode = SizeMode.Responsive(setOf(LINE_MIN, SMALL_MIN, MEDIUM_MIN, LARGE_MIN))
 
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        val koin = GlobalContext.getOrNull()
-        // 登录态走 AuthRepository（偏好标记 + token 实际存在），避免"偏好已标记但凭据缺失"的假登录
-        val isLoggedIn =
-            koin
-                ?.getOrNull<AuthRepository>()
-                ?.isLoggedIn
-                ?.firstOrNull() == true
-        val trackedSubjectIds =
-            if (isLoggedIn) {
-                koin
-                    .getOrNull<CollectionRepository>()
-                    ?.getCollectionsByTypeStream(CollectionType.DOING)
-                    ?.firstOrNull()
-                    .orEmpty()
-                    .map { it.subjectId }
-            } else {
-                emptyList()
-            }
-        val scheduleRepo = koin?.getOrNull<ScheduleRepository>()
-        val upcoming =
-            if (isLoggedIn && trackedSubjectIds.isNotEmpty()) {
-                scheduleRepo
-                    ?.getUpcomingAiringForSubjects(
-                        subjectIds = trackedSubjectIds,
-                        hoursAhead = HOURS_AHEAD,
-                        lookbackHours = LOOKBACK_HOURS,
-                    ).orEmpty()
-            } else {
-                emptyList()
-            }
+        val (uiState, heroCover) =
+            withContext(Dispatchers.IO) {
+                val koin = GlobalContext.getOrNull()
+                // 登录态走 AuthRepository（偏好标记 + token 实际存在），避免"偏好已标记但凭据缺失"的假登录
+                val isLoggedIn =
+                    koin
+                        ?.getOrNull<AuthRepository>()
+                        ?.isLoggedIn
+                        ?.firstOrNull() == true
+                val trackedSubjectIds =
+                    if (isLoggedIn) {
+                        koin
+                            .getOrNull<CollectionRepository>()
+                            ?.getCollectionsByTypeStream(CollectionType.DOING)
+                            ?.firstOrNull()
+                            .orEmpty()
+                            .map { it.subjectId }
+                    } else {
+                        emptyList()
+                    }
+                val scheduleRepo = koin?.getOrNull<ScheduleRepository>()
+                val upcoming =
+                    if (isLoggedIn && trackedSubjectIds.isNotEmpty()) {
+                        scheduleRepo
+                            ?.getUpcomingAiringForSubjects(
+                                subjectIds = trackedSubjectIds,
+                                hoursAhead = HOURS_AHEAD,
+                                lookbackHours = LOOKBACK_HOURS,
+                            ).orEmpty()
+                    } else {
+                        emptyList()
+                    }
+                // 公共日历仅作为未登录用户的获客面；登录用户绝不掺入陌生番剧
+                val todaySchedules =
+                    if (!isLoggedIn) {
+                        scheduleRepo
+                            ?.getSchedulesByWeekday(
+                                Instant
+                                    .ofEpochMilli(System.currentTimeMillis())
+                                    .atZone(ZoneId.systemDefault())
+                                    .dayOfWeek
+                                    .value,
+                            )?.firstOrNull()
+                            .orEmpty()
+                    } else {
+                        emptyList()
+                    }
 
-        // 单次取样 now，且日历 weekday 与 Planner 判「今天」共用同一时区（设备时区）——
-        // 此前 JST 取 weekday + systemDefault 判今天，UTC+8 用户凌晨 0-1 点会取错一天日历
-        val nowEpochMillis = System.currentTimeMillis()
-        val zoneId = ZoneId.systemDefault()
-        val todayWeekday =
-            Instant
-                .ofEpochMilli(nowEpochMillis)
-                .atZone(zoneId)
-                .dayOfWeek.value
-        val todaySchedules =
-            scheduleRepo
-                ?.getSchedulesByWeekday(todayWeekday)
-                ?.firstOrNull()
-                .orEmpty()
+                val nowEpochMillis = System.currentTimeMillis()
+                val zoneId = ZoneId.systemDefault()
 
-        val uiState =
-            ScheduleWidgetPlanner.plan(
-                isLoggedIn = isLoggedIn,
-                upcoming = upcoming,
-                todaySchedules = todaySchedules,
-                nowEpochMillis = nowEpochMillis,
-                zoneId = zoneId,
-                maxItems = 6,
-            )
+                val state =
+                    ScheduleWidgetPlanner.plan(
+                        isLoggedIn = isLoggedIn,
+                        hasTrackedSubjects = trackedSubjectIds.isNotEmpty(),
+                        upcoming = upcoming,
+                        todaySchedules = todaySchedules,
+                        nowEpochMillis = nowEpochMillis,
+                        zoneId = zoneId,
+                    )
+
+                // 封面仅 4x4 hero 使用：加载失败/无地址时回退纯文本布局，仍是合法形态
+                val cover =
+                    state.orderedItems
+                        .firstOrNull()
+                        ?.coverUrl
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { url -> loadHeroCoverBitmap(context, url) }
+
+                state to cover
+            }
 
         provideContent {
             GlanceTheme(colors = ColorProviders(MiniBgmLightColors, MiniBgmDarkColors)) {
-                WidgetRoot(uiState = uiState)
+                // 顶层统一承载系统小组件背景与动态大圆角（Android 12+）
+                Box(
+                    modifier =
+                        GlanceModifier
+                            .fillMaxSize()
+                            .background(GlanceTheme.colors.background)
+                            .appWidgetBackground(),
+                ) {
+                    WidgetRoot(uiState = uiState, heroCover = heroCover)
+                }
             }
         }
     }
 }
 
 /**
- * 系统为 widget 内层元素定义的圆角（API 31+，minSdk 已满足）。
- * glance 1.2.0 stable 尚未暴露 appWidgetInnerCornerRadius API，此处手动解析框架 dimen；
- * 部分厂商 ROM 可能返回 0，回退到 8dp 保底。
+ * hero 封面小图：经 Coil（复用应用级 ImageLoader 的磁盘缓存与网络栈）取约 44x60dp@3x 的位图。
+ * 请求失败（无网/解析失败/Koin 未就绪）一律返回 null，由调用方回退纯文本布局。
  */
-private val systemWidgetInnerRadius: Dp =
+private suspend fun loadHeroCoverBitmap(
+    context: Context,
+    url: String,
+): Bitmap? =
     runCatching {
-        Resources
-            .getSystem()
-            .getDimension(android.R.dimen.system_app_widget_inner_radius)
-            .dp
-    }.getOrDefault(10.dp).coerceAtLeast(8.dp)
+        val request =
+            ImageRequest
+                .Builder(context)
+                .data(url)
+                .size(132, 180)
+                .build()
+        val result = SingletonImageLoader.get(context).execute(request)
+        ((result as? SuccessResult)?.image?.asDrawable(context.resources) as? BitmapDrawable)?.bitmap
+    }.getOrNull()
 
 @Composable
-private fun WidgetRoot(uiState: ScheduleWidgetUiState) {
+private fun WidgetRoot(
+    uiState: ScheduleWidgetUiState,
+    heroCover: Bitmap?,
+) {
     val size = LocalSize.current
-    val isCompact = size.width < 210.dp
-    val isExpanded = size.width >= 210.dp && size.height >= 230.dp
-
     when {
-        uiState.items.isEmpty() -> {
-            if (!uiState.isLoggedIn) {
-                WidgetPlaceholder(
-                    message = "登录小番盒后，汇总「我追的」每日更新",
-                    ctaText = "去登录 ›",
-                    action = openLoginAction(),
-                )
-            } else {
-                WidgetPlaceholder(
-                    message = "追番近期暂无更新，去时间表看看新番",
-                    ctaText = "查看全部时间表 ›",
-                    action = openScheduleAction(),
-                )
-            }
+        uiState.orderedItems.isEmpty() -> {
+            // 空态三态：未登录 / 登录但没在追 / 在追但 7 天窗口内无排期
+            val context = LocalContext.current
+            val (message, ctaText, action) =
+                when {
+                    !uiState.isLoggedIn ->
+                        Triple(
+                            context.getString(R.string.widget_empty_not_logged_in),
+                            context.getString(R.string.widget_cta_login),
+                            openLoginAction(),
+                        )
+                    !uiState.hasTrackedSubjects ->
+                        Triple(
+                            context.getString(R.string.widget_empty_no_tracking),
+                            context.getString(R.string.widget_cta_open_schedule),
+                            openScheduleAction(),
+                        )
+                    else ->
+                        Triple(
+                            context.getString(R.string.widget_empty_no_updates),
+                            context.getString(R.string.widget_cta_view_schedule),
+                            openScheduleAction(),
+                        )
+                }
+            WidgetPlaceholder(message = message, ctaText = ctaText, action = action)
         }
-        isCompact ->
-            CompactWidgetContent(
-                uiState = uiState,
-            )
-        isExpanded ->
-            ExpandedWidgetContent(
-                uiState = uiState,
-            )
+        // 布局判断阈值与 companion 里的断点常量同源，杜绝阈值漂移。
+        size.height < ScheduleWidget.SMALL_MIN.height ->
+            LineWidgetContent(uiState = uiState)
+        size.width < ScheduleWidget.MEDIUM_MIN.width ->
+            CompactWidgetContent(uiState = uiState)
+        size.width >= ScheduleWidget.LARGE_MIN.width && size.height >= ScheduleWidget.LARGE_MIN.height ->
+            ExpandedWidgetContent(uiState = uiState, heroCover = heroCover)
         else ->
-            MediumWidgetContent(
-                uiState = uiState,
-            )
+            MediumWidgetContent(uiState = uiState)
     }
 }
 
 /**
- * 2x2 极简焦点排期卡片：
- * 1. 顶部：简洁标题栏（左侧「今日追番」，右侧轻量周几/计数）；
- * 2. 焦点项：核心展示即将播出的番剧，大号状态胶囊 + 标题 + 话数与倒计时；
- * 3. 次要项/提示：若今日有后续番剧，展示单行紧凑预览或「还有 X 部待播 ›」。
+ * 单行条（高度 < 2x2 的扁长形态，如 2x1 / 4x1）：
+ * 与三档布局同一套 hero 优先级（可看 -> 今日待播 -> 下一部），横向单行承载。
+ */
+@Composable
+private fun LineWidgetContent(uiState: ScheduleWidgetUiState) {
+    val todayItems = uiState.watchable + uiState.upcomingToday
+    val heroIsToday = todayItems.isNotEmpty()
+    val hero = if (heroIsToday) todayItems.first() else uiState.later.first()
+
+    Row(
+        modifier =
+            GlanceModifier
+                .fillMaxSize()
+                .clickable(
+                    if (heroIsToday) openSubjectAction(hero.subjectId) else openScheduleAction(),
+                ).padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.Start,
+    ) {
+        StatusBadge(item = hero)
+        Spacer(modifier = GlanceModifier.width(6.dp))
+        Text(
+            text = hero.title,
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+            modifier = GlanceModifier.defaultWeight(),
+        )
+        Spacer(modifier = GlanceModifier.width(4.dp))
+        Text(
+            text = heroEpisodeLine(hero),
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+        )
+    }
+}
+
+/**
+ * 2x2 焦点卡：无标题栏，按优先级只回答一件事——
+ * 有可看 → 「已更新」焦点；今天全待播 → 最近一部的时刻；今天没有 → 未来 7 天内的下一部。
  */
 @Composable
 private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
-    val heroItem = uiState.items.first()
-    val secondaryItem = uiState.items.getOrNull(1)
+    val context = LocalContext.current
+    val todayItems = uiState.watchable + uiState.upcomingToday
+    val heroIsToday = todayItems.isNotEmpty()
+    val hero = if (heroIsToday) todayItems.first() else uiState.later.first()
 
     Column(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(GlanceTheme.colors.background)
-                .appWidgetBackground()
-                .clickable(openSubjectAction(heroItem.subjectId))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .clickable(
+                    if (heroIsToday) openSubjectAction(hero.subjectId) else openScheduleAction(),
+                ).padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
-        // 顶部状态条
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = uiState.headerTitle,
-                maxLines = 1,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.primary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-            )
+            StatusBadge(item = hero)
             Spacer(modifier = GlanceModifier.defaultWeight())
             Text(
-                text = if (uiState.items.size > 1) "共${uiState.items.size}部" else uiState.headerSubtitle,
+                text = weekdayTextOf(uiState),
                 maxLines = 1,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.outline,
-                        fontSize = 11.sp,
-                    ),
+                style = textStyle(color = GlanceTheme.colors.outline, fontSize = 10.sp),
             )
         }
 
         Spacer(modifier = GlanceModifier.height(6.dp))
 
-        // 焦点卡片主体
+        Text(
+            text = hero.title,
+            maxLines = 2,
+            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+            modifier = GlanceModifier.defaultWeight(),
+        )
+
+        Spacer(modifier = GlanceModifier.height(2.dp))
+
+        Text(
+            text = heroEpisodeLine(hero),
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+        )
+
+        Spacer(modifier = GlanceModifier.height(4.dp))
+
+        Text(
+            text =
+                when {
+                    heroIsToday && uiState.totalToday > 1 ->
+                        context.getString(R.string.widget_hint_more_today, uiState.totalToday - 1)
+                    uiState.totalWeek > 1 ->
+                        context.getString(R.string.widget_hint_total_week, uiState.totalWeek)
+                    else ->
+                        dateLineOf(uiState)
+                },
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
+        )
+    }
+}
+
+/** 4x2 摘要列表：单列 3 行「[状态胶囊][番名][话数]」+ 真实计数溢出行 */
+@Composable
+private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
+    val context = LocalContext.current
+    val rows = uiState.orderedItems.take(3)
+
+    Column(
+        modifier =
+            GlanceModifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        WidgetHeader(
+            title = headerTitleOf(uiState),
+            dateLine = dateLineOf(uiState),
+            onRefreshClick = actionRunCallback<RefreshScheduleWidgetCallback>(),
+            onScheduleClick = openScheduleAction(),
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+
         Column(
-            modifier =
-                GlanceModifier
-                    .fillMaxWidth()
-                    .defaultWeight()
-                    .background(GlanceTheme.colors.surfaceVariant)
-                    .cornerRadius(systemWidgetInnerRadius)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
         ) {
-            // 状态胶囊与倒计时
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusBadge(
-                    isAiredToday = heroItem.isAiredToday,
-                    airTimeLocal = heroItem.airTimeLocal,
-                    countdownBadge = heroItem.countdownBadge,
+            rows.forEach { item ->
+                WidgetItemRow(
+                    item = item,
+                    onClick = openSubjectAction(item.subjectId),
+                    modifier = if (rows.size >= 3) GlanceModifier.defaultWeight() else GlanceModifier,
                 )
-                if (!heroItem.isAiredToday &&
-                    heroItem.countdownBadge.isNotBlank() &&
-                    heroItem.countdownBadge != "待播" &&
-                    heroItem.airTimeLocal.isNotBlank()
-                ) {
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    CountdownBadgeView(
-                        text = heroItem.countdownBadge,
-                        isAiredToday = false,
-                    )
-                }
             }
-
-            Spacer(modifier = GlanceModifier.height(4.dp))
-
-            Text(
-                text = heroItem.title,
-                maxLines = 2,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.onBackground,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                modifier = GlanceModifier.defaultWeight(),
-            )
-
-            Spacer(modifier = GlanceModifier.height(2.dp))
-
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (heroItem.episode > 0) "第${heroItem.episode}话" else "最新话",
-                    maxLines = 1,
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                )
-                if (heroItem.kindTag != null) {
-                    Spacer(modifier = GlanceModifier.width(4.dp))
-                    Text(
-                        text = "· ${heroItem.kindTag}",
-                        maxLines = 1,
-                        style =
-                            TextStyle(
-                                color = GlanceTheme.colors.outline,
-                                fontSize = 11.sp,
-                            ),
-                    )
-                }
+            if (rows.size < 3) {
+                Spacer(modifier = GlanceModifier.defaultWeight())
             }
         }
 
-        // 次级番剧或查看更多引导
-        if (secondaryItem != null) {
-            Spacer(modifier = GlanceModifier.height(4.dp))
+        val hidden = uiState.totalWeek - rows.size
+        if (hidden > 0) {
+            Spacer(modifier = GlanceModifier.height(2.dp))
             Row(
                 modifier =
                     GlanceModifier
                         .fillMaxWidth()
-                        .clickable(openSubjectAction(secondaryItem.subjectId)),
+                        .clickable(openScheduleAction()),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = secondaryItem.airTimeLocal.ifBlank { "稍后" },
+                    text = context.getString(R.string.widget_hint_more, hidden),
                     maxLines = 1,
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.outline,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
+                    style = textStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
                 )
-                Spacer(modifier = GlanceModifier.width(4.dp))
-                Text(
-                    text = secondaryItem.title,
-                    maxLines = 1,
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.onBackground,
-                            fontSize = 12.sp,
-                        ),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
-                if (uiState.items.size > 2) {
-                    Text(
-                        text = "+${uiState.items.size - 2}",
-                        style =
-                            TextStyle(
-                                color = GlanceTheme.colors.primary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                    )
-                }
             }
         }
     }
 }
 
-/**
- * 4x2 现代化双列看板 (Hero Spotlight + Timeline Queue)：
- * 左侧 45%：焦点英雄卡片（最近或下一部开播），展示大标题、开播胶囊、话数与倒计时；
- * 右侧 55%：今日排期时间线（Timeline），按时刻清晰列出今日后续番剧清单。
- */
+/** 4x4 分区看板：hero 卡（带封面）+ 「今日后续」「接下来」分区 + 真实计数溢出行 */
 @Composable
-private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
-    val items = uiState.items
-    val heroItem = items.first()
-    val queueItems = items.drop(1)
+private fun ExpandedWidgetContent(
+    uiState: ScheduleWidgetUiState,
+    heroCover: Bitmap?,
+) {
+    val context = LocalContext.current
+    val hero = uiState.orderedItems.first()
+    val todayRest = (uiState.watchable + uiState.upcomingToday).drop(1).take(3)
+    val heroFromLater = uiState.totalToday == 0
+    val laterRows = uiState.later.drop(if (heroFromLater) 1 else 0).take(2)
+    val totalListItems = todayRest.size + laterRows.size
+    val useWeight = totalListItems >= 4
 
     Column(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(GlanceTheme.colors.background)
-                .appWidgetBackground()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        WidgetHeader(
-            title = uiState.headerTitle,
-            subtitle = uiState.headerSubtitle,
-            onScheduleClick = openScheduleAction(),
-            onRefreshClick = actionRunCallback<RefreshScheduleWidgetCallback>(),
-        )
-        Spacer(modifier = GlanceModifier.height(6.dp))
-
-        Row(
-            modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // 左半区：焦点番剧卡片
-            Column(
-                modifier =
-                    GlanceModifier
-                        .defaultWeight()
-                        .fillMaxHeight()
-                        .background(GlanceTheme.colors.surfaceVariant)
-                        .cornerRadius(systemWidgetInnerRadius)
-                        .clickable(openSubjectAction(heroItem.subjectId))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-            ) {
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    StatusBadge(
-                        isAiredToday = heroItem.isAiredToday,
-                        airTimeLocal = heroItem.airTimeLocal,
-                        countdownBadge = heroItem.countdownBadge,
-                    )
-                    if (!heroItem.isAiredToday &&
-                        heroItem.countdownBadge.isNotBlank() &&
-                        heroItem.countdownBadge != "待播" &&
-                        heroItem.airTimeLocal.isNotBlank()
-                    ) {
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-                        CountdownBadgeView(
-                            text = heroItem.countdownBadge,
-                            isAiredToday = false,
-                        )
-                    }
-                }
-
-                Spacer(modifier = GlanceModifier.height(6.dp))
-
-                Text(
-                    text = heroItem.title,
-                    maxLines = 2,
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.onBackground,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                    modifier = GlanceModifier.defaultWeight(),
-                )
-
-                Spacer(modifier = GlanceModifier.height(3.dp))
-
-                Row(
-                    modifier = GlanceModifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (heroItem.episode > 0) "第${heroItem.episode}话" else "最新话",
-                        maxLines = 1,
-                        style =
-                            TextStyle(
-                                color = GlanceTheme.colors.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                    )
-                    if (heroItem.kindTag != null) {
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-                        Text(
-                            text = "· ${heroItem.kindTag}",
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.outline,
-                                    fontSize = 11.sp,
-                                ),
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = GlanceModifier.width(10.dp))
-
-            // 右半区：今日日程时间线列表
-            Column(
-                modifier =
-                    GlanceModifier
-                        .defaultWeight()
-                        .fillMaxHeight(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (queueItems.isEmpty()) {
-                    Column(
-                        modifier =
-                            GlanceModifier
-                                .fillMaxSize()
-                                .clickable(openScheduleAction())
-                                .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "今日追番仅此 1 部",
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.onBackground,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                        )
-                        Spacer(modifier = GlanceModifier.height(3.dp))
-                        Text(
-                            text = "准时守候，不见不散",
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.outline,
-                                    fontSize = 11.sp,
-                                ),
-                        )
-                        Spacer(modifier = GlanceModifier.height(4.dp))
-                        Text(
-                            text = "查看本周完整时间表 ›",
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.primary,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                ),
-                        )
-                    }
-                } else {
-                    val displayQueue = queueItems.take(3)
-                    displayQueue.forEachIndexed { index, queueItem ->
-                        Row(
-                            modifier =
-                                GlanceModifier
-                                    .fillMaxWidth()
-                                    .defaultWeight()
-                                    .clickable(openSubjectAction(queueItem.subjectId)),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                modifier =
-                                    GlanceModifier
-                                        .background(GlanceTheme.colors.surfaceVariant)
-                                        .cornerRadius(4.dp)
-                                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                            ) {
-                                Text(
-                                    text = queueItem.airTimeLocal.ifBlank { "待播" },
-                                    maxLines = 1,
-                                    style =
-                                        TextStyle(
-                                            color = GlanceTheme.colors.onSurfaceVariant,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                        ),
-                                )
-                            }
-                            Spacer(modifier = GlanceModifier.width(6.dp))
-                            Text(
-                                text = queueItem.title,
-                                maxLines = 1,
-                                style =
-                                    TextStyle(
-                                        color = GlanceTheme.colors.onBackground,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                    ),
-                                modifier = GlanceModifier.defaultWeight(),
-                            )
-                            Spacer(modifier = GlanceModifier.width(4.dp))
-                            Text(
-                                text = if (queueItem.episode > 0) "第${queueItem.episode}话" else "更新",
-                                maxLines = 1,
-                                style =
-                                    TextStyle(
-                                        color = GlanceTheme.colors.outline,
-                                        fontSize = 11.sp,
-                                    ),
-                            )
-                        }
-                        if (index < displayQueue.size - 1) {
-                            Spacer(modifier = GlanceModifier.height(2.dp))
-                        }
-                    }
-
-                    if (queueItems.size > 3) {
-                        Spacer(modifier = GlanceModifier.height(2.dp))
-                        Row(
-                            modifier =
-                                GlanceModifier
-                                    .fillMaxWidth()
-                                    .clickable(openScheduleAction()),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "还有 ${queueItems.size - 3} 部待播",
-                                maxLines = 1,
-                                style =
-                                    TextStyle(
-                                        color = GlanceTheme.colors.primary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                    ),
-                            )
-                            Text(
-                                text = " ›",
-                                style =
-                                    TextStyle(
-                                        color = GlanceTheme.colors.primary,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 4x4 大组件排期看板：顶部焦点大卡片 + 5 行全天时间线清单，信息极其饱满 */
-@Composable
-private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
-    val items = uiState.items
-    val heroItem = items.first()
-    val timelineItems = items.drop(1).take(5)
-
-    Column(
-        modifier =
-            GlanceModifier
-                .fillMaxSize()
-                .background(GlanceTheme.colors.background)
-                .appWidgetBackground()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         WidgetHeader(
-            title = uiState.headerTitle,
-            subtitle = uiState.headerSubtitle,
-            onScheduleClick = openScheduleAction(),
+            title = headerTitleOf(uiState),
+            dateLine = dateLineOf(uiState),
             onRefreshClick = actionRunCallback<RefreshScheduleWidgetCallback>(),
+            onScheduleClick = openScheduleAction(),
         )
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        // 顶部高光卡片 (Hero Card)
-        Column(
+        // Hero 卡：最近可看的一部，或今天的下一部
+        Row(
             modifier =
                 GlanceModifier
                     .fillMaxWidth()
                     .background(GlanceTheme.colors.surfaceVariant)
-                    .cornerRadius(systemWidgetInnerRadius)
-                    .clickable(openSubjectAction(heroItem.subjectId))
+                    .cornerRadius(android.R.dimen.system_app_widget_inner_radius)
+                    .clickable(openSubjectAction(hero.subjectId))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusBadge(
-                    isAiredToday = heroItem.isAiredToday,
-                    airTimeLocal = heroItem.airTimeLocal,
-                    countdownBadge = heroItem.countdownBadge,
+            if (heroCover != null) {
+                Image(
+                    provider = ImageProvider(heroCover),
+                    contentDescription = context.getString(R.string.widget_cd_cover),
+                    modifier = GlanceModifier.width(44.dp).height(60.dp).cornerRadius(6.dp),
                 )
-                if (!heroItem.isAiredToday &&
-                    heroItem.countdownBadge.isNotBlank() &&
-                    heroItem.countdownBadge != "待播" &&
-                    heroItem.airTimeLocal.isNotBlank()
+                Spacer(modifier = GlanceModifier.width(8.dp))
+            }
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Spacer(modifier = GlanceModifier.width(6.dp))
-                    CountdownBadgeView(
-                        text = heroItem.countdownBadge,
-                        isAiredToday = false,
+                    StatusBadge(item = hero)
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                    Text(
+                        text = heroEpisodeLine(hero),
+                        maxLines = 1,
+                        style = textStyle(color = GlanceTheme.colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
                     )
                 }
-                Spacer(modifier = GlanceModifier.defaultWeight())
+
+                Spacer(modifier = GlanceModifier.height(4.dp))
+
                 Text(
-                    text = if (heroItem.episode > 0) "第${heroItem.episode}话" else "最新话",
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
+                    text = hero.title,
+                    maxLines = 2,
+                    style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 14.sp, fontWeight = FontWeight.Bold),
                 )
             }
-
-            Spacer(modifier = GlanceModifier.height(4.dp))
-
-            Text(
-                text = heroItem.title,
-                maxLines = 1,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.onBackground,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-            )
         }
 
         Spacer(modifier = GlanceModifier.height(8.dp))
 
-        // 标题栏：今日日程时间线
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "今日后续排期",
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.outline,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-            )
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            if (items.size > 6) {
-                Text(
-                    text = "还有 ${items.size - 6} 部",
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.outline,
-                            fontSize = 11.sp,
-                        ),
-                )
-            }
-        }
-
-        Spacer(modifier = GlanceModifier.height(4.dp))
-
-        // 列表区
-        if (timelineItems.isEmpty()) {
+        if (todayRest.isEmpty() && laterRows.isEmpty()) {
             Column(
                 modifier =
                     GlanceModifier
@@ -741,125 +484,117 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "今日后续暂无其他番剧播出",
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.outline,
-                            fontSize = 11.sp,
-                        ),
+                    text = context.getString(R.string.widget_empty_no_schedule),
+                    style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
                 )
                 Spacer(modifier = GlanceModifier.height(4.dp))
                 Text(
-                    text = "查看本周完整时间表 ›",
-                    style =
-                        TextStyle(
-                            color = GlanceTheme.colors.primary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                        ),
+                    text = context.getString(R.string.widget_cta_view_week),
+                    style = textStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
                 )
             }
         } else {
             Column(
                 modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
             ) {
-                timelineItems.forEachIndexed { index, item ->
-                    Row(
-                        modifier =
-                            GlanceModifier
-                                .fillMaxWidth()
-                                .defaultWeight()
-                                .clickable(openSubjectAction(item.subjectId))
-                                .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 播出时刻胶囊
-                        Box(
-                            modifier =
-                                GlanceModifier
-                                    .background(GlanceTheme.colors.surfaceVariant)
-                                    .cornerRadius(4.dp)
-                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = item.airTimeLocal.ifBlank { "待播" },
-                                maxLines = 1,
-                                style =
-                                    TextStyle(
-                                        color = GlanceTheme.colors.onSurfaceVariant,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                            )
-                        }
-
-                        Spacer(modifier = GlanceModifier.width(8.dp))
-
-                        // 番剧名
-                        Text(
-                            text = item.title,
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.onBackground,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                ),
-                            modifier = GlanceModifier.defaultWeight(),
-                        )
-
-                        Spacer(modifier = GlanceModifier.width(6.dp))
-
-                        // 话数
-                        Text(
-                            text = if (item.episode > 0) "第${item.episode}话" else "更新",
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = GlanceTheme.colors.outline,
-                                    fontSize = 11.sp,
-                                ),
-                        )
-
-                        Spacer(modifier = GlanceModifier.width(6.dp))
-
-                        // 状态标签
-                        Text(
-                            text = if (item.isAiredToday) "已播" else item.countdownBadge,
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color =
-                                        if (item.isAiredToday) {
-                                            GlanceTheme.colors.primary
-                                        } else {
-                                            GlanceTheme.colors.outline
-                                        },
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
+                val itemModifier = if (useWeight) GlanceModifier.defaultWeight() else GlanceModifier
+                if (todayRest.isNotEmpty()) {
+                    Text(
+                        text = context.getString(R.string.widget_section_today),
+                        style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(modifier = GlanceModifier.height(2.dp))
+                    todayRest.forEach { item ->
+                        WidgetItemRow(
+                            item = item,
+                            onClick = openSubjectAction(item.subjectId),
+                            modifier = itemModifier,
                         )
                     }
-                    if (index < timelineItems.size - 1) {
-                        Spacer(modifier = GlanceModifier.height(2.dp))
+                }
+                if (todayRest.isNotEmpty() && laterRows.isNotEmpty()) {
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+                }
+                if (laterRows.isNotEmpty()) {
+                    Text(
+                        text = context.getString(R.string.widget_section_later),
+                        style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                    )
+                    Spacer(modifier = GlanceModifier.height(2.dp))
+                    laterRows.forEach { item ->
+                        WidgetItemRow(
+                            item = item,
+                            onClick = openSubjectAction(item.subjectId),
+                            modifier = itemModifier,
+                        )
                     }
+                }
+                if (!useWeight) {
+                    Spacer(modifier = GlanceModifier.defaultWeight())
+                }
+            }
+
+            val hidden = uiState.totalWeek - 1 - todayRest.size - laterRows.size
+            if (hidden > 0) {
+                Spacer(modifier = GlanceModifier.height(4.dp))
+                Row(
+                    modifier =
+                        GlanceModifier
+                            .fillMaxWidth()
+                            .clickable(openScheduleAction()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = context.getString(R.string.widget_hint_more_week, hidden),
+                        maxLines = 1,
+                        style = textStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                    )
                 }
             }
         }
     }
 }
 
+/** 统一条目行：状态胶囊 + 番名 + 话数，4x2 与 4x4 共用 */
 @Composable
-private fun StatusBadge(
-    isAiredToday: Boolean,
-    airTimeLocal: String,
-    countdownBadge: String,
+private fun WidgetItemRow(
+    item: ScheduleWidgetItemUiModel,
+    onClick: Action,
+    modifier: GlanceModifier = GlanceModifier,
 ) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clickable(onClick)
+                .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusBadge(item = item)
+        Spacer(modifier = GlanceModifier.width(6.dp))
+        Text(
+            text = item.title,
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            modifier = GlanceModifier.defaultWeight(),
+        )
+        Spacer(modifier = GlanceModifier.width(4.dp))
+        Text(
+            text = episodeText(item),
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
+        )
+    }
+}
+
+/** 单一状态胶囊：已更新/可看（tertiary 强调）、时刻、周几+时刻（primary） */
+@Composable
+private fun StatusBadge(item: ScheduleWidgetItemUiModel) {
     Box(
         modifier =
             GlanceModifier
                 .background(
-                    if (isAiredToday) {
+                    if (item.isWatchable) {
                         GlanceTheme.colors.tertiaryContainer
                     } else {
                         GlanceTheme.colors.primaryContainer
@@ -868,17 +603,12 @@ private fun StatusBadge(
                 .padding(horizontal = 5.dp, vertical = 2.dp),
     ) {
         Text(
-            text =
-                when {
-                    isAiredToday -> "已更新"
-                    airTimeLocal.isNotBlank() -> "$airTimeLocal 待播"
-                    else -> countdownBadge
-                },
+            text = statusLineText(item.status),
             maxLines = 1,
             style =
                 TextStyle(
                     color =
-                        if (isAiredToday) {
+                        if (item.isWatchable) {
                             GlanceTheme.colors.onTertiaryContainer
                         } else {
                             GlanceTheme.colors.onPrimaryContainer
@@ -893,10 +623,11 @@ private fun StatusBadge(
 @Composable
 private fun WidgetHeader(
     title: String,
-    subtitle: String,
-    onScheduleClick: Action,
+    dateLine: String,
     onRefreshClick: Action,
+    onScheduleClick: Action,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -904,25 +635,14 @@ private fun WidgetHeader(
         Text(
             text = title,
             maxLines = 1,
-            style =
-                TextStyle(
-                    color = GlanceTheme.colors.onBackground,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
+            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Bold),
         )
-        if (subtitle.isNotBlank()) {
-            Spacer(modifier = GlanceModifier.width(4.dp))
-            Text(
-                text = "· $subtitle",
-                maxLines = 1,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.outline,
-                        fontSize = 11.sp,
-                    ),
-            )
-        }
+        Spacer(modifier = GlanceModifier.width(4.dp))
+        Text(
+            text = dateLine,
+            maxLines = 1,
+            style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
+        )
         Spacer(modifier = GlanceModifier.defaultWeight())
         // 40dp 热区承载 16dp 图标：视觉不变，触控面积符合最低标准
         Box(
@@ -934,7 +654,7 @@ private fun WidgetHeader(
         ) {
             Image(
                 provider = ImageProvider(R.drawable.ic_widget_refresh),
-                contentDescription = "刷新",
+                contentDescription = context.getString(R.string.widget_cd_refresh),
                 modifier = GlanceModifier.size(16.dp),
             )
         }
@@ -945,52 +665,11 @@ private fun WidgetHeader(
                     .padding(horizontal = 4.dp, vertical = 12.dp),
         ) {
             Text(
-                text = "时间表 ›",
+                text = context.getString(R.string.widget_open_schedule),
                 maxLines = 1,
-                style =
-                    TextStyle(
-                        color = GlanceTheme.colors.primary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
+                style = textStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Medium),
             )
         }
-    }
-}
-
-@Composable
-private fun CountdownBadgeView(
-    text: String,
-    isAiredToday: Boolean,
-    fontSize: TextUnit = 11.sp,
-) {
-    if (text.isBlank()) return
-    // 「刚刚开播」是正向状态（现在就能看），与「已更新」同属 tertiary 家族；
-    // error 红色只保留给真正的异常语义，避免用户把更新误读为出错
-    val (bgColor, textColor) =
-        when {
-            isAiredToday -> GlanceTheme.colors.tertiaryContainer to GlanceTheme.colors.onTertiaryContainer
-            text == "刚刚开播" -> GlanceTheme.colors.tertiaryContainer to GlanceTheme.colors.onTertiaryContainer
-            else -> GlanceTheme.colors.primaryContainer to GlanceTheme.colors.onPrimaryContainer
-        }
-
-    Box(
-        modifier =
-            GlanceModifier
-                .background(bgColor)
-                .cornerRadius(3.dp)
-                .padding(horizontal = 4.dp, vertical = 1.dp),
-    ) {
-        Text(
-            text = text,
-            maxLines = 1,
-            style =
-                TextStyle(
-                    color = textColor,
-                    fontSize = fontSize,
-                    fontWeight = FontWeight.Bold,
-                ),
-        )
     }
 }
 
@@ -1004,8 +683,6 @@ private fun WidgetPlaceholder(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(GlanceTheme.colors.background)
-                .appWidgetBackground()
                 .clickable(action)
                 .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1014,25 +691,117 @@ private fun WidgetPlaceholder(
         Text(
             text = message,
             maxLines = 2,
-            style =
-                TextStyle(
-                    color = GlanceTheme.colors.onBackground,
-                    fontSize = 12.sp,
-                ),
+            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 12.sp),
         )
         Spacer(modifier = GlanceModifier.height(8.dp))
         Text(
             text = ctaText,
             maxLines = 1,
-            style =
-                TextStyle(
-                    color = GlanceTheme.colors.primary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
+            style = textStyle(color = GlanceTheme.colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
         )
     }
 }
+
+// region 文案渲染：结构化状态 -> 语言资源（Planner 零文案）
+
+/** 「周X」（完整日期见 [dateLineOf]） */
+@Composable
+private fun weekdayTextOf(uiState: ScheduleWidgetUiState): String {
+    val context = LocalContext.current
+    val weekdayIndex = LocalDate.ofEpochDay(uiState.todayEpochDay).dayOfWeek.value
+    return context.widgetWeekday(weekdayIndex)
+}
+
+/** 「周X · M月D日」 */
+@Composable
+private fun dateLineOf(uiState: ScheduleWidgetUiState): String {
+    val context = LocalContext.current
+    val date = LocalDate.ofEpochDay(uiState.todayEpochDay)
+    return context.getString(
+        R.string.widget_date_line,
+        context.widgetWeekday(date.dayOfWeek.value),
+        date.monthValue,
+        date.dayOfMonth,
+    )
+}
+
+@Composable
+private fun headerTitleOf(uiState: ScheduleWidgetUiState): String {
+    val context = LocalContext.current
+    return when {
+        !uiState.isLoggedIn -> context.getString(R.string.widget_title_calendar)
+        uiState.totalToday > 0 -> context.getString(R.string.widget_title_today)
+        else -> context.getString(R.string.widget_title_next)
+    }
+}
+
+private fun Context.widgetWeekday(index: Int): String = resources.getStringArray(R.array.widget_weekdays)[(index - 1).coerceIn(0, 6)]
+
+private fun dayLabel(
+    context: Context,
+    day: AirDay,
+): String =
+    when (day) {
+        AirDay.Yesterday -> context.getString(R.string.widget_day_yesterday)
+        AirDay.Tomorrow -> context.getString(R.string.widget_day_tomorrow)
+        is AirDay.Weekday -> context.widgetWeekday(day.index)
+    }
+
+@Composable
+private fun statusLineText(status: AirStatusLine): String {
+    val context = LocalContext.current
+    return when (status) {
+        AirStatusLine.AiredToday -> context.getString(R.string.widget_status_aired_today)
+        is AirStatusLine.Aired ->
+            context.getString(R.string.widget_status_day_time, dayLabel(context, status.day), status.time)
+        is AirStatusLine.TodayAt -> status.time
+        is AirStatusLine.Upcoming ->
+            context.getString(R.string.widget_status_day_time, dayLabel(context, status.day), status.time)
+        AirStatusLine.Watching -> context.getString(R.string.widget_status_watching)
+        AirStatusLine.OnAir -> context.getString(R.string.widget_status_on_air)
+    }
+}
+
+private fun kindLabel(
+    context: Context,
+    airKind: String?,
+): String? =
+    when (airKind) {
+        AirEventKind.SCHEDULED -> context.getString(R.string.widget_kind_scheduled)
+        AirEventKind.PREDICTED -> context.getString(R.string.widget_kind_predicted)
+        else -> null
+    }
+
+@Composable
+private fun episodeText(item: ScheduleWidgetItemUiModel): String {
+    val context = LocalContext.current
+    return if (item.episode > 0) {
+        context.getString(R.string.widget_episode, item.episode)
+    } else {
+        context.getString(R.string.widget_episode_latest)
+    }
+}
+
+/** 「第X话」或「最新话」，附带表定/预估置信度标签 */
+@Composable
+private fun heroEpisodeLine(item: ScheduleWidgetItemUiModel): String {
+    val context = LocalContext.current
+    val episode = episodeText(item)
+    val kind = kindLabel(context, item.airKind) ?: return episode
+    return context.getString(R.string.widget_episode_with_kind, episode, kind)
+}
+
+// endregion
+
+private fun textStyle(
+    color: androidx.glance.unit.ColorProvider,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight? = null,
+) = TextStyle(
+    color = color,
+    fontSize = fontSize,
+    fontWeight = fontWeight,
+)
 
 @Composable
 private fun openScheduleAction(): Action {

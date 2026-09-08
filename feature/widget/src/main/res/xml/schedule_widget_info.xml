@@ -1,15 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 单 Provider + 自由拖拽：内容由 WidgetRoot 按实际尺寸映射到对应档位渲染
+     （超矮单行条 / 2x2 焦点卡 / 4x2 摘要列表 / ≥4x4 分区看板）。
+     周期刷新由 WorkManager 承担（30 分钟心跳 + 午夜跨天 + 同步完成后即时刷新），
+     系统心跳关闭以避免双重唤醒。
+     maxResizeWidth/Height 为 API 31+ 建议值，遵守的桌面会钳制到约 4x4 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="100dp"
     android:minHeight="100dp"
     android:minResizeWidth="100dp"
     android:minResizeHeight="100dp"
-    android:maxResizeWidth="380dp"
-    android:maxResizeHeight="360dp"
+    android:maxResizeWidth="320dp"
+    android:maxResizeHeight="320dp"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:previewLayout="@layout/schedule_widget_preview"
-    android:updatePeriodMillis="1800000"
+    android:updatePeriodMillis="0"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"

@@ -10,10 +10,11 @@ class ScheduleWidgetReceiver : GlanceAppWidgetReceiver() {
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
         WidgetSync.enqueuePeriodicUpdate(context)
+        WidgetSync.enqueueMidnightUpdate(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        WidgetSync.cancelPeriodicUpdate(context)
+        WidgetSync.cancelAll(context)
     }
 }

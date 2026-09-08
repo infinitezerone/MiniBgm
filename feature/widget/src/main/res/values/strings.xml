@@ -10,4 +10,60 @@
     <string name="widget_preview_episode">第8话</string>
     <string name="widget_preview_queue_time">21:00</string>
     <string name="widget_preview_queue_title">后续番剧标题…</string>
+
+    <!-- 头部与导航 -->
+    <string name="widget_title_today">今日追番</string>
+    <string name="widget_title_next">下一部更新</string>
+    <string name="widget_title_calendar">今日新番日历</string>
+    <string name="widget_open_schedule">时间表 ›</string>
+    <string name="widget_cd_refresh">刷新</string>
+    <string name="widget_cd_cover">番剧封面</string>
+
+    <!-- 日期：周几（周一…周日）与「周几 · M月D日」 -->
+    <string name="widget_date_line">%1$s · %2$d月%3$d日</string>
+    <string-array name="widget_weekdays">
+        <item>周一</item>
+        <item>周二</item>
+        <item>周三</item>
+        <item>周四</item>
+        <item>周五</item>
+        <item>周六</item>
+        <item>周日</item>
+    </string-array>
+
+    <!-- 状态胶囊：单一状态来源的文案 -->
+    <string name="widget_status_aired_today">已更新</string>
+    <string name="widget_status_day_time">%1$s %2$s</string>
+    <string name="widget_day_yesterday">昨天</string>
+    <string name="widget_day_tomorrow">明天</string>
+    <string name="widget_status_watching">在看</string>
+    <string name="widget_status_on_air">放送中</string>
+    <string name="widget_kind_scheduled">表定</string>
+    <string name="widget_kind_predicted">预估</string>
+
+    <!-- 话数 -->
+    <string name="widget_episode">第%1$d话</string>
+    <string name="widget_episode_latest">最新话</string>
+    <string name="widget_episode_with_kind">%1$s · %2$s</string>
+
+    <!-- 计数与引导 -->
+    <string name="widget_hint_more_today">今天还有 %1$d 部</string>
+    <string name="widget_hint_total_week">本周共 %1$d 部</string>
+    <string name="widget_hint_more">还有 %1$d 部 ›</string>
+    <string name="widget_hint_more_week">本周还有 %1$d 部 ›</string>
+    <string name="widget_section_today">今日后续</string>
+    <string name="widget_section_later">接下来</string>
+    <string name="widget_empty_no_schedule">近期没有其他排期</string>
+    <string name="widget_cta_view_week">查看本周时间表 ›</string>
+
+    <!-- 空态三态 -->
+    <string name="widget_empty_not_logged_in">登录小番盒后，汇总「我追的」每日更新</string>
+    <string name="widget_cta_login">去登录 ›</string>
+    <string name="widget_empty_no_tracking">还没有在追的番，去时间表挑一部</string>
+    <string name="widget_cta_open_schedule">打开时间表 ›</string>
+    <string name="widget_empty_no_updates">在追的番近期没有更新</string>
+    <string name="widget_cta_view_schedule">查看时间表 ›</string>
+
+    <!-- 刷新反馈 -->
+    <string name="widget_refresh_failed">刷新失败，请稍后重试</string>
 </resources>
