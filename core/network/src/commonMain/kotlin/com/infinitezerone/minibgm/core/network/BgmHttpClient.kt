@@ -64,7 +64,7 @@ object BgmHttpClient {
             }
             install(Logging) {
                 logger = Logger.DEFAULT
-                level = if (enableLogging) LogLevel.ALL else LogLevel.NONE
+                level = if (enableLogging) LogLevel.INFO else LogLevel.NONE
             }
             install(DefaultRequest) {
                 header(HttpHeaders.UserAgent, userAgent)
