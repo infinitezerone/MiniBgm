@@ -9,7 +9,7 @@ import kotlin.test.fail
 /**
  * 对应 AGENTS.md 核心架构规范与安全边界的确定性自动化测试：
  * 1. Feature 隔离：:feature:A 绝不能依赖 :feature:B
- * 2. 单一数据源：UI 层（:feature:*）严禁越级依赖或 import :core:network 或 :core:database
+ * 2. 单一数据源：UI 层（:feature:*）严禁越级依赖或 import :core:network / :core:database / :core:datastore
  * 3. 纯模型层：:core:model 为纯 Kotlin，严禁引入任何 android.* / androidx.* / UI 框架依赖
  * 4. MVI 单向流：所有 ViewModel 严禁对外暴露 MutableStateFlow，必须暴露不可变 StateFlow
  * 5. 凭据隔离：UserPreferences 绝不包含任何 token / 凭据字段（Token 必须走 AndroidKeyStore）
@@ -97,6 +97,50 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反单一数据源与分层隔离（UI 层必须通过 :core:data Repositories 协调，严禁直连 network 或 database）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun feature_modules_never_depend_directly_on_datastore() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+
+        // 1. 检查 build.gradle.kts 依赖
+        featureDir
+            .walkTopDown()
+            .filter { it.name == "build.gradle.kts" }
+            .forEach { buildScript ->
+                val moduleName = buildScript.parentFile?.name ?: "unknown"
+                buildScript.readLines().forEachIndexed { index, line ->
+                    if (line.contains("project(\":core:datastore\")") ||
+                        line.contains("project(':core:datastore')")
+                    ) {
+                        violations.add("[$moduleName] build.gradle.kts:${index + 1} 越级依赖了 :core:datastore -> $line")
+                    }
+                }
+            }
+
+        // 2. 检查源码 import
+        featureDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val relPath = sourceFile.relativeTo(projectRoot).path
+                sourceFile.readLines().forEachIndexed { index, line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("import com.infinitezerone.minibgm.core.datastore")) {
+                        violations.add("$relPath:${index + 1} 违规直接引入 datastore -> $trimmed")
+                    }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反单一数据源与分层隔离（UI 层读写用户偏好必须经 :core:data SettingsRepository，严禁直接依赖或 import :core:datastore）：\n" +
                     violations.joinToString("\n"),
             )
         }

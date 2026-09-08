@@ -7,7 +7,7 @@ Architectural context, coding standards, and verification workflow for **MiniBgm
 The rules below are **deterministically enforced by `ArchitectureRulesTest`** in `:core:testing` — a violation fails `./gradlew :core:testing:testAndroid`. When introducing a new redline, add its test there first; do not rely on prose alone.
 
 1. **Feature isolation**: `:feature:A` must never depend on `:feature:B`; inter-feature navigation goes through type-safe route contracts.
-2. **Single source of truth**: UI layers go through `:core:data` repositories only — no `:core:network` / `:core:database` project dependencies, and no `io.ktor.*` / `androidx.room.*` imports, in feature sources.
+2. **Single source of truth**: UI layers go through `:core:data` repositories only — no `:core:network` / `:core:database` / `:core:datastore` project dependencies, and no `io.ktor.*` / `androidx.room.*` imports, in feature sources. User-preference reads/writes go through `SettingsRepository` (login state through `AuthRepository`).
 3. **`:core:model` is pure Kotlin**: no `android.*` / `androidx.*` imports.
 4. **MVI**: ViewModels expose a single, immutable `StateFlow<UiState>` — never a public `MutableStateFlow`; one-off events (snackbars, navigation) go through `Channel`/`SharedFlow`.
 5. **Credential isolation**: OAuth tokens only ever live in `AuthTokensDataSource` (AndroidKeyStore-encrypted, excluded from backups) — never in `UserPreferences` or plain DataStore keys.

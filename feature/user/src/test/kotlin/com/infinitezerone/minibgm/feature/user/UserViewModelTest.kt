@@ -4,10 +4,10 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfileAlt
-import com.infinitezerone.minibgm.core.testing.datastore.createTestUserPreferencesDataSource
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,13 +32,12 @@ class UserViewModelTest {
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
     ): Pair<UserViewModel, FakeScheduleRepository> {
-        val userPrefs = createTestUserPreferencesDataSource()
         val viewModel =
             UserViewModel(
                 authRepository = authRepo,
                 scheduleRepository = scheduleRepo,
                 collectionRepository = collectionRepo,
-                userPreferencesDataSource = userPrefs,
+                settingsRepository = FakeSettingsRepository(),
                 syncManager = syncManager,
             )
         return viewModel to scheduleRepo
