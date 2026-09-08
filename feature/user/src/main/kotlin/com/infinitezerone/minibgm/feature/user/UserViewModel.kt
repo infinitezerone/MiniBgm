@@ -6,8 +6,9 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.SyncManager
-import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -41,7 +42,7 @@ class UserViewModel(
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
-    private val userPreferencesDataSource: UserPreferencesDataSource,
+    private val settingsRepository: SettingsRepository,
     private val syncManager: SyncManager,
 ) : ViewModel() {
     private val isManualSyncing = MutableStateFlow(false)
@@ -67,7 +68,7 @@ class UserViewModel(
             authRepository.activeProfile,
             authRepository.savedAccounts,
             authRepository.isAuthenticating,
-            userPreferencesDataSource.userPreferences,
+            settingsRepository.settings,
             syncManager.isSyncing,
             isManualSyncing,
             collectionCountsFlow,
@@ -80,7 +81,7 @@ class UserViewModel(
             @Suppress("UNCHECKED_CAST")
             val savedAccounts = args[2] as List<UserProfile>
             val isAuthenticating = args[3] as Boolean
-            val prefs = args[4] as com.infinitezerone.minibgm.core.datastore.UserPreferences
+            val settings = args[4] as UserSettings
             val workSyncing = args[5] as Boolean
             val manualSyncing = args[6] as Boolean
 
@@ -95,13 +96,13 @@ class UserViewModel(
                 savedAccounts = savedAccounts,
                 isAuthenticating = isAuthenticating,
                 isRefreshing = isRefreshing,
-                syncInterval = prefs.syncInterval,
-                lastSyncTimestamp = prefs.bangumiDataLastSyncTimestamp,
+                syncInterval = settings.syncInterval,
+                lastSyncTimestamp = settings.bangumiDataLastSyncTimestamp,
                 isSyncing = workSyncing || manualSyncing,
                 collectionCounts = collectionCounts,
                 isCountsLoading = isCountsLoading,
-                airingReminderEnabled = prefs.airingReminderEnabled,
-                airingReminderHour = prefs.airingReminderHour,
+                airingReminderEnabled = settings.airingReminderEnabled,
+                airingReminderHour = settings.airingReminderHour,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -166,21 +167,21 @@ class UserViewModel(
 
     fun setSyncInterval(interval: SyncInterval) {
         viewModelScope.launch {
-            userPreferencesDataSource.setSyncInterval(interval)
+            settingsRepository.setSyncInterval(interval)
         }
     }
 
     /** 开播提醒总开关（通知权限的授予与否由 UI 层请求） */
     fun setAiringReminderEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            userPreferencesDataSource.setAiringReminderEnabled(enabled)
+            settingsRepository.setAiringReminderEnabled(enabled)
         }
     }
 
     /** 每日提醒触发时刻（设备本地时间小时） */
     fun setAiringReminderHour(hour: Int) {
         viewModelScope.launch {
-            userPreferencesDataSource.setAiringReminderHour(hour)
+            settingsRepository.setAiringReminderHour(hour)
         }
     }
 

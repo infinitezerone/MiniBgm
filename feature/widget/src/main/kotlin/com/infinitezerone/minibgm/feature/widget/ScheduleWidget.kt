@@ -41,9 +41,9 @@ import androidx.glance.material3.ColorProviders
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
-import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmDarkColors
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmLightColors
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -79,12 +79,12 @@ class ScheduleWidget : GlanceAppWidget() {
         id: GlanceId,
     ) {
         val koin = GlobalContext.getOrNull()
+        // 登录态走 AuthRepository（偏好标记 + token 实际存在），避免"偏好已标记但凭据缺失"的假登录
         val isLoggedIn =
             koin
-                ?.getOrNull<UserPreferencesDataSource>()
-                ?.userPreferences
-                ?.firstOrNull()
-                ?.isLoggedIn == true
+                ?.getOrNull<AuthRepository>()
+                ?.isLoggedIn
+                ?.firstOrNull() == true
         val trackedSubjectIds =
             if (isLoggedIn) {
                 koin

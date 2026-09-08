@@ -10,6 +10,8 @@ import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepositoryImpl
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
@@ -63,6 +65,11 @@ val dataModule =
         single<CommunityRepository> {
             CommunityRepositoryImpl(
                 communityService = get<BangumiCommunityService>(),
+            )
+        }
+        single<SettingsRepository> {
+            SettingsRepositoryImpl(
+                userPreferences = get<UserPreferencesDataSource>(),
             )
         }
         single {
