@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.core.network
+package com.infinitezerone.minibgm.core.common
 
 import kotlinx.coroutines.flow.Flow
 

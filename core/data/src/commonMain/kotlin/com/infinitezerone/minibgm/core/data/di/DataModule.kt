@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.di
 
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.AuthRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
@@ -27,7 +28,6 @@ import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmTokenService
-import com.infinitezerone.minibgm.core.network.TokenProvider
 import org.koin.dsl.module
 
 val dataModule =

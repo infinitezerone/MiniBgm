@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.datastore.di
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.datastore.AuthBlobSerializer
 import com.infinitezerone.minibgm.core.datastore.AuthTokensDataSource
 import com.infinitezerone.minibgm.core.datastore.CryptoManager
@@ -10,7 +11,6 @@ import com.infinitezerone.minibgm.core.datastore.KeystoreTokenProvider
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesSerializer
-import com.infinitezerone.minibgm.core.network.TokenProvider
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 

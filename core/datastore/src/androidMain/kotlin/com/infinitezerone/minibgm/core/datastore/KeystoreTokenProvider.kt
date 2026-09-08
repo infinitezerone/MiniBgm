@@ -1,6 +1,6 @@
 package com.infinitezerone.minibgm.core.datastore
 
-import com.infinitezerone.minibgm.core.network.TokenProvider
+import com.infinitezerone.minibgm.core.common.TokenProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
