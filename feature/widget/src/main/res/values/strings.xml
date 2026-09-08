@@ -1,4 +1,13 @@
 <resources>
     <string name="widget_schedule_label">今日更新</string>
-    <string name="widget_schedule_description">展示「我追的」番剧未来 24 小时内的更新时间表</string>
+    <string name="widget_schedule_description">汇总我追的番剧的更新安排，从「我的下一部」回答什么时候有得看</string>
+
+    <!-- widget 选择器静态预览文案 -->
+    <string name="widget_preview_title">今日追番</string>
+    <string name="widget_preview_schedule">时间表 ›</string>
+    <string name="widget_preview_badge">20:30 待播</string>
+    <string name="widget_preview_hero">下一部：番剧标题</string>
+    <string name="widget_preview_episode">第8话</string>
+    <string name="widget_preview_queue_time">21:00</string>
+    <string name="widget_preview_queue_title">后续番剧标题…</string>
 </resources>

@@ -18,15 +18,14 @@ data class ScheduleWidgetItemUiModel(
     val isAiredToday: Boolean = false,
     /** 播出时刻是否落在今天（用于区分「今日追番」与「下一部更新」） */
     val isToday: Boolean = false,
-    /** 格式化播出时刻，例如 "23:00" */
-    val airTimeCst: String = "",
+    /** 本地时区格式化播出时刻，例如 "23:00" */
+    val airTimeLocal: String = "",
 )
 
 /** 小组件整体展示态 */
 data class ScheduleWidgetUiState(
     val isLoggedIn: Boolean,
     val items: List<ScheduleWidgetItemUiModel>,
-    val formattedUpdateTime: String,
     val headerTitle: String = "今日更新",
     val headerSubtitle: String = "",
     val hasTrackedItems: Boolean = false,

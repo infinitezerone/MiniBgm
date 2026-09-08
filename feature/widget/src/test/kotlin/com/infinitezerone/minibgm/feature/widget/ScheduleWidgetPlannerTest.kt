@@ -27,7 +27,6 @@ class ScheduleWidgetPlannerTest {
 
         assertFalse(state.isLoggedIn)
         assertTrue(state.items.isEmpty())
-        assertEquals("12:00", state.formattedUpdateTime)
         assertEquals("周一 · 9月7日", state.headerSubtitle)
     }
 

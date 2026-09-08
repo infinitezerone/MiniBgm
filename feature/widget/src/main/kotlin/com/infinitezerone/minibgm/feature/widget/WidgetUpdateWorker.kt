@@ -21,8 +21,10 @@ class WidgetUpdateWorker(
         }.fold(
             onSuccess = { Result.success() },
             onFailure = { e ->
-                Log.e(TAG, "Widget update failed", e)
-                Result.success()
+                // updateAll 失败通常是瞬时 IPC/系统异常：返回 retry 让 WorkManager
+                // 按退避策略重试，而不是伪装成功导致小组件停留在过期数据上
+                Log.e(TAG, "Widget update failed, scheduling retry", e)
+                Result.retry()
             },
         )
 
