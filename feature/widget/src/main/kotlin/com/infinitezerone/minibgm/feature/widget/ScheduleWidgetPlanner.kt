@@ -89,7 +89,7 @@ object ScheduleWidgetPlanner {
                             isTracked = true,
                             isAiredToday = meta.second.first,
                             isToday = todayFlag,
-                            airTimeCst = meta.first.third,
+                            airTimeLocal = meta.first.third,
                         ),
                     diffMillis = meta.second.second,
                     isToday = todayFlag,
@@ -156,7 +156,7 @@ object ScheduleWidgetPlanner {
                                 isTracked = false,
                                 isAiredToday = aired,
                                 isToday = true,
-                                airTimeCst = timeStr,
+                                airTimeLocal = timeStr,
                             ),
                         diffMillis = diff,
                         isToday = true,
@@ -190,12 +190,10 @@ object ScheduleWidgetPlanner {
         val todayWeekdayCn = weekdayCn(nowZoned.dayOfWeek)
         val formattedDate = "${nowZoned.monthValue}月${nowZoned.dayOfMonth}日"
         val headerSubtitle = "$todayWeekdayCn · $formattedDate"
-        val formattedTime = nowZoned.format(timeFormatter)
 
         return ScheduleWidgetUiState(
             isLoggedIn = isLoggedIn,
             items = allItems,
-            formattedUpdateTime = formattedTime,
             headerTitle = headerTitle,
             headerSubtitle = headerSubtitle,
             hasTrackedItems = hasTracked,
@@ -212,7 +210,7 @@ object ScheduleWidgetPlanner {
 
     /**
      * 档位词而非分钟级倒计时：小组件刷新周期为 30 分钟，精确到分钟的倒数在两次刷新之间必然失真。
-     * 精确时刻由条目的 airTimeCst 呈现，此处只回答状态档位。
+     * 精确时刻由条目的 airTimeLocal 呈现，此处只回答状态档位。
      */
     fun formatCountdown(
         diffMillis: Long,

@@ -8,6 +8,7 @@
     android:maxResizeHeight="360dp"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
+    android:previewLayout="@layout/schedule_widget_preview"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/glance_default_loading_layout"
     android:resizeMode="horizontal|vertical"

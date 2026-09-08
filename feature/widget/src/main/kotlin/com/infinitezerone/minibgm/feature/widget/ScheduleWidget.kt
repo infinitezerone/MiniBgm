@@ -1,7 +1,9 @@
 package com.infinitezerone.minibgm.feature.widget
 
 import android.content.Context
+import android.content.res.Resources
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -19,6 +21,7 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -38,7 +41,6 @@ import androidx.glance.material3.ColorProviders
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -49,6 +51,8 @@ import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.feature.widget.R
 import kotlinx.coroutines.flow.firstOrNull
 import org.koin.core.context.GlobalContext
+import java.time.Instant
+import java.time.ZoneId
 
 /**
  * 现代化「今日更新」极简桌面排期小组件：
@@ -105,7 +109,15 @@ class ScheduleWidget : GlanceAppWidget() {
                 emptyList()
             }
 
-        val todayWeekday = TimeUtils.jstWeekdayOfEpoch(System.currentTimeMillis())
+        // 单次取样 now，且日历 weekday 与 Planner 判「今天」共用同一时区（设备时区）——
+        // 此前 JST 取 weekday + systemDefault 判今天，UTC+8 用户凌晨 0-1 点会取错一天日历
+        val nowEpochMillis = System.currentTimeMillis()
+        val zoneId = ZoneId.systemDefault()
+        val todayWeekday =
+            Instant
+                .ofEpochMilli(nowEpochMillis)
+                .atZone(zoneId)
+                .dayOfWeek.value
         val todaySchedules =
             scheduleRepo
                 ?.getSchedulesByWeekday(todayWeekday)
@@ -117,7 +129,8 @@ class ScheduleWidget : GlanceAppWidget() {
                 isLoggedIn = isLoggedIn,
                 upcoming = upcoming,
                 todaySchedules = todaySchedules,
-                nowEpochMillis = System.currentTimeMillis(),
+                nowEpochMillis = nowEpochMillis,
+                zoneId = zoneId,
                 maxItems = 6,
             )
 
@@ -128,6 +141,19 @@ class ScheduleWidget : GlanceAppWidget() {
         }
     }
 }
+
+/**
+ * 系统为 widget 内层元素定义的圆角（API 31+，minSdk 已满足）。
+ * glance 1.2.0 stable 尚未暴露 appWidgetInnerCornerRadius API，此处手动解析框架 dimen；
+ * 部分厂商 ROM 可能返回 0，回退到 8dp 保底。
+ */
+private val systemWidgetInnerRadius: Dp =
+    runCatching {
+        Resources
+            .getSystem()
+            .getDimension(android.R.dimen.system_app_widget_inner_radius)
+            .dp
+    }.getOrDefault(10.dp).coerceAtLeast(8.dp)
 
 @Composable
 private fun WidgetRoot(uiState: ScheduleWidgetUiState) {
@@ -182,7 +208,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
             GlanceModifier
                 .fillMaxSize()
                 .background(GlanceTheme.colors.background)
-                .cornerRadius(16.dp)
+                .appWidgetBackground()
                 .clickable(openSubjectAction(heroItem.subjectId))
                 .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
@@ -222,7 +248,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                     .fillMaxWidth()
                     .defaultWeight()
                     .background(GlanceTheme.colors.surfaceVariant)
-                    .cornerRadius(10.dp)
+                    .cornerRadius(systemWidgetInnerRadius)
                     .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             // 状态胶囊与倒计时
@@ -232,13 +258,13 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
             ) {
                 StatusBadge(
                     isAiredToday = heroItem.isAiredToday,
-                    airTimeCst = heroItem.airTimeCst,
+                    airTimeLocal = heroItem.airTimeLocal,
                     countdownBadge = heroItem.countdownBadge,
                 )
                 if (!heroItem.isAiredToday &&
                     heroItem.countdownBadge.isNotBlank() &&
                     heroItem.countdownBadge != "待播" &&
-                    heroItem.airTimeCst.isNotBlank()
+                    heroItem.airTimeLocal.isNotBlank()
                 ) {
                     Spacer(modifier = GlanceModifier.width(4.dp))
                     CountdownBadgeView(
@@ -304,7 +330,7 @@ private fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = secondaryItem.airTimeCst.ifBlank { "稍后" },
+                    text = secondaryItem.airTimeLocal.ifBlank { "稍后" },
                     maxLines = 1,
                     style =
                         TextStyle(
@@ -356,7 +382,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
             GlanceModifier
                 .fillMaxSize()
                 .background(GlanceTheme.colors.background)
-                .cornerRadius(16.dp)
+                .appWidgetBackground()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         WidgetHeader(
@@ -378,7 +404,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                         .defaultWeight()
                         .fillMaxHeight()
                         .background(GlanceTheme.colors.surfaceVariant)
-                        .cornerRadius(10.dp)
+                        .cornerRadius(systemWidgetInnerRadius)
                         .clickable(openSubjectAction(heroItem.subjectId))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
@@ -388,13 +414,13 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                 ) {
                     StatusBadge(
                         isAiredToday = heroItem.isAiredToday,
-                        airTimeCst = heroItem.airTimeCst,
+                        airTimeLocal = heroItem.airTimeLocal,
                         countdownBadge = heroItem.countdownBadge,
                     )
                     if (!heroItem.isAiredToday &&
                         heroItem.countdownBadge.isNotBlank() &&
                         heroItem.countdownBadge != "待播" &&
-                        heroItem.airTimeCst.isNotBlank()
+                        heroItem.airTimeLocal.isNotBlank()
                     ) {
                         Spacer(modifier = GlanceModifier.width(4.dp))
                         CountdownBadgeView(
@@ -519,7 +545,7 @@ private fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                                         .padding(horizontal = 4.dp, vertical = 2.dp),
                             ) {
                                 Text(
-                                    text = queueItem.airTimeCst.ifBlank { "待播" },
+                                    text = queueItem.airTimeLocal.ifBlank { "待播" },
                                     maxLines = 1,
                                     style =
                                         TextStyle(
@@ -605,7 +631,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
             GlanceModifier
                 .fillMaxSize()
                 .background(GlanceTheme.colors.background)
-                .cornerRadius(16.dp)
+                .appWidgetBackground()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         WidgetHeader(
@@ -622,7 +648,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                 GlanceModifier
                     .fillMaxWidth()
                     .background(GlanceTheme.colors.surfaceVariant)
-                    .cornerRadius(12.dp)
+                    .cornerRadius(systemWidgetInnerRadius)
                     .clickable(openSubjectAction(heroItem.subjectId))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
@@ -632,13 +658,13 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
             ) {
                 StatusBadge(
                     isAiredToday = heroItem.isAiredToday,
-                    airTimeCst = heroItem.airTimeCst,
+                    airTimeLocal = heroItem.airTimeLocal,
                     countdownBadge = heroItem.countdownBadge,
                 )
                 if (!heroItem.isAiredToday &&
                     heroItem.countdownBadge.isNotBlank() &&
                     heroItem.countdownBadge != "待播" &&
-                    heroItem.airTimeCst.isNotBlank()
+                    heroItem.airTimeLocal.isNotBlank()
                 ) {
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     CountdownBadgeView(
@@ -756,7 +782,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
                                     .padding(horizontal = 4.dp, vertical = 2.dp),
                         ) {
                             Text(
-                                text = item.airTimeCst.ifBlank { "待播" },
+                                text = item.airTimeLocal.ifBlank { "待播" },
                                 maxLines = 1,
                                 style =
                                     TextStyle(
@@ -826,7 +852,7 @@ private fun ExpandedWidgetContent(uiState: ScheduleWidgetUiState) {
 @Composable
 private fun StatusBadge(
     isAiredToday: Boolean,
-    airTimeCst: String,
+    airTimeLocal: String,
     countdownBadge: String,
 ) {
     Box(
@@ -845,7 +871,7 @@ private fun StatusBadge(
             text =
                 when {
                     isAiredToday -> "已更新"
-                    airTimeCst.isNotBlank() -> "$airTimeCst 待播"
+                    airTimeLocal.isNotBlank() -> "$airTimeLocal 待播"
                     else -> countdownBadge
                 },
             maxLines = 1,
@@ -979,7 +1005,7 @@ private fun WidgetPlaceholder(
             GlanceModifier
                 .fillMaxSize()
                 .background(GlanceTheme.colors.background)
-                .cornerRadius(16.dp)
+                .appWidgetBackground()
                 .clickable(action)
                 .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
