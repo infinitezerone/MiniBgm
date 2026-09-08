@@ -33,36 +33,25 @@ object TimeUtils {
             ""
         }
 
-    fun getCstWeekday(isoUtcString: String): Int =
-        try {
-            val instant = Instant.parse(isoUtcString)
-            val local = instant.toLocalDateTime(timeZoneCst)
-            local.dayOfWeek.ordinal + 1
-        } catch (_: Exception) {
-            1
-        }
+    /** epoch 毫秒 → 日本时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
+    fun jstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneJst)
 
-    /** epoch 毫秒 → 日本时区的星期（1=周一 … 7=周日） */
-    fun jstWeekdayOfEpoch(millis: Long): Int =
-        try {
-            Instant
-                .fromEpochMilliseconds(millis)
-                .toLocalDateTime(timeZoneJst)
-                .dayOfWeek.ordinal + 1
-        } catch (_: Exception) {
-            1
-        }
+    /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
+    fun cstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneCst)
 
-    /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日） */
-    fun cstWeekdayOfEpoch(millis: Long): Int =
-        try {
-            Instant
-                .fromEpochMilliseconds(millis)
-                .toLocalDateTime(timeZoneCst)
-                .dayOfWeek.ordinal + 1
-        } catch (_: Exception) {
-            1
-        }
+    private fun weekdayOfEpoch(
+        millis: Long,
+        timeZone: TimeZone,
+    ): Int {
+        val instant =
+            try {
+                Instant.fromEpochMilliseconds(millis)
+            } catch (_: Exception) {
+                // 回退到当前时刻而非固定值，避免解析失败被误读为"周一"
+                Instant.fromEpochMilliseconds(nowEpochMillis())
+            }
+        return instant.toLocalDateTime(timeZone).dayOfWeek.ordinal + 1
+    }
 
     /** epoch 毫秒 → UTC ISO-8601 字符串 */
     fun isoUtcFromEpochMillis(millis: Long): String = Instant.fromEpochMilliseconds(millis).toString()
