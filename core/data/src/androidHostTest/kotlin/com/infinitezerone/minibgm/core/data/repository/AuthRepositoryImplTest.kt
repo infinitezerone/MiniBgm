@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
+import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
@@ -198,12 +199,25 @@ class AuthRepositoryImplTest {
             )
         val userPreferencesDataSource = UserPreferencesDataSource(dataStore)
         val userDataCleaner = UserDataCleaner(listOf(userPreferencesDataSource))
+
+        /** 本套件聚焦 token 兑换与凭据生命周期：getMe 一律 404，completeLogin 内 runCatching 吞掉即可 */
+        private val stubApiService =
+            BangumiApiServiceImpl(
+                client =
+                    HttpClient(
+                        MockEngine {
+                            respond(content = "", status = HttpStatusCode.NotFound)
+                        },
+                    ),
+            )
+
         val repository =
             AuthRepositoryImpl(
                 tokenService = api.service,
                 tokenProvider = tokenProvider,
                 userPreferences = userPreferencesDataSource,
                 authConfig = BgmAuthConfig(),
+                apiService = stubApiService,
                 userDataCleaner = userDataCleaner,
             )
 
