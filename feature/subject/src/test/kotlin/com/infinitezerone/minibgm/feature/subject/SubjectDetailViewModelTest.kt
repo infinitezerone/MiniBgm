@@ -44,7 +44,7 @@ class SubjectDetailViewModelTest {
                     sendRelations(sampleSubject.id, sampleRelationList)
                 }
 
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
             val state = viewModel.uiState.value
 
             assertFalse(state.isLoading)
@@ -88,7 +88,7 @@ class SubjectDetailViewModelTest {
                     }
                 }
 
-            SubjectDetailViewModel(repository, 7777L)
+            SubjectDetailViewModel(repository, 7777L, FakeCollectionRepository(), FakeCommunityRepository())
 
             assertEquals(7777L, requestedDetailId)
             assertEquals(7777L, requestedEpisodesId)
@@ -105,7 +105,7 @@ class SubjectDetailViewModelTest {
                     fetchSubjectDetailResult = { AppResult.Error(IllegalStateException("条目请求失败")) }
                 }
 
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
             val state = viewModel.uiState.value
 
             assertFalse(state.isLoading)
@@ -123,7 +123,7 @@ class SubjectDetailViewModelTest {
                     fetchSubjectDetailResult = { AppResult.Error(IllegalStateException("离线")) }
                     fetchEpisodesResult = { AppResult.Error(IllegalStateException("离线")) }
                 }
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
 
             repository.sendSubject(sampleSubject)
             repository.sendEpisodes(sampleSubject.id, sampleEpisodeList)
@@ -153,6 +153,7 @@ class SubjectDetailViewModelTest {
                     subjectRepository = subjectRepo,
                     subjectId = sampleSubject.id,
                     collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
                 )
 
             val state = viewModel.uiState.value
@@ -171,6 +172,7 @@ class SubjectDetailViewModelTest {
                     subjectRepository = subjectRepo,
                     subjectId = sampleSubject.id,
                     collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
                 )
 
             viewModel.updateCollectionStatus(
@@ -199,6 +201,7 @@ class SubjectDetailViewModelTest {
                     subjectRepository = subjectRepo,
                     subjectId = sampleSubject.id,
                     collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
                 )
 
             viewModel.updateCollectionStatus(
@@ -221,6 +224,7 @@ class SubjectDetailViewModelTest {
                     subjectRepository = subjectRepo,
                     subjectId = sampleSubject.id,
                     collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
                 )
 
             // 1. 初始为 null，快捷追番即刻变为在看
@@ -253,6 +257,7 @@ class SubjectDetailViewModelTest {
                     subjectRepository = subjectRepo,
                     subjectId = sampleSubject.id,
                     collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
                 )
 
             viewModel.toggleEpisodeWatched(2001L, isWatched = true)
@@ -291,7 +296,7 @@ class SubjectDetailViewModelTest {
                     sendSubject(sampleSubject)
                 }
 
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
 
             val initialDetail = detailCount
             val initialChars = charactersCount
@@ -320,7 +325,7 @@ class SubjectDetailViewModelTest {
                 }
             val collectionRepository = FakeCollectionRepository()
 
-            val viewModel = SubjectDetailViewModel(repository, bookSubject.id, collectionRepository)
+            val viewModel = SubjectDetailViewModel(repository, bookSubject.id, collectionRepository, FakeCommunityRepository())
             testScheduler.advanceUntilIdle()
 
             viewModel.updateCollectionStatus(CollectionType.DOING)
@@ -364,6 +369,7 @@ class SubjectDetailViewModelTest {
                 SubjectDetailViewModel(
                     subjectRepository = FakeSubjectRepository(),
                     subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
                     communityRepository = communityRepo,
                 )
             testScheduler.advanceUntilIdle()
@@ -395,6 +401,7 @@ class SubjectDetailViewModelTest {
                 SubjectDetailViewModel(
                     subjectRepository = FakeSubjectRepository(),
                     subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
                     communityRepository = communityRepo,
                 )
 
@@ -423,6 +430,7 @@ class SubjectDetailViewModelTest {
                 SubjectDetailViewModel(
                     subjectRepository = FakeSubjectRepository(),
                     subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
                     communityRepository = communityRepo,
                 )
             testScheduler.advanceUntilIdle()
@@ -458,7 +466,7 @@ class SubjectDetailViewModelTest {
                     sendCharacterSubjects(charId, works)
                 }
 
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
             viewModel.loadCharacterDetail(charId)
             testScheduler.advanceUntilIdle()
 
@@ -485,7 +493,7 @@ class SubjectDetailViewModelTest {
                     sendPersonSubjects(personId, works)
                 }
 
-            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id)
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
             viewModel.loadPersonDetail(personId)
             testScheduler.advanceUntilIdle()
 
