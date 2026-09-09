@@ -97,35 +97,38 @@ class SubjectDetailViewModel(
 
     private var detailsLoaded = false
     private var communityLoaded = false
+    private var refreshJob: Job? = null
     private var detailsJob: Job? = null
     private var communityJob: Job? = null
 
     /** 刷新/重新拉取条目、分集与收藏数据（首屏核心三要素） */
     fun refresh() {
+        refreshJob?.cancel()
         detailsLoaded = false
         communityLoaded = false
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+        refreshJob =
+            viewModelScope.launch {
+                _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
-            val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
-            val episodesResult = subjectRepository.fetchEpisodes(subjectId)
-            val collectionResult = collectionRepository.fetchCollection(subjectId)
+                // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
+                val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
+                val episodesResult = subjectRepository.fetchEpisodes(subjectId)
+                val collectionResult = collectionRepository.fetchCollection(subjectId)
 
-            subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
-            episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
-            collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
+                subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
+                episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
+                collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
 
-            val remoteCollection = (collectionResult as? AppResult.Success)?.data
+                val remoteCollection = (collectionResult as? AppResult.Success)?.data
 
-            _uiState.update { current ->
-                current.copy(
-                    isLoading = false,
-                    subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
-                    collection = remoteCollection ?: current.collection,
-                )
+                _uiState.update { current ->
+                    current.copy(
+                        isLoading = false,
+                        subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
+                        collection = remoteCollection ?: current.collection,
+                    )
+                }
             }
-        }
     }
 
     /**
