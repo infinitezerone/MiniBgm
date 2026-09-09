@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.di
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.data.di.dataModule
+import com.infinitezerone.minibgm.core.data.di.platformDataModule
 import com.infinitezerone.minibgm.core.database.di.databaseModule
 import com.infinitezerone.minibgm.core.datastore.di.datastoreModule
 import com.infinitezerone.minibgm.core.network.di.networkModule
@@ -24,6 +25,7 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             databaseModule,
             datastoreModule,
             dataModule,
+            platformDataModule,
             scheduleModule,
             userModule,
             subjectModule,
