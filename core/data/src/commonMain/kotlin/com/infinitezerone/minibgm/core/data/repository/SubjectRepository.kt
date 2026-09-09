@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.asAppResult
 import com.infinitezerone.minibgm.core.database.dao.EpisodeDao
 import com.infinitezerone.minibgm.core.database.dao.SubjectDao
 import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
@@ -18,6 +19,7 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.network.BangumiApiService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
@@ -169,6 +171,8 @@ class SubjectRepositoryImpl(
                 )
             subjectDao.insertSubject(entity)
             AppResult.Success(subject)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             AppResult.Error(e)
         }
@@ -212,63 +216,27 @@ class SubjectRepositoryImpl(
                 }
             episodeDao.insertEpisodes(entities)
             AppResult.Success(response.data)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             AppResult.Error(e)
         }
 
     override suspend fun fetchCharacters(subjectId: Long): AppResult<List<SubjectCharacter>> =
-        try {
-            val response = apiService.getSubjectCharacters(subjectId)
-            AppResult.Success(response)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+        asAppResult { apiService.getSubjectCharacters(subjectId) }
 
-    override suspend fun fetchCharacterDetail(id: Long): AppResult<CharacterDetail> =
-        try {
-            val detail = apiService.getCharacter(id)
-            AppResult.Success(detail)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+    override suspend fun fetchCharacterDetail(id: Long): AppResult<CharacterDetail> = asAppResult { apiService.getCharacter(id) }
 
     override suspend fun fetchCharacterSubjects(id: Long): AppResult<List<RelatedWork>> =
-        try {
-            val subjects = apiService.getCharacterSubjects(id)
-            AppResult.Success(subjects)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+        asAppResult { apiService.getCharacterSubjects(id) }
 
     override suspend fun fetchPersons(subjectId: Long): AppResult<List<SubjectPerson>> =
-        try {
-            val response = apiService.getSubjectPersons(subjectId)
-            AppResult.Success(response)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+        asAppResult { apiService.getSubjectPersons(subjectId) }
 
-    override suspend fun fetchPersonDetail(id: Long): AppResult<PersonDetail> =
-        try {
-            val detail = apiService.getPerson(id)
-            AppResult.Success(detail)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+    override suspend fun fetchPersonDetail(id: Long): AppResult<PersonDetail> = asAppResult { apiService.getPerson(id) }
 
-    override suspend fun fetchPersonSubjects(id: Long): AppResult<List<RelatedWork>> =
-        try {
-            val subjects = apiService.getPersonSubjects(id)
-            AppResult.Success(subjects)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+    override suspend fun fetchPersonSubjects(id: Long): AppResult<List<RelatedWork>> = asAppResult { apiService.getPersonSubjects(id) }
 
     override suspend fun fetchRelations(subjectId: Long): AppResult<List<SubjectRelation>> =
-        try {
-            val response = apiService.getSubjectRelations(subjectId)
-            AppResult.Success(response)
-        } catch (e: Throwable) {
-            AppResult.Error(e)
-        }
+        asAppResult { apiService.getSubjectRelations(subjectId) }
 }

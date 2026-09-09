@@ -1,11 +1,11 @@
 package com.infinitezerone.minibgm.sync.work.workers
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.TokenProvider
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -31,8 +31,10 @@ class AiringReminderWorker(
     private val userPreferences: UserPreferencesDataSource,
     private val tokenProvider: TokenProvider,
 ) : CoroutineWorker(appContext, workerParams) {
+    private val log = bgmLogger("Bgm/Worker/Reminder")
+
     override suspend fun doWork(): Result {
-        Log.d(TAG, "AiringReminderWorker starting doWork...")
+        log.d { "[REMINDER_WORKER:START] checking reminders..." }
         val prefs = userPreferences.userPreferences.firstOrNull() ?: return Result.success()
         // 会话事实来自凭据库（与各 Repository 同一判据）
         val isLoggedIn = tokenProvider.activeUserId.first() != null
@@ -56,7 +58,7 @@ class AiringReminderWorker(
 
         val notifier = AiringReminderNotifier(applicationContext)
         if (!notifier.notificationsEnabled()) {
-            Log.d(TAG, "AiringReminderWorker: notifications disabled by user")
+            log.d { "[REMINDER_WORKER:SKIP] notifications disabled by user" }
             return Result.success()
         }
 
@@ -77,10 +79,10 @@ class AiringReminderWorker(
         if (dailySummary.isNotEmpty()) {
             runCatching { notifier.notify(dailySummary) }.fold(
                 onSuccess = {
-                    Log.d(TAG, "AiringReminderWorker notified ${dailySummary.size} daily updates")
+                    log.i { "[REMINDER_DAILY:SUCCESS] notified ${dailySummary.size} daily updates" }
                     userPreferences.setAiringReminderLastNotifiedDate(today)
                 },
-                onFailure = { e -> Log.e(TAG, "AiringReminderWorker failed to notify daily summary", e) },
+                onFailure = { e -> log.e(e) { "[REMINDER_DAILY:FAILED] failed to notify daily summary" } },
             )
         }
 
@@ -98,14 +100,14 @@ class AiringReminderWorker(
         if (preAir.isNotEmpty()) {
             runCatching { notifier.notifyImminent(preAir) }.fold(
                 onSuccess = {
-                    Log.d(TAG, "AiringReminderWorker notified ${preAir.size} imminent episodes")
+                    log.i { "[REMINDER_PRE_AIR:SUCCESS] notified ${preAir.size} imminent episodes" }
                     val keptKeys =
                         prefs.airingReminderNotifiedKeys
                             .filter { it.startsWith("$today:") }
                             .toSet() + preAir.map { AiringReminderPlanner.preAirKey(today, it) }
                     userPreferences.setAiringReminderNotifiedKeys(keptKeys.toList())
                 },
-                onFailure = { e -> Log.e(TAG, "AiringReminderWorker failed to notify pre-air", e) },
+                onFailure = { e -> log.e(e) { "[REMINDER_PRE_AIR:FAILED] failed to notify pre-air" } },
             )
         }
 

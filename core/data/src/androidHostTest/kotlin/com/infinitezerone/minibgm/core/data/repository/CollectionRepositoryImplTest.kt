@@ -59,6 +59,11 @@ class CollectionRepositoryImplTest {
             activeUserIdState.value = userId.takeIf { it != 0L }
         }
 
+        override suspend fun saveTokens(
+            accessToken: String,
+            refreshToken: String,
+        ) = Unit
+
         override suspend fun setActiveUser(userId: Long) {
             activeUserIdState.value = userId.takeIf { it != 0L }
         }
@@ -133,6 +138,8 @@ class CollectionRepositoryImplTest {
         var collectionsTotal = 0
         val requests = mutableListOf<Pair<Int, Int>>() // limit to offset
 
+        var cancellationToThrow: Boolean = false
+
         override suspend fun getUserCollections(
             username: String,
             subjectType: Int,
@@ -140,6 +147,7 @@ class CollectionRepositoryImplTest {
             limit: Int,
             offset: Int,
         ): UserCollectionPageResponse {
+            if (cancellationToThrow) throw kotlinx.coroutines.CancellationException("Job cancelled")
             requests += limit to offset
             val page = collectionPages.value[offset] ?: error("Network failure")
             return PageResponse(total = collectionsTotal, data = page)
@@ -895,5 +903,25 @@ class CollectionRepositoryImplTest {
                 harness.dao.stored.value
                     .firstOrNull { it.userId == 999L },
             )
+        }
+
+    @Test
+    fun cancellationException_rethrowsFromCollectionRepositoryMethods() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "access", "refresh")
+            harness.api.cancellationToThrow = true
+
+            kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
+                harness.repository.fetchUserCollections("testuser")
+            }
+
+            kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
+                harness.repository.fetchCollectionCount("testuser", com.infinitezerone.minibgm.core.model.CollectionType.DOING)
+            }
+
+            kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
+                harness.repository.syncWatchingCollections()
+            }
         }
 }

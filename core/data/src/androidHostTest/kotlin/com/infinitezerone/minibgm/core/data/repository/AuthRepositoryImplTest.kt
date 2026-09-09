@@ -70,6 +70,15 @@ class AuthRepositoryImplTest {
             hasTokensState.value = true
         }
 
+        override suspend fun saveTokens(
+            accessToken: String,
+            refreshToken: String,
+        ) {
+            this.accessToken = accessToken
+            this.refreshToken = refreshToken
+            hasTokensState.value = true
+        }
+
         override suspend fun setActiveUser(userId: Long) {
             this.activeUserIdState.value = userId
         }

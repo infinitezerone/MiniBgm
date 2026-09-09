@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
@@ -16,6 +17,7 @@ import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -28,6 +30,9 @@ import kotlin.math.abs
 
 interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
+
+    /** 观察全量放送排播流（单流监听，避免按天拆流导致的重复数据库查询与高频重组） */
+    fun getAllSchedulesStream(): Flow<List<AirSchedule>>
 
     /**
      * 查询指定条目（通常为"我追的"）在时间窗口内的播出事件，
@@ -73,6 +78,11 @@ class ScheduleRepositoryImpl(
 ) : ScheduleRepository {
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> =
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
+            entities.map { it.toModel(json) }
+        }
+
+    override fun getAllSchedulesStream(): Flow<List<AirSchedule>> =
+        scheduleDao.getAllSchedules().map { entities ->
             entities.map { it.toModel(json) }
         }
 
@@ -175,6 +185,8 @@ class ScheduleRepositoryImpl(
                 scheduleDao.insertSchedules(entities)
             }
             AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             AppResult.Error(e)
         }
@@ -278,9 +290,11 @@ class ScheduleRepositoryImpl(
             }
 
             // ③ 逐话事件同步与仲裁：失败只降级为"预计"数据，不阻塞名单同步
-            runCatching { syncAirEvents() }
+            runCatchingCancellable { syncAirEvents() }
 
             AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             AppResult.Error(e)
         }

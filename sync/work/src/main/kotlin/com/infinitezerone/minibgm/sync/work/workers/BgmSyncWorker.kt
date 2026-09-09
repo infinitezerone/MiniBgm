@@ -1,12 +1,13 @@
 package com.infinitezerone.minibgm.sync.work.workers
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.BgmDispatchers
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.TokenProvider
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.util.SyncCompletionObserver
@@ -14,9 +15,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
- * 周期性后台同步 Worker（对标 NiA SyncWorker）：
- * 在系统满足网络连通与非低电量约束时唤醒，静默刷新时刻表并执行 ETag 304 探测与本地持久化，
- * 若当前已登录则一并同步用户的「在看」追番状态，保证桌面小组件与开播提醒消费到最新数据。
+ * 后台数据同步 Worker（约束：网络已连接）。
+ *
+ * 刷新时刻表（全量公共数据），若用户已登录则同步个人追番收藏；全部落盘后通知观察者（如小组件）。
  */
 class BgmSyncWorker(
     appContext: Context,
@@ -27,23 +28,29 @@ class BgmSyncWorker(
     private val dispatchers: BgmDispatchers,
     private val syncCompletionObserver: SyncCompletionObserver,
 ) : CoroutineWorker(appContext, workerParams) {
+    private val log = bgmLogger("Bgm/Worker/Sync")
+
     override suspend fun doWork(): Result =
         withContext(dispatchers.io) {
-            Log.d(TAG, "BgmSyncWorker starting doWork... attempt: $runAttemptCount")
+            val startTime = TimeUtils.nowEpochMillis()
+            log.d { "[SYNC_WORKER:START] attempt=$runAttemptCount" }
             val scheduleResult = scheduleRepository.syncBangumiData(force = false)
             if (tokenProvider.activeUserId.first() != null) {
                 collectionRepository.syncWatchingCollections()
             }
+            val duration = TimeUtils.nowEpochMillis() - startTime
             when (scheduleResult) {
                 is AppResult.Success -> {
-                    Log.d(TAG, "BgmSyncWorker succeeded!")
+                    log.i { "[SYNC_WORKER:SUCCESS] took ${duration}ms notify syncCompletionObserver" }
                     // 新排期已写入本地，通知下游（如桌面小组件）自行刷新：数据一到就上屏，
                     // 而不是等下一次心跳。具体消费方由 SyncCompletionObserver 接口解耦。
                     syncCompletionObserver.onSyncSucceeded()
                     Result.success()
                 }
                 is AppResult.Error -> {
-                    Log.e(TAG, "BgmSyncWorker failed with error: ${scheduleResult.throwable.message}", scheduleResult.throwable)
+                    log.e(scheduleResult.throwable) {
+                        "[SYNC_WORKER:FAILED] took ${duration}ms attempt=$runAttemptCount message=${scheduleResult.throwable.message}"
+                    }
                     if (runAttemptCount < 3) Result.retry() else Result.failure()
                 }
                 is AppResult.Loading -> Result.success()

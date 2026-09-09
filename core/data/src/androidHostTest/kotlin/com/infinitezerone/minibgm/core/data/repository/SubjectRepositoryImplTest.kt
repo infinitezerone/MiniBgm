@@ -63,15 +63,19 @@ class SubjectRepositoryImplTest {
 
     private class FakeBangumiApiService : BangumiApiService {
         var episodesResponse: EpisodePageResponse = EpisodePageResponse(total = 0, data = emptyList())
+        var subjectResponse: Subject? = null
         var shouldThrow: Boolean = false
+        var cancellationToThrow: Boolean = false
 
         override suspend fun getCalendar(): List<CalendarDayResponse> = error("Not needed")
 
         override suspend fun getSubject(id: Long): Subject =
-            if (shouldThrow) {
+            if (cancellationToThrow) {
+                throw kotlinx.coroutines.CancellationException("Job cancelled")
+            } else if (shouldThrow) {
                 error("Network error")
             } else {
-                Subject(
+                subjectResponse ?: Subject(
                     id = id,
                     name = "葬送のフリーレン",
                     nameCn = "葬送的芙莉莲",
@@ -329,7 +333,7 @@ class SubjectRepositoryImplTest {
         }
 
     @Test
-    fun getSubjectStream_and_fetchSubjectDetail_persistRatingAndCollection() =
+    fun fetchSubjectDetail_persistsToDatabaseAndReturnsSuccess() =
         runTest {
             val subjectDao = FakeSubjectDao()
             val episodeDao = FakeEpisodeDao()
@@ -361,32 +365,13 @@ class SubjectRepositoryImplTest {
                 )
             val apiService =
                 FakeBangumiApiService().apply {
-                    // Return testSubject
+                    subjectResponse = testSubject
                 }
             val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
-            val entity =
-                SubjectEntity(
-                    id = testSubject.id,
-                    type = testSubject.type,
-                    name = testSubject.name,
-                    nameCn = testSubject.nameCn,
-                    summary = testSubject.summary,
-                    date = testSubject.date,
-                    eps = testSubject.eps,
-                    totalEpisodes = testSubject.totalEpisodes,
-                    coverUrl = "",
-                    ratingScore = testSubject.rating?.score ?: 0.0,
-                    ratingRank = testSubject.rating?.rank ?: 0,
-                    ratingTotal = testSubject.rating?.total ?: 0,
-                    ratingCountJson = """{"8":200,"9":150}""",
-                    collectionWish = 10,
-                    collectionCollect = 300,
-                    collectionDoing = 50,
-                    collectionOnHold = 5,
-                    collectionDropped = 2,
-                    tagsJson = """[{"name":"异世界","count":120}]""",
-                )
-            subjectDao.insertSubject(entity)
+
+            val result = repo.fetchSubjectDetail(528828L)
+            assertIs<AppResult.Success<Subject>>(result)
+            assertEquals("骸骨騎士様", result.data.name)
 
             val streamSubject = repo.getSubjectStream(528828L).first()
             kotlin.test.assertNotNull(streamSubject)
@@ -396,5 +381,36 @@ class SubjectRepositoryImplTest {
             assertEquals(50, streamSubject.collection?.doing)
             assertEquals(1, streamSubject.tags.size)
             assertEquals("异世界", streamSubject.tags[0].name)
+        }
+
+    @Test
+    fun fetchSubjectDetail_onError_returnsAppResultError() =
+        runTest {
+            val subjectDao = FakeSubjectDao()
+            val episodeDao = FakeEpisodeDao()
+            val apiService =
+                FakeBangumiApiService().apply {
+                    shouldThrow = true
+                }
+            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+
+            val result = repo.fetchSubjectDetail(528828L)
+            assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun fetchSubjectDetail_onCancellation_rethrows() =
+        runTest {
+            val subjectDao = FakeSubjectDao()
+            val episodeDao = FakeEpisodeDao()
+            val apiService =
+                FakeBangumiApiService().apply {
+                    cancellationToThrow = true
+                }
+            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+
+            kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
+                repo.fetchSubjectDetail(528828L)
+            }
         }
 }

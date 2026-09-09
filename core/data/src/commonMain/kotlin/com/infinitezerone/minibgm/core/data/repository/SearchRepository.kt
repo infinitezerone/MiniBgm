@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -88,6 +89,8 @@ class SearchRepositoryImpl(
                     offset = offset,
                 )
             AppResult.Success(SearchResult(total = response.total, list = response.data))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             // 若高级搜索异常，降级回退至旧版搜索接口
             try {
@@ -99,6 +102,8 @@ class SearchRepositoryImpl(
                         offset = offset,
                     )
                 AppResult.Success(SearchResult(total = legacy.results, list = legacy.list))
+            } catch (fallbackCe: CancellationException) {
+                throw fallbackCe
             } catch (fallbackEx: Exception) {
                 AppResult.Error(e, "搜索失败：${e.message}")
             }
@@ -120,6 +125,8 @@ class SearchRepositoryImpl(
                     offset = offset,
                 )
             AppResult.Success(response.data)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             AppResult.Error(e, "高级搜索失败：${e.message}")
         } catch (e: Exception) {
