@@ -162,6 +162,8 @@ class UserViewModel(
                     }
                     collectionRepository.syncWatchingCollections()
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 success = false
             } finally {
@@ -179,24 +181,27 @@ class UserViewModel(
 
         viewModelScope.launch {
             isCountsLoadingFlow.value = true
-            val results =
-                CollectionType.entries
-                    .map { type ->
-                        async {
-                            type to collectionRepository.fetchCollectionCount(username, type)
-                        }
-                    }.awaitAll()
+            try {
+                val results =
+                    CollectionType.entries
+                        .map { type ->
+                            async {
+                                type to collectionRepository.fetchCollectionCount(username, type)
+                            }
+                        }.awaitAll()
 
-            val newCounts = mutableMapOf<CollectionType, Int>()
-            results.forEach { (type, res) ->
-                if (res is AppResult.Success) {
-                    newCounts[type] = res.data
+                val newCounts = mutableMapOf<CollectionType, Int>()
+                results.forEach { (type, res) ->
+                    if (res is AppResult.Success) {
+                        newCounts[type] = res.data
+                    }
                 }
+                if (newCounts.isNotEmpty()) {
+                    collectionCountsFlow.value = newCounts
+                }
+            } finally {
+                isCountsLoadingFlow.value = false
             }
-            if (newCounts.isNotEmpty()) {
-                collectionCountsFlow.value = newCounts
-            }
-            isCountsLoadingFlow.value = false
         }
     }
 
@@ -223,9 +228,14 @@ class UserViewModel(
     fun syncBangumiDataNow(onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             isManualSyncing.value = true
-            val result = scheduleRepository.syncBangumiData(force = false)
-            isManualSyncing.value = false
-            onComplete(result is AppResult.Success)
+            var success = false
+            try {
+                val result = scheduleRepository.syncBangumiData(force = false)
+                success = result is AppResult.Success
+            } finally {
+                isManualSyncing.value = false
+                onComplete(success)
+            }
         }
     }
 
