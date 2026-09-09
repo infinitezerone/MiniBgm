@@ -52,9 +52,9 @@ val imageLoaderModule =
                             val data = request.data
                             if (data is String && data.startsWith("http://", ignoreCase = true)) {
                                 val secureUrl = data.replaceFirst("http://", "https://", ignoreCase = true)
-                                chain.proceed(request.newBuilder().data(secureUrl).build())
+                                chain.withRequest(request.newBuilder().data(secureUrl).build()).proceed()
                             } else {
-                                chain.proceed(request)
+                                chain.proceed()
                             }
                         },
                     )
