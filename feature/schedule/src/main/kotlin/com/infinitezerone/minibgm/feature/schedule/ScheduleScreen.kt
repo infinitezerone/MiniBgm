@@ -162,7 +162,7 @@ fun ScheduleScreen(
                     } else {
                         viewModel.selectWeekday(weekday)
                         coroutineScope.launch {
-                            pagerState.animateScrollToPage(weekday - 1)
+                            pagerState.scrollToPage(weekday - 1)
                         }
                     }
                 },
