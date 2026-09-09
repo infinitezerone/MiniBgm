@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.di
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
+import coil3.intercept.Interceptor
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
@@ -11,6 +12,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpRedirect
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import org.koin.android.ext.koin.androidContext
@@ -22,11 +24,18 @@ val imageLoaderModule =
         single<HttpClient>(named("imageHttpClient")) {
             HttpClient(CIO) {
                 install(HttpRedirect)
+                install(HttpTimeout) {
+                    connectTimeoutMillis = 10_000
+                    socketTimeoutMillis = 15_000
+                    requestTimeoutMillis = 30_000
+                }
                 install(DefaultRequest) {
                     header(
                         HttpHeaders.UserAgent,
                         "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)",
                     )
+                    header("Referer", "https://bgm.tv/")
+                    header(HttpHeaders.Accept, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
                 }
             }
         }
@@ -36,6 +45,19 @@ val imageLoaderModule =
             ImageLoader
                 .Builder(context)
                 .components {
+                    // 全局拦截器：将所有明文 http:// 图片地址自动升轨为安全 https://，防止 Android Cleartext 限制
+                    add(
+                        Interceptor { chain ->
+                            val request = chain.request
+                            val data = request.data
+                            if (data is String && data.startsWith("http://", ignoreCase = true)) {
+                                val secureUrl = data.replaceFirst("http://", "https://", ignoreCase = true)
+                                chain.proceed(request.newBuilder().data(secureUrl).build())
+                            } else {
+                                chain.proceed(request)
+                            }
+                        },
+                    )
                     add(KtorNetworkFetcherFactory(httpClient = { client }))
                 }.memoryCache {
                     MemoryCache

@@ -7,14 +7,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
+import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
@@ -26,6 +32,7 @@ import com.infinitezerone.minibgm.navigation.BgmNavHost
 fun BgmApp(
     snackbarHostState: SnackbarHostState,
     authRepository: AuthRepository,
+    networkMonitor: NetworkMonitor,
     openSchedule: Boolean = false,
     onScheduleNavigated: () -> Unit = {},
     openSubjectId: Long? = null,
@@ -35,6 +42,25 @@ fun BgmApp(
     modifier: Modifier = Modifier,
 ) {
     val isAuthenticating by authRepository.isAuthenticating.collectAsStateWithLifecycle()
+    val isOnline by networkMonitor.isOnline.collectAsStateWithLifecycle(initialValue = true)
+    var wasOffline by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isOnline) {
+        if (!isOnline) {
+            wasOffline = true
+            snackbarHostState.showSnackbar(
+                message = "网络连接已断开，正在浏览本地离线数据",
+                duration = SnackbarDuration.Indefinite,
+            )
+        } else if (wasOffline) {
+            wasOffline = false
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = "网络已恢复连接",
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
 
     val navState =
         rememberBgmNavState(

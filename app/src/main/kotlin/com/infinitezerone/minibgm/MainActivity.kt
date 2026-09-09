@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
+import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.ui.BgmApp
@@ -24,6 +25,7 @@ import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
     private val authRepository: AuthRepository by inject()
+    private val networkMonitor: NetworkMonitor by inject()
     private val snackbarHostState = SnackbarHostState()
 
     /** 通知点击携带的"直达时间表"标记，消费后复位 */
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
                 BgmApp(
                     snackbarHostState = snackbarHostState,
                     authRepository = authRepository,
+                    networkMonitor = networkMonitor,
                     openSchedule = openSchedule,
                     onScheduleNavigated = { openSchedule = false },
                     openSubjectId = openSubjectId,
