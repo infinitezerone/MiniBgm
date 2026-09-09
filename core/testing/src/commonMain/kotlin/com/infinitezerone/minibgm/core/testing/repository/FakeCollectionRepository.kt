@@ -24,6 +24,9 @@ class FakeCollectionRepository : CollectionRepository {
         private set
     var clearUserDataCallCount: Int = 0
         private set
+    var fetchCollectionCountsCallCount: Int = 0
+        private set
+    var fetchCollectionCountsResult: AppResult<Map<CollectionType, Int>>? = null
 
     fun sendCollection(collection: UserCollection) {
         collectionsState.value = collectionsState.value + (collection.subjectId to collection)
@@ -57,6 +60,19 @@ class FakeCollectionRepository : CollectionRepository {
     ): AppResult<Int> {
         val count = collectionsState.value.values.count { it.type == type.value }
         return AppResult.Success(count)
+    }
+
+    override suspend fun fetchCollectionCounts(
+        username: String,
+        force: Boolean,
+    ): AppResult<Map<CollectionType, Int>> {
+        fetchCollectionCountsCallCount++
+        fetchCollectionCountsResult?.let { return it }
+        val counts =
+            CollectionType.entries.associateWith { type ->
+                collectionsState.value.values.count { it.type == type.value }
+            }
+        return AppResult.Success(counts)
     }
 
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> = AppResult.Success(collectionsState.value[subjectId])

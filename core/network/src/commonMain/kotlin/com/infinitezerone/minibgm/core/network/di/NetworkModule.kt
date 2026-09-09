@@ -61,7 +61,7 @@ fun networkModule(
                 },
             )
         }
-        single<BangumiApiService> { BangumiApiServiceImpl(get()) }
+        single<BangumiApiService> { BangumiApiServiceImpl(client = get(), authConfig = get()) }
         single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }

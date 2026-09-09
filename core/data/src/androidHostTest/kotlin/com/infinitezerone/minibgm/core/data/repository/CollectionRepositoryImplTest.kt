@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
+import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.network.BangumiApiService
@@ -216,6 +217,16 @@ class CollectionRepositoryImplTest {
         ) = error("Not needed")
 
         override suspend fun getMe(): UserProfile = error("Not needed")
+
+        var collectionStatsToReturn: List<com.infinitezerone.minibgm.core.network.UserCollectionStatusGroup> = emptyList()
+        var getUserCollectionStatsCallCount = 0
+
+        override suspend fun getUserCollectionStats(
+            username: String,
+        ): List<com.infinitezerone.minibgm.core.network.UserCollectionStatusGroup> {
+            getUserCollectionStatsCallCount++
+            return collectionStatsToReturn
+        }
 
         override suspend fun getCollection(
             username: String,
@@ -923,5 +934,75 @@ class CollectionRepositoryImplTest {
             kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
                 harness.repository.syncWatchingCollections()
             }
+        }
+
+    @Test
+    fun fetchCollectionCounts_aggregatesAllCategoriesAndCachesResult() =
+        runTest {
+            val harness = Harness()
+            val sampleStats =
+                listOf(
+                    com.infinitezerone.minibgm.core.network.UserCollectionStatusGroup(
+                        type = 2,
+                        name = "anime",
+                        collects =
+                            listOf(
+                                com.infinitezerone.minibgm.core.network.UserCollectionStatusEntry(
+                                    status =
+                                        com.infinitezerone.minibgm.core.network.UserCollectionStatusDetail(
+                                            id = 3,
+                                            type = "do",
+                                            name = "在看",
+                                        ),
+                                    count = 12,
+                                ),
+                                com.infinitezerone.minibgm.core.network.UserCollectionStatusEntry(
+                                    status =
+                                        com.infinitezerone.minibgm.core.network.UserCollectionStatusDetail(
+                                            id = 1,
+                                            type = "wish",
+                                            name = "想看",
+                                        ),
+                                    count = 5,
+                                ),
+                            ),
+                    ),
+                    com.infinitezerone.minibgm.core.network.UserCollectionStatusGroup(
+                        type = 1,
+                        name = "book",
+                        collects =
+                            listOf(
+                                com.infinitezerone.minibgm.core.network.UserCollectionStatusEntry(
+                                    status =
+                                        com.infinitezerone.minibgm.core.network.UserCollectionStatusDetail(
+                                            id = 3,
+                                            type = "do",
+                                            name = "在读",
+                                        ),
+                                    count = 3,
+                                ),
+                            ),
+                    ),
+                )
+            harness.api.collectionStatsToReturn = sampleStats
+
+            // 1. 首次加载：请求网络并聚合各分类
+            val firstResult = harness.repository.fetchCollectionCounts("testuser", force = false)
+            assertTrue(firstResult is AppResult.Success)
+            val counts = firstResult.data
+            assertEquals(15, counts[CollectionType.DOING]) // 12 + 3
+            assertEquals(5, counts[CollectionType.WISH])
+            assertEquals(0, counts[CollectionType.COLLECT])
+            assertEquals(1, harness.api.getUserCollectionStatsCallCount)
+
+            // 2. 二次调用（非强制）：命中内存缓存，不发网络请求
+            val cachedResult = harness.repository.fetchCollectionCounts("testuser", force = false)
+            assertTrue(cachedResult is AppResult.Success)
+            assertEquals(1, harness.api.getUserCollectionStatsCallCount)
+
+            // 3. 强制刷新：绕过缓存重新发请求
+            val forceResult = harness.repository.fetchCollectionCounts("testuser", force = true)
+            assertTrue(forceResult is AppResult.Success)
+            assertEquals(2, harness.api.getUserCollectionStatsCallCount)
         }
 }

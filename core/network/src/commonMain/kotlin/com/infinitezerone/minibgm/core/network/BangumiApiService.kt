@@ -26,7 +26,29 @@ import io.ktor.http.ContentType
 import io.ktor.http.URLBuilder
 import io.ktor.http.appendPathSegments
 import io.ktor.http.contentType
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class UserCollectionStatusGroup(
+    val type: Int = 0,
+    val name: String = "",
+    @SerialName("name_cn") val nameCn: String = "",
+    val collects: List<UserCollectionStatusEntry> = emptyList(),
+)
+
+@Serializable
+data class UserCollectionStatusEntry(
+    val status: UserCollectionStatusDetail,
+    val count: Int = 0,
+)
+
+@Serializable
+data class UserCollectionStatusDetail(
+    val id: Int = 0,
+    val type: String = "",
+    val name: String = "",
+)
 
 interface BangumiApiService {
     suspend fun getCalendar(): List<CalendarDayResponse>
@@ -115,11 +137,19 @@ interface BangumiApiService {
         episodeId: Long,
         type: Int,
     )
+
+    /**
+     * 获取指定用户的全量条目收藏状态与分类统计（GET /user/{username}/collections/status?app_id={clientId}）。
+     *
+     * 该接口单次请求即可返回所有大类（动画、书籍、音乐、游戏、三次元）及各状态的统计。
+     */
+    suspend fun getUserCollectionStats(username: String): List<UserCollectionStatusGroup> = emptyList()
 }
 
 class BangumiApiServiceImpl(
     private val client: HttpClient,
     private val baseUrl: String = "https://api.bgm.tv",
+    private val authConfig: BgmAuthConfig = BgmAuthConfig(),
 ) : BangumiApiService {
     override suspend fun getCalendar(): List<CalendarDayResponse> = client.get("$baseUrl/calendar").body()
 
@@ -260,4 +290,10 @@ class BangumiApiServiceImpl(
             setBody(EpisodeStatusUpdateBody(episode_id = listOf(episodeId), type = type))
         }
     }
+
+    override suspend fun getUserCollectionStats(username: String): List<UserCollectionStatusGroup> =
+        client
+            .get("$baseUrl/user/$username/collections/status") {
+                parameter("app_id", authConfig.clientId)
+            }.body()
 }

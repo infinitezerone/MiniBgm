@@ -242,6 +242,32 @@ class UserViewModelTest {
 
             assertTrue(refreshDone)
             assertEquals(1, authRepo.refreshProfileCallCount)
+            // 初始加载 1 次 + 下拉刷新 1 次 = 共 2 次，无并发冗余请求
+            assertEquals(2, collectionRepo.fetchCollectionCountsCallCount)
+        }
+
+    @Test
+    fun settingsChange_doesNotTriggerCollectionCountsReload() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(com.infinitezerone.minibgm.core.testing.data.sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            viewModel.uiState.first { it.collectionCounts.isNotEmpty() }
+            val initialCalls = collectionRepo.fetchCollectionCountsCallCount
+            assertEquals(1, initialCalls)
+
+            // 修改设置项
+            viewModel.setSyncInterval(SyncInterval.DAILY)
+            viewModel.setAiringReminderHour(10)
+
+            // 验证未触发重新拉取
+            assertEquals(1, collectionRepo.fetchCollectionCountsCallCount)
         }
 
     @Test

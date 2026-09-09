@@ -44,6 +44,15 @@ interface CollectionRepository : UserDataClearable {
         type: CollectionType,
     ): AppResult<Int>
 
+    /**
+     * 获取指定用户的全量收藏统计（五大分类汇总）。
+     * [force] 为 true 时绕过内存缓存强制向远端同步。
+     */
+    suspend fun fetchCollectionCounts(
+        username: String,
+        force: Boolean = false,
+    ): AppResult<Map<CollectionType, Int>>
+
     /** 从远端拉取指定条目的收藏详情并更新本地 Room 缓存 */
     suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?>
 
@@ -160,6 +169,47 @@ class CollectionRepositoryImpl(
             AppResult.Error(e, "获取收藏总数异常：${e.message}")
         }
 
+    private val collectionCountsCache = mutableMapOf<String, CachedCounts>()
+
+    private data class CachedCounts(
+        val counts: Map<CollectionType, Int>,
+        val timestamp: Long,
+    )
+
+    override suspend fun fetchCollectionCounts(
+        username: String,
+        force: Boolean,
+    ): AppResult<Map<CollectionType, Int>> =
+        try {
+            val now = TimeUtils.nowEpochMillis()
+            val cached = collectionCountsCache[username]
+            if (!force && cached != null && (now - cached.timestamp) < CACHE_TTL_MILLIS) {
+                AppResult.Success(cached.counts)
+            } else {
+                val stats = apiService.getUserCollectionStats(username)
+                val counts = mutableMapOf<CollectionType, Int>()
+                for (group in stats) {
+                    for (entry in group.collects) {
+                        val type = CollectionType.fromValue(entry.status.id)
+                        counts[type] = (counts[type] ?: 0) + entry.count
+                    }
+                }
+                // 确保五大分类键值完整存在（无条目的分类置 0）
+                CollectionType.entries.forEach { type ->
+                    counts.putIfAbsent(type, 0)
+                }
+                val resultMap = counts.toMap()
+                collectionCountsCache[username] = CachedCounts(resultMap, now)
+                AppResult.Success(resultMap)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BgmNetworkException) {
+            AppResult.Error(e, "获取收藏统计失败：${e.message}")
+        } catch (e: Exception) {
+            AppResult.Error(e, "获取收藏统计异常：${e.message}")
+        }
+
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> {
         val activeUid = tokenProvider.activeUserId.first() ?: return AppResult.Success(null)
         return try {
@@ -216,6 +266,7 @@ class CollectionRepositoryImpl(
                     private = private,
                     epStatus = epStatus,
                 )
+                collectionCountsCache.clear()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -299,6 +350,7 @@ class CollectionRepositoryImpl(
                         updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
+                collectionCountsCache.clear()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -424,13 +476,19 @@ class CollectionRepositoryImpl(
 
     override suspend fun clearUserData(userId: Long) =
         withContext(NonCancellable) {
+            collectionCountsCache.clear()
             userCollectionDao.clearByUserId(userId)
         }
 
     override suspend fun clearAllUserData() =
         withContext(NonCancellable) {
+            collectionCountsCache.clear()
             userCollectionDao.clearAll()
         }
+
+    private companion object {
+        const val CACHE_TTL_MILLIS = 10 * 60 * 1000L // 10 分钟缓存有效期
+    }
 }
 
 fun UserCollectionEntity.asExternalModel(): UserCollection =
