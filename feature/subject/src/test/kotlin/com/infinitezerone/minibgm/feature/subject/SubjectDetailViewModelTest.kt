@@ -50,10 +50,18 @@ class SubjectDetailViewModelTest {
             assertFalse(state.isLoading)
             assertEquals(sampleSubject, state.subject)
             assertEquals(sampleEpisodeList, state.episodes)
-            assertEquals(sampleCharacterList, state.characters)
-            assertEquals(samplePersonList, state.persons)
-            assertEquals(sampleRelationList, state.relations)
+            // 首屏按需懒加载：初次加载不请求演职员数据
+            assertTrue(state.characters.isEmpty())
+            assertTrue(state.persons.isEmpty())
+            assertTrue(state.relations.isEmpty())
             assertNull(state.error)
+
+            // 切换至资料与演职员 Tab 时按需触发加载
+            viewModel.loadDetailsTabIfNeeded()
+            val loadedState = viewModel.uiState.value
+            assertEquals(sampleCharacterList, loadedState.characters)
+            assertEquals(samplePersonList, loadedState.persons)
+            assertEquals(sampleRelationList, loadedState.relations)
         }
 
     @Test
@@ -88,10 +96,16 @@ class SubjectDetailViewModelTest {
                     }
                 }
 
-            SubjectDetailViewModel(repository, 7777L, FakeCollectionRepository(), FakeCommunityRepository())
+            val viewModel = SubjectDetailViewModel(repository, 7777L, FakeCollectionRepository(), FakeCommunityRepository())
 
             assertEquals(7777L, requestedDetailId)
             assertEquals(7777L, requestedEpisodesId)
+            // 初次初始化不调用演职员接口
+            assertNull(requestedCharactersId)
+            assertNull(requestedPersonsId)
+            assertNull(requestedRelationsId)
+
+            viewModel.loadDetailsTabIfNeeded()
             assertEquals(7777L, requestedCharactersId)
             assertEquals(7777L, requestedPersonsId)
             assertEquals(7777L, requestedRelationsId)
@@ -299,16 +313,22 @@ class SubjectDetailViewModelTest {
             val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
 
             val initialDetail = detailCount
-            val initialChars = charactersCount
-            val initialPersons = personsCount
-            val initialRelations = relationsCount
+            assertEquals(0, charactersCount)
+            assertEquals(0, personsCount)
+            assertEquals(0, relationsCount)
 
+            // 下拉刷新核心首屏数据（不产生次要接口请求）
             viewModel.refresh()
-
             assertEquals(initialDetail + 1, detailCount)
-            assertEquals(initialChars + 1, charactersCount)
-            assertEquals(initialPersons + 1, personsCount)
-            assertEquals(initialRelations + 1, relationsCount)
+            assertEquals(0, charactersCount)
+            assertEquals(0, personsCount)
+            assertEquals(0, relationsCount)
+
+            // 切入并强制刷新资料 Tab
+            viewModel.loadDetailsTabIfNeeded(force = true)
+            assertEquals(1, charactersCount)
+            assertEquals(1, personsCount)
+            assertEquals(1, relationsCount)
             assertEquals(sampleCharacterList, viewModel.uiState.value.characters)
             assertEquals(samplePersonList, viewModel.uiState.value.persons)
             assertEquals(sampleRelationList, viewModel.uiState.value.relations)
@@ -374,6 +394,20 @@ class SubjectDetailViewModelTest {
                 )
             testScheduler.advanceUntilIdle()
 
+            // 首屏按需懒加载：初次不加载社区短评与讨论
+            assertTrue(
+                viewModel.uiState.value.subjectComments
+                    .isEmpty(),
+            )
+            assertTrue(
+                viewModel.uiState.value.subjectTopics
+                    .isEmpty(),
+            )
+
+            // 切换至社区吐槽 Tab 后按需懒加载
+            viewModel.loadCommunityTabIfNeeded()
+            testScheduler.advanceUntilIdle()
+
             val state = viewModel.uiState.value
             assertEquals(sampleComments, state.subjectComments)
             assertEquals(42, state.subjectCommentTotal)
@@ -433,6 +467,7 @@ class SubjectDetailViewModelTest {
                     collectionRepository = FakeCollectionRepository(),
                     communityRepository = communityRepo,
                 )
+            viewModel.loadCommunityTabIfNeeded()
             testScheduler.advanceUntilIdle()
 
             assertEquals(listOf(initialComment), viewModel.uiState.value.subjectComments)
@@ -506,5 +541,92 @@ class SubjectDetailViewModelTest {
             val clearedState = viewModel.uiState.value
             assertNull(clearedState.selectedPersonDetail)
             assertTrue(clearedState.selectedPersonWorks.isEmpty())
+        }
+
+    @Test
+    fun initialLoad_onlyFetchesCoreData_andSkipsDetailsAndCommunity() =
+        runTest {
+            var detailCalls = 0
+            var episodeCalls = 0
+            var charCalls = 0
+            var communityCalls = 0
+
+            val subjectRepo =
+                FakeSubjectRepository().apply {
+                    fetchSubjectDetailResult = {
+                        detailCalls++
+                        AppResult.Success(sampleSubject)
+                    }
+                    fetchEpisodesResult = {
+                        episodeCalls++
+                        AppResult.Success(sampleEpisodeList)
+                    }
+                    fetchCharactersResult = {
+                        charCalls++
+                        AppResult.Success(sampleCharacterList)
+                    }
+                }
+            val communityRepo =
+                FakeCommunityRepository().apply {
+                    // set comments
+                    setSubjectComments(sampleSubject.id, SubjectCommentPage(total = 0, data = emptyList()))
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = subjectRepo,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepo,
+                )
+
+            // 初次初始化：仅拉取条目和章节
+            assertEquals(1, detailCalls)
+            assertEquals(1, episodeCalls)
+            assertEquals(0, charCalls)
+            assertTrue(
+                viewModel.uiState.value.characters
+                    .isEmpty(),
+            )
+            assertTrue(
+                viewModel.uiState.value.subjectComments
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun lazyLoading_preventsDuplicateFetches() =
+        runTest {
+            var charCalls = 0
+            val subjectRepo =
+                FakeSubjectRepository().apply {
+                    fetchCharactersResult = {
+                        charCalls++
+                        AppResult.Success(sampleCharacterList)
+                    }
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = subjectRepo,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertEquals(0, charCalls)
+
+            // 第一次加载 Tab
+            viewModel.loadDetailsTabIfNeeded()
+            assertEquals(1, charCalls)
+
+            // 重复调用不触发网络请求
+            viewModel.loadDetailsTabIfNeeded()
+            viewModel.loadDetailsTabIfNeeded()
+            assertEquals(1, charCalls)
+
+            // 强制刷新时才重新拉取
+            viewModel.loadDetailsTabIfNeeded(force = true)
+            assertEquals(2, charCalls)
         }
 }

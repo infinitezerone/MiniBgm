@@ -65,6 +65,7 @@ fun SubjectCommunitySection(
     topics: List<SubjectTopic>,
     onUrlClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
 ) {
     val context = LocalContext.current
     var isExpanded by rememberSaveable { mutableStateOf(false) }
@@ -119,11 +120,15 @@ fun SubjectCommunitySection(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = "暂无短评，快去发表你的看法吧~",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(
+                                text = "暂无短评，快去发表你的看法吧~",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             } else {

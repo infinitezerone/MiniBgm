@@ -20,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,10 +38,12 @@ data class SubjectDetailUiState(
     val characters: List<SubjectCharacter> = emptyList(),
     val persons: List<SubjectPerson> = emptyList(),
     val relations: List<SubjectRelation> = emptyList(),
+    val isDetailsLoading: Boolean = false,
     val subjectComments: List<SubjectComment> = emptyList(),
     val subjectCommentTotal: Int = 0,
     val isLoadingMoreComments: Boolean = false,
     val hasMoreComments: Boolean = true,
+    val isCommunityLoading: Boolean = false,
     val selectedCharacterDetail: CharacterDetail? = null,
     val selectedCharacterWorks: List<RelatedWork> = emptyList(),
     val selectedPersonDetail: PersonDetail? = null,
@@ -92,12 +95,19 @@ class SubjectDetailViewModel(
         }
     }
 
-    /** 刷新/重新拉取条目、分集、角色、制作团队、关联作品与收藏数据 */
+    private var detailsLoaded = false
+    private var communityLoaded = false
+    private var detailsJob: Job? = null
+    private var communityJob: Job? = null
+
+    /** 刷新/重新拉取条目、分集与收藏数据（首屏核心三要素） */
     fun refresh() {
+        detailsLoaded = false
+        communityLoaded = false
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // 1. 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
+            // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
             val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
             val episodesResult = subjectRepository.fetchEpisodes(subjectId)
             val collectionResult = collectionRepository.fetchCollection(subjectId)
@@ -115,36 +125,62 @@ class SubjectDetailViewModel(
                     collection = remoteCollection ?: current.collection,
                 )
             }
-
-            // 2. 次级演职员数据平滑拉取：角色 -> 人员 -> 关联作品
-            val charactersResult = subjectRepository.fetchCharacters(subjectId)
-            val personsResult = subjectRepository.fetchPersons(subjectId)
-            val relationsResult = subjectRepository.fetchRelations(subjectId)
-
-            _uiState.update { current ->
-                current.copy(
-                    characters = (charactersResult as? AppResult.Success)?.data ?: current.characters,
-                    persons = (personsResult as? AppResult.Success)?.data ?: current.persons,
-                    relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
-                )
-            }
-
-            // 3. 社区数据平滑拉取：评论 -> 讨论
-            val subjectCommentsResult = communityRepository.getSubjectComments(subjectId, limit = 15)
-            val subjectTopicsResult = communityRepository.getSubjectTopics(subjectId, limit = 5)
-
-            val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
-            val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
-
-            _uiState.update { current ->
-                current.copy(
-                    subjectComments = commentsPage?.data ?: current.subjectComments,
-                    subjectCommentTotal = commentsPage?.total ?: current.subjectCommentTotal,
-                    hasMoreComments = (commentsPage?.data?.size ?: 0) < (commentsPage?.total ?: 0),
-                    subjectTopics = if (topics.isNotEmpty()) topics else current.subjectTopics,
-                )
-            }
         }
+    }
+
+    /**
+     * 按需懒加载资料与演职员 Tab 数据（角色 -> 人员 -> 关联作品）。
+     * 仅在用户主动切到「资料与演职员」Tab 时触发，已加载过则不再重复请求。
+     */
+    fun loadDetailsTabIfNeeded(force: Boolean = false) {
+        if (!force && (detailsLoaded || detailsJob?.isActive == true)) return
+        detailsJob?.cancel()
+        detailsJob =
+            viewModelScope.launch {
+                _uiState.update { it.copy(isDetailsLoading = true) }
+                val charactersResult = subjectRepository.fetchCharacters(subjectId)
+                val personsResult = subjectRepository.fetchPersons(subjectId)
+                val relationsResult = subjectRepository.fetchRelations(subjectId)
+
+                _uiState.update { current ->
+                    current.copy(
+                        isDetailsLoading = false,
+                        characters = (charactersResult as? AppResult.Success)?.data ?: current.characters,
+                        persons = (personsResult as? AppResult.Success)?.data ?: current.persons,
+                        relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
+                    )
+                }
+                detailsLoaded = true
+            }
+    }
+
+    /**
+     * 按需懒加载社区吐槽与讨论版 Tab 数据（短评 -> 讨论）。
+     * 仅在用户主动切到「社区吐槽」Tab 时触发，已加载过则不再重复请求。
+     */
+    fun loadCommunityTabIfNeeded(force: Boolean = false) {
+        if (!force && (communityLoaded || communityJob?.isActive == true)) return
+        communityJob?.cancel()
+        communityJob =
+            viewModelScope.launch {
+                _uiState.update { it.copy(isCommunityLoading = true) }
+                val subjectCommentsResult = communityRepository.getSubjectComments(subjectId, limit = 15)
+                val subjectTopicsResult = communityRepository.getSubjectTopics(subjectId, limit = 5)
+
+                val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
+                val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
+
+                _uiState.update { current ->
+                    current.copy(
+                        isCommunityLoading = false,
+                        subjectComments = commentsPage?.data ?: current.subjectComments,
+                        subjectCommentTotal = commentsPage?.total ?: current.subjectCommentTotal,
+                        hasMoreComments = (commentsPage?.data?.size ?: 0) < (commentsPage?.total ?: 0),
+                        subjectTopics = if (topics.isNotEmpty()) topics else current.subjectTopics,
+                    )
+                }
+                communityLoaded = true
+            }
     }
 
     /** 更新条目收藏状态（想看/在看/看过等，支持 0ms 本地即时乐观更新与失败回滚） */
