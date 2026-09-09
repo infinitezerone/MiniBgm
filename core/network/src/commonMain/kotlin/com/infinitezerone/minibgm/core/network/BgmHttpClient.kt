@@ -7,6 +7,7 @@ import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -20,6 +21,7 @@ import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 object BgmHttpClient {
@@ -62,6 +64,16 @@ object BgmHttpClient {
                 requestTimeoutMillis = 15000
                 connectTimeoutMillis = 15000
                 socketTimeoutMillis = 15000
+            }
+            install(HttpRequestRetry) {
+                maxRetries = 2
+                retryIf { _, response ->
+                    response.status == HttpStatusCode.TooManyRequests || response.status.value in 500..599
+                }
+                retryOnExceptionIf { _, cause ->
+                    cause !is CancellationException
+                }
+                exponentialDelay()
             }
             val networkLogger = bgmLogger("Bgm/Network")
             install(Logging) {
