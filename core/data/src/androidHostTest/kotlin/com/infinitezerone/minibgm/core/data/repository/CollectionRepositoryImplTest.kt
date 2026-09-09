@@ -228,10 +228,15 @@ class CollectionRepositoryImplTest {
             return collectionStatsToReturn
         }
 
+        var getCollectionCallCount = 0
+
         override suspend fun getCollection(
             username: String,
             subjectId: Long,
-        ): UserCollection? = collectionToReturn
+        ): UserCollection? {
+            getCollectionCallCount++
+            return collectionToReturn
+        }
 
         override suspend fun updateCollection(
             subjectId: Long,
@@ -248,12 +253,19 @@ class CollectionRepositoryImplTest {
             updateCollectionCalls.add(UpdateCollectionCall(subjectId, type, rate, comment, private, epStatus))
         }
 
+        var throwNotFoundOnFirstUpdateEpisode = false
+        var updateEpisodeNotFoundCount = 0
+
         override suspend fun updateEpisodeStatus(
             subjectId: Long,
             episodeId: Long,
             type: Int,
         ) {
             onBeforeUpdateEpisode?.invoke()
+            if (throwNotFoundOnFirstUpdateEpisode && updateEpisodeNotFoundCount == 0) {
+                updateEpisodeNotFoundCount++
+                throw BgmNetworkException.NotFound("Mock 404 Not Found")
+            }
             if (shouldThrowOnUpdateEpisode) {
                 throw BgmNetworkException.ServerError(500, "Mock server error")
             }
@@ -1005,4 +1017,76 @@ class CollectionRepositoryImplTest {
             assertTrue(forceResult is AppResult.Success)
             assertEquals(2, harness.api.getUserCollectionStatsCallCount)
         }
+
+    @Test
+    fun updateEpisodeStatus_whenAlreadyInCollection_skipsGetCollectionAndDirectlyChecksIn() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 2,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            val result =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1003L,
+                    isWatched = true,
+                    epNumber = 3,
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 验证未调用冗余的 getCollection 与 updateCollection，仅发 1 次打卡请求
+            assertEquals(0, harness.api.getCollectionCallCount)
+            assertEquals(0, harness.api.updateCollectionCalls.size)
+            assertEquals(1, harness.api.updateEpisodeCalls.size)
+            assertEquals(1003L, harness.api.updateEpisodeCalls.first().episodeId)
+            assertEquals(2, harness.api.updateEpisodeCalls.first().type)
+        }
+
+    @Test
+    fun updateEpisodeStatus_whenServerReturnsNotFound_selfHealsAndRetries() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 1,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            // 首次打卡报 404
+            harness.api.throwNotFoundOnFirstUpdateEpisode = true
+
+            val result =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1002L,
+                    isWatched = true,
+                    epNumber = 2,
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 验证自愈触发：补调 updateCollection 加入在看，然后再次尝试 updateEpisodeStatus 成功
+            assertEquals(1, harness.api.updateEpisodeNotFoundCount)
+            assertEquals(1, harness.api.updateCollectionCalls.size)
+            assertEquals(CollectionType.DOING.value, harness.api.updateCollectionCalls.first().type)
+            assertEquals(1, harness.api.updateEpisodeCalls.size)
+            assertEquals(2, harness.dao.stored.value.first { it.subjectId == 100L }.epStatus)
+        }
 }
+

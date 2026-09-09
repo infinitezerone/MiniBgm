@@ -322,31 +322,25 @@ class CollectionRepositoryImpl(
                         episodeId
                     }
 
-                // 4. 获取远端收藏快照对齐类型与进度
-                val existing =
-                    try {
-                        apiService.getCollection(activeUid.toString(), subjectId)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        null
-                    }
-
-                val existingType = existing?.type?.takeIf { it > 0 } ?: (localPrevious?.type ?: 0)
-                val targetType = computeTargetType(existingType, isWatched)
-                val currentEpStatus = existing?.epStatus ?: (localPrevious?.epStatus ?: 0)
-                val targetEpStatus = computeTargetEpStatus(currentEpStatus, epNumber, isWatched)
-
-                ensureCollectionAndCheckIn(subjectId, existing, targetType, resolvedEpisodeId, isWatched)
+                // 4. 远端打卡（消除多余 GET，支持 404 自愈）
+                val previousType = localPrevious?.type ?: 0
+                val isInCollection = previousType > 0 && (!isWatched || previousType != CollectionType.WISH.value)
+                checkInWithSelfHealing(
+                    subjectId = subjectId,
+                    episodeId = resolvedEpisodeId,
+                    isWatched = isWatched,
+                    targetType = optimisticType,
+                    isInCollection = isInCollection,
+                )
 
                 // 5. 远端打卡成功后，写入最终对齐状态
                 userCollectionDao.insertCollection(
                     UserCollectionEntity(
                         userId = activeUid,
                         subjectId = subjectId,
-                        subjectType = localPrevious?.subjectType ?: (existing?.subjectType ?: 2),
-                        type = targetType,
-                        epStatus = targetEpStatus,
+                        subjectType = localPrevious?.subjectType ?: 2,
+                        type = optimisticType,
+                        epStatus = optimisticEpStatus,
                         updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
                     ),
                 )
@@ -408,28 +402,32 @@ class CollectionRepositoryImpl(
             ?: episodes.firstOrNull { it.sort.toInt() == epNumber }?.id
     }
 
-    /** 确保条目已在用户收藏中（未收藏或想看则置为在看），随后执行单集打卡（type = 2 已看过，0 撤销） */
-    private suspend fun ensureCollectionAndCheckIn(
+    /**
+     * 执行远端打卡：
+     * 若条目已在收藏中，直接发送单集打卡；若遇云端 404（多端删除或未同步），自动触发自愈先加入在看再重试打卡。
+     * 若条目未在收藏中或仅为想看，先确保远端创建在看收藏，再执行打卡。
+     */
+    private suspend fun checkInWithSelfHealing(
         subjectId: Long,
-        existing: UserCollection?,
-        targetType: Int,
         episodeId: Long,
         isWatched: Boolean,
+        targetType: Int,
+        isInCollection: Boolean,
     ) {
-        if (existing == null || existing.type == 0 || (isWatched && existing.type == CollectionType.WISH.value)) {
-            apiService.updateCollection(
-                subjectId = subjectId,
-                type = targetType,
-                rate = existing?.rate?.takeIf { it > 0 },
-                comment = existing?.comment?.ifBlank { null },
-                private = false,
-            )
+        val checkInType = if (isWatched) 2 else 0
+        if (isInCollection) {
+            try {
+                apiService.updateEpisodeStatus(subjectId, episodeId, checkInType)
+            } catch (e: BgmNetworkException.NotFound) {
+                // 自愈：条目在云端未收录，先加入在看再重试打卡
+                apiService.updateCollection(subjectId, targetType)
+                apiService.updateEpisodeStatus(subjectId, episodeId, checkInType)
+            }
+        } else {
+            // 本地无记录或原本仅为想看：先确保远端创建在看收藏，再执行单集打卡
+            apiService.updateCollection(subjectId, targetType)
+            apiService.updateEpisodeStatus(subjectId, episodeId, checkInType)
         }
-        apiService.updateEpisodeStatus(
-            subjectId = subjectId,
-            episodeId = episodeId,
-            type = if (isWatched) 2 else 0,
-        )
     }
 
     override suspend fun syncWatchingCollections(): AppResult<Unit> =
