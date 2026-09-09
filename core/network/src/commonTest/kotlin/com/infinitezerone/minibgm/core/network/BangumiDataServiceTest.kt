@@ -138,4 +138,56 @@ class BangumiDataServiceTest {
             assertEquals("备用节点动画", result.items.first().title)
             assertEquals(""""secondary-etag-456"""", result.etag)
         }
+
+    @Test
+    fun getRecentBangumiData_fetchesMonthlySlicesAndCombines() =
+        runTest {
+            val monthlyJson =
+                """
+                [
+                    {
+                        "title": "一月新番",
+                        "begin": "2026-01-08T15:00:00.000Z",
+                        "broadcast": "R/2026-01-08T15:00:00.000Z/P7D",
+                        "sites": [{"site": "bangumi", "id": "3001"}]
+                    }
+                ]
+                """.trimIndent()
+
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.contains("2026/01.json")) {
+                        respond(
+                            content = monthlyJson,
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                        )
+                    } else {
+                        respond(
+                            content = "Not Found",
+                            status = HttpStatusCode.NotFound,
+                        )
+                    }
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service =
+                BangumiDataServiceImpl(
+                    client = client,
+                    cdnBases = listOf("https://test.cdn/"),
+                )
+
+            val result = service.getRecentBangumiData(year = 2026, month = 1, lookbackMonths = 1, aheadMonths = 0)
+
+            assertIs<BangumiDataResult.Success>(result)
+            assertEquals(1, result.items.size)
+            assertEquals("一月新番", result.items.first().title)
+            assertEquals(3001L, result.items.first().bgmSubjectId)
+        }
 }
