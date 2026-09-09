@@ -271,6 +271,32 @@ class CollectionRepositoryImplTest {
             }
             updateEpisodeCalls.add(UpdateEpisodeCall(subjectId, episodeId, type))
         }
+
+        data class UpdateEpisodesCall(
+            val subjectId: Long,
+            val episodeIds: List<Long>,
+            val type: Int,
+        )
+
+        val updateEpisodesCalls = mutableListOf<UpdateEpisodesCall>()
+        var throwNotFoundOnFirstUpdateEpisodes = false
+        var updateEpisodesNotFoundCount = 0
+        var shouldThrowOnUpdateEpisodes = false
+
+        override suspend fun updateEpisodesStatus(
+            subjectId: Long,
+            episodeIds: List<Long>,
+            type: Int,
+        ) {
+            if (throwNotFoundOnFirstUpdateEpisodes && updateEpisodesNotFoundCount == 0) {
+                updateEpisodesNotFoundCount++
+                throw BgmNetworkException.NotFound("Mock 404 Not Found")
+            }
+            if (shouldThrowOnUpdateEpisodes) {
+                throw BgmNetworkException.ServerError(500, "Mock server error")
+            }
+            updateEpisodesCalls.add(UpdateEpisodesCall(subjectId, episodeIds, type))
+        }
     }
 
     /** 内存版 Storage，绕开 DataStore 文件系统依赖（见 AuthRepositoryImplTest 同名注释） */
@@ -1048,8 +1074,18 @@ class CollectionRepositoryImplTest {
             assertEquals(0, harness.api.getCollectionCallCount)
             assertEquals(0, harness.api.updateCollectionCalls.size)
             assertEquals(1, harness.api.updateEpisodeCalls.size)
-            assertEquals(1003L, harness.api.updateEpisodeCalls.first().episodeId)
-            assertEquals(2, harness.api.updateEpisodeCalls.first().type)
+            assertEquals(
+                1003L,
+                harness.api.updateEpisodeCalls
+                    .first()
+                    .episodeId,
+            )
+            assertEquals(
+                2,
+                harness.api.updateEpisodeCalls
+                    .first()
+                    .type,
+            )
         }
 
     @Test
@@ -1084,9 +1120,152 @@ class CollectionRepositoryImplTest {
             // 验证自愈触发：补调 updateCollection 加入在看，然后再次尝试 updateEpisodeStatus 成功
             assertEquals(1, harness.api.updateEpisodeNotFoundCount)
             assertEquals(1, harness.api.updateCollectionCalls.size)
-            assertEquals(CollectionType.DOING.value, harness.api.updateCollectionCalls.first().type)
+            assertEquals(
+                CollectionType.DOING.value,
+                harness.api.updateCollectionCalls
+                    .first()
+                    .type,
+            )
             assertEquals(1, harness.api.updateEpisodeCalls.size)
-            assertEquals(2, harness.dao.stored.value.first { it.subjectId == 100L }.epStatus)
+            assertEquals(
+                2,
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+                    .epStatus,
+            )
+        }
+
+    @Test
+    fun markEpisodesWatchedUpTo_withProvidedEpisodeIds_updatesCollectionAndCallsApi() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 1,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            val result =
+                harness.repository.markEpisodesWatchedUpTo(
+                    subjectId = 100L,
+                    epNumber = 3,
+                    episodeIds = listOf(1001L, 1002L, 1003L),
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            assertEquals(1, harness.api.updateEpisodesCalls.size)
+            val call = harness.api.updateEpisodesCalls.first()
+            assertEquals(100L, call.subjectId)
+            assertEquals(listOf(1001L, 1002L, 1003L), call.episodeIds)
+            assertEquals(2, call.type)
+
+            val stored =
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+            assertEquals(3, stored.epStatus)
+            assertEquals(CollectionType.DOING.value, stored.type)
+        }
+
+    @Test
+    fun markEpisodesWatchedUpTo_withoutEpisodeIds_resolvesFromApi() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+            harness.api.episodesToReturn =
+                listOf(
+                    com.infinitezerone.minibgm.core.model
+                        .Episode(id = 101L, sort = 1f, ep = 1f, name = "Ep 1"),
+                    com.infinitezerone.minibgm.core.model
+                        .Episode(id = 102L, sort = 2f, ep = 2f, name = "Ep 2"),
+                    com.infinitezerone.minibgm.core.model
+                        .Episode(id = 103L, sort = 3f, ep = 3f, name = "Ep 3"),
+                    com.infinitezerone.minibgm.core.model
+                        .Episode(id = 104L, sort = 4f, ep = 4f, name = "Ep 4"),
+                )
+
+            val result =
+                harness.repository.markEpisodesWatchedUpTo(
+                    subjectId = 100L,
+                    epNumber = 2,
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            assertEquals(1, harness.api.updateEpisodesCalls.size)
+            assertEquals(
+                listOf(101L, 102L),
+                harness.api.updateEpisodesCalls
+                    .first()
+                    .episodeIds,
+            )
+            assertEquals(
+                2,
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+                    .epStatus,
+            )
+        }
+
+    @Test
+    fun markEpisodesWatchedUpTo_notInCollection_createsCollectionAndSelfHeals() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+            harness.api.throwNotFoundOnFirstUpdateEpisodes = true
+
+            val result =
+                harness.repository.markEpisodesWatchedUpTo(
+                    subjectId = 100L,
+                    epNumber = 1,
+                    episodeIds = listOf(101L),
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 先尝试创建在看，打卡报 404 后自愈重试，最终成功
+            assertEquals(1, harness.api.updateEpisodesNotFoundCount)
+            assertEquals(1, harness.api.updateEpisodesCalls.size)
+            assertEquals(
+                1,
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+                    .epStatus,
+            )
+        }
+
+    @Test
+    fun markEpisodesWatchedUpTo_whenNotLoggedIn_returnsError() =
+        runTest {
+            val harness = Harness()
+            val result = harness.repository.markEpisodesWatchedUpTo(100L, epNumber = 1)
+            assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun markEpisodesWatchedUpTo_whenNetworkFails_rollsBackRoom() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+            harness.api.shouldThrowOnUpdateEpisodes = true
+
+            val result =
+                harness.repository.markEpisodesWatchedUpTo(
+                    subjectId = 100L,
+                    epNumber = 2,
+                    episodeIds = listOf(101L, 102L),
+                )
+
+            assertIs<AppResult.Error>(result)
+            // 失败后回滚，Room 中不应保留未确认的状态
+            assertEquals(
+                emptyList(),
+                harness.dao.stored.value
+                    .filter { it.subjectId == 100L },
+            )
         }
 }
-

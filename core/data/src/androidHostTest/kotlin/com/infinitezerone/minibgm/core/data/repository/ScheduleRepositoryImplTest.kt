@@ -803,4 +803,178 @@ class ScheduleRepositoryImplTest {
             assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
             assertTrue(updated.nextEpisode > 0)
         }
+
+    @Test
+    fun getUpcomingAiringForSubjects_withEmptySubjectIds_returnsEmptyList() =
+        runTest {
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = FakeAirScheduleDao(),
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.getUpcomingAiringForSubjects(emptyList())
+            assertTrue(result.isEmpty())
+        }
+
+    @Test
+    fun getUpcomingAiringForSubjects_withStoredAirEvents_deduplicatesAndReturnsUpcomingAiring() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val eventTime1 = TimeUtils.isoUtcFromEpochMillis(nowMillis + 2 * 3600 * 1000L)
+            val eventTime2 = TimeUtils.isoUtcFromEpochMillis(nowMillis + 4 * 3600 * 1000L)
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 1001L,
+                                title = "Title 1",
+                                titleCn = "标题 1",
+                                coverUrl = "https://example.com/cover1.jpg",
+                                ratingScore = 8.5,
+                                beginUtc = "",
+                                weekday = 1,
+                                timeCst = "18:00",
+                                timeJst = "19:00",
+                                sitesJson = "[]",
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 1002L,
+                                title = "Title 2",
+                                titleCn = "标题 2",
+                                coverUrl = "https://example.com/cover2.jpg",
+                                ratingScore = 7.5,
+                                beginUtc = "",
+                                weekday = 2,
+                                timeCst = "20:00",
+                                timeJst = "21:00",
+                                sitesJson = "[]",
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao =
+                FakeAirEventDao().apply {
+                    insertAirEvents(
+                        listOf(
+                            // Predicted event for 1001 ep 3
+                            AirEventEntity(
+                                subjectId = 1001L,
+                                episode = 3,
+                                airAtUtc = eventTime1,
+                                kind = AirEventKind.PREDICTED,
+                                source = "rule",
+                            ),
+                            // Actual event for 1001 ep 3 (should win deduplication over predicted)
+                            AirEventEntity(
+                                subjectId = 1001L,
+                                episode = 3,
+                                airAtUtc = eventTime1,
+                                kind = AirEventKind.ACTUAL,
+                                source = "anilist",
+                            ),
+                            // Scheduled event for 1002 ep 5
+                            AirEventEntity(
+                                subjectId = 1002L,
+                                episode = 5,
+                                airAtUtc = eventTime2,
+                                kind = AirEventKind.SCHEDULED,
+                                source = "anilist",
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val results = repo.getUpcomingAiringForSubjects(listOf(1001L, 1002L))
+
+            assertEquals(2, results.size)
+            assertEquals(1001L, results[0].subjectId)
+            assertEquals(3, results[0].episode)
+            assertEquals(AirEventKind.ACTUAL, results[0].kind)
+            assertEquals("标题 1", results[0].titleCn)
+
+            assertEquals(1002L, results[1].subjectId)
+            assertEquals(5, results[1].episode)
+            assertEquals(AirEventKind.SCHEDULED, results[1].kind)
+        }
+
+    @Test
+    fun getUpcomingAiringForSubjects_whenNoAirEvents_fallsBackToAirScheduleEntity() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val upcomingAirUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis + 3 * 3600 * 1000L)
+            val pastAirUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis - 48 * 3600 * 1000L)
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 2001L,
+                                title = "Fallback Anime",
+                                titleCn = "回退动画",
+                                coverUrl = "https://example.com/cover.jpg",
+                                ratingScore = 8.0,
+                                beginUtc = "",
+                                weekday = 3,
+                                timeCst = "21:00",
+                                timeJst = "22:00",
+                                sitesJson = "[]",
+                                nextEpisode = 7,
+                                nextEpisodeAtUtc = upcomingAirUtc,
+                                nextEpisodeKind = AirEventKind.SCHEDULED,
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 2002L,
+                                title = "Out of Range Anime",
+                                titleCn = "超出范围动画",
+                                coverUrl = "https://example.com/cover.jpg",
+                                ratingScore = 7.0,
+                                beginUtc = "",
+                                weekday = 1,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                nextEpisode = 1,
+                                nextEpisodeAtUtc = pastAirUtc,
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val results =
+                repo.getUpcomingAiringForSubjects(
+                    subjectIds = listOf(2001L, 2002L),
+                    hoursAhead = 24L,
+                    lookbackHours = 6L,
+                )
+
+            assertEquals(1, results.size)
+            assertEquals(2001L, results[0].subjectId)
+            assertEquals(7, results[0].episode)
+            assertEquals("回退动画", results[0].titleCn)
+            assertEquals(upcomingAirUtc, results[0].airAtUtc)
+        }
 }

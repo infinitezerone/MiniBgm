@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -152,10 +153,8 @@ class CollectionRepositoryImpl(
             AppResult.Success(response.data)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "获取用户收藏失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "获取用户收藏异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("获取用户收藏"))
         }
 
     override suspend fun fetchCollectionCount(
@@ -174,10 +173,8 @@ class CollectionRepositoryImpl(
             AppResult.Success(response.total)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "获取收藏总数失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "获取收藏总数异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏总数"))
         }
 
     private val collectionCountsCache = mutableMapOf<String, CachedCounts>()
@@ -215,10 +212,8 @@ class CollectionRepositoryImpl(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "获取收藏统计失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "获取收藏统计异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏统计"))
         }
 
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> {
@@ -231,10 +226,8 @@ class CollectionRepositoryImpl(
             AppResult.Success(collection)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "获取收藏状态失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "获取收藏状态异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏状态"))
         }
     }
 
@@ -282,12 +275,9 @@ class CollectionRepositoryImpl(
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
                 throw e
-            } catch (e: BgmNetworkException) {
+            } catch (e: Throwable) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "更新收藏状态失败：${e.message}")
-            } catch (e: Exception) {
-                rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "更新收藏状态异常：${e.message}")
+                AppResult.Error(e, e.toUserFriendlyMessage("更新收藏状态"))
             }
         }
 
@@ -301,23 +291,15 @@ class CollectionRepositoryImpl(
             val activeUid = tokenProvider.activeUserId.first()
             if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
 
-            // 1. 本地历史快照（绑定不可变的当前 activeUid）
-            val localPrevious = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+            // 1. 本地历史快照（绑定不可变的当前 activeUid；若本地尚未缓存则降级查远端一次，防止覆盖历史进度）
+            val localPrevious = getOrFetchPreviousCollection(activeUid, subjectId)
 
             // 2. 本地优先：计算乐观状态并立即写入 Room，全应用零延迟响应
             val optimisticType = computeTargetType(localPrevious?.type ?: 0, isWatched)
             val optimisticEpStatus = computeTargetEpStatus(localPrevious?.epStatus ?: 0, epNumber, isWatched)
+            val subjectType = localPrevious?.subjectType ?: 2
 
-            userCollectionDao.insertCollection(
-                UserCollectionEntity(
-                    userId = activeUid,
-                    subjectId = subjectId,
-                    subjectType = localPrevious?.subjectType ?: 2,
-                    type = optimisticType,
-                    epStatus = optimisticEpStatus,
-                    updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
-                ),
-            )
+            saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
 
             try {
                 // 3. 远端单集 ID 解析（若入参缺失）
@@ -345,27 +327,15 @@ class CollectionRepositoryImpl(
                 )
 
                 // 5. 远端打卡成功后，写入最终对齐状态
-                userCollectionDao.insertCollection(
-                    UserCollectionEntity(
-                        userId = activeUid,
-                        subjectId = subjectId,
-                        subjectType = localPrevious?.subjectType ?: 2,
-                        type = optimisticType,
-                        epStatus = optimisticEpStatus,
-                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
-                    ),
-                )
+                saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
                 collectionCountsCache.clear()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
                 throw e
-            } catch (e: BgmNetworkException) {
+            } catch (e: Throwable) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "打卡失败：${e.message}")
-            } catch (e: Exception) {
-                rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "打卡异常：${e.message}")
+                AppResult.Error(e, e.toUserFriendlyMessage("打卡"))
             }
         }
 
@@ -378,89 +348,117 @@ class CollectionRepositoryImpl(
             val activeUid = tokenProvider.activeUserId.first()
             if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
 
-            // 1. 本地历史快照（绑定不可变的当前 activeUid）
-            val localPrevious = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+            // 1. 本地历史快照（绑定不可变的当前 activeUid；若本地尚未缓存则降级查远端一次，防止覆盖历史进度）
+            val localPrevious = getOrFetchPreviousCollection(activeUid, subjectId)
 
             // 2. 本地优先：计算乐观状态并立即写入 Room，全应用零延迟响应
             val optimisticType = computeTargetType(localPrevious?.type ?: 0, isWatched = true)
             val optimisticEpStatus = maxOf(localPrevious?.epStatus ?: 0, epNumber)
+            val subjectType = localPrevious?.subjectType ?: 2
 
-            userCollectionDao.insertCollection(
-                UserCollectionEntity(
-                    userId = activeUid,
-                    subjectId = subjectId,
-                    subjectType = localPrevious?.subjectType ?: 2,
-                    type = optimisticType,
-                    epStatus = optimisticEpStatus,
-                    updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
-                ),
-            )
+            saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
 
             try {
                 // 3. 解析需要打卡的单集 ID 列表
-                val targetEpisodeIds =
-                    if (episodeIds.isNotEmpty()) {
-                        episodeIds
-                    } else {
-                        val episodes = apiService.getEpisodes(subjectId).data
-                        episodes
-                            .filter { (it.ep.toInt() in 1..epNumber) || (it.sort.toInt() in 1..epNumber) }
-                            .map { it.id }
-                    }
+                val targetEpisodeIds = resolveBatchEpisodeIds(subjectId, epNumber, episodeIds)
 
                 // 4. 远端批量打卡（支持自愈：条目未收录时先加入在看）
-                val previousType = localPrevious?.type ?: 0
-                val isInCollection = previousType > 0 && previousType != CollectionType.WISH.value
-                if (!isInCollection) {
-                    try {
-                        apiService.updateCollection(subjectId, optimisticType)
-                    } catch (_: Exception) {
-                        // 忽略创建在看失败，后续单集打卡如报 404 将在 catch 中触发自愈
-                    }
-                }
-
-                if (targetEpisodeIds.isNotEmpty()) {
-                    try {
-                        apiService.updateEpisodesStatus(
-                            subjectId = subjectId,
-                            episodeIds = targetEpisodeIds,
-                            type = 2,
-                        )
-                    } catch (e: BgmNetworkException.NotFound) {
-                        // 自愈：条目在云端未收录，先加入在看再重试打卡
-                        apiService.updateCollection(subjectId, optimisticType)
-                        apiService.updateEpisodesStatus(
-                            subjectId = subjectId,
-                            episodeIds = targetEpisodeIds,
-                            type = 2,
-                        )
-                    }
-                }
+                executeBatchCheckIn(subjectId, targetEpisodeIds, optimisticType, localPrevious?.type ?: 0)
 
                 // 5. 远端打卡成功后，写入最终对齐状态
-                userCollectionDao.insertCollection(
-                    UserCollectionEntity(
-                        userId = activeUid,
-                        subjectId = subjectId,
-                        subjectType = localPrevious?.subjectType ?: 2,
-                        type = optimisticType,
-                        epStatus = optimisticEpStatus,
-                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
-                    ),
-                )
+                saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
                 collectionCountsCache.clear()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
                 throw e
-            } catch (e: BgmNetworkException) {
+            } catch (e: Throwable) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "批量打卡失败：${e.message}")
-            } catch (e: Exception) {
-                rollbackRoom(activeUid, subjectId, localPrevious)
-                AppResult.Error(e, "批量打卡异常：${e.message}")
+                AppResult.Error(e, e.toUserFriendlyMessage("批量打卡"))
             }
         }
+
+    private suspend fun getOrFetchPreviousCollection(
+        userId: Long,
+        subjectId: Long,
+    ): UserCollectionEntity? {
+        var local = userCollectionDao.getCollectionBySubjectId(userId, subjectId).firstOrNull()
+        if (local == null) {
+            val remote = runCatching { apiService.getCollection(userId.toString(), subjectId) }.getOrNull()
+            if (remote != null) {
+                val entity = remote.asEntity(userId)
+                userCollectionDao.insertCollection(entity)
+                local = entity
+            }
+        }
+        return local
+    }
+
+    private suspend fun saveOptimisticCollection(
+        userId: Long,
+        subjectId: Long,
+        subjectType: Int,
+        type: Int,
+        epStatus: Int,
+    ) {
+        userCollectionDao.insertCollection(
+            UserCollectionEntity(
+                userId = userId,
+                subjectId = subjectId,
+                subjectType = subjectType,
+                type = type,
+                epStatus = epStatus,
+                updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
+            ),
+        )
+    }
+
+    private suspend fun resolveBatchEpisodeIds(
+        subjectId: Long,
+        epNumber: Int,
+        providedIds: List<Long>,
+    ): List<Long> {
+        if (providedIds.isNotEmpty()) return providedIds
+        val episodes = apiService.getEpisodes(subjectId).data
+        return episodes
+            .filter { (it.ep.toInt() in 1..epNumber) || (it.sort.toInt() in 1..epNumber) }
+            .map { it.id }
+    }
+
+    private suspend fun executeBatchCheckIn(
+        subjectId: Long,
+        targetEpisodeIds: List<Long>,
+        optimisticType: Int,
+        previousType: Int,
+    ) {
+        val isInCollection = previousType > 0 && previousType != CollectionType.WISH.value
+        if (!isInCollection) {
+            try {
+                apiService.updateCollection(subjectId, optimisticType)
+            } catch (_: Exception) {
+                // 忽略创建在看失败，后续单集打卡如报 404 将在 catch 中触发自愈
+            }
+        }
+
+        if (targetEpisodeIds.isNotEmpty()) {
+            try {
+                apiService.updateEpisodesStatus(
+                    subjectId = subjectId,
+                    episodeIds = targetEpisodeIds,
+                    type = 2,
+                )
+            } catch (e: BgmNetworkException.NotFound) {
+                apiService.updateCollection(subjectId, optimisticType)
+                apiService.updateEpisodesStatus(
+                    subjectId = subjectId,
+                    episodeIds = targetEpisodeIds,
+                    type = 2,
+                )
+            }
+        }
+    }
+
+    private fun computeTargetType(
         existingType: Int,
         isWatched: Boolean,
     ): Int =
@@ -568,10 +566,8 @@ class CollectionRepositoryImpl(
             AppResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "同步在看收藏失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "同步在看收藏异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("同步在看收藏"))
         }
 
     override suspend fun clearUserData(userId: Long) =

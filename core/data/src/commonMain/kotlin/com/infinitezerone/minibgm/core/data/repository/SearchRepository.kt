@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -105,10 +106,10 @@ class SearchRepositoryImpl(
             } catch (fallbackCe: CancellationException) {
                 throw fallbackCe
             } catch (fallbackEx: Exception) {
-                AppResult.Error(e, "搜索失败：${e.message}")
+                AppResult.Error(fallbackEx, fallbackEx.toUserFriendlyMessage("搜索"))
             }
         } catch (e: Exception) {
-            AppResult.Error(e, "搜索异常：${e.message}")
+            AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
         }
     }
 
@@ -127,9 +128,7 @@ class SearchRepositoryImpl(
             AppResult.Success(response.data)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: BgmNetworkException) {
-            AppResult.Error(e, "高级搜索失败：${e.message}")
-        } catch (e: Exception) {
-            AppResult.Error(e, "高级搜索异常：${e.message}")
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("高级搜索"))
         }
 }
