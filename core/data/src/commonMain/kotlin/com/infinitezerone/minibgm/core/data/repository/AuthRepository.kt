@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TokenProvider
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -10,6 +11,8 @@ import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 
 interface AuthRepository {
@@ -61,6 +65,7 @@ class AuthRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userDataCleaner: UserDataCleaner,
 ) : AuthRepository {
+    private val log = bgmLogger("Bgm/Auth")
     private val _isAuthenticating = MutableStateFlow(false)
     override val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
 
@@ -86,6 +91,7 @@ class AuthRepositoryImpl(
         // verifier 仅存本地；state 携带其 sha256 指纹，Worker 兑换时校验
         // sha256(verifier)==state（PKCE 等价，bgm.tv 不支持标准 PKCE，见 BgmPkce）。
         // Uuid.random() 底层为 SecureRandom，两次共 ≥256 位随机。
+        log.i { "[LOGIN:BEGIN] generating oauth authorization request" }
         val verifier = BgmPkce.generateVerifier()
         userPreferences.setPendingOAuthVerifier(verifier)
         return authConfig.buildAuthorizeUrl(state = BgmPkce.challenge(verifier))
@@ -96,13 +102,18 @@ class AuthRepositoryImpl(
         state: String?,
     ): AppResult<Unit> {
         _isAuthenticating.value = true
+        log.d { "[LOGIN:COMPLETE:START]" }
         return try {
             val verifier = userPreferences.userPreferences.first().pendingOAuthVerifier
             when {
-                code.isNullOrBlank() || state.isNullOrBlank() ->
+                code.isNullOrBlank() || state.isNullOrBlank() -> {
+                    log.w { "[LOGIN:COMPLETE:REJECTED] missing code or state" }
                     return AppResult.Error(IllegalArgumentException("回调缺少 code 或 state"))
-                verifier.isBlank() || BgmPkce.challenge(verifier) != state ->
+                }
+                verifier.isBlank() || BgmPkce.challenge(verifier) != state -> {
+                    log.w { "[LOGIN:COMPLETE:REJECTED] state or verifier mismatch" }
                     return AppResult.Error(IllegalStateException("state 校验失败，疑似伪造回调"))
+                }
             }
             val tokens = tokenService.exchangeCode(code, state, verifier)
             // saveTokens 同时把该用户置为凭据库的活跃账号，登录态随之成立
@@ -114,10 +125,15 @@ class AuthRepositoryImpl(
                 .getOrNull()
                 ?.let { profile -> userPreferences.saveUserProfile(profile) }
 
+            log.i { "[LOGIN:COMPLETE:SUCCESS] userId=${tokens.userId}" }
             AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
+            log.e(e) { "[LOGIN:COMPLETE:FAILED] network exception: ${e.message}" }
             AppResult.Error(e, "授权码兑换失败：${e.message}")
         } catch (e: SerializationException) {
+            log.e(e) { "[LOGIN:COMPLETE:FAILED] serialization exception: ${e.message}" }
             AppResult.Error(e, "兑换响应解析失败：${e.message}")
         } finally {
             _isAuthenticating.value = false
@@ -125,36 +141,50 @@ class AuthRepositoryImpl(
     }
 
     override suspend fun switchAccount(userId: Long) {
+        log.i { "[AUTH:SWITCH_ACCOUNT] userId=$userId" }
         tokenProvider.setActiveUser(userId)
     }
 
     override suspend fun logout() {
-        val currentUserId = tokenProvider.activeUserId.first()
-        if (currentUserId != null) {
-            logout(currentUserId)
-        } else {
-            logoutAll()
+        withContext(NonCancellable) {
+            val currentUserId = tokenProvider.activeUserId.first()
+            if (currentUserId != null) {
+                logout(currentUserId)
+            } else {
+                logoutAll()
+            }
         }
     }
 
     override suspend fun logout(userId: Long) {
-        tokenProvider.removeTokens(userId)
-        userDataCleaner.clear(userId)
+        withContext(NonCancellable) {
+            log.i { "[AUTH:LOGOUT] userId=$userId" }
+            tokenProvider.removeTokens(userId)
+            userDataCleaner.clear(userId)
+        }
     }
 
     override suspend fun logoutAll() {
-        tokenProvider.clearTokens()
-        userDataCleaner.clearAll()
+        withContext(NonCancellable) {
+            log.i { "[AUTH:LOGOUT_ALL]" }
+            tokenProvider.clearTokens()
+            userDataCleaner.clearAll()
+        }
     }
 
     override suspend fun refreshProfile(): AppResult<UserProfile> =
         try {
             val profile = apiService.getMe()
             userPreferences.saveUserProfile(profile)
+            log.d { "[PROFILE:REFRESH:SUCCESS] userId=${profile.id}" }
             AppResult.Success(profile)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
+            log.e(e) { "[PROFILE:REFRESH:FAILED] ${e.message}" }
             AppResult.Error(e, "拉取个人资料失败：${e.message}")
         } catch (e: Exception) {
+            log.e(e) { "[PROFILE:REFRESH:ERROR] ${e.message}" }
             AppResult.Error(e, "个人资料同步异常：${e.message}")
         }
 }

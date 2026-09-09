@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.asAppResult
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -32,10 +33,8 @@ class CommunityRepositoryImpl(
     private val communityService: BangumiCommunityService,
 ) : CommunityRepository {
     override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> =
-        try {
-            AppResult.Success(communityService.getEpisodeComments(episodeId))
-        } catch (e: Exception) {
-            AppResult.Error(e, e.message ?: "获取单集吐槽失败")
+        asAppResult(errorMessage = { it.message ?: "获取单集吐槽失败" }) {
+            communityService.getEpisodeComments(episodeId)
         }
 
     override suspend fun getSubjectComments(
@@ -43,10 +42,8 @@ class CommunityRepositoryImpl(
         limit: Int,
         offset: Int,
     ): AppResult<SubjectCommentPage> =
-        try {
-            AppResult.Success(communityService.getSubjectComments(subjectId, limit, offset))
-        } catch (e: Exception) {
-            AppResult.Error(e, e.message ?: "获取条目短评失败")
+        asAppResult(errorMessage = { it.message ?: "获取条目短评失败" }) {
+            communityService.getSubjectComments(subjectId, limit, offset)
         }
 
     override suspend fun getSubjectTopics(
@@ -54,10 +51,7 @@ class CommunityRepositoryImpl(
         limit: Int,
         offset: Int,
     ): AppResult<List<SubjectTopic>> =
-        try {
-            val page = communityService.getSubjectTopics(subjectId, limit, offset)
-            AppResult.Success(page.data)
-        } catch (e: Exception) {
-            AppResult.Error(e, e.message ?: "获取条目讨论版失败")
+        asAppResult(errorMessage = { it.message ?: "获取条目讨论版失败" }) {
+            communityService.getSubjectTopics(subjectId, limit, offset).data
         }
 }

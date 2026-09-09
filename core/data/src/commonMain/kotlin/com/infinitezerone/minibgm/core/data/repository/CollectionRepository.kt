@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -129,6 +130,8 @@ class CollectionRepositoryImpl(
                     offset = offset,
                 )
             AppResult.Success(response.data)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             AppResult.Error(e, "获取用户收藏失败：${e.message}")
         } catch (e: Exception) {
@@ -149,6 +152,8 @@ class CollectionRepositoryImpl(
                     offset = 0,
                 )
             AppResult.Success(response.total)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             AppResult.Error(e, "获取收藏总数失败：${e.message}")
         } catch (e: Exception) {
@@ -163,6 +168,8 @@ class CollectionRepositoryImpl(
                 userCollectionDao.insertCollection(collection.asEntity(activeUid))
             }
             AppResult.Success(collection)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             AppResult.Error(e, "获取收藏状态失败：${e.message}")
         } catch (e: Exception) {
@@ -210,6 +217,9 @@ class CollectionRepositoryImpl(
                     epStatus = epStatus,
                 )
                 AppResult.Success(Unit)
+            } catch (e: CancellationException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                throw e
             } catch (e: BgmNetworkException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "更新收藏状态失败：${e.message}")
@@ -265,6 +275,8 @@ class CollectionRepositoryImpl(
                 val existing =
                     try {
                         apiService.getCollection(activeUid.toString(), subjectId)
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         null
                     }
@@ -288,6 +300,9 @@ class CollectionRepositoryImpl(
                     ),
                 )
                 AppResult.Success(Unit)
+            } catch (e: CancellationException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                throw e
             } catch (e: BgmNetworkException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "打卡失败：${e.message}")
@@ -399,19 +414,23 @@ class CollectionRepositoryImpl(
                 collections = allDoingCollections,
             )
             AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: BgmNetworkException) {
             AppResult.Error(e, "同步在看收藏失败：${e.message}")
         } catch (e: Exception) {
             AppResult.Error(e, "同步在看收藏异常：${e.message}")
         }
 
-    override suspend fun clearUserData(userId: Long) {
-        userCollectionDao.clearByUserId(userId)
-    }
+    override suspend fun clearUserData(userId: Long) =
+        withContext(NonCancellable) {
+            userCollectionDao.clearByUserId(userId)
+        }
 
-    override suspend fun clearAllUserData() {
-        userCollectionDao.clearAll()
-    }
+    override suspend fun clearAllUserData() =
+        withContext(NonCancellable) {
+            userCollectionDao.clearAll()
+        }
 }
 
 fun UserCollectionEntity.asExternalModel(): UserCollection =
