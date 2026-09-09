@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
