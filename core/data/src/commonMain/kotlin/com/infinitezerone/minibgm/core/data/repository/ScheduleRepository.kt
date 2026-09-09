@@ -445,46 +445,12 @@ class ScheduleRepositoryImpl(
 
     private fun resolveSiteLink(site: BangumiDataSite): SiteLink? {
         val siteKey = site.site.lowercase()
-        val id = site.id
-        val rawUrl = site.url.ifBlank { "" }
-
-        val (displayName, url) =
-            when (siteKey) {
-                "bilibili" ->
-                    "哔哩哔哩" to
-                        rawUrl.ifBlank {
-                            if (id.startsWith("http")) {
-                                id
-                            } else if (id.startsWith("md")) {
-                                "https://www.bilibili.com/bangumi/media/$id"
-                            } else if (id.startsWith("ss")) {
-                                "https://www.bilibili.com/bangumi/play/$id"
-                            } else {
-                                "https://www.bilibili.com/bangumi/media/md$id"
-                            }
-                        }
-                "gamer", "gamer_hk" -> "巴哈姆特" to rawUrl.ifBlank { "https://ani.gamer.com.tw/animeVideo.php?sn=$id" }
-                "iqiyi" -> "爱奇艺" to rawUrl.ifBlank { "https://www.iqiyi.com/v_$id.html" }
-                "qq" -> "腾讯视频" to rawUrl.ifBlank { "https://v.qq.com/x/cover/$id.html" }
-                "youku" -> "优酷" to rawUrl.ifBlank { "https://v.youku.com/v_show/id_$id.html" }
-                "netflix" -> "Netflix" to rawUrl.ifBlank { "https://www.netflix.com/title/$id" }
-                "danime" -> "d动画" to rawUrl.ifBlank { "https://animestore.docomo.ne.jp/animestore/ci_pc?workId=$id" }
-                "abema" -> "ABEMA" to rawUrl.ifBlank { "https://abema.tv/channels/$id" }
-                "unext" -> "U-NEXT" to rawUrl.ifBlank { "https://video.unext.jp/title/$id" }
-                "prime" -> "Prime Video" to rawUrl.ifBlank { "https://www.amazon.co.jp/dp/$id" }
-                "disneyplus" -> "Disney+" to rawUrl.ifBlank { "https://www.disneyplus.com/series/$id" }
-                "crunchyroll" -> "Crunchyroll" to rawUrl.ifBlank { "https://www.crunchyroll.com/series/$id" }
-                "muse_tw", "muse_hk" -> "木棉花" to rawUrl.ifBlank { "https://www.youtube.com/playlist?list=$id" }
-                "ani_one", "ani_one_asia" -> "羚邦" to rawUrl.ifBlank { "https://www.youtube.com/playlist?list=$id" }
-                "nicovideo" -> "NicoNico" to rawUrl.ifBlank { "https://ch.nicovideo.jp/$id" }
-                "mikan" -> "蜜柑计划" to rawUrl.ifBlank { "https://mikanani.me/Home/Bangumi/$id" }
-                else -> return null // 过滤 mal, anidb, aniList, tmdb, bangumi 等元数据站点
-            }
-
+        val resolver = SITE_RESOLVERS[siteKey] ?: return null
+        val url = site.url.ifBlank { resolver.second(site.id) }
         if (url.isBlank()) return null
         return SiteLink(
             siteName = siteKey,
-            displayName = displayName,
+            displayName = resolver.first,
             playUrl = url,
         )
     }
@@ -565,5 +531,36 @@ class ScheduleRepositoryImpl(
         const val PREDICTED_HORIZON_DAYS = 30L
         const val MAX_PREDICTED_EVENTS = 6
         const val OFFSET_TOLERANCE_MILLIS = 3L * DAY_MILLIS
+
+        private fun buildBilibiliUrl(id: String): String =
+            when {
+                id.startsWith("http") -> id
+                id.startsWith("md") -> "https://www.bilibili.com/bangumi/media/$id"
+                id.startsWith("ss") -> "https://www.bilibili.com/bangumi/play/$id"
+                else -> "https://www.bilibili.com/bangumi/media/md$id"
+            }
+
+        private val SITE_RESOLVERS: Map<String, Pair<String, (String) -> String>> =
+            mapOf(
+                "bilibili" to ("哔哩哔哩" to ::buildBilibiliUrl),
+                "gamer" to ("巴哈姆特" to { "https://ani.gamer.com.tw/animeVideo.php?sn=$it" }),
+                "gamer_hk" to ("巴哈姆特" to { "https://ani.gamer.com.tw/animeVideo.php?sn=$it" }),
+                "iqiyi" to ("爱奇艺" to { "https://www.iqiyi.com/v_$it.html" }),
+                "qq" to ("腾讯视频" to { "https://v.qq.com/x/cover/$it.html" }),
+                "youku" to ("优酷" to { "https://v.youku.com/v_show/id_$it.html" }),
+                "netflix" to ("Netflix" to { "https://www.netflix.com/title/$it" }),
+                "danime" to ("d动画" to { "https://animestore.docomo.ne.jp/animestore/ci_pc?workId=$it" }),
+                "abema" to ("ABEMA" to { "https://abema.tv/channels/$it" }),
+                "unext" to ("U-NEXT" to { "https://video.unext.jp/title/$it" }),
+                "prime" to ("Prime Video" to { "https://www.amazon.co.jp/dp/$it" }),
+                "disneyplus" to ("Disney+" to { "https://www.disneyplus.com/series/$it" }),
+                "crunchyroll" to ("Crunchyroll" to { "https://www.crunchyroll.com/series/$it" }),
+                "muse_tw" to ("木棉花" to { "https://www.youtube.com/playlist?list=$it" }),
+                "muse_hk" to ("木棉花" to { "https://www.youtube.com/playlist?list=$it" }),
+                "ani_one" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
+                "ani_one_asia" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
+                "nicovideo" to ("NicoNico" to { "https://ch.nicovideo.jp/$it" }),
+                "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
+            )
     }
 }

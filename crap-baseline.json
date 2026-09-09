@@ -7,12 +7,6 @@
   "methods": [
     {
       "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
-      "method": "resolveSiteLink",
-      "cc": 31,
-      "reason": "bangumi-data 跨源播放链接与 AniList 网站映射解析，包含繁复的正则匹配与兜底降级链路。"
-    },
-    {
-      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
       "method": "syncAirEvents",
       "cc": 43,
       "reason": "多数据源时刻表与单集事件仲裁聚合核心，负责 UTC 时间推导、跨季偏移仲裁与未来窗口生成。"
