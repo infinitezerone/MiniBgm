@@ -20,7 +20,6 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,14 +97,10 @@ class SubjectDetailViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // 1. 核心首屏数据优先拉取：条目详情、分集列表、收藏状态（保障用户以最快速度看到主体内容）
-            val subjectDeferred = async { subjectRepository.fetchSubjectDetail(subjectId) }
-            val episodesDeferred = async { subjectRepository.fetchEpisodes(subjectId) }
-            val collectionDeferred = async { collectionRepository.fetchCollection(subjectId) }
-
-            val subjectResult = subjectDeferred.await()
-            val episodesResult = episodesDeferred.await()
-            val collectionResult = collectionDeferred.await()
+            // 1. 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
+            val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
+            val episodesResult = subjectRepository.fetchEpisodes(subjectId)
+            val collectionResult = collectionRepository.fetchCollection(subjectId)
 
             subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
             episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
@@ -121,27 +116,28 @@ class SubjectDetailViewModel(
                 )
             }
 
-            // 2. 次级与社区数据并行拉取：角色、人员、关联作品、评论、讨论（削峰防 429 限流）
-            val charactersDeferred = async { subjectRepository.fetchCharacters(subjectId) }
-            val personsDeferred = async { subjectRepository.fetchPersons(subjectId) }
-            val relationsDeferred = async { subjectRepository.fetchRelations(subjectId) }
-            val subjectCommentsDeferred = async { communityRepository.getSubjectComments(subjectId, limit = 15) }
-            val subjectTopicsDeferred = async { communityRepository.getSubjectTopics(subjectId, limit = 5) }
-
-            val charactersResult = charactersDeferred.await()
-            val personsResult = personsDeferred.await()
-            val relationsResult = relationsDeferred.await()
-            val subjectCommentsResult = subjectCommentsDeferred.await()
-            val subjectTopicsResult = subjectTopicsDeferred.await()
-
-            val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
-            val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
+            // 2. 次级演职员数据平滑拉取：角色 -> 人员 -> 关联作品
+            val charactersResult = subjectRepository.fetchCharacters(subjectId)
+            val personsResult = subjectRepository.fetchPersons(subjectId)
+            val relationsResult = subjectRepository.fetchRelations(subjectId)
 
             _uiState.update { current ->
                 current.copy(
                     characters = (charactersResult as? AppResult.Success)?.data ?: current.characters,
                     persons = (personsResult as? AppResult.Success)?.data ?: current.persons,
                     relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
+                )
+            }
+
+            // 3. 社区数据平滑拉取：评论 -> 讨论
+            val subjectCommentsResult = communityRepository.getSubjectComments(subjectId, limit = 15)
+            val subjectTopicsResult = communityRepository.getSubjectTopics(subjectId, limit = 5)
+
+            val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
+            val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
+
+            _uiState.update { current ->
+                current.copy(
                     subjectComments = commentsPage?.data ?: current.subjectComments,
                     subjectCommentTotal = commentsPage?.total ?: current.subjectCommentTotal,
                     hasMoreComments = (commentsPage?.data?.size ?: 0) < (commentsPage?.total ?: 0),
@@ -320,11 +316,8 @@ class SubjectDetailViewModel(
                     selectedPersonWorks = emptyList(),
                 )
             }
-            val detailDeferred = async { subjectRepository.fetchCharacterDetail(characterId) }
-            val worksDeferred = async { subjectRepository.fetchCharacterSubjects(characterId) }
-
-            val detailResult = detailDeferred.await()
-            val worksResult = worksDeferred.await()
+            val detailResult = subjectRepository.fetchCharacterDetail(characterId)
+            val worksResult = subjectRepository.fetchCharacterSubjects(characterId)
 
             _uiState.update { state ->
                 state.copy(
@@ -346,11 +339,8 @@ class SubjectDetailViewModel(
                     selectedCharacterWorks = emptyList(),
                 )
             }
-            val detailDeferred = async { subjectRepository.fetchPersonDetail(personId) }
-            val worksDeferred = async { subjectRepository.fetchPersonSubjects(personId) }
-
-            val detailResult = detailDeferred.await()
-            val worksResult = worksDeferred.await()
+            val detailResult = subjectRepository.fetchPersonDetail(personId)
+            val worksResult = subjectRepository.fetchPersonSubjects(personId)
 
             _uiState.update { state ->
                 state.copy(

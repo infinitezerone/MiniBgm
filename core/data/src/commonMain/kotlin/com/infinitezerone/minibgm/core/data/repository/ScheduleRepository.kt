@@ -19,9 +19,6 @@ import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -530,22 +527,17 @@ class ScheduleRepositoryImpl(
 
     /**
      * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
-     * 仅对 coverUrl 为空的条目并发调用官方接口；获取后落库持久化，后续刷新直接复用。
+     * 仅对 coverUrl 为空的条目平滑顺序调用官方接口（避免并发突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
      */
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
         val missing = schedules.filter { it.coverUrl.isBlank() }
         if (missing.isEmpty()) return schedules
 
         val metadataByBgmId =
-            coroutineScope {
-                missing
-                    .map { entity ->
-                        async {
-                            runCatching { apiService.getSubject(entity.bgmId) }.getOrNull()
-                        }
-                    }.awaitAll()
-            }.filterNotNull()
-                .associateBy { it.id }
+            missing
+                .mapNotNull { entity ->
+                    runCatching { apiService.getSubject(entity.bgmId) }.getOrNull()
+                }.associateBy { it.id }
 
         if (metadataByBgmId.isEmpty()) return schedules
 

@@ -12,8 +12,6 @@ import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -182,22 +180,15 @@ class UserViewModel(
         viewModelScope.launch {
             isCountsLoadingFlow.value = true
             try {
-                val results =
-                    CollectionType.entries
-                        .map { type ->
-                            async {
-                                type to collectionRepository.fetchCollectionCount(username, type)
-                            }
-                        }.awaitAll()
-
                 val newCounts = mutableMapOf<CollectionType, Int>()
-                results.forEach { (type, res) ->
+                // 逐个平滑请求 5 大分类计数，避免瞬间并发轰炸触发 429 限流；
+                // 每次获取成功即时更新 Flow，UI 呈现递增动效，消除长时间白屏/转圈
+                for (type in CollectionType.entries) {
+                    val res = collectionRepository.fetchCollectionCount(username, type)
                     if (res is AppResult.Success) {
                         newCounts[type] = res.data
+                        collectionCountsFlow.value = newCounts.toMap()
                     }
-                }
-                if (newCounts.isNotEmpty()) {
-                    collectionCountsFlow.value = newCounts
                 }
             } finally {
                 isCountsLoadingFlow.value = false
