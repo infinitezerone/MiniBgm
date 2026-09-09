@@ -19,13 +19,16 @@ class FakeScheduleRepository : ScheduleRepository {
         weekday: Int,
         schedules: List<AirSchedule>,
     ) {
+        val normalized = schedules.map { if (it.weekday != weekday) it.copy(weekday = weekday) else it }
         schedulesState.value =
             schedulesState.value.toMutableMap().apply {
-                put(weekday, schedules)
+                put(weekday, normalized)
             }
     }
 
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> = schedulesState.map { it[weekday].orEmpty() }
+
+    override fun getAllSchedulesStream(): Flow<List<AirSchedule>> = schedulesState.map { it.values.flatten() }
 
     var syncBangumiDataCallCount: Int = 0
         private set

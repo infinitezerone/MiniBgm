@@ -153,10 +153,7 @@ class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
 ) : ViewModel() {
-    private val today = LocalDate.now()
-    private val initialWeekday = today.dayOfWeek.value
-
-    private val selectedWeekday = MutableStateFlow(initialWeekday)
+    private val selectedWeekday = MutableStateFlow(LocalDate.now().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
@@ -164,39 +161,14 @@ class ScheduleViewModel(
     private val _userMessage = Channel<String>(Channel.BUFFERED)
     val userMessage: Flow<String> = _userMessage.receiveAsFlow()
 
-    private val dateItems: List<WeekdayDateItem> =
-        run {
-            val monday = today.minusDays((initialWeekday - 1).toLong())
-            (1..7).map { weekday ->
-                val date = monday.plusDays((weekday - 1).toLong())
-                val weekdayLabel =
-                    when (weekday) {
-                        1 -> "周一"
-                        2 -> "周二"
-                        3 -> "周三"
-                        4 -> "周四"
-                        5 -> "周五"
-                        6 -> "周六"
-                        7 -> "周日"
-                        else -> ""
-                    }
-                WeekdayDateItem(
-                    weekday = weekday,
-                    weekdayLabel = weekdayLabel,
-                    dateLabel = "${date.monthValue}/${date.dayOfMonth}",
-                    isToday = weekday == initialWeekday,
-                )
-            }
-        }
-
-    // 组合每周 1~7 天的全部放送流
+    // 监听全量放送流并按星期聚合（单流监听，避免按天并发 7 路订阅导致的重复 SQL 查询与高频重组）
     private val weeklySchedulesFlow: Flow<Map<Int, List<AirSchedule>>> =
-        combine(
-            (1..7).map { weekday ->
-                scheduleRepository.getSchedulesByWeekday(weekday).map { weekday to it }
-            },
-        ) { pairs ->
-            pairs.toMap()
+        scheduleRepository.getAllSchedulesStream().map { all ->
+            val map = (1..7).associateWith { mutableListOf<AirSchedule>() }
+            all.forEach { schedule ->
+                map[schedule.weekday]?.add(schedule)
+            }
+            map
         }
 
     // 响应式观察用户正在追番的条目集合及收藏详情
@@ -248,8 +220,11 @@ class ScheduleViewModel(
             filterFlow,
             statusFlow,
         ) { weeklySchedules, (watchingIds, collectionMap), (weekday, onlyWatch), (refreshing, error) ->
+            val currentToday = LocalDate.now()
+            val currentWeekday = currentToday.dayOfWeek.value
+            val currentDateItems = calculateDateItems(currentToday)
 
-            val yesterdayWeekday = if (initialWeekday == 1) 7 else initialWeekday - 1
+            val yesterdayWeekday = if (currentWeekday == 1) 7 else currentWeekday - 1
             val dayBeforeWeekday = if (yesterdayWeekday == 1) 7 else yesterdayWeekday - 1
 
             // 提取待补更新：昨日、前天已播出的在追番，且进度落后
@@ -302,8 +277,8 @@ class ScheduleViewModel(
                 isRefreshing = refreshing,
                 error = error,
                 selectedWeekday = weekday,
-                todayWeekday = initialWeekday,
-                dateItems = dateItems,
+                todayWeekday = currentWeekday,
+                dateItems = currentDateItems,
                 weeklySchedules = weeklySchedules,
                 watchingSubjectIds = watchingIds,
                 onlyWatching = onlyWatch,
@@ -314,13 +289,17 @@ class ScheduleViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue =
-                ScheduleUiState(
-                    isLoading = true,
-                    isRefreshing = false,
-                    selectedWeekday = initialWeekday,
-                    todayWeekday = initialWeekday,
-                    dateItems = dateItems,
-                ),
+                run {
+                    val initialToday = LocalDate.now()
+                    val initialWeekday = initialToday.dayOfWeek.value
+                    ScheduleUiState(
+                        isLoading = true,
+                        isRefreshing = false,
+                        selectedWeekday = initialWeekday,
+                        todayWeekday = initialWeekday,
+                        dateItems = calculateDateItems(initialToday),
+                    )
+                },
         )
 
     init {
@@ -406,6 +385,33 @@ class ScheduleViewModel(
                 .onSuccess { errorMessage.value = null }
                 .onError { _, message -> errorMessage.value = message }
             isRefreshing.value = false
+        }
+    }
+
+    companion object {
+        fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> {
+            val todayWeekday = today.dayOfWeek.value
+            val monday = today.minusDays((todayWeekday - 1).toLong())
+            return (1..7).map { weekday ->
+                val date = monday.plusDays((weekday - 1).toLong())
+                val weekdayLabel =
+                    when (weekday) {
+                        1 -> "周一"
+                        2 -> "周二"
+                        3 -> "周三"
+                        4 -> "周四"
+                        5 -> "周五"
+                        6 -> "周六"
+                        7 -> "周日"
+                        else -> ""
+                    }
+                WeekdayDateItem(
+                    weekday = weekday,
+                    weekdayLabel = weekdayLabel,
+                    dateLabel = "${date.monthValue}/${date.dayOfMonth}",
+                    isToday = weekday == todayWeekday,
+                )
+            }
         }
     }
 }
