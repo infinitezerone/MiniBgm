@@ -252,7 +252,6 @@ class ExploreViewModel(
                                 pageOffset = offset + newSubjects.size,
                             )
                         }
-                        fetchHotCommentsForSubjects(newSubjects)
                     }
 
                     is AppResult.Error -> {
@@ -340,38 +339,23 @@ class ExploreViewModel(
     }
 
     /**
-     * 异步为当前探索列表中的条目拉取真实社区热评
+     * 异步为当前探索列表中的置顶焦点大卡（ExploreSpotlightCard）拉取真实社区热评；
+     * 其余普通瀑布流卡片直接消费条目自带的剧情简介与特色同好标签，杜绝单次加载 8 次网络并发请求。
      */
     private fun fetchHotCommentsForSubjects(subjects: List<Subject>) {
         val repo = communityRepository ?: return
-        if (subjects.isEmpty()) return
+        val firstSubject = subjects.firstOrNull() ?: return
 
         hotCommentsJob?.cancel()
         hotCommentsJob =
             viewModelScope.launch {
-                // 1. 优先并发抓取第 1 个条目（即 ExploreSpotlightCard 焦点大卡）
-                val firstSubject = subjects.firstOrNull()
-                if (firstSubject != null && !_uiState.value.hotComments.containsKey(firstSubject.id)) {
+                if (!_uiState.value.hotComments.containsKey(firstSubject.id)) {
                     val result = repo.getSubjectComments(firstSubject.id, limit = 5)
                     if (result is AppResult.Success) {
                         val best = selectBestComment(result.data.data)
                         if (best != null) {
                             _uiState.update {
                                 it.copy(hotComments = it.hotComments + (firstSubject.id to best))
-                            }
-                        }
-                    }
-                }
-
-                // 2. 依次轻量抓取前 8 个瀑布流条目的热评
-                val targets = subjects.drop(1).take(8).filter { !_uiState.value.hotComments.containsKey(it.id) }
-                for (target in targets) {
-                    val result = repo.getSubjectComments(target.id, limit = 3)
-                    if (result is AppResult.Success) {
-                        val best = selectBestComment(result.data.data)
-                        if (best != null) {
-                            _uiState.update {
-                                it.copy(hotComments = it.hotComments + (target.id to best))
                             }
                         }
                     }
