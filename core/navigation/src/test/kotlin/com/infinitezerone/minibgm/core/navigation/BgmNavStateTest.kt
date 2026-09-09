@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.navigation
 
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -13,6 +14,7 @@ import org.junit.Test
  * 纯 JVM 单测：直接构造 BgmNavState（NavBackStack 底层为 SnapshotStateList，无需 Compose 场景），
  * 覆盖顶层 Tab 历史、子返回栈、single-top 与 exit-through-home 语义
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class BgmNavStateTest {
     private fun newState(): BgmNavState =
         BgmNavState(
