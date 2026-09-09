@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
@@ -134,49 +135,13 @@ class ScheduleRepositoryImpl(
 
             // 2. 读取本地已有的缓存实体，复用已同步好的播放源与时刻（0 次 CDN 请求）
             val existingEntities = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
-            val entities = mutableListOf<AirScheduleEntity>()
-
-            for (day in calendarDays) {
-                val officialWeekday = day.weekday.id
-                for (subject in day.items) {
-                    val bgmId = subject.id
-                    val existing = existingEntities[bgmId]
-
-                    val coverUrl =
-                        (subject.images?.bestImage ?: "").replace("http://", "https://")
-                    val titleCn = subject.nameCn.ifBlank { existing?.titleCn ?: "" }
-                    val beginUtc =
-                        existing?.beginUtc.takeIf { !it.isNullOrBlank() }
-                            ?: subject.airDate
-
-                    entities.add(
-                        AirScheduleEntity(
-                            bgmId = bgmId,
-                            title = subject.name,
-                            titleCn = titleCn,
-                            coverUrl = coverUrl,
-                            ratingScore = subject.rating?.score ?: 0.0,
-                            beginUtc = beginUtc,
-                            weekday = officialWeekday,
-                            timeCst = existing?.timeCst ?: "",
-                            timeJst = existing?.timeJst ?: "",
-                            sitesJson = existing?.sitesJson ?: "[]",
-                            anilistId = existing?.anilistId,
-                            broadcastRule = existing?.broadcastRule ?: "",
-                            totalEpisodes =
-                                subject.eps.takeIf { it > 0 }
-                                    ?: subject.totalEpisodes.takeIf { it > 0 }
-                                    ?: existing?.totalEpisodes
-                                    ?: 0,
-                            source = AirScheduleEntity.SOURCE_OFFICIAL,
-                            nextEpisode = existing?.nextEpisode ?: 0,
-                            nextEpisodeAtUtc = existing?.nextEpisodeAtUtc ?: "",
-                            nextEpisodeKind = existing?.nextEpisodeKind ?: "",
-                            updatedAt = existing?.updatedAt ?: 0L,
-                        ),
-                    )
+            val entities =
+                calendarDays.flatMap { day ->
+                    val officialWeekday = day.weekday.id
+                    day.items.map { subject ->
+                        mapCalendarSubjectToEntity(subject, officialWeekday, existingEntities[subject.id])
+                    }
                 }
-            }
 
             if (entities.isNotEmpty()) {
                 // 官方日历只是名单的一部分：只清理官方名单内的行，
@@ -300,9 +265,8 @@ class ScheduleRepositoryImpl(
         }
 
     /**
-     * 逐话事件同步与仲裁：
-     * 1) AniList airingSchedule → actual（已播）/ scheduled（已排期）事件，
-     *    通过 beginUtc 就近对齐自推导拆季偏移；
+     * 同步全量条目的播出事件并仲裁时刻表：
+     * 1) 从 AniList 获取逐话真值（实际播出/官方预定）；
      * 2) AniList 未覆盖的条目由 broadcast 规则生成 predicted 事件（未来 30 天窗口）；
      * 3) 按可信度仲裁回写条目的 weekday 分桶与 next* 字段。
      */
@@ -317,21 +281,43 @@ class ScheduleRepositoryImpl(
         airEventDao.deleteEventsNotIn(keepIds.toList())
         airEventDao.deleteStalePredictedEvents(nowIso)
         scheduleDao.deleteStaleBgmDataSchedules(TimeUtils.isoUtcFromEpochMillis(nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS))
-        val existingEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
 
         // 1. AniList 逐话真值
+        val (anilistEvents, coveredSubjects) = fetchAnilistAirEvents(entities, nowMillis)
+        if (anilistEvents.isNotEmpty()) {
+            airEventDao.insertAirEvents(anilistEvents)
+        }
+
+        // 2. 规则推算（predicted）：只服务 AniList 未覆盖的条目
+        val predictedEvents = generatePredictedAirEvents(entities, coveredSubjects, nowMillis)
+        if (predictedEvents.isNotEmpty()) {
+            airEventDao.insertAirEvents(predictedEvents)
+        }
+
+        // 3. 仲裁回写：weekday 分桶与 next* 字段取"距当前最近"的事件，
+        //    按可信度 actual > scheduled > predicted 打破同刻平局
+        val allEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
+        val reconciled = reconcileScheduleEntities(entities, allEvents, nowMillis)
+        scheduleDao.insertSchedules(reconciled)
+    }
+
+    private suspend fun fetchAnilistAirEvents(
+        entities: List<AirScheduleEntity>,
+        nowMillis: Long,
+    ): Pair<List<AirEventEntity>, Set<Long>> {
         val withAnilistId = entities.filter { it.anilistId != null }
         val schedulesByAnilistId =
             runCatching { anilistService.getAiringSchedules(withAnilistId.mapNotNull { it.anilistId }) }
                 .getOrElse { emptyMap() }
         val anilistEvents = mutableListOf<AirEventEntity>()
         val coveredSubjects = mutableSetOf<Long>()
+
         for (entity in withAnilistId) {
             val anilistId = entity.anilistId ?: continue
             val episodes = schedulesByAnilistId[anilistId].orEmpty()
             if (episodes.isEmpty()) continue
             val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: continue
-            // 偏移自推导：bgm 条目 begin 就近对齐 AniList 话次（±3 天），消除拆季粒度错位
+
             val offset =
                 episodes
                     .minByOrNull { abs(it.airAtEpochSeconds * 1000 - beginMillis) }
@@ -339,16 +325,12 @@ class ScheduleRepositoryImpl(
                     ?.episode
                     ?.minus(1)
                     ?: continue
+
             for (episode in episodes) {
                 val bgmEpisode = episode.episode - offset
                 if (bgmEpisode < 1) continue
                 val airAtMillis = episode.airAtEpochSeconds * 1000
-                val kind =
-                    if (airAtMillis <= nowMillis) {
-                        AirEventKind.ACTUAL
-                    } else {
-                        AirEventKind.SCHEDULED
-                    }
+                val kind = if (airAtMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
                 anilistEvents +=
                     AirEventEntity(
                         subjectId = entity.bgmId,
@@ -360,11 +342,14 @@ class ScheduleRepositoryImpl(
                 coveredSubjects += entity.bgmId
             }
         }
-        if (anilistEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(anilistEvents)
-        }
+        return anilistEvents to coveredSubjects
+    }
 
-        // 2. 规则推算（predicted）：只服务 AniList 未覆盖的条目
+    private fun generatePredictedAirEvents(
+        entities: List<AirScheduleEntity>,
+        coveredSubjects: Set<Long>,
+        nowMillis: Long,
+    ): List<AirEventEntity> {
         val predictedEvents = mutableListOf<AirEventEntity>()
         for (entity in entities) {
             if (entity.bgmId in coveredSubjects) continue
@@ -401,39 +386,98 @@ class ScheduleRepositoryImpl(
                 episode += 1
             }
         }
-        if (predictedEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(predictedEvents)
+        return predictedEvents
+    }
+
+    private fun reconcileScheduleEntities(
+        entities: List<AirScheduleEntity>,
+        allEvents: Map<Long, List<AirEventEntity>>,
+        nowMillis: Long,
+    ): List<AirScheduleEntity> =
+        entities.map { entity ->
+            val events =
+                allEvents[entity.bgmId]
+                    .orEmpty()
+                    .mapNotNull { event ->
+                        val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: return@mapNotNull null
+                        event to millis
+                    }
+            if (events.isEmpty()) {
+                return@map entity
+            }
+            val closest =
+                events.minWithOrNull(
+                    compareBy({ abs(it.second - nowMillis) }, { AirEventKind.rank(it.first.kind) }),
+                ) ?: return@map entity
+            val (closestEvent, closestMillis) = closest
+            val next = events.filter { it.second > nowMillis }.minByOrNull { it.second }
+            entity.copy(
+                weekday = TimeUtils.cstWeekdayOfEpoch(closestMillis),
+                nextEpisode = closestEvent.episode,
+                nextEpisodeAtUtc = next?.first?.airAtUtc ?: "",
+                nextEpisodeKind = next?.first?.kind ?: closestEvent.kind,
+            )
         }
 
-        // 3. 仲裁回写：weekday 分桶与 next* 字段取"距当前最近"的事件，
-        //    按可信度 actual > scheduled > predicted 打破同刻平局
-        val allEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
-        val reconciled =
-            entities.map { entity ->
-                val events =
-                    allEvents[entity.bgmId]
-                        .orEmpty()
-                        .mapNotNull { event ->
-                            val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: return@mapNotNull null
-                            event to millis
-                        }
-                if (events.isEmpty()) {
-                    return@map entity
-                }
-                val closest =
-                    events.minWithOrNull(
-                        compareBy({ abs(it.second - nowMillis) }, { AirEventKind.rank(it.first.kind) }),
-                    ) ?: return@map entity
-                val (closestEvent, closestMillis) = closest
-                val next = events.filter { it.second > nowMillis }.minByOrNull { it.second }
-                entity.copy(
-                    weekday = TimeUtils.cstWeekdayOfEpoch(closestMillis),
-                    nextEpisode = closestEvent.episode,
-                    nextEpisodeAtUtc = next?.first?.airAtUtc ?: "",
-                    nextEpisodeKind = next?.first?.kind ?: closestEvent.kind,
-                )
-            }
-        scheduleDao.insertSchedules(reconciled)
+    private fun mapCalendarSubjectToEntity(
+        subject: Subject,
+        officialWeekday: Int,
+        existing: AirScheduleEntity?,
+    ): AirScheduleEntity =
+        if (existing == null) {
+            createInitialScheduleEntity(subject, officialWeekday)
+        } else {
+            mergeScheduleEntity(subject, officialWeekday, existing)
+        }
+
+    private fun createInitialScheduleEntity(
+        subject: Subject,
+        officialWeekday: Int,
+    ): AirScheduleEntity =
+        AirScheduleEntity(
+            bgmId = subject.id,
+            title = subject.name,
+            titleCn = subject.nameCn,
+            coverUrl = (subject.images?.bestImage.orEmpty()).replace("http://", "https://"),
+            ratingScore = subject.rating?.score ?: 0.0,
+            beginUtc = subject.airDate,
+            weekday = officialWeekday,
+            timeCst = "",
+            timeJst = "",
+            sitesJson = "[]",
+            anilistId = null,
+            broadcastRule = "",
+            totalEpisodes = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes.takeIf { it > 0 } ?: 0,
+            source = AirScheduleEntity.SOURCE_OFFICIAL,
+            nextEpisode = 0,
+            nextEpisodeAtUtc = "",
+            nextEpisodeKind = "",
+            updatedAt = 0L,
+        )
+
+    private fun mergeScheduleEntity(
+        subject: Subject,
+        officialWeekday: Int,
+        existing: AirScheduleEntity,
+    ): AirScheduleEntity {
+        val coverUrl = (subject.images?.bestImage.orEmpty()).replace("http://", "https://")
+        val titleCn = subject.nameCn.ifBlank { existing.titleCn }
+        val beginUtc = existing.beginUtc.takeIf { it.isNotBlank() } ?: subject.airDate
+        val totalEpisodes =
+            subject.eps.takeIf { it > 0 }
+                ?: subject.totalEpisodes.takeIf { it > 0 }
+                ?: existing.totalEpisodes
+
+        return existing.copy(
+            title = subject.name,
+            titleCn = titleCn,
+            coverUrl = coverUrl,
+            ratingScore = subject.rating?.score ?: 0.0,
+            beginUtc = beginUtc,
+            weekday = officialWeekday,
+            totalEpisodes = totalEpisodes,
+            source = AirScheduleEntity.SOURCE_OFFICIAL,
+        )
     }
 
     override suspend fun getScheduleDefaultOnlyWatching(): Boolean =

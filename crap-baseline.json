@@ -4,18 +4,5 @@
   "version": 1,
   "updatedAt": "2026-09-09T08:00:00Z",
   "threshold": 30.0,
-  "methods": [
-    {
-      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
-      "method": "syncAirEvents",
-      "cc": 43,
-      "reason": "多数据源时刻表与单集事件仲裁聚合核心，负责 UTC 时间推导、跨季偏移仲裁与未来窗口生成。"
-    },
-    {
-      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
-      "method": "refreshSchedules",
-      "cc": 40,
-      "reason": "官方全星期日历批量处理、实体去重、增量覆盖与元数据整合。"
-    }
-  ]
+  "methods": []
 }
