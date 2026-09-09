@@ -13,6 +13,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
+import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
@@ -60,6 +61,10 @@ object BgmHttpClient {
             install(ContentNegotiation) {
                 json(jsonConfig)
             }
+            install(ContentEncoding) {
+                gzip()
+                deflate()
+            }
             install(HttpTimeout) {
                 requestTimeoutMillis = 15000
                 connectTimeoutMillis = 15000
@@ -73,7 +78,11 @@ object BgmHttpClient {
                 retryOnExceptionIf { _, cause ->
                     cause !is CancellationException
                 }
-                exponentialDelay()
+                exponentialDelay(
+                    base = 2.0,
+                    maxDelayMs = 15000,
+                    randomizationMs = 500,
+                )
             }
             val networkLogger = bgmLogger("Bgm/Network")
             install(Logging) {
