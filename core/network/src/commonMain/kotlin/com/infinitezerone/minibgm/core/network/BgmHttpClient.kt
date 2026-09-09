@@ -140,6 +140,11 @@ object BgmHttpClient {
                         -> throw BgmNetworkException.ServerError(response.status.value)
                     }
                 }
+                handleResponseExceptionWithRequest { cause, _ ->
+                    if (cause is CancellationException) return@handleResponseExceptionWithRequest
+                    if (cause is BgmNetworkException) return@handleResponseExceptionWithRequest
+                    throw cause.toBgmNetworkException()
+                }
             }
         }
         return engine?.let { HttpClient(it) { bgmConfiguration() } }
