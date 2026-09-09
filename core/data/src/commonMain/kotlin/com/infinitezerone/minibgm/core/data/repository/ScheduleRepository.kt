@@ -527,10 +527,10 @@ class ScheduleRepositoryImpl(
 
     /**
      * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
-     * 仅对 coverUrl 为空的条目平滑顺序调用官方接口（避免并发突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
+     * 仅对 coverUrl 为空的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
      */
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
-        val missing = schedules.filter { it.coverUrl.isBlank() }
+        val missing = schedules.filter { it.coverUrl.isBlank() }.take(5)
         if (missing.isEmpty()) return schedules
 
         val metadataByBgmId =
