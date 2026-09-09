@@ -228,4 +228,3 @@ class BgmHttpClientAuthTest {
             assertEquals(2, attempts)
         }
 }
-
