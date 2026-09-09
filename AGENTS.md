@@ -25,11 +25,12 @@ Equally binding, but enforced by build config or code structure rather than the 
 
 ```bash
 ./gradlew :core:testing:testAndroid           # architecture redlines (ArchitectureRulesTest) — run always
+./gradlew crapCheck                           # CRAP score quality gate (KMP modules <= 30.0)
 ./gradlew spotlessCheck                       # ktlint + whitespace gate (spotlessApply to auto-fix)
 ./gradlew :core:network:testAndroid           # KMP module unit tests; substitute a touched KMP module
 ./gradlew :core:navigation:testDebugUnitTest  # Android-only module unit tests; substitute a touched Android module
 ./gradlew :app:assembleDebug                  # assemble debug APK — also the cross-module compile gate
-./gradlew allTests testDebugUnitTest          # FULL test suite — only for cross-cutting changes (see rule 2)
+./gradlew allTests testDebugUnitTest crapCheck # FULL test suite — only for cross-cutting changes (see rule 2)
 ```
 
 **Rules for AI agents:**

@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "MiniBgm CRAP Score Baseline Technical Debt Ledger. Known high-complexity methods whitelisted until scheduled refactoring.",
+  "version": 1,
+  "updatedAt": "2026-09-09T08:00:00Z",
+  "threshold": 30.0,
+  "methods": [
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
+      "method": "resolveSiteLink",
+      "cc": 31,
+      "reason": "bangumi-data 跨源播放链接与 AniList 网站映射解析，包含繁复的正则匹配与兜底降级链路。"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
+      "method": "syncAirEvents",
+      "cc": 43,
+      "reason": "多数据源时刻表与单集事件仲裁聚合核心，负责 UTC 时间推导、跨季偏移仲裁与未来窗口生成。"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
+      "method": "refreshSchedules",
+      "cc": 40,
+      "reason": "官方全星期日历批量处理、实体去重、增量覆盖与元数据整合。"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/common/BgmUrlParser",
+      "method": "parse",
+      "cc": 31,
+      "reason": "Bangumi 各种历史域名（bgm.tv / bangumi.tv / chii.in）与短链变体的全量正则路由解析（单测覆盖率 > 97%）。"
+    }
+  ]
+}

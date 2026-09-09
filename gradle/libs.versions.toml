@@ -25,6 +25,7 @@ androidxWork = "2.10.0"
 androidx-core-splashscreen = "1.0.1"
 androidx-glance = "1.2.0"
 kover = "0.9.9"
+kermit = "2.1.0"
 
 [libraries]
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
@@ -86,6 +87,7 @@ androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx"
 androidx-work-testing = { group = "androidx.work", name = "work-testing", version.ref = "androidxWork" }
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "androidx-glance" }
 androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "androidx-glance" }
+touchlab-kermit = { group = "co.touchlab", name = "kermit", version.ref = "kermit" }
 
 # Gradle Plugin Artifacts for build-logic
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
@@ -118,4 +120,5 @@ minibgm-android-application-compose = { id = "minibgm.android.application.compos
 minibgm-android-library = { id = "minibgm.android.library", version = "unspecified" }
 minibgm-android-library-compose = { id = "minibgm.android.library.compose", version = "unspecified" }
 minibgm-android-feature = { id = "minibgm.android.feature", version = "unspecified" }
+minibgm-crap-check = { id = "minibgm.crap.check", version = "unspecified" }
 

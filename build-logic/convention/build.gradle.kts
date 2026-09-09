@@ -43,5 +43,9 @@ gradlePlugin {
             id = "minibgm.android.feature"
             implementationClass = "com.infinitezerone.minibgm.AndroidFeatureConventionPlugin"
         }
+        register("crapCheck") {
+            id = "minibgm.crap.check"
+            implementationClass = "com.infinitezerone.minibgm.crap.CrapCheckPlugin"
+        }
     }
 }
