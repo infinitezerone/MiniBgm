@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 
 class SubjectRepositoryImplTest {
     private class FakeSubjectDao : SubjectDao {
-        private val subjectsFlow = MutableStateFlow<Map<Long, SubjectEntity>>(emptyMap())
+        val subjectsFlow = MutableStateFlow<Map<Long, SubjectEntity>>(emptyMap())
 
         override fun getSubjectById(id: Long): Flow<SubjectEntity?> = subjectsFlow.map { it[id] }
 
@@ -381,6 +381,10 @@ class SubjectRepositoryImplTest {
             assertEquals(50, streamSubject.collection?.doing)
             assertEquals(1, streamSubject.tags.size)
             assertEquals("异世界", streamSubject.tags[0].name)
+
+            val storedEntity = subjectDao.subjectsFlow.value[528828L]
+            kotlin.test.assertNotNull(storedEntity)
+            assertTrue(storedEntity.updatedAt > 0L)
         }
 
     @Test
@@ -396,6 +400,7 @@ class SubjectRepositoryImplTest {
 
             val result = repo.fetchSubjectDetail(528828L)
             assertIs<AppResult.Error>(result)
+            assertTrue(result.message.startsWith("获取条目详情失败"))
         }
 
     @Test

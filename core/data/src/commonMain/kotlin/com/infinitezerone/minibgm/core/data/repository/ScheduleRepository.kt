@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SiteLink
@@ -19,6 +20,7 @@ import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -98,30 +100,46 @@ class ScheduleRepositoryImpl(
         val titles = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
         val storedEvents = airEventDao.getUpcomingEvents(subjectIds, fromIso, toIso)
         if (storedEvents.isNotEmpty()) {
-            return storedEvents
-                // 同话多源去重：actual/scheduled 优先于 predicted
-                .groupBy { it.subjectId to it.episode }
-                .map { (_, sameEpisode) ->
-                    sameEpisode.minWithOrNull(
-                        compareBy(
-                            { AirEventKind.rank(it.kind) },
-                            { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE },
-                        ),
-                    )!!
-                }.sortedWith(compareBy { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE })
-                .mapNotNull { event ->
-                    val subject = titles[event.subjectId] ?: return@mapNotNull null
-                    UpcomingAiring(
-                        subjectId = event.subjectId,
-                        title = subject.title,
-                        titleCn = subject.titleCn,
-                        episode = event.episode,
-                        airAtUtc = event.airAtUtc,
-                        kind = event.kind,
-                        coverUrl = subject.coverUrl,
-                    )
-                }
+            return resolveFromStoredEvents(storedEvents, titles)
         }
+        return resolveFromSchedulesFallback(subjectIds, titles, nowMillis, hoursAhead, lookbackHours)
+    }
+
+    private fun resolveFromStoredEvents(
+        storedEvents: List<AirEventEntity>,
+        titles: Map<Long, AirScheduleEntity>,
+    ): List<UpcomingAiring> =
+        storedEvents
+            // 同话多源去重：actual/scheduled 优先于 predicted
+            .groupBy { it.subjectId to it.episode }
+            .map { (_, sameEpisode) ->
+                sameEpisode.minWithOrNull(
+                    compareBy(
+                        { AirEventKind.rank(it.kind) },
+                        { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE },
+                    ),
+                )!!
+            }.sortedWith(compareBy { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE })
+            .mapNotNull { event ->
+                val subject = titles[event.subjectId] ?: return@mapNotNull null
+                UpcomingAiring(
+                    subjectId = event.subjectId,
+                    title = subject.title,
+                    titleCn = subject.titleCn,
+                    episode = event.episode,
+                    airAtUtc = event.airAtUtc,
+                    kind = event.kind,
+                    coverUrl = subject.coverUrl,
+                )
+            }
+
+    private fun resolveFromSchedulesFallback(
+        subjectIds: List<Long>,
+        titles: Map<Long, AirScheduleEntity>,
+        nowMillis: Long,
+        hoursAhead: Long,
+        lookbackHours: Long,
+    ): List<UpcomingAiring> {
         // 快速路径：若 air_events 暂无事件，直接根据 air_schedules 单表实体秒级生成
         val fromMillis = nowMillis - lookbackHours * HOUR_MILLIS
         val toMillis = nowMillis + hoursAhead * HOUR_MILLIS
@@ -153,7 +171,7 @@ class ScheduleRepositoryImpl(
                 runCatching { apiService.getCalendar() }.getOrNull() ?: emptyList()
 
             if (calendarDays.isEmpty()) {
-                return AppResult.Error(IllegalStateException("Failed to load official schedule calendar"))
+                return AppResult.Error(IllegalStateException("获取官方放送日历失败，请稍后重试"))
             }
 
             // 2. 读取本地已有的缓存实体，复用已同步好的播放源与时刻（0 次 CDN 请求）
@@ -176,7 +194,7 @@ class ScheduleRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e)
+            AppResult.Error(e, e.toUserFriendlyMessage("同步官方放送日历"))
         }
 
     override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> =
@@ -215,7 +233,7 @@ class ScheduleRepositoryImpl(
                         etag = currentEtag,
                     )
                 }.getOrElse { throwable ->
-                    return AppResult.Error(throwable)
+                    return AppResult.Error(throwable, throwable.toUserFriendlyMessage("同步番组数据"))
                 }
 
             if (bangumiDataResult is BangumiDataResult.Success) {
@@ -227,69 +245,9 @@ class ScheduleRepositoryImpl(
 
                 val bgmMap = itemsWithId.associateBy { it.bgmSubjectId!! }
 
-                // ① 增强既有条目：话源、中文名、时刻，并回填 AniList ID 与周播规则
-                val enriched =
-                    existingEntities.map { entity ->
-                        val dataItem = bgmMap[entity.bgmId] ?: return@map entity
-                        val siteLinks = dataItem.sites.mapNotNull { s -> resolveSiteLink(s) }
-                        val rule = dataItem.broadcast.ifBlank { entity.broadcastRule }
-                        val begin = dataItem.begin.ifBlank { entity.beginUtc }
-                        val (calcEp, calcAirUtc) = calculateNextEpisode(begin, rule, entity.totalEpisodes, now)
-                        entity.copy(
-                            titleCn = entity.titleCn.ifBlank { dataItem.chineseTitle },
-                            beginUtc = begin,
-                            timeCst = TimeUtils.formatToCstTime(begin).ifBlank { entity.timeCst },
-                            timeJst = TimeUtils.formatToJstTime(begin).ifBlank { entity.timeJst },
-                            sitesJson = json.encodeToString(siteLinks),
-                            anilistId =
-                                entity.anilistId
-                                    ?: dataItem.sites
-                                        .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                                        ?.id
-                                        ?.toLongOrNull(),
-                            broadcastRule = rule,
-                            nextEpisode = if (calcEp > 0) calcEp else entity.nextEpisode,
-                            nextEpisodeAtUtc = calcAirUtc.ifBlank { entity.nextEpisodeAtUtc },
-                            nextEpisodeKind = if (calcAirUtc.isNotBlank()) AirEventKind.SCHEDULED else entity.nextEpisodeKind,
-                        )
-                    }
-
-                // ② 新增合并：官方日历不收录的网络独播番（如 Re:Zero 夺还篇），
-                //    begin 在窗口内且带 bgm 条目 ID 的直接入库，消除 roster 缺口
+                val enriched = enrichExistingEntities(existingEntities, bgmMap, now)
                 val existingIds = existingEntities.map { it.bgmId }.toSet()
-                val windowStart = now - ROSTER_LOOKBACK_DAYS * DAY_MILLIS
-                val windowEnd = now + ROSTER_AHEAD_DAYS * DAY_MILLIS
-                val inserted =
-                    itemsWithId.mapNotNull { item ->
-                        val bgmId = item.bgmSubjectId!!
-                        if (existingIds.contains(bgmId)) return@mapNotNull null
-                        val beginMillis = TimeUtils.epochMillisOfIso(item.begin) ?: return@mapNotNull null
-                        if (beginMillis < windowStart || beginMillis > windowEnd) return@mapNotNull null
-                        val ruleStart = TimeUtils.parseBroadcastRule(item.broadcast)?.first ?: beginMillis
-                        val (nextEp, nextEpUtc) = calculateNextEpisode(item.begin, item.broadcast, 0, now)
-                        AirScheduleEntity(
-                            bgmId = bgmId,
-                            title = item.title,
-                            titleCn = item.chineseTitle,
-                            coverUrl = "",
-                            ratingScore = 0.0,
-                            beginUtc = item.begin,
-                            weekday = TimeUtils.jstWeekdayOfEpoch(ruleStart),
-                            timeCst = TimeUtils.formatToCstTime(item.begin),
-                            timeJst = TimeUtils.formatToJstTime(item.begin),
-                            sitesJson = json.encodeToString(item.sites.mapNotNull { s -> resolveSiteLink(s) }),
-                            anilistId =
-                                item.sites
-                                    .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                                    ?.id
-                                    ?.toLongOrNull(),
-                            broadcastRule = item.broadcast,
-                            source = AirScheduleEntity.SOURCE_BGM_DATA,
-                            nextEpisode = nextEp,
-                            nextEpisodeAtUtc = nextEpUtc,
-                            nextEpisodeKind = if (nextEpUtc.isNotBlank()) AirEventKind.SCHEDULED else "",
-                        )
-                    }
+                val inserted = createNewEntitiesFromBangumiData(itemsWithId, existingIds, now)
 
                 val allSchedules = enriched + inserted
                 val finalized = enrichMissingMetadata(allSchedules)
@@ -303,8 +261,77 @@ class ScheduleRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e)
+            AppResult.Error(e, e.toUserFriendlyMessage("同步番组数据"))
         }
+
+    private fun enrichExistingEntities(
+        existingEntities: List<AirScheduleEntity>,
+        bgmMap: Map<Long, BangumiDataItem>,
+        now: Long,
+    ): List<AirScheduleEntity> =
+        existingEntities.map { entity ->
+            val dataItem = bgmMap[entity.bgmId] ?: return@map entity
+            val siteLinks = dataItem.sites.mapNotNull { s -> resolveSiteLink(s) }
+            val rule = dataItem.broadcast.ifBlank { entity.broadcastRule }
+            val begin = dataItem.begin.ifBlank { entity.beginUtc }
+            val (calcEp, calcAirUtc) = calculateNextEpisode(begin, rule, entity.totalEpisodes, now)
+            entity.copy(
+                titleCn = entity.titleCn.ifBlank { dataItem.chineseTitle },
+                beginUtc = begin,
+                timeCst = TimeUtils.formatToCstTime(begin).ifBlank { entity.timeCst },
+                timeJst = TimeUtils.formatToJstTime(begin).ifBlank { entity.timeJst },
+                sitesJson = json.encodeToString(siteLinks),
+                anilistId =
+                    entity.anilistId
+                        ?: dataItem.sites
+                            .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
+                            ?.id
+                            ?.toLongOrNull(),
+                broadcastRule = rule,
+                nextEpisode = if (calcEp > 0) calcEp else entity.nextEpisode,
+                nextEpisodeAtUtc = calcAirUtc.ifBlank { entity.nextEpisodeAtUtc },
+                nextEpisodeKind = if (calcAirUtc.isNotBlank()) AirEventKind.SCHEDULED else entity.nextEpisodeKind,
+            )
+        }
+
+    private fun createNewEntitiesFromBangumiData(
+        itemsWithId: List<BangumiDataItem>,
+        existingIds: Set<Long>,
+        now: Long,
+    ): List<AirScheduleEntity> {
+        val windowStart = now - ROSTER_LOOKBACK_DAYS * DAY_MILLIS
+        val windowEnd = now + ROSTER_AHEAD_DAYS * DAY_MILLIS
+        return itemsWithId.mapNotNull { item ->
+            val bgmId = item.bgmSubjectId!!
+            if (existingIds.contains(bgmId)) return@mapNotNull null
+            val beginMillis = TimeUtils.epochMillisOfIso(item.begin) ?: return@mapNotNull null
+            if (beginMillis < windowStart || beginMillis > windowEnd) return@mapNotNull null
+            val ruleStart = TimeUtils.parseBroadcastRule(item.broadcast)?.first ?: beginMillis
+            val (nextEp, nextEpUtc) = calculateNextEpisode(item.begin, item.broadcast, 0, now)
+            AirScheduleEntity(
+                bgmId = bgmId,
+                title = item.title,
+                titleCn = item.chineseTitle,
+                coverUrl = "",
+                ratingScore = 0.0,
+                beginUtc = item.begin,
+                weekday = TimeUtils.jstWeekdayOfEpoch(ruleStart),
+                timeCst = TimeUtils.formatToCstTime(item.begin),
+                timeJst = TimeUtils.formatToJstTime(item.begin),
+                sitesJson = json.encodeToString(item.sites.mapNotNull { s -> resolveSiteLink(s) }),
+                anilistId =
+                    item.sites
+                        .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
+                        ?.id
+                        ?.toLongOrNull(),
+                broadcastRule = item.broadcast,
+                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                nextEpisode = nextEp,
+                nextEpisodeAtUtc = nextEpUtc,
+                nextEpisodeKind = if (nextEpUtc.isNotBlank()) AirEventKind.SCHEDULED else "",
+            )
+        }
+    }
 
     /**
      * 同步全量条目的播出事件并仲裁时刻表：

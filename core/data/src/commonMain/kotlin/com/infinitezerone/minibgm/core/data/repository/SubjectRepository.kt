@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.asAppResult
 import com.infinitezerone.minibgm.core.database.dao.EpisodeDao
 import com.infinitezerone.minibgm.core.database.dao.SubjectDao
@@ -19,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.network.BangumiApiService
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -168,13 +170,14 @@ class SubjectRepositoryImpl(
                     collectionOnHold = subject.collection?.onHold ?: 0,
                     collectionDropped = subject.collection?.dropped ?: 0,
                     tagsJson = tagsJson,
+                    updatedAt = TimeUtils.nowEpochMillis(),
                 )
             subjectDao.insertSubject(entity)
             AppResult.Success(subject)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e)
+            AppResult.Error(e, e.toUserFriendlyMessage("获取条目详情"))
         }
 
     override fun getEpisodesStream(subjectId: Long): Flow<List<Episode>> =
@@ -219,24 +222,41 @@ class SubjectRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e)
+            AppResult.Error(e, e.toUserFriendlyMessage("获取剧集列表"))
         }
 
     override suspend fun fetchCharacters(subjectId: Long): AppResult<List<SubjectCharacter>> =
-        asAppResult { apiService.getSubjectCharacters(subjectId) }
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取角色列表") }) {
+            apiService.getSubjectCharacters(subjectId)
+        }
 
-    override suspend fun fetchCharacterDetail(id: Long): AppResult<CharacterDetail> = asAppResult { apiService.getCharacter(id) }
+    override suspend fun fetchCharacterDetail(id: Long): AppResult<CharacterDetail> =
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取角色详情") }) {
+            apiService.getCharacter(id)
+        }
 
     override suspend fun fetchCharacterSubjects(id: Long): AppResult<List<RelatedWork>> =
-        asAppResult { apiService.getCharacterSubjects(id) }
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取角色参演作品") }) {
+            apiService.getCharacterSubjects(id)
+        }
 
     override suspend fun fetchPersons(subjectId: Long): AppResult<List<SubjectPerson>> =
-        asAppResult { apiService.getSubjectPersons(subjectId) }
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取演职员列表") }) {
+            apiService.getSubjectPersons(subjectId)
+        }
 
-    override suspend fun fetchPersonDetail(id: Long): AppResult<PersonDetail> = asAppResult { apiService.getPerson(id) }
+    override suspend fun fetchPersonDetail(id: Long): AppResult<PersonDetail> =
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取演职员详情") }) {
+            apiService.getPerson(id)
+        }
 
-    override suspend fun fetchPersonSubjects(id: Long): AppResult<List<RelatedWork>> = asAppResult { apiService.getPersonSubjects(id) }
+    override suspend fun fetchPersonSubjects(id: Long): AppResult<List<RelatedWork>> =
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取演职员作品") }) {
+            apiService.getPersonSubjects(id)
+        }
 
     override suspend fun fetchRelations(subjectId: Long): AppResult<List<SubjectRelation>> =
-        asAppResult { apiService.getSubjectRelations(subjectId) }
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取关联作品") }) {
+            apiService.getSubjectRelations(subjectId)
+        }
 }

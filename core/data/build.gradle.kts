@@ -21,6 +21,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
         }
+        androidMain.dependencies {
+            implementation(libs.koin.android)
+        }
         // androidHostTest 源集由 AGP KMP 插件在 finalizeDsl 阶段按需创建，
         // 用 matching+configureEach 惰性匹配，避免脚本求值期源集尚不存在
         matching { it.name == "androidHostTest" }.configureEach {
