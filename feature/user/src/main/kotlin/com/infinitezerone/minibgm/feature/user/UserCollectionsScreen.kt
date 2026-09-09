@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,6 +85,7 @@ fun UserCollectionsScreen(
         onTypeSelect = viewModel::selectType,
         onFilterSelect = viewModel::selectSubjectFilter,
         onRefresh = viewModel::refresh,
+        onLoadMore = viewModel::loadMore,
         onSubjectClick = onSubjectClick,
         onBackClick = onBackClick,
         onIncrementProgress = viewModel::incrementEpisodeProgress,
@@ -107,6 +109,7 @@ fun UserCollectionsContent(
     onTypeSelect: (CollectionType) -> Unit,
     onFilterSelect: (CollectionSubjectFilter) -> Unit,
     onRefresh: () -> Unit,
+    onLoadMore: (CollectionType) -> Unit = {},
     onSubjectClick: (Long) -> Unit,
     onBackClick: () -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
@@ -197,6 +200,24 @@ fun UserCollectionsContent(
                 val isPageLoading = uiState.loadingTypes.contains(pageType)
                 val isPageLoaded = uiState.collectionsByType.containsKey(pageType)
                 val pageError = uiState.errorByType[pageType] ?: uiState.error
+                val isPageLoadingMore = uiState.loadingMoreTypes.contains(pageType)
+                val pageHasMore = uiState.hasMoreByType[pageType] ?: false
+                val listState = listStates[page]
+
+                // 触底加载监听：滑动到列表末尾（倒数第 3 项以内）且有更多数据时自动触发增量加载
+                LaunchedEffect(listState, pageHasMore, isPageLoadingMore) {
+                    if (!pageHasMore || isPageLoadingMore) return@LaunchedEffect
+                    snapshotFlow {
+                        val layoutInfo = listState.layoutInfo
+                        val totalItems = layoutInfo.totalItemsCount
+                        val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        totalItems > 0 && lastVisibleItemIndex >= totalItems - 3
+                    }.collect { shouldLoadMore ->
+                        if (shouldLoadMore) {
+                            onLoadMore(pageType)
+                        }
+                    }
+                }
 
                 PullToRefreshBox(
                     isRefreshing = uiState.isRefreshing && uiState.selectedType == pageType,
@@ -223,7 +244,7 @@ fun UserCollectionsContent(
 
                         else -> {
                             LazyColumn(
-                                state = listStates[page],
+                                state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -238,6 +259,36 @@ fun UserCollectionsContent(
                                         onSubjectClick = onSubjectClick,
                                         onIncrementProgress = { onIncrementProgress(item) },
                                     )
+                                }
+
+                                if (isPageLoadingMore) {
+                                    item(key = "load_more_indicator") {
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 16.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp,
+                                            )
+                                        }
+                                    }
+                                } else if (!pageHasMore && pageCollections.size >= 50) {
+                                    item(key = "no_more_footer") {
+                                        Text(
+                                            text = "— 已加载全部收藏 —",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            textAlign = TextAlign.Center,
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 16.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
