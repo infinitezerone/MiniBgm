@@ -12,11 +12,13 @@ import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -70,16 +72,24 @@ class UserViewModel(
     private val isRefreshingFlow = MutableStateFlow(false)
     private val collectionCountsFlow = MutableStateFlow<Map<CollectionType, Int>>(emptyMap())
     private val isCountsLoadingFlow = MutableStateFlow(false)
+    private var lastLoadedUserId: Long? = null
+    private var countsJob: Job? = null
 
     init {
         viewModelScope.launch {
-            authRepository.activeProfile.collect { profile ->
-                if (profile != null) {
-                    refreshCollectionCounts(profile)
-                } else {
-                    collectionCountsFlow.value = emptyMap()
+            authRepository.activeProfile
+                .distinctUntilChanged { old, new -> old?.id == new?.id && old?.username == new?.username }
+                .collect { profile ->
+                    if (profile != null) {
+                        if (lastLoadedUserId != profile.id || collectionCountsFlow.value.isEmpty()) {
+                            lastLoadedUserId = profile.id
+                            refreshCollectionCounts(profile, force = false)
+                        }
+                    } else {
+                        lastLoadedUserId = null
+                        collectionCountsFlow.value = emptyMap()
+                    }
                 }
-            }
         }
     }
 
@@ -156,7 +166,7 @@ class UserViewModel(
                     }
                     val currentProfile = (profileRes as? AppResult.Success)?.data ?: uiState.value.activeProfile
                     if (currentProfile != null) {
-                        refreshCollectionCounts(currentProfile)
+                        refreshCollectionCounts(currentProfile, force = true)
                     }
                     collectionRepository.syncWatchingCollections()
                 }
@@ -171,29 +181,30 @@ class UserViewModel(
         }
     }
 
-    /** 刷新活跃用户的五大收藏分类条目总数（真实 Bangumi 远端统计） */
-    fun refreshCollectionCounts(profile: UserProfile? = null) {
+    /** 刷新活跃用户的五大收藏分类条目总数（真实 Bangumi 远端统计汇总） */
+    fun refreshCollectionCounts(
+        profile: UserProfile? = null,
+        force: Boolean = false,
+    ) {
         val currentProfile = profile ?: uiState.value.activeProfile ?: return
         val username = currentProfile.username.ifBlank { currentProfile.id.toString() }
         if (username.isBlank() || username == "0") return
 
-        viewModelScope.launch {
-            isCountsLoadingFlow.value = true
-            try {
-                val newCounts = mutableMapOf<CollectionType, Int>()
-                // 逐个平滑请求 5 大分类计数，避免瞬间并发轰炸触发 429 限流；
-                // 每次获取成功即时更新 Flow，UI 呈现递增动效，消除长时间白屏/转圈
-                for (type in CollectionType.entries) {
-                    val res = collectionRepository.fetchCollectionCount(username, type)
+        if (!force && countsJob?.isActive == true) return
+
+        countsJob?.cancel()
+        countsJob =
+            viewModelScope.launch {
+                isCountsLoadingFlow.value = true
+                try {
+                    val res = collectionRepository.fetchCollectionCounts(username, force = force)
                     if (res is AppResult.Success) {
-                        newCounts[type] = res.data
-                        collectionCountsFlow.value = newCounts.toMap()
+                        collectionCountsFlow.value = res.data
                     }
+                } finally {
+                    isCountsLoadingFlow.value = false
                 }
-            } finally {
-                isCountsLoadingFlow.value = false
             }
-        }
     }
 
     fun setSyncInterval(interval: SyncInterval) {

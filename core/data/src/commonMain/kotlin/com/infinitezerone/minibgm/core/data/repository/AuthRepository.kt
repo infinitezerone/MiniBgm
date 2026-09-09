@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -77,12 +78,14 @@ class AuthRepositoryImpl(
     override val isLoggedIn: Flow<Boolean> =
         tokenProvider.activeUserId
             .map { it != null }
+            .distinctUntilChanged()
 
     override val activeProfile: Flow<UserProfile?> =
         combine(
             tokenProvider.activeUserId,
             userPreferences.userPreferences,
         ) { userId, prefs -> userId?.let { prefs.savedProfiles[it] } }
+            .distinctUntilChanged()
 
     override val savedAccounts: Flow<List<UserProfile>> =
         userPreferences.userPreferences.map { it.allProfiles }
