@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.core.datastore
 
-import android.util.Base64
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +11,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 /** 密文 blob 的持久化格式：文件内容是 Base64 字符串，加解密与校验都在 [AuthTokensDataSource] 内完成 */
 internal object AuthBlobSerializer : Serializer<String> {
@@ -70,7 +71,14 @@ class AuthTokensDataSource(
     suspend fun saveTokens(
         accessToken: String,
         refreshToken: String,
-    ) = saveTokens(0L, accessToken, refreshToken)
+    ) {
+        val current = currentState()
+        val targetUserId =
+            current.activeUserId.takeIf { it != 0L }
+                ?: current.accounts.keys.firstOrNull()
+                ?: 0L
+        saveTokens(targetUserId, accessToken, refreshToken)
+    }
 
     suspend fun setActiveUser(userId: Long) {
         val current = currentState()
@@ -106,19 +114,21 @@ class AuthTokensDataSource(
         return state.accounts[state.activeUserId] ?: state.accounts.values.firstOrNull()
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     private suspend fun saveState(state: AuthTokensState) {
         val json = Json.encodeToString(AuthTokensState.serializer(), state)
-        val blob = Base64.encodeToString(crypto.encrypt(json.encodeToByteArray()), Base64.NO_WRAP)
+        val blob = Base64.Default.encode(crypto.encrypt(json.encodeToByteArray()))
         dataStore.updateData { blob }
     }
 
     /** 密文损坏（如跨设备恢复后无法解密）时按"未登录"处理，避免崩溃循环 */
+    @OptIn(ExperimentalEncodingApi::class)
     private fun decodeState(blob: String): AuthTokensState? =
         if (blob.isBlank()) {
             null
         } else {
             runCatching {
-                val plain = crypto.decrypt(Base64.decode(blob, Base64.NO_WRAP)).decodeToString()
+                val plain = crypto.decrypt(Base64.Default.decode(blob.trim())).decodeToString()
                 val state = Json.decodeFromString(AuthTokensState.serializer(), plain)
                 if (state.accounts.isEmpty() && state.accessToken.isNotBlank()) {
                     val legacy = AccountTokens(state.accessToken, state.refreshToken, state.activeUserId)

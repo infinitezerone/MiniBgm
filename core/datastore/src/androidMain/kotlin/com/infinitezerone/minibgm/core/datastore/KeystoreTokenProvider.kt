@@ -24,6 +24,13 @@ class KeystoreTokenProvider(
         authTokens.saveTokens(userId, accessToken, refreshToken)
     }
 
+    override suspend fun saveTokens(
+        accessToken: String,
+        refreshToken: String,
+    ) {
+        authTokens.saveTokens(accessToken, refreshToken)
+    }
+
     override suspend fun setActiveUser(userId: Long) {
         authTokens.setActiveUser(userId)
     }

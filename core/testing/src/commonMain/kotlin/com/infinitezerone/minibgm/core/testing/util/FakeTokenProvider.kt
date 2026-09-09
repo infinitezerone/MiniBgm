@@ -28,6 +28,14 @@ class FakeTokenProvider(
         uidFlow.value = userId
     }
 
+    override suspend fun saveTokens(
+        accessToken: String,
+        refreshToken: String,
+    ) {
+        val targetId = uidFlow.value ?: 0L
+        saveTokens(targetId, accessToken, refreshToken)
+    }
+
     override suspend fun setActiveUser(userId: Long) {
         uidFlow.value = userId
     }

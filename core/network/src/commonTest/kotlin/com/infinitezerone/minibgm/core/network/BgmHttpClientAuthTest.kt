@@ -54,6 +54,15 @@ class BgmHttpClientAuthTest {
             saveCount++
         }
 
+        override suspend fun saveTokens(
+            accessToken: String,
+            refreshToken: String,
+        ) {
+            this.accessToken = accessToken
+            this.refreshToken = refreshToken
+            saveCount++
+        }
+
         override suspend fun setActiveUser(userId: Long) = Unit
 
         override suspend fun removeTokens(userId: Long) {

@@ -2,6 +2,9 @@ package com.infinitezerone.minibgm
 
 import android.app.Application
 import android.content.ComponentCallbacks2
+import co.touchlab.kermit.Logger
+import co.touchlab.kermit.Severity
+import co.touchlab.kermit.platformLogWriter
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -33,6 +36,12 @@ class MiniBgmApp :
 
     override fun onCreate() {
         super.onCreate()
+
+        // 初始化统一日志门面（Kermit）：统一挂载 Android 平台日志输出器（Logcat）
+        // Debug 开启 Debug 级别便于联调追踪；Release 提升至 Warn 级别杜绝信息泄漏与性能损耗
+        Logger.setLogWriters(platformLogWriter())
+        Logger.setMinSeverity(if (BuildConfig.DEBUG) Severity.Debug else Severity.Warn)
+
         startKoin {
             // release 下仅记录错误，避免 DI 结构信息进入公共日志
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.ERROR)
