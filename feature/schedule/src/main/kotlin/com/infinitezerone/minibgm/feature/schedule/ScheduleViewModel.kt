@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -202,6 +203,7 @@ class ScheduleViewModel(
     private val userCollectionsFlow =
         collectionRepository
             .getCollectionsByTypeStream(CollectionType.DOING)
+            .distinctUntilChanged()
 
     // 本地乐观更新追番状态缓存：subjectId -> isWatching (true: 加入在看, false: 移出在看)
     private val optimisticWatching = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
@@ -227,7 +229,7 @@ class ScheduleViewModel(
                 }
             }
             finalWatchingIds to collectionMap
-        }
+        }.distinctUntilChanged()
 
     private val filterFlow =
         combine(selectedWeekday, onlyWatching) { weekday, onlyWatch ->

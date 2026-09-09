@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
+import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.UserCollectionPageResponse
@@ -35,6 +36,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -180,6 +182,10 @@ class CollectionRepositoryImplTest {
         val updateCollectionCalls = mutableListOf<UpdateCollectionCall>()
         val updateEpisodeCalls = mutableListOf<UpdateEpisodeCall>()
         var episodesToReturn: List<com.infinitezerone.minibgm.core.model.Episode> = emptyList()
+        var shouldThrowOnUpdateCollection = false
+        var shouldThrowOnUpdateEpisode = false
+        var onBeforeUpdateCollection: (suspend () -> Unit)? = null
+        var onBeforeUpdateEpisode: (suspend () -> Unit)? = null
 
         override suspend fun getEpisodes(
             subjectId: Long,
@@ -216,6 +222,10 @@ class CollectionRepositoryImplTest {
             private: Boolean,
             epStatus: Int?,
         ) {
+            onBeforeUpdateCollection?.invoke()
+            if (shouldThrowOnUpdateCollection) {
+                throw BgmNetworkException.ServerError(500, "Mock server error")
+            }
             updateCollectionCalls.add(UpdateCollectionCall(subjectId, type, rate, comment, private, epStatus))
         }
 
@@ -224,6 +234,10 @@ class CollectionRepositoryImplTest {
             episodeId: Long,
             type: Int,
         ) {
+            onBeforeUpdateEpisode?.invoke()
+            if (shouldThrowOnUpdateEpisode) {
+                throw BgmNetworkException.ServerError(500, "Mock server error")
+            }
             updateEpisodeCalls.add(UpdateEpisodeCall(subjectId, episodeId, type))
         }
     }
@@ -709,6 +723,177 @@ class CollectionRepositoryImplTest {
             assertTrue(
                 harness.dao.stored.value
                     .isEmpty(),
+            )
+        }
+
+    @Test
+    fun updateCollectionStatus_remoteFailure_rollsBackOptimisticWrite() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+            harness.api.shouldThrowOnUpdateCollection = true
+
+            // 情况 1：原本本地无记录，远端失败后应完全删除本地乐观插入的记录
+            val result1 =
+                harness.repository.updateCollectionStatus(
+                    subjectId = 100L,
+                    type = com.infinitezerone.minibgm.core.model.CollectionType.DOING,
+                )
+            assertIs<AppResult.Error>(result1)
+            assertNull(
+                harness.dao.stored.value
+                    .firstOrNull { it.subjectId == 100L },
+            )
+
+            // 情况 2：原本本地已有记录（例如想看 WISH，epStatus = 0），远端失败后应回滚到原快照
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = com.infinitezerone.minibgm.core.model.CollectionType.WISH.value,
+                    epStatus = 0,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            val result2 =
+                harness.repository.updateCollectionStatus(
+                    subjectId = 100L,
+                    type = com.infinitezerone.minibgm.core.model.CollectionType.DOING,
+                    epStatus = 5,
+                )
+            assertIs<AppResult.Error>(result2)
+            val restored =
+                harness.dao.stored.value
+                    .firstOrNull { it.subjectId == 100L }
+            assertNotNull(restored)
+            assertEquals(com.infinitezerone.minibgm.core.model.CollectionType.WISH.value, restored.type)
+            assertEquals(0, restored.epStatus)
+        }
+
+    @Test
+    fun updateEpisodeStatus_remoteFailure_rollsBackOptimisticWrite() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+            harness.api.shouldThrowOnUpdateEpisode = true
+
+            // 情况 1：原本本地无记录，打卡失败回滚后删除乐观数据
+            val result1 =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1001L,
+                    isWatched = true,
+                    epNumber = 1,
+                )
+            assertIs<AppResult.Error>(result1)
+            assertNull(
+                harness.dao.stored.value
+                    .firstOrNull { it.subjectId == 100L },
+            )
+
+            // 情况 2：原本已有进度 epStatus = 2，打卡第 3 集失败回滚至原快照
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = com.infinitezerone.minibgm.core.model.CollectionType.DOING.value,
+                    epStatus = 2,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            val result2 =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1003L,
+                    isWatched = true,
+                    epNumber = 3,
+                )
+            assertIs<AppResult.Error>(result2)
+            val restored =
+                harness.dao.stored.value
+                    .firstOrNull { it.subjectId == 100L }
+            assertNotNull(restored)
+            assertEquals(2, restored.epStatus)
+        }
+
+    @Test
+    fun updateEpisodeStatus_optimisticWrite_immediatelyUpdatesLocalBeforeRemote() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val originalEntity =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = com.infinitezerone.minibgm.core.model.CollectionType.DOING.value,
+                    epStatus = 2,
+                    updatedAt = "2026-09-08T00:00:00Z",
+                )
+            harness.dao.insertCollection(originalEntity)
+
+            var observedOptimisticStatusDuringRemote: Int? = null
+            harness.api.onBeforeUpdateEpisode = {
+                // 在远端请求执行期间检查 Room 数据库，验证 Stage 1 乐观写入已生效
+                observedOptimisticStatusDuringRemote =
+                    harness.dao.stored.value
+                        .firstOrNull { it.subjectId == 100L }
+                        ?.epStatus
+            }
+
+            val result =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1003L,
+                    isWatched = true,
+                    epNumber = 3,
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            assertEquals(3, observedOptimisticStatusDuringRemote)
+            assertEquals(
+                3,
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+                    .epStatus,
+            )
+        }
+
+    @Test
+    fun updateEpisodeStatus_accountSwitchDuringInFlightRequest_bindsToOriginalActiveUid() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            // 请求发出前是用户 42
+            harness.api.onBeforeUpdateEpisode = {
+                // 模拟在打卡网络请求途中切换账号到 999
+                harness.tokenProvider.saveTokens(999L, "at2", "rt2")
+            }
+
+            val result =
+                harness.repository.updateEpisodeStatus(
+                    subjectId = 100L,
+                    episodeId = 1001L,
+                    isWatched = true,
+                    epNumber = 1,
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 写入的实体必须归属于发起操作时的活跃账号 42，严禁污染新账号 999
+            val stored42 =
+                harness.dao.stored.value
+                    .firstOrNull { it.userId == 42L && it.subjectId == 100L }
+            assertNotNull(stored42)
+            assertEquals(1, stored42.epStatus)
+            assertNull(
+                harness.dao.stored.value
+                    .firstOrNull { it.userId == 999L },
             )
         }
 }
