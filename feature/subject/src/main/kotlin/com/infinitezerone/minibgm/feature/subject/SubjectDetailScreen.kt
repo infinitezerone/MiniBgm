@@ -148,6 +148,14 @@ fun SubjectDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val subjectType = uiState.subject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
     var selectedTab by rememberSaveable { mutableStateOf(SubjectDetailTab.EPISODES) }
+
+    LaunchedEffect(selectedTab) {
+        when (selectedTab) {
+            SubjectDetailTab.EPISODES -> Unit
+            SubjectDetailTab.DETAILS -> viewModel.loadDetailsTabIfNeeded()
+            SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded()
+        }
+    }
     var isGridView by rememberSaveable { mutableStateOf(true) }
     var showCollectionSheet by rememberSaveable { mutableStateOf(false) }
     var selectedEpisodeForDetail by remember { mutableStateOf<Episode?>(null) }
@@ -225,7 +233,14 @@ fun SubjectDetailScreen(
     ) { innerPadding ->
         PullToRefreshBox(
             isRefreshing = uiState.isLoading && uiState.subject != null,
-            onRefresh = viewModel::refresh,
+            onRefresh = {
+                viewModel.refresh()
+                when (selectedTab) {
+                    SubjectDetailTab.EPISODES -> Unit
+                    SubjectDetailTab.DETAILS -> viewModel.loadDetailsTabIfNeeded(force = true)
+                    SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
+                }
+            },
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -476,6 +491,24 @@ fun SubjectDetailScreen(
                                         )
                                     }
 
+                                    if (uiState.isDetailsLoading &&
+                                        uiState.relations.isEmpty() &&
+                                        uiState.characters.isEmpty() &&
+                                        uiState.persons.isEmpty()
+                                    ) {
+                                        item(key = "details_loading_indicator") {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.dp,
+                                                )
+                                            }
+                                        }
+                                    }
+
                                     if (uiState.relations.isNotEmpty()) {
                                         item(key = "relations_section") {
                                             RelationsSection(
@@ -516,6 +549,7 @@ fun SubjectDetailScreen(
                                             onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                             topics = uiState.subjectTopics,
                                             onUrlClick = handleLinkClick,
+                                            isLoading = uiState.isCommunityLoading,
                                         )
                                     }
                                 }
