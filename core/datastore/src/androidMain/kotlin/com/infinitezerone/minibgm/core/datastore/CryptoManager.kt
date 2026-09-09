@@ -8,6 +8,13 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+/** 加解密抽象接口，隔离底层实现以支持 JVM/Host 单元测试 */
+interface CryptoManager {
+    fun encrypt(plain: ByteArray): ByteArray
+
+    fun decrypt(blob: ByteArray): ByteArray
+}
+
 /**
  * AndroidKeyStore 硬件密钥 + AES-256-GCM。
  *
@@ -15,16 +22,16 @@ import javax.crypto.spec.GCMParameterSpec
  * 泄漏面收敛为"本机 + 本 app 沙箱"。
  * 输出格式：IV(12B) || ciphertext+tag。
  */
-class CryptoManager {
+class AndroidCryptoManager : CryptoManager {
     private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
 
-    fun encrypt(plain: ByteArray): ByteArray {
+    override fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, getOrCreateKey()) }
         val ciphertext = cipher.doFinal(plain)
         return cipher.iv + ciphertext
     }
 
-    fun decrypt(blob: ByteArray): ByteArray {
+    override fun decrypt(blob: ByteArray): ByteArray {
         require(blob.size > IV_SIZE_BYTES) { "加密数据长度非法" }
         val iv = blob.copyOf(IV_SIZE_BYTES)
         val ciphertext = blob.copyOfRange(IV_SIZE_BYTES, blob.size)

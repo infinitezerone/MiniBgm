@@ -37,6 +37,11 @@ class BgmTokenServiceTest {
             refreshToken: String,
         ) = Unit
 
+        override suspend fun saveTokens(
+            accessToken: String,
+            refreshToken: String,
+        ) = Unit
+
         override suspend fun setActiveUser(userId: Long) = Unit
 
         override suspend fun removeTokens(userId: Long) = Unit

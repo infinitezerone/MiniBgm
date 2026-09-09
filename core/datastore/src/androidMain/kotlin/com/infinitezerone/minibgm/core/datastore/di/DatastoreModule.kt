@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
 import com.infinitezerone.minibgm.core.common.TokenProvider
+import com.infinitezerone.minibgm.core.datastore.AndroidCryptoManager
 import com.infinitezerone.minibgm.core.datastore.AuthBlobSerializer
 import com.infinitezerone.minibgm.core.datastore.AuthTokensDataSource
 import com.infinitezerone.minibgm.core.datastore.CryptoManager
@@ -26,7 +27,7 @@ val datastoreModule =
             UserPreferencesDataSource(userPrefsDataStore)
         }
 
-        single { CryptoManager() }
+        single<CryptoManager> { AndroidCryptoManager() }
 
         // OAuth token 独立加密存储；损坏时按未登录处理（典型场景：备份恢复到新设备，Keystore 密钥不可迁移）
         single<AuthTokensDataSource> {

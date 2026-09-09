@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.network
 
 import com.infinitezerone.minibgm.core.common.TokenProvider
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngine
@@ -12,7 +13,6 @@ import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.logging.DEFAULT
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
@@ -63,8 +63,14 @@ object BgmHttpClient {
                 connectTimeoutMillis = 15000
                 socketTimeoutMillis = 15000
             }
+            val networkLogger = bgmLogger("Bgm/Network")
             install(Logging) {
-                logger = Logger.DEFAULT
+                logger =
+                    object : Logger {
+                        override fun log(message: String) {
+                            networkLogger.d { message }
+                        }
+                    }
                 level = if (enableLogging) LogLevel.INFO else LogLevel.NONE
             }
             install(DefaultRequest) {

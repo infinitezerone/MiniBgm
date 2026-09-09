@@ -17,10 +17,11 @@ interface TokenProvider {
         refreshToken: String,
     )
 
+    /** 更新当前活跃账号的 token（用于 401 自动刷新等不知道用户 ID 的场景） */
     suspend fun saveTokens(
         accessToken: String,
         refreshToken: String,
-    ) = saveTokens(0L, accessToken, refreshToken)
+    )
 
     suspend fun setActiveUser(userId: Long)
 
