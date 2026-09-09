@@ -293,6 +293,60 @@ class SubjectDetailViewModel(
         }
     }
 
+    /**
+     * 批量标记观看进度至目标话数（看到本集）。
+     * 将本集及之前的所有常规单集批量打卡，并更新条目观看进度与收藏状态。
+     */
+    fun markWatchedUpTo(targetEpisode: Episode) {
+        val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
+        val previousCollection = _uiState.value.collection
+        val currentEp = previousCollection?.epStatus ?: 0
+        val newEpStatus = maxOf(currentEp, targetEpNumber)
+
+        val targetType =
+            if (previousCollection == null || previousCollection.type == 0 || previousCollection.type == CollectionType.WISH.value) {
+                CollectionType.DOING.value
+            } else {
+                previousCollection.type
+            }
+
+        val optimisticCollection =
+            previousCollection?.copy(
+                epStatus = newEpStatus,
+                type = targetType,
+            ) ?: UserCollection(
+                userId = 0L,
+                subjectId = subjectId,
+                subjectType = _uiState.value.subject?.type ?: 2,
+                rate = 0,
+                type = targetType,
+                comment = "",
+                epStatus = newEpStatus,
+                volStatus = 0,
+                updatedAt = "",
+            )
+        _uiState.update { it.copy(collection = optimisticCollection, error = null) }
+
+        val targetEpisodeIds =
+            _uiState.value.episodes
+                .filter { ep ->
+                    val num = if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()
+                    num in 1..targetEpNumber
+                }.map { it.id }
+
+        viewModelScope.launch {
+            val result =
+                collectionRepository.markEpisodesWatchedUpTo(
+                    subjectId = subjectId,
+                    epNumber = targetEpNumber,
+                    episodeIds = targetEpisodeIds,
+                )
+            result.onError { _, message ->
+                _uiState.update { it.copy(collection = previousCollection, error = message) }
+            }
+        }
+    }
+
     /** 按需加载单集吐槽（带本地内存缓存，避免重复网络请求） */
     fun loadEpisodeComments(episodeId: Long) {
         if (_uiState.value.episodeComments.containsKey(episodeId)) return

@@ -629,4 +629,36 @@ class SubjectDetailViewModelTest {
             viewModel.loadDetailsTabIfNeeded(force = true)
             assertEquals(2, charCalls)
         }
+
+    @Test
+    fun markWatchedUpTo_optimisticallyUpdatesProgressAndCallsRepository() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepository = FakeCollectionRepository()
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                )
+            testScheduler.advanceUntilIdle()
+
+            // 针对第 3 话触发「看到本集」
+            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 3 }
+            viewModel.markWatchedUpTo(targetEp)
+
+            // 验证乐观更新状态
+            val state = viewModel.uiState.value
+            assertEquals(3, state.collection?.epStatus)
+            assertEquals(CollectionType.DOING.value, state.collection?.type)
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, collectionRepository.markEpisodesWatchedUpToCallCount)
+        }
 }
