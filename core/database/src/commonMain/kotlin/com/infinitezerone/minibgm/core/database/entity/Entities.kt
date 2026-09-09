@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.database.entity
 
 import androidx.room3.Entity
+import androidx.room3.Index
 import androidx.room3.PrimaryKey
 
 @Entity(tableName = "subjects")
@@ -27,7 +28,10 @@ data class SubjectEntity(
     val updatedAt: Long = 0L,
 )
 
-@Entity(tableName = "episodes")
+@Entity(
+    tableName = "episodes",
+    indices = [Index(value = ["subjectId"])],
+)
 data class EpisodeEntity(
     @PrimaryKey val id: Long,
     val subjectId: Long,
@@ -98,6 +102,7 @@ data class AirEventEntity(
 @Entity(
     tableName = "user_collections",
     primaryKeys = ["userId", "subjectId"],
+    indices = [Index(value = ["userId", "type"])],
 )
 data class UserCollectionEntity(
     val userId: Long,
