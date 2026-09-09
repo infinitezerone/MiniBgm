@@ -32,6 +32,13 @@ import org.koin.dsl.module
 
 val dataModule =
     module {
+        single<CollectionRepository> {
+            CollectionRepositoryImpl(
+                apiService = get<BangumiApiService>(),
+                userCollectionDao = get<UserCollectionDao>(),
+                tokenProvider = get<TokenProvider>(),
+            )
+        }
         single<ScheduleRepository> {
             ScheduleRepositoryImpl(
                 apiService = get<BangumiApiService>(),
@@ -40,6 +47,7 @@ val dataModule =
                 airEventDao = get<AirEventDao>(),
                 anilistService = get<AniListService>(),
                 userPreferences = get<UserPreferencesDataSource>(),
+                collectionRepository = getOrNull<CollectionRepository>(),
             )
         }
         single<SubjectRepository> {
@@ -47,13 +55,6 @@ val dataModule =
                 apiService = get<BangumiApiService>(),
                 subjectDao = get<SubjectDao>(),
                 episodeDao = get<EpisodeDao>(),
-            )
-        }
-        single<CollectionRepository> {
-            CollectionRepositoryImpl(
-                apiService = get<BangumiApiService>(),
-                userCollectionDao = get<UserCollectionDao>(),
-                tokenProvider = get<TokenProvider>(),
             )
         }
         single<SearchRepository> {
