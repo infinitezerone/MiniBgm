@@ -19,6 +19,8 @@ class FakeCollectionRepository : CollectionRepository {
         private set
     var updateEpisodeCallCount: Int = 0
         private set
+    var markEpisodesWatchedUpToCallCount: Int = 0
+        private set
     var syncWatchingResult: AppResult<Unit>? = null
     var syncWatchingCallCount: Int = 0
         private set
@@ -51,7 +53,8 @@ class FakeCollectionRepository : CollectionRepository {
                 (type == null || col.type == type.value) &&
                     (subjectType == 0 || col.subjectType == subjectType)
             }
-        return AppResult.Success(filtered)
+        val paged = if (limit > 0) filtered.drop(offset).take(limit) else filtered
+        return AppResult.Success(paged)
     }
 
     override suspend fun fetchCollectionCount(
@@ -116,6 +119,30 @@ class FakeCollectionRepository : CollectionRepository {
         epNumber: Int,
     ): AppResult<Unit> {
         updateEpisodeCallCount++
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun markEpisodesWatchedUpTo(
+        subjectId: Long,
+        epNumber: Int,
+        episodeIds: List<Long>,
+    ): AppResult<Unit> {
+        markEpisodesWatchedUpToCallCount++
+        val current = collectionsState.value[subjectId]
+        val updated =
+            current?.copy(
+                epStatus = maxOf(current.epStatus, epNumber),
+                type = if (current.type == 0 || current.type == CollectionType.WISH.value) CollectionType.DOING.value else current.type,
+            ) ?: UserCollection(
+                userId = 0L,
+                subjectId = subjectId,
+                subjectType = 2,
+                type = CollectionType.DOING.value,
+                rate = 0,
+                comment = "",
+                epStatus = epNumber,
+            )
+        collectionsState.value = collectionsState.value + (subjectId to updated)
         return AppResult.Success(Unit)
     }
 

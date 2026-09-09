@@ -139,6 +139,18 @@ interface BangumiApiService {
     )
 
     /**
+     * 批量修改当前登录用户对多个章节的打卡状态（PATCH /v0/users/-/collections/{subject_id}/episodes）。
+     */
+    suspend fun updateEpisodesStatus(
+        subjectId: Long,
+        episodeIds: List<Long>,
+        type: Int,
+    ) {
+        if (episodeIds.isEmpty()) return
+        updateEpisodeStatus(subjectId, episodeIds.first(), type)
+    }
+
+    /**
      * 获取指定用户的全量条目收藏状态与分类统计（GET /user/{username}/collections/status?app_id={clientId}）。
      *
      * 该接口单次请求即可返回所有大类（动画、书籍、音乐、游戏、三次元）及各状态的统计。
@@ -285,9 +297,18 @@ class BangumiApiServiceImpl(
         episodeId: Long,
         type: Int,
     ) {
+        updateEpisodesStatus(subjectId, listOf(episodeId), type)
+    }
+
+    override suspend fun updateEpisodesStatus(
+        subjectId: Long,
+        episodeIds: List<Long>,
+        type: Int,
+    ) {
+        if (episodeIds.isEmpty()) return
         client.patch("$baseUrl/v0/users/-/collections/$subjectId/episodes") {
             contentType(ContentType.Application.Json)
-            setBody(EpisodeStatusUpdateBody(episode_id = listOf(episodeId), type = type))
+            setBody(EpisodeStatusUpdateBody(episode_id = episodeIds, type = type))
         }
     }
 

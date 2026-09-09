@@ -590,6 +590,9 @@ fun SubjectDetailScreen(
                 val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
                 viewModel.toggleEpisodeWatched(episode.id, watched, epNumber)
             },
+            onMarkWatchedUpTo = { episode ->
+                viewModel.markWatchedUpTo(episode)
+            },
             onUrlClick = handleLinkClick,
         )
     }

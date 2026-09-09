@@ -80,6 +80,17 @@ interface CollectionRepository : UserDataClearable {
     ): AppResult<Unit>
 
     /**
+     * 批量更新单集观看进度至目标话数（看到此集）。
+     * 将小于等于目标话数的单集批量标记为已看过（status = 2）。
+     * [episodeIds] 为要更新的单集 ID 列表；若为空，内部尝试从远端单集列表解析。
+     */
+    suspend fun markEpisodesWatchedUpTo(
+        subjectId: Long,
+        epNumber: Int,
+        episodeIds: List<Long> = emptyList(),
+    ): AppResult<Unit>
+
+    /**
      * 登录会话建立后，把云端「在看」（动画类）收藏全量分页同步进本地 Room。
      * 时刻表「我追的」、待补更新、桌面小组件与开播提醒均消费本地收藏流，
      * 本地无数据即表现为「没有在追的番」，故会话建立时必须先执行本同步。
@@ -358,7 +369,98 @@ class CollectionRepositoryImpl(
             }
         }
 
-    private fun computeTargetType(
+    override suspend fun markEpisodesWatchedUpTo(
+        subjectId: Long,
+        epNumber: Int,
+        episodeIds: List<Long>,
+    ): AppResult<Unit> =
+        withContext(NonCancellable) {
+            val activeUid = tokenProvider.activeUserId.first()
+            if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
+
+            // 1. 本地历史快照（绑定不可变的当前 activeUid）
+            val localPrevious = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+
+            // 2. 本地优先：计算乐观状态并立即写入 Room，全应用零延迟响应
+            val optimisticType = computeTargetType(localPrevious?.type ?: 0, isWatched = true)
+            val optimisticEpStatus = maxOf(localPrevious?.epStatus ?: 0, epNumber)
+
+            userCollectionDao.insertCollection(
+                UserCollectionEntity(
+                    userId = activeUid,
+                    subjectId = subjectId,
+                    subjectType = localPrevious?.subjectType ?: 2,
+                    type = optimisticType,
+                    epStatus = optimisticEpStatus,
+                    updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
+                ),
+            )
+
+            try {
+                // 3. 解析需要打卡的单集 ID 列表
+                val targetEpisodeIds =
+                    if (episodeIds.isNotEmpty()) {
+                        episodeIds
+                    } else {
+                        val episodes = apiService.getEpisodes(subjectId).data
+                        episodes
+                            .filter { (it.ep.toInt() in 1..epNumber) || (it.sort.toInt() in 1..epNumber) }
+                            .map { it.id }
+                    }
+
+                // 4. 远端批量打卡（支持自愈：条目未收录时先加入在看）
+                val previousType = localPrevious?.type ?: 0
+                val isInCollection = previousType > 0 && previousType != CollectionType.WISH.value
+                if (!isInCollection) {
+                    try {
+                        apiService.updateCollection(subjectId, optimisticType)
+                    } catch (_: Exception) {
+                        // 忽略创建在看失败，后续单集打卡如报 404 将在 catch 中触发自愈
+                    }
+                }
+
+                if (targetEpisodeIds.isNotEmpty()) {
+                    try {
+                        apiService.updateEpisodesStatus(
+                            subjectId = subjectId,
+                            episodeIds = targetEpisodeIds,
+                            type = 2,
+                        )
+                    } catch (e: BgmNetworkException.NotFound) {
+                        // 自愈：条目在云端未收录，先加入在看再重试打卡
+                        apiService.updateCollection(subjectId, optimisticType)
+                        apiService.updateEpisodesStatus(
+                            subjectId = subjectId,
+                            episodeIds = targetEpisodeIds,
+                            type = 2,
+                        )
+                    }
+                }
+
+                // 5. 远端打卡成功后，写入最终对齐状态
+                userCollectionDao.insertCollection(
+                    UserCollectionEntity(
+                        userId = activeUid,
+                        subjectId = subjectId,
+                        subjectType = localPrevious?.subjectType ?: 2,
+                        type = optimisticType,
+                        epStatus = optimisticEpStatus,
+                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
+                    ),
+                )
+                collectionCountsCache.clear()
+                AppResult.Success(Unit)
+            } catch (e: CancellationException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                throw e
+            } catch (e: BgmNetworkException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                AppResult.Error(e, "批量打卡失败：${e.message}")
+            } catch (e: Exception) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                AppResult.Error(e, "批量打卡异常：${e.message}")
+            }
+        }
         existingType: Int,
         isWatched: Boolean,
     ): Int =

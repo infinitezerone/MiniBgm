@@ -57,6 +57,7 @@ fun EpisodeDetailBottomSheet(
     onLoadComments: () -> Unit,
     onDismiss: () -> Unit,
     onToggleWatched: (episode: Episode, isWatched: Boolean) -> Unit,
+    onMarkWatchedUpTo: (episode: Episode) -> Unit = {},
     onUrlClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -212,19 +213,56 @@ fun EpisodeDetailBottomSheet(
                     Text(text = "已看过 · 点击取消打卡")
                 }
             } else {
-                Button(
-                    onClick = {
-                        onToggleWatched(episode, true)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "标记为看过 (打卡)")
+                val epNum = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                if (epNum > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = {
+                                onToggleWatched(episode, true)
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "标记此集")
+                        }
+                        FilledTonalButton(
+                            onClick = {
+                                onMarkWatchedUpTo(episode)
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "看到本集")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            onToggleWatched(episode, true)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "标记为看过 (打卡)")
+                    }
                 }
             }
 
