@@ -144,4 +144,9 @@ object TimeUtils {
             ""
         }
     }
+
+    fun currentCstYearMonth(): Pair<Int, Int> {
+        val local = Clock.System.now().toLocalDateTime(timeZoneCst)
+        return local.year to local.monthNumber
+    }
 }
