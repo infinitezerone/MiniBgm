@@ -55,6 +55,19 @@ private val MIGRATION_2_3 =
         }
     }
 
+/** v3 → v4：给 episodes.subjectId 与 user_collections.(userId, type) 增加索引，杜绝全表扫描 */
+private val MIGRATION_3_4 =
+    object : Migration(3, 4) {
+        override suspend fun migrate(connection: SQLiteConnection) {
+            listOf(
+                "CREATE INDEX IF NOT EXISTS `index_episodes_subjectId` ON `episodes` (`subjectId`)",
+                "CREATE INDEX IF NOT EXISTS `index_user_collections_userId_type` ON `user_collections` (`userId`, `type`)",
+            ).forEach { sql ->
+                connection.prepare(sql).use { it.step() }
+            }
+        }
+    }
+
 val databaseModule =
     module {
         single {
@@ -63,7 +76,7 @@ val databaseModule =
                     androidContext(),
                     BgmDatabase::class.java,
                     "minibgm.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }

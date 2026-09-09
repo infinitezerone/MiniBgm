@@ -21,7 +21,7 @@ import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
         UserCollectionEntity::class,
         AirEventEntity::class,
     ],
-    version = 3,
+    version = 4,
     // 导出 schema JSON 到 core/database/schemas（KmpRoomConventionPlugin 已配 schemaDirectory），
     // 为后续 Migration 提供可审计的迁移历史
     exportSchema = true,
