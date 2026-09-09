@@ -16,12 +16,6 @@
       "method": "refreshSchedules",
       "cc": 40,
       "reason": "官方全星期日历批量处理、实体去重、增量覆盖与元数据整合。"
-    },
-    {
-      "class": "com/infinitezerone/minibgm/core/common/BgmUrlParser",
-      "method": "parse",
-      "cc": 31,
-      "reason": "Bangumi 各种历史域名（bgm.tv / bangumi.tv / chii.in）与短链变体的全量正则路由解析（单测覆盖率 > 97%）。"
     }
   ]
 }

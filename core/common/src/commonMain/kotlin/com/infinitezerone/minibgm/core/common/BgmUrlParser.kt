@@ -66,76 +66,60 @@ object BgmUrlParser {
         val trimmed = rawUrl.trim()
         if (trimmed.isEmpty()) return BgmLink.External(rawUrl)
 
-        // 统一提取路径（去掉 query 参数和 hash 锚点）
-        val path: String
-        val isBangumiDomain: Boolean
+        val path = extractBgmPath(trimmed) ?: return BgmLink.External(trimmed)
+        return matchBgmLink(path) ?: BgmLink.External(trimmed)
+    }
 
-        when {
-            // 相对路径：如 /subject/12345
-            trimmed.startsWith("/") && !trimmed.startsWith("//") -> {
-                isBangumiDomain = true
-                path = extractPath(trimmed)
+    private fun extractBgmPath(trimmed: String): String? {
+        if (trimmed.startsWith("/") && !trimmed.startsWith("//")) {
+            return extractPath(trimmed)
+        }
+        val fullUrl =
+            when {
+                trimmed.startsWith("//") -> "https:$trimmed"
+                trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+                isBgmDomainPrefix(trimmed) -> "https://$trimmed"
+                else -> return null
             }
-            // 协议相对链接：如 //bgm.tv/subject/12345
-            trimmed.startsWith("//") -> {
-                val fullUrl = "https:$trimmed"
-                isBangumiDomain = checkIsBgmDomain(fullUrl)
-                path = if (isBangumiDomain) extractPathFromAbsolute(fullUrl) else ""
-            }
-            // 带有 scheme：http:// 或 https://
-            trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true) -> {
-                isBangumiDomain = checkIsBgmDomain(trimmed)
-                path = if (isBangumiDomain) extractPathFromAbsolute(trimmed) else ""
-            }
-            // 无 scheme 域名开头：如 bgm.tv/subject/12345
-            isBgmDomainPrefix(trimmed) -> {
-                val fullUrl = "https://$trimmed"
-                isBangumiDomain = true
-                path = extractPathFromAbsolute(fullUrl)
-            }
-            else -> {
-                return BgmLink.External(trimmed)
-            }
-        }
+        if (!checkIsBgmDomain(fullUrl)) return null
+        val path = extractPathFromAbsolute(fullUrl)
+        return path.ifEmpty { null }
+    }
 
-        if (!isBangumiDomain || path.isEmpty()) {
-            return BgmLink.External(trimmed)
-        }
+    private fun matchBgmLink(path: String): BgmLink? =
+        parseSubject(path)
+            ?: parseCharacter(path)
+            ?: parsePerson(path)
+            ?: parseEpisode(path)
+            ?: parseTopic(path)
+            ?: parseUser(path)
 
-        // 解析匹配各类资源
-        SUBJECT_REGEX.matchEntire(path)?.let { match ->
-            val id = match.groupValues[1].toLongOrNull()
-            if (id != null && id > 0) return BgmLink.Subject(id)
-        }
+    private fun parsePositiveId(
+        match: MatchResult,
+        group: Int = 1,
+    ): Long? = match.groupValues[group].toLongOrNull()?.takeIf { it > 0 }
 
-        CHARACTER_REGEX.matchEntire(path)?.let { match ->
-            val id = match.groupValues[1].toLongOrNull()
-            if (id != null && id > 0) return BgmLink.Character(id)
-        }
+    private fun parseSubject(path: String): BgmLink? = SUBJECT_REGEX.matchEntire(path)?.let { parsePositiveId(it)?.let(BgmLink::Subject) }
 
-        PERSON_REGEX.matchEntire(path)?.let { match ->
-            val id = match.groupValues[1].toLongOrNull()
-            if (id != null && id > 0) return BgmLink.Person(id)
-        }
+    private fun parseCharacter(path: String): BgmLink? =
+        CHARACTER_REGEX.matchEntire(path)?.let { parsePositiveId(it)?.let(BgmLink::Character) }
 
-        EPISODE_REGEX.matchEntire(path)?.let { match ->
-            val id = match.groupValues[1].toLongOrNull()
-            if (id != null && id > 0) return BgmLink.Episode(id)
-        }
+    private fun parsePerson(path: String): BgmLink? = PERSON_REGEX.matchEntire(path)?.let { parsePositiveId(it)?.let(BgmLink::Person) }
 
+    private fun parseEpisode(path: String): BgmLink? = EPISODE_REGEX.matchEntire(path)?.let { parsePositiveId(it)?.let(BgmLink::Episode) }
+
+    private fun parseTopic(path: String): BgmLink? =
         TOPIC_REGEX.matchEntire(path)?.let { match ->
+            val id = parsePositiveId(match, 3) ?: return null
             val type = match.groupValues[1].ifBlank { match.groupValues[2] }.ifBlank { "subject" }
-            val id = match.groupValues[3].toLongOrNull()
-            if (id != null && id > 0) return BgmLink.Topic(topicId = id, type = type)
+            BgmLink.Topic(topicId = id, type = type)
         }
 
+    private fun parseUser(path: String): BgmLink? =
         USER_REGEX.matchEntire(path)?.let { match ->
             val username = match.groupValues[1]
-            if (username.isNotBlank()) return BgmLink.User(username)
+            username.takeIf { it.isNotBlank() }?.let(BgmLink::User)
         }
-
-        return BgmLink.External(trimmed)
-    }
 
     /**
      * 将识别出的 [BgmLink] 格式化为原生简洁可读的展示文案
