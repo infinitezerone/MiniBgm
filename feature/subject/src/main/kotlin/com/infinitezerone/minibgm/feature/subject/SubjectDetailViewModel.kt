@@ -24,6 +24,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -63,19 +64,15 @@ class SubjectDetailViewModel(
     init {
         // 先拉取条目详情与章节（写入本地库）；错误仅转为文案，不中断流程
         refresh()
-        // 订阅本地库流：fetch 写库后由 Flow 合并进 UiState（数据库为单一数据源）
+        // 订阅本地库流：fetch 写库后由 combine 单一流合并进 UiState（单一数据源，防止分散并发派发导致重组风暴）
         viewModelScope.launch {
-            subjectRepository.getSubjectStream(subjectId).collect { subject ->
-                _uiState.update { it.copy(subject = subject) }
-            }
-        }
-        viewModelScope.launch {
-            subjectRepository.getEpisodesStream(subjectId).collect { episodes ->
-                _uiState.update { it.copy(episodes = episodes) }
-            }
-        }
-        viewModelScope.launch {
-            collectionRepository.getCollectionStream(subjectId).collect { localCollection ->
+            combine(
+                subjectRepository.getSubjectStream(subjectId),
+                subjectRepository.getEpisodesStream(subjectId),
+                collectionRepository.getCollectionStream(subjectId),
+            ) { subject, episodes, localCollection ->
+                Triple(subject, episodes, localCollection)
+            }.collect { (subject, episodes, localCollection) ->
                 _uiState.update { state ->
                     val mergedCollection =
                         if (localCollection == null) {
@@ -86,7 +83,11 @@ class SubjectDetailViewModel(
                                 epStatus = localCollection.epStatus,
                             ) ?: localCollection
                         }
-                    state.copy(collection = mergedCollection)
+                    state.copy(
+                        subject = subject ?: state.subject,
+                        episodes = episodes,
+                        collection = mergedCollection,
+                    )
                 }
             }
         }
@@ -97,30 +98,19 @@ class SubjectDetailViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
+            // 1. 核心首屏数据优先拉取：条目详情、分集列表、收藏状态（保障用户以最快速度看到主体内容）
             val subjectDeferred = async { subjectRepository.fetchSubjectDetail(subjectId) }
             val episodesDeferred = async { subjectRepository.fetchEpisodes(subjectId) }
             val collectionDeferred = async { collectionRepository.fetchCollection(subjectId) }
-            val charactersDeferred = async { subjectRepository.fetchCharacters(subjectId) }
-            val personsDeferred = async { subjectRepository.fetchPersons(subjectId) }
-            val relationsDeferred = async { subjectRepository.fetchRelations(subjectId) }
-            val subjectCommentsDeferred = async { communityRepository.getSubjectComments(subjectId, limit = 15) }
-            val subjectTopicsDeferred = async { communityRepository.getSubjectTopics(subjectId, limit = 5) }
 
             val subjectResult = subjectDeferred.await()
             val episodesResult = episodesDeferred.await()
             val collectionResult = collectionDeferred.await()
-            val charactersResult = charactersDeferred.await()
-            val personsResult = personsDeferred.await()
-            val relationsResult = relationsDeferred.await()
-            val subjectCommentsResult = subjectCommentsDeferred.await()
-            val subjectTopicsResult = subjectTopicsDeferred.await()
 
             subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
             episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
             collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
 
-            val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
-            val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
             val remoteCollection = (collectionResult as? AppResult.Success)?.data
 
             _uiState.update { current ->
@@ -128,6 +118,27 @@ class SubjectDetailViewModel(
                     isLoading = false,
                     subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
                     collection = remoteCollection ?: current.collection,
+                )
+            }
+
+            // 2. 次级与社区数据并行拉取：角色、人员、关联作品、评论、讨论（削峰防 429 限流）
+            val charactersDeferred = async { subjectRepository.fetchCharacters(subjectId) }
+            val personsDeferred = async { subjectRepository.fetchPersons(subjectId) }
+            val relationsDeferred = async { subjectRepository.fetchRelations(subjectId) }
+            val subjectCommentsDeferred = async { communityRepository.getSubjectComments(subjectId, limit = 15) }
+            val subjectTopicsDeferred = async { communityRepository.getSubjectTopics(subjectId, limit = 5) }
+
+            val charactersResult = charactersDeferred.await()
+            val personsResult = personsDeferred.await()
+            val relationsResult = relationsDeferred.await()
+            val subjectCommentsResult = subjectCommentsDeferred.await()
+            val subjectTopicsResult = subjectTopicsDeferred.await()
+
+            val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
+            val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
+
+            _uiState.update { current ->
+                current.copy(
                     characters = (charactersResult as? AppResult.Success)?.data ?: current.characters,
                     persons = (personsResult as? AppResult.Success)?.data ?: current.persons,
                     relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
