@@ -197,4 +197,35 @@ class BgmHttpClientAuthTest {
             assertEquals(expectedUserAgent, capturedUserAgent)
             assertEquals("application/json", capturedAccept)
         }
+
+    @Test
+    fun `429 限流时自动重试并在成功后返回数据`() =
+        runTest {
+            var attempts = 0
+            val engine =
+                MockEngine {
+                    attempts++
+                    if (attempts == 1) {
+                        respond("", HttpStatusCode.TooManyRequests, headersOf(HttpHeaders.ContentType to listOf("application/json")))
+                    } else {
+                        respond(
+                            """{"id":1}""",
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                        )
+                    }
+                }
+            val client =
+                BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
+                    tokenProvider = FakeTokenProvider(null, null),
+                    engine = engine,
+                )
+
+            val body = client.get("https://api.bgm.tv/v0/subjects/1").bodyAsText()
+
+            assertEquals("""{"id":1}""", body)
+            assertEquals(2, attempts)
+        }
 }
+
