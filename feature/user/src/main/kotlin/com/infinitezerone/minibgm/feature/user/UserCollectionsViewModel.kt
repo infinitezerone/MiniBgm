@@ -44,6 +44,8 @@ data class UserCollectionsUiState(
     val selectedSubjectFilter: CollectionSubjectFilter = CollectionSubjectFilter.ALL,
     val collectionsByType: Map<CollectionType, List<UserCollection>> = emptyMap(),
     val loadingTypes: Set<CollectionType> = emptySet(),
+    val loadingMoreTypes: Set<CollectionType> = emptySet(),
+    val hasMoreByType: Map<CollectionType, Boolean> = emptyMap(),
     val errorByType: Map<CollectionType, String?> = emptyMap(),
     val updatingSubjectIds: Set<Long> = emptySet(),
 ) {
@@ -54,6 +56,14 @@ data class UserCollectionsUiState(
     /** 当前选中分类是否正在加载中 */
     val isCurrentTabLoading: Boolean
         get() = loadingTypes.contains(selectedType) || (isLoading && !collectionsByType.containsKey(selectedType))
+
+    /** 当前选中分类是否正在加载更多 */
+    val isCurrentTabLoadingMore: Boolean
+        get() = loadingMoreTypes.contains(selectedType)
+
+    /** 当前选中分类是否还有更多数据可供加载 */
+    val currentTabHasMore: Boolean
+        get() = hasMoreByType[selectedType] ?: true
 
     /** 当前选中分类是否已经加载完成（哪怕内容为空也是已加载） */
     val isCurrentTabLoaded: Boolean
@@ -90,6 +100,8 @@ class UserCollectionsViewModel(
                         state.copy(
                             collectionsByType = emptyMap(),
                             loadingTypes = emptySet(),
+                            loadingMoreTypes = emptySet(),
+                            hasMoreByType = emptyMap(),
                             errorByType = emptyMap(),
                             error = null,
                         )
@@ -123,6 +135,8 @@ class UserCollectionsViewModel(
                     selectedSubjectFilter = filter,
                     collectionsByType = emptyMap(),
                     loadingTypes = emptySet(),
+                    loadingMoreTypes = emptySet(),
+                    hasMoreByType = emptyMap(),
                     errorByType = emptyMap(),
                     error = null,
                 )
@@ -188,10 +202,12 @@ class UserCollectionsViewModel(
                         type = type,
                         limit = 50,
                     ).onSuccess { data ->
+                        val hasMore = data.size >= 50
                         _uiState.update { state ->
                             val newLoading = state.loadingTypes - type
                             state.copy(
                                 collectionsByType = state.collectionsByType + (type to data),
+                                hasMoreByType = state.hasMoreByType + (type to hasMore),
                                 loadingTypes = newLoading,
                                 errorByType = state.errorByType - type,
                                 error = null,
@@ -212,6 +228,59 @@ class UserCollectionsViewModel(
                         }
                     }
             }
+    }
+
+    /** 触底加载下一页收藏列表（增量追加并自动去重） */
+    fun loadMore(type: CollectionType = _uiState.value.selectedType) {
+        val currentState = _uiState.value
+        if (currentState.loadingTypes.contains(type) || currentState.loadingMoreTypes.contains(type)) return
+        if (currentState.hasMoreByType[type] == false) return
+
+        val currentList = currentState.collectionsByType[type].orEmpty()
+        if (currentList.isEmpty()) return
+
+        _uiState.update { it.copy(loadingMoreTypes = it.loadingMoreTypes + type) }
+
+        viewModelScope.launch {
+            val profile = _uiState.value.activeProfile ?: authRepository.activeProfile.first()
+            if (profile == null) {
+                _uiState.update { it.copy(loadingMoreTypes = it.loadingMoreTypes - type) }
+                return@launch
+            }
+
+            val username =
+                profile.username
+                    .ifBlank { profile.id.toString() }
+                    .takeIf { it.isNotBlank() } ?: profile.id.toString()
+            val subjectType = _uiState.value.selectedSubjectFilter.typeId
+            val offset = currentList.size
+
+            collectionRepository
+                .fetchUserCollections(
+                    username = username,
+                    subjectType = subjectType,
+                    type = type,
+                    limit = 50,
+                    offset = offset,
+                ).onSuccess { data ->
+                    _uiState.update { curState ->
+                        val existing = curState.collectionsByType[type].orEmpty()
+                        val existingIds = existing.map { it.subjectId }.toSet()
+                        val uniqueNewData = data.filterNot { existingIds.contains(it.subjectId) }
+                        val combined = existing + uniqueNewData
+                        val hasMore = data.size >= 50
+                        curState.copy(
+                            collectionsByType = curState.collectionsByType + (type to combined),
+                            hasMoreByType = curState.hasMoreByType + (type to hasMore),
+                            loadingMoreTypes = curState.loadingMoreTypes - type,
+                        )
+                    }
+                }.onError { _, _ ->
+                    _uiState.update { curState ->
+                        curState.copy(loadingMoreTypes = curState.loadingMoreTypes - type)
+                    }
+                }
+        }
     }
 
     fun incrementEpisodeProgress(collection: UserCollection) {

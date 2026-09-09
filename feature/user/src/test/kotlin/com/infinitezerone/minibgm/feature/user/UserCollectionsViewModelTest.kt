@@ -201,4 +201,50 @@ class UserCollectionsViewModelTest {
             assertEquals(sampleUserCollection.subjectId, cachedDoingState.collections.first().subjectId)
             assertEquals(2, collectionRepo.fetchUserCollectionsCallCount)
         }
+
+    @Test
+    fun loadMore_appendsNewCollectionsAndUpdatesPaginationState() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            val collections =
+                (1L..60L).map { id ->
+                    sampleUserCollection.copy(subjectId = id, type = CollectionType.DOING.value)
+                }
+            collections.forEach { collectionRepo.sendCollection(it) }
+
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+
+            val initial = viewModel.uiState.first { it.collections.size == 50 }
+            assertEquals(50, initial.collections.size)
+            assertTrue(initial.currentTabHasMore)
+            assertFalse(initial.isCurrentTabLoadingMore)
+            assertEquals(1, collectionRepo.fetchUserCollectionsCallCount)
+
+            viewModel.loadMore(CollectionType.DOING)
+
+            val loaded = viewModel.uiState.first { it.collections.size == 60 }
+            assertEquals(60, loaded.collections.size)
+            assertFalse(loaded.currentTabHasMore)
+            assertFalse(loaded.isCurrentTabLoadingMore)
+            assertEquals(2, collectionRepo.fetchUserCollectionsCallCount)
+        }
+
+    @Test
+    fun loadMore_whenHasMoreIsFalse_doesNotTriggerFetch() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            val initial = viewModel.uiState.first { it.collections.isNotEmpty() }
+            assertEquals(1, initial.collections.size)
+            assertFalse(initial.currentTabHasMore)
+            assertEquals(1, collectionRepo.fetchUserCollectionsCallCount)
+
+            viewModel.loadMore(CollectionType.DOING)
+            assertEquals(1, collectionRepo.fetchUserCollectionsCallCount)
+        }
 }
