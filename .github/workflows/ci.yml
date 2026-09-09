@@ -48,5 +48,5 @@ jobs:
       # AGP 9 迁移后：KMP 模块测试任务为 testAndroid，全量套件是 allTests（test 仅剩 app/designsystem 空壳）；
       # allTests 是 KMP 聚合任务，不覆盖 Android-only 模块（:app/:feature:*等），
       # 因此根级 testDebugUnitTest 必须同时声明，否则那些模块的单测在 CI 从不执行
-      - name: Spotless + Tests + Assemble
-        run: ./gradlew spotlessCheck allTests testDebugUnitTest assembleDebug --stacktrace
+      - name: Spotless + Tests + CRAP Check + Assemble
+        run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug --stacktrace

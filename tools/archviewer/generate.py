@@ -15,6 +15,8 @@ UI & 连线可辨识度重构：
   python tools/archviewer/generate.py --check  # CI 模式：红线违规返回 1，否则 0
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -157,6 +159,8 @@ def check_rules(modules: dict[str, dict]) -> list[dict]:
                 if f["path"].endswith("ViewModel.kt"):
                     for i, line in enumerate(f["content"].splitlines(), 1):
                         t = line.strip()
+                        if t.startswith("//") or t.startswith("*"):
+                            continue
                         if ("MutableStateFlow" in t) and not t.startswith("private "):
                             if re.search(r"\b(val|var)\s+\w+.*[:=].*MutableStateFlow", t):
                                 add(name, "R4 MVI 单向流", f["path"] + ":" + str(i), f"暴露可变状态流 -> {t}", f["path"])
@@ -193,8 +197,8 @@ def build_data_topology() -> dict:
             "id": "api_calendar", "col": 0, "row": 0, "category": "origin", "icon": "globe",
             "name": "GET /calendar", "sub": "api.bgm.tv (v0)",
             "desc": "官方每周基础日历排期，包含每日番剧 Rank、全站评分与条目元数据。",
-            "modelName": "List<CalendarResponseDto>",
-            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiCalendarApi.kt",
+            "modelName": "List<CalendarDayResponse>",
+            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiApiService.kt",
             "fields": [
                 {"name": "weekday.id", "type": "Int", "desc": "星期序号 (1-7)"},
                 {"name": "items[].id", "type": "Long", "desc": "Bangumi 条目 ID"},
@@ -257,8 +261,8 @@ def build_data_topology() -> dict:
             "id": "cdn_bgm_data", "col": 0, "row": 1, "category": "origin", "icon": "file-json",
             "name": "bgm-data CDN", "sub": "Static Schedule JSON",
             "desc": "全网逐话实时开播时刻与首播时间对齐清单。",
-            "modelName": "ScheduleData (JSON)",
-            "file": "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/ScheduleRepository.kt",
+            "modelName": "BangumiDataResult",
+            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiDataService.kt",
             "fields": [
                 {"name": "bgmId", "type": "Long", "desc": "条目 ID"},
                 {"name": "begin", "type": "String (UTC)", "desc": "准确开播 UTC ISO8601"},
@@ -292,8 +296,8 @@ def build_data_topology() -> dict:
             "id": "api_subject", "col": 0, "row": 2, "category": "origin", "icon": "book-open",
             "name": "GET /v0/subjects/{id}", "sub": "api.bgm.tv (v0)",
             "desc": "番剧条目完整档案：分集、演职员、角色与关系关联图。",
-            "modelName": "SubjectDetailDto",
-            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiSubjectApi.kt",
+            "modelName": "Subject",
+            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiApiService.kt",
             "fields": [
                 {"name": "id", "type": "Long", "desc": "条目唯一标识"},
                 {"name": "summary", "type": "String", "desc": "剧情简介"},
@@ -328,9 +332,9 @@ def build_data_topology() -> dict:
         },
         {
             "id": "vm_subject", "col": 3, "row": 2, "category": "vm", "icon": "film",
-            "name": "SubjectDetailViewModel", "sub": "StateFlow<SubjectUiState>",
+            "name": "SubjectDetailViewModel", "sub": "StateFlow<SubjectDetailUiState>",
             "desc": "聚合条目详情、分集列表、收藏打卡进度与角色列表，提供 0 延迟乐观打卡。",
-            "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectViewModel.kt",
+            "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailViewModel.kt",
             "modelName": "SubjectDetailUiState",
             "fields": [
                 {"name": "subject", "type": "SubjectDetail?", "desc": "条目详情实体"},
@@ -344,7 +348,7 @@ def build_data_topology() -> dict:
             "id": "ui_subject_screen", "col": 4, "row": 2, "category": "ui", "icon": "smartphone",
             "name": "SubjectDetailScreen", "sub": "Compose Screen",
             "desc": "番剧详情、单集气泡网格打卡、收藏状态 BottomSheet、角色声优横向滚动栏。",
-            "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectScreen.kt",
+            "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt",
             "storyIds": ["subject_detail"],
         },
 
@@ -353,8 +357,8 @@ def build_data_topology() -> dict:
             "id": "api_collection", "col": 0, "row": 3, "category": "origin", "icon": "bookmark-check",
             "name": "GET /users/.../collections", "sub": "api.bgm.tv (v0)",
             "desc": "用户个人收藏档案：想看/在看/看过等状态与单集观看进度。",
-            "modelName": "PagedResult<UserCollectionDto>",
-            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiCollectionApi.kt",
+            "modelName": "UserCollectionPageResponse",
+            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiApiService.kt",
             "fields": [
                 {"name": "subject_id", "type": "Long", "desc": "关联条目 ID"},
                 {"name": "type", "type": "Int", "desc": "收藏分类 (1:想看, 2:看过, 3:在看)"},
@@ -497,8 +501,8 @@ def build_data_topology() -> dict:
             "id": "api_community", "col": 0, "row": 6, "category": "origin", "icon": "message-square",
             "name": "Next API /p1/topics", "sub": "next.bgm.tv",
             "desc": "社区热门讨论、条目吐槽以及楼层评论数据。",
-            "modelName": "List<TopicDto> & List<CommentDto>",
-            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiCommunityApi.kt",
+            "modelName": "List<EpisodeComment> / SubjectTopicPage",
+            "file": "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BangumiCommunityService.kt",
             "fields": [
                 {"name": "topic.title", "type": "String", "desc": "讨论主题"},
                 {"name": "comment.content", "type": "String (BBCode)", "desc": "BBCode 回复富文本"},
@@ -520,7 +524,7 @@ def build_data_topology() -> dict:
             "id": "vm_explore", "col": 3, "row": 6, "category": "vm", "icon": "compass",
             "name": "ExploreViewModel", "sub": "StateFlow<ExploreUiState>",
             "desc": "聚合当季最高分与社区最热话题，驱动发现页双列瀑布流。",
-            "file": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ExploreViewModel.kt",
+            "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModel.kt",
             "modelName": "ExploreUiState",
             "fields": [
                 {"name": "rankingItems", "type": "List<RankingItem>", "desc": "榜单排行"},
@@ -532,7 +536,7 @@ def build_data_topology() -> dict:
             "id": "ui_explore_screen", "col": 4, "row": 6, "category": "ui", "icon": "smartphone",
             "name": "ExploreScreen", "sub": "Compose Screen",
             "desc": "排行榜单与社区讨论瀑布流，支持点击跳转条目详情或打开讨论外链。",
-            "file": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ExploreScreen.kt",
+            "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt",
             "storyIds": ["explore_community"],
         },
 
@@ -541,7 +545,7 @@ def build_data_topology() -> dict:
             "id": "planner_reminder", "col": 1, "row": 7, "category": "transform", "icon": "alarm-clock",
             "name": "AiringReminderPlanner", "sub": "纯函数排期决策",
             "desc": "比对未来 24 小时排期与在追条目，执行去重判定，决定是否发出通知。",
-            "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/AiringReminderPlanner.kt",
+            "file": "sync/work/src/main/kotlin/com/infinitezerone/minibgm/sync/work/reminders/AiringReminderPlanner.kt",
             "operations": [
                 "检查登录态与提醒总开关",
                 "筛选未来 24h 内播出的在追番剧",
@@ -553,7 +557,7 @@ def build_data_topology() -> dict:
             "id": "worker_reminder", "col": 4, "row": 7, "category": "ui", "icon": "clock",
             "name": "AiringReminderWorker", "sub": "WorkManager 定时任务",
             "desc": "每日定时唤醒触发排期决策判定，满足条件时向系统通知通道推送开播提醒。",
-            "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/AiringReminderWorker.kt",
+            "file": "sync/work/src/main/kotlin/com/infinitezerone/minibgm/sync/work/workers/AiringReminderWorker.kt",
             "storyIds": ["airing_reminder"],
         },
     ]
@@ -2436,25 +2440,87 @@ function renderRedlines() {
   ];
 
   rules.forEach(r => {
+    const ruleViolations = (GRAPH.violations || []).filter(v => v.rule && v.rule.startsWith(r.id));
+    const isPass = ruleViolations.length === 0;
+
     const card = document.createElement("div");
-    card.className = "rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 flex items-start justify-between gap-4";
-    card.innerHTML = `
-      <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">${r.id}</span>
-          <span class="text-xs font-bold text-white">${r.name}</span>
-          <span class="text-[10px] font-mono text-slate-400">(${r.test})</span>
+    if (isPass) {
+      card.className = "rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 flex items-start justify-between gap-4";
+      card.innerHTML = `
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">${r.id}</span>
+            <span class="text-xs font-bold text-white">${r.name}</span>
+            <span class="text-[10px] font-mono text-slate-400">(${r.test})</span>
+          </div>
+          <p class="text-xs text-slate-300">${r.desc}</p>
         </div>
-        <p class="text-xs text-slate-300">${r.desc}</p>
-      </div>
-      <span class="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-bold text-[11px] flex items-center gap-1 shrink-0">
-        <i data-lucide="check" class="w-3 h-3"></i> PASS
-      </span>
-    `;
+        <span class="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-bold text-[11px] flex items-center gap-1 shrink-0">
+          <i data-lucide="check" class="w-3 h-3"></i> PASS
+        </span>
+      `;
+    } else {
+      card.className = "rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 flex flex-col gap-2.5";
+      const detailsHtml = ruleViolations.map(v =>
+        `<div class="text-[11px] font-mono text-rose-300 bg-rose-950/40 px-2.5 py-1.5 rounded border border-rose-500/20">
+           <b>${v.module}</b> @ <span class="text-slate-400">${v.where}</span>: ${v.detail}
+         </div>`
+      ).join("");
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/30">${r.id}</span>
+              <span class="text-xs font-bold text-white">${r.name}</span>
+              <span class="text-[10px] font-mono text-slate-400">(${r.test})</span>
+            </div>
+            <p class="text-xs text-slate-300">${r.desc}</p>
+          </div>
+          <span class="px-2 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold text-[11px] flex items-center gap-1 shrink-0">
+            <i data-lucide="alert-triangle" class="w-3 h-3"></i> FAIL (${ruleViolations.length})
+          </span>
+        </div>
+        <div class="space-y-1.5 mt-1">${detailsHtml}</div>
+      `;
+    }
     list.appendChild(card);
   });
   lucide.createIcons();
 }
+
+function updateTopStats() {
+  if (GRAPH.stats) {
+    const elModules = document.getElementById("statModules");
+    const elFiles = document.getElementById("statFiles");
+    const elLoc = document.getElementById("statLoc");
+    if (elModules) elModules.textContent = GRAPH.stats.modules;
+    if (elFiles) elFiles.textContent = GRAPH.stats.files;
+    if (elLoc) elLoc.textContent = (GRAPH.stats.loc >= 1000) ? (GRAPH.stats.loc / 1000).toFixed(1) + "k" : GRAPH.stats.loc;
+
+    const btnRedlines = document.getElementById("btnRedlines");
+    if (btnRedlines) {
+      if (GRAPH.stats.violations === 0) {
+        btnRedlines.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold cursor-pointer hover:bg-emerald-500/20 transition-colors";
+        btnRedlines.innerHTML = `<i data-lucide="shield-check" class="w-3.5 h-3.5"></i> 架构红线 (8项全过)`;
+      } else {
+        btnRedlines.className = "flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-400 font-semibold cursor-pointer hover:bg-rose-500/30 transition-colors animate-pulse";
+        btnRedlines.innerHTML = `<i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> 架构红线 (${GRAPH.stats.violations} 处违规)`;
+      }
+    }
+  }
+}
+
+// 复制文件路径
+document.getElementById("drawerFilePath")?.addEventListener("click", (e) => {
+  const text = e.target.textContent;
+  if (text && navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = e.target.textContent;
+      e.target.textContent = "已复制文件路径 ✓";
+      setTimeout(() => { e.target.textContent = orig; }, 1500);
+    }).catch(() => {});
+  }
+});
 
 // ==============================================================================
 // 搜索与快捷键
@@ -2465,6 +2531,7 @@ searchInput.addEventListener("input", (e) => {
   const q = e.target.value.trim().toLowerCase();
   if (!q) {
     selectStory(activeStoryId);
+    document.querySelectorAll("#moduleTableBody tr").forEach(tr => tr.style.display = "");
     return;
   }
 
@@ -2479,6 +2546,10 @@ searchInput.addEventListener("input", (e) => {
       c.classList.remove("highlighted", "action-highlighted");
       c.classList.add("dimmed");
     }
+  });
+
+  document.querySelectorAll("#moduleTableBody tr").forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
   });
 });
 
@@ -2505,6 +2576,7 @@ document.getElementById("btnCloseLineage")?.addEventListener("click", () => {
 // ==============================================================================
 // 初始化执行
 // ==============================================================================
+updateTopStats();
 renderStoryButtons();
 renderTopologyNodes();
 renderTopologyCables();
