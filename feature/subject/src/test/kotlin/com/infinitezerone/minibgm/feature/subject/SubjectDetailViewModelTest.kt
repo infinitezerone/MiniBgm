@@ -336,6 +336,30 @@ class SubjectDetailViewModelTest {
         }
 
     @Test
+    fun refresh_cancelsOngoingRefreshJob_preventsConcurrentRace() =
+        runTest {
+            var fetchCount = 0
+            val repository =
+                FakeSubjectRepository().apply {
+                    fetchSubjectDetailResult = {
+                        fetchCount++
+                        AppResult.Success(sampleSubject)
+                    }
+                    sendSubject(sampleSubject)
+                }
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
+            testScheduler.advanceUntilIdle()
+
+            // 连续快速触发两次 refresh，旧任务被取消，最终正常完成
+            viewModel.refresh()
+            viewModel.refresh()
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isLoading)
+            assertEquals(null, viewModel.uiState.value.error)
+        }
+
+    @Test
     fun updateCollectionStatus_preservesActualSubjectTypeInOptimisticCreation() =
         runTest {
             val bookSubject = sampleSubject.copy(id = 555L, type = 1) // 1 = BOOK
@@ -649,13 +673,13 @@ class SubjectDetailViewModelTest {
                 )
             testScheduler.advanceUntilIdle()
 
-            // 针对第 3 话触发「看到本集」
-            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 3 }
+            // 针对第 2 话触发「看到本集」
+            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
             viewModel.markWatchedUpTo(targetEp)
 
             // 验证乐观更新状态
             val state = viewModel.uiState.value
-            assertEquals(3, state.collection?.epStatus)
+            assertEquals(2, state.collection?.epStatus)
             assertEquals(CollectionType.DOING.value, state.collection?.type)
 
             testScheduler.advanceUntilIdle()
