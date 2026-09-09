@@ -89,26 +89,28 @@ class CollectionRepositoryImpl(
         tokenProvider.activeUserId.distinctUntilChanged()
 
     override fun getCollectionStream(subjectId: Long): Flow<UserCollection?> =
-        activeUserIdFlow.flatMapLatest { userId ->
-            if (userId == null) {
-                flowOf(null)
-            } else {
-                userCollectionDao
-                    .getCollectionBySubjectId(userId, subjectId)
-                    .map { entity -> entity?.asExternalModel() }
-            }
-        }
+        activeUserIdFlow
+            .flatMapLatest { userId ->
+                if (userId == null) {
+                    flowOf(null)
+                } else {
+                    userCollectionDao
+                        .getCollectionBySubjectId(userId, subjectId)
+                        .map { entity -> entity?.asExternalModel() }
+                }
+            }.distinctUntilChanged()
 
     override fun getCollectionsByTypeStream(type: CollectionType): Flow<List<UserCollection>> =
-        activeUserIdFlow.flatMapLatest { userId ->
-            if (userId == null) {
-                flowOf(emptyList())
-            } else {
-                userCollectionDao
-                    .getCollectionsByType(userId, type.value)
-                    .map { list -> list.map { it.asExternalModel() } }
-            }
-        }
+        activeUserIdFlow
+            .flatMapLatest { userId ->
+                if (userId == null) {
+                    flowOf(emptyList())
+                } else {
+                    userCollectionDao
+                        .getCollectionsByType(userId, type.value)
+                        .map { list -> list.map { it.asExternalModel() } }
+                }
+            }.distinctUntilChanged()
 
     override suspend fun fetchUserCollections(
         username: String,
@@ -180,6 +182,24 @@ class CollectionRepositoryImpl(
         withContext(NonCancellable) {
             val activeUid = tokenProvider.activeUserId.first()
             if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("未登录账号，无法更新收藏"))
+
+            // 1. 本地历史快照（绑定不可变的当前 activeUid）
+            val localPrevious = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+            val resolvedSubjectType = if (subjectType > 0) subjectType else (localPrevious?.subjectType ?: 2)
+
+            // 2. 本地优先：立即乐观写入 Room，全应用零延迟响应
+            val optimisticEntity =
+                UserCollectionEntity(
+                    userId = activeUid,
+                    subjectId = subjectId,
+                    subjectType = resolvedSubjectType,
+                    type = type.value,
+                    epStatus = epStatus ?: (localPrevious?.epStatus ?: 0),
+                    updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
+                )
+            userCollectionDao.insertCollection(optimisticEntity)
+
+            // 3. 远端同步与失败回滚
             try {
                 apiService.updateCollection(
                     subjectId = subjectId,
@@ -189,23 +209,12 @@ class CollectionRepositoryImpl(
                     private = private,
                     epStatus = epStatus,
                 )
-                // 写入本地 Room 数据库（仅保留纯追番状态）
-                val existing = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
-                val resolvedSubjectType = if (subjectType > 0) subjectType else (existing?.subjectType ?: 2)
-                userCollectionDao.insertCollection(
-                    UserCollectionEntity(
-                        userId = activeUid,
-                        subjectId = subjectId,
-                        subjectType = resolvedSubjectType,
-                        type = type.value,
-                        epStatus = epStatus ?: (existing?.epStatus ?: 0),
-                        updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
-                    ),
-                )
                 AppResult.Success(Unit)
             } catch (e: BgmNetworkException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "更新收藏状态失败：${e.message}")
             } catch (e: Exception) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "更新收藏状态异常：${e.message}")
             }
         }
@@ -219,9 +228,40 @@ class CollectionRepositoryImpl(
         withContext(NonCancellable) {
             val activeUid = tokenProvider.activeUserId.first()
             if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
+
+            // 1. 本地历史快照（绑定不可变的当前 activeUid）
+            val localPrevious = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+
+            // 2. 本地优先：计算乐观状态并立即写入 Room，全应用零延迟响应
+            val optimisticType = computeTargetType(localPrevious?.type ?: 0, isWatched)
+            val optimisticEpStatus = computeTargetEpStatus(localPrevious?.epStatus ?: 0, epNumber, isWatched)
+
+            userCollectionDao.insertCollection(
+                UserCollectionEntity(
+                    userId = activeUid,
+                    subjectId = subjectId,
+                    subjectType = localPrevious?.subjectType ?: 2,
+                    type = optimisticType,
+                    epStatus = optimisticEpStatus,
+                    updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
+                ),
+            )
+
             try {
-                // 1. 获取当前远端及本地收藏状态
-                val localExisting = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+                // 3. 远端单集 ID 解析（若入参缺失）
+                val resolvedEpisodeId =
+                    if (episodeId == null || episodeId <= 0L) {
+                        resolveEpisodeId(subjectId, epNumber) ?: run {
+                            rollbackRoom(activeUid, subjectId, localPrevious)
+                            return@withContext AppResult.Error(
+                                IllegalStateException("未找到第 $epNumber 话的单集，无法打卡"),
+                            )
+                        }
+                    } else {
+                        episodeId
+                    }
+
+                // 4. 获取远端收藏快照对齐类型与进度
                 val existing =
                     try {
                         apiService.getCollection(activeUid.toString(), subjectId)
@@ -229,51 +269,19 @@ class CollectionRepositoryImpl(
                         null
                     }
 
-                // 2. 状态流转：打卡若原本未收藏或为「想看」，自动流转至「在看」
-                val existingType = existing?.type?.takeIf { it > 0 } ?: (localExisting?.type?.takeIf { it > 0 } ?: 0)
-                val targetType =
-                    if (isWatched && (existingType == 0 || existingType == CollectionType.WISH.value)) {
-                        CollectionType.DOING.value
-                    } else if (existingType > 0) {
-                        existingType
-                    } else {
-                        CollectionType.DOING.value
-                    }
+                val existingType = existing?.type?.takeIf { it > 0 } ?: (localPrevious?.type ?: 0)
+                val targetType = computeTargetType(existingType, isWatched)
+                val currentEpStatus = existing?.epStatus ?: (localPrevious?.epStatus ?: 0)
+                val targetEpStatus = computeTargetEpStatus(currentEpStatus, epNumber, isWatched)
 
-                val currentEpStatus = existing?.epStatus ?: (localExisting?.epStatus ?: 0)
-                val targetEpStatus =
-                    if (isWatched) {
-                        maxOf(currentEpStatus, epNumber)
-                    } else {
-                        // 撤销打卡：仅当撤销的是当前最大进度时才回退，防止撤销中间历史集数导致进度暴跌
-                        if (epNumber >= currentEpStatus) {
-                            maxOf(0, epNumber - 1)
-                        } else {
-                            currentEpStatus
-                        }
-                    }
+                ensureCollectionAndCheckIn(subjectId, existing, targetType, resolvedEpisodeId, isWatched)
 
-                if (episodeId == null || episodeId <= 0L) {
-                    // 时间表待补清单等场景仅有话数、无单集 ID：
-                    // episode_id=0 的打卡会被远端拒绝，按话数从单集列表解析真实 ID
-                    val episodes = apiService.getEpisodes(subjectId).data
-                    val resolvedEpisodeId =
-                        episodes.firstOrNull { it.ep.toInt() == epNumber }?.id
-                            ?: episodes.firstOrNull { it.sort.toInt() == epNumber }?.id
-                            ?: return@withContext AppResult.Error(
-                                IllegalStateException("未找到第 $epNumber 话的单集，无法打卡"),
-                            )
-                    ensureCollectionAndCheckIn(subjectId, existing, targetType, resolvedEpisodeId, isWatched)
-                } else {
-                    ensureCollectionAndCheckIn(subjectId, existing, targetType, episodeId, isWatched)
-                }
-
-                // 3. 远端打卡成功后，将最新的纯追番状态存入本地 Room 数据库
+                // 5. 远端打卡成功后，写入最终对齐状态
                 userCollectionDao.insertCollection(
                     UserCollectionEntity(
                         userId = activeUid,
                         subjectId = subjectId,
-                        subjectType = localExisting?.subjectType ?: 2,
+                        subjectType = localPrevious?.subjectType ?: (existing?.subjectType ?: 2),
                         type = targetType,
                         epStatus = targetEpStatus,
                         updatedAt = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis()),
@@ -281,11 +289,57 @@ class CollectionRepositoryImpl(
                 )
                 AppResult.Success(Unit)
             } catch (e: BgmNetworkException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "打卡失败：${e.message}")
             } catch (e: Exception) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
                 AppResult.Error(e, "打卡异常：${e.message}")
             }
         }
+
+    private fun computeTargetType(
+        existingType: Int,
+        isWatched: Boolean,
+    ): Int =
+        if (isWatched && (existingType == 0 || existingType == CollectionType.WISH.value)) {
+            CollectionType.DOING.value
+        } else if (existingType > 0) {
+            existingType
+        } else {
+            CollectionType.DOING.value
+        }
+
+    private fun computeTargetEpStatus(
+        currentEpStatus: Int,
+        epNumber: Int,
+        isWatched: Boolean,
+    ): Int =
+        if (isWatched) {
+            maxOf(currentEpStatus, epNumber)
+        } else {
+            if (epNumber >= currentEpStatus) maxOf(0, epNumber - 1) else currentEpStatus
+        }
+
+    private suspend fun rollbackRoom(
+        userId: Long,
+        subjectId: Long,
+        snapshot: UserCollectionEntity?,
+    ) {
+        if (snapshot != null) {
+            userCollectionDao.insertCollection(snapshot)
+        } else {
+            userCollectionDao.deleteBySubjectId(userId, subjectId)
+        }
+    }
+
+    private suspend fun resolveEpisodeId(
+        subjectId: Long,
+        epNumber: Int,
+    ): Long? {
+        val episodes = apiService.getEpisodes(subjectId).data
+        return episodes.firstOrNull { it.ep.toInt() == epNumber }?.id
+            ?: episodes.firstOrNull { it.sort.toInt() == epNumber }?.id
+    }
 
     /** 确保条目已在用户收藏中（未收藏或想看则置为在看），随后执行单集打卡（type = 2 已看过，0 撤销） */
     private suspend fun ensureCollectionAndCheckIn(
