@@ -1,10 +1,13 @@
 package com.infinitezerone.minibgm.feature.schedule
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -29,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -157,34 +161,46 @@ fun ScheduleScreen(
                 }
 
             // 顶部星期胶囊导航（指示器 + 快速点击锚点）
-            ModernDateCapsuleStrip(
-                dateItems = uiState.dateItems,
-                selectedWeekday = uiState.selectedWeekday,
-                pagerState = pagerState,
-                onSelectWeekday = { weekday ->
-                    if (weekday == uiState.selectedWeekday) {
-                        coroutineScope.launch {
-                            weekdayListStates[weekday]?.animateScrollToItem(0)
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                ModernDateCapsuleStrip(
+                    dateItems = uiState.dateItems,
+                    selectedWeekday = uiState.selectedWeekday,
+                    pagerState = pagerState,
+                    onSelectWeekday = { weekday ->
+                        if (weekday == uiState.selectedWeekday) {
+                            coroutineScope.launch {
+                                weekdayListStates[weekday]?.animateScrollToItem(0)
+                            }
+                        } else {
+                            viewModel.selectWeekday(weekday)
+                            coroutineScope.launch {
+                                pagerState.scrollToPage(weekday - 1)
+                            }
                         }
-                    } else {
-                        viewModel.selectWeekday(weekday)
-                        coroutineScope.launch {
-                            pagerState.scrollToPage(weekday - 1)
-                        }
-                    }
-                },
-                watchingCountMap = watchingCountMap,
-            )
+                    },
+                    watchingCountMap = watchingCountMap,
+                    modifier = Modifier.widthIn(max = 840.dp),
+                )
+            }
 
             val currentWeekdayTotal = uiState.getTotalCountForWeekday(uiState.selectedWeekday)
             val currentWeekdayWatching = uiState.getWatchingCountForWeekday(uiState.selectedWeekday)
 
-            FilterAndMetaBar(
-                totalCount = currentWeekdayTotal,
-                watchingCount = currentWeekdayWatching,
-                onlyWatching = uiState.onlyWatching,
-                onToggleOnlyWatching = viewModel::toggleOnlyWatching,
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                FilterAndMetaBar(
+                    totalCount = currentWeekdayTotal,
+                    watchingCount = currentWeekdayWatching,
+                    onlyWatching = uiState.onlyWatching,
+                    onToggleOnlyWatching = viewModel::toggleOnlyWatching,
+                    modifier = Modifier.widthIn(max = 840.dp),
+                )
+            }
 
             // 主体：左右手势丝滑翻页的 HorizontalPager
             PullToRefreshBox(
@@ -194,14 +210,27 @@ fun ScheduleScreen(
             ) {
                 when {
                     uiState.isLoading && uiState.weeklySchedules.isEmpty() -> {
-                        ScheduleTimelineSkeleton()
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            ScheduleTimelineSkeleton(
+                                modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+                            )
+                        }
                     }
 
                     uiState.error != null && uiState.weeklySchedules.isEmpty() -> {
-                        ScheduleErrorState(
-                            errorMessage = uiState.error ?: "网络连接异常",
-                            onRetry = viewModel::refresh,
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            ScheduleErrorState(
+                                errorMessage = uiState.error ?: "网络连接异常",
+                                onRetry = viewModel::refresh,
+                                modifier = Modifier.widthIn(max = 840.dp),
+                            )
+                        }
                     }
 
                     else -> {
@@ -267,60 +296,65 @@ private fun DayScheduleList(
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
-        state = listState,
-        contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    Box(
         modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        if (uiState.isOfflineCache) {
-            item(key = "offline_cache_banner") {
-                OfflineCacheBanner(onRetry = {})
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+        ) {
+            if (uiState.isOfflineCache) {
+                item(key = "offline_cache_banner") {
+                    OfflineCacheBanner(onRetry = {})
+                }
             }
-        }
 
-        // ==================== 今日视图专属首屏：待补更新 ====================
-        if (isTodayPage && !uiState.onlyWatching && uiState.catchupItems.isNotEmpty()) {
-            item(key = "today_catchup_feed") {
-                ScheduleCatchupSection(
-                    catchupItems = uiState.catchupItems,
-                    onSubjectClick = onSubjectClick,
-                    onMarkEpisodeWatched = onMarkEpisodeWatched,
-                )
-            }
-        }
-
-        // 如果当天完全没有排播
-        if (timeGrouped.isEmpty() && allDaySchedules.isEmpty()) {
-            item(key = "empty_day_$weekday") {
-                ScheduleDayEmptyNote(onlyWatching = uiState.onlyWatching)
-            }
-        } else {
-            // ==================== 时间线排播节点（时间醒目 + 聚合防冗余） ====================
-            timeGrouped.forEach { (time, animeList) ->
-                item(key = "timeslot_${weekday}_$time") {
-                    TimelineSlotRow(
-                        time = time,
-                        schedules = animeList,
-                        isToday = isTodayPage,
-                        watchingSubjectIds = uiState.watchingSubjectIds,
+            // ==================== 今日视图专属首屏：待补更新 ====================
+            if (isTodayPage && !uiState.onlyWatching && uiState.catchupItems.isNotEmpty()) {
+                item(key = "today_catchup_feed") {
+                    ScheduleCatchupSection(
+                        catchupItems = uiState.catchupItems,
                         onSubjectClick = onSubjectClick,
-                        onToggleWatching = onToggleWatching,
-                        onShowSources = onShowSources,
+                        onMarkEpisodeWatched = onMarkEpisodeWatched,
                     )
                 }
             }
 
-            // ==================== 全天 / 网络独播待定番剧自然收容 ====================
-            if (allDaySchedules.isNotEmpty()) {
-                item(key = "untimed_section_$weekday") {
-                    ScheduleUntimedSection(
-                        schedules = allDaySchedules,
-                        watchingSubjectIds = uiState.watchingSubjectIds,
-                        onSubjectClick = onSubjectClick,
-                        onToggleWatching = onToggleWatching,
-                        onShowSources = onShowSources,
-                    )
+            // 如果当天完全没有排播
+            if (timeGrouped.isEmpty() && allDaySchedules.isEmpty()) {
+                item(key = "empty_day_$weekday") {
+                    ScheduleDayEmptyNote(onlyWatching = uiState.onlyWatching)
+                }
+            } else {
+                // ==================== 时间线排播节点（时间醒目 + 聚合防冗余） ====================
+                timeGrouped.forEach { (time, animeList) ->
+                    item(key = "timeslot_${weekday}_$time") {
+                        TimelineSlotRow(
+                            time = time,
+                            schedules = animeList,
+                            isToday = isTodayPage,
+                            watchingSubjectIds = uiState.watchingSubjectIds,
+                            onSubjectClick = onSubjectClick,
+                            onToggleWatching = onToggleWatching,
+                            onShowSources = onShowSources,
+                        )
+                    }
+                }
+
+                // ==================== 全天 / 网络独播待定番剧自然收容 ====================
+                if (allDaySchedules.isNotEmpty()) {
+                    item(key = "untimed_section_$weekday") {
+                        ScheduleUntimedSection(
+                            schedules = allDaySchedules,
+                            watchingSubjectIds = uiState.watchingSubjectIds,
+                            onSubjectClick = onSubjectClick,
+                            onToggleWatching = onToggleWatching,
+                            onShowSources = onShowSources,
+                        )
+                    }
                 }
             }
         }

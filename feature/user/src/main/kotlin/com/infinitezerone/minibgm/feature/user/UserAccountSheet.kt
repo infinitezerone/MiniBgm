@@ -63,6 +63,7 @@ internal fun AccountManagementBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = 600.dp,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {

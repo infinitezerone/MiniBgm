@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -39,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -363,250 +366,76 @@ fun SubjectDetailScreen(
                     displaySubject != null -> {
                         val totalEpisodes =
                             if (displaySubject.eps > 0) displaySubject.eps else displaySubject.totalEpisodes
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            if (uiState.error != null) {
-                                item(key = "inline_error") {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.errorContainer,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text(
-                                            text = "同步提示：${uiState.error}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            modifier = Modifier.padding(12.dp),
-                                        )
-                                    }
-                                }
-                            }
+                        val isWideScreen = LocalConfiguration.current.screenWidthDp >= 720
+                        val fullSubject = if (isTransitionStabilizing) null else uiState.subject
 
-                            // 1. 条目头部 Hero 卡片 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
-                            item(key = "header") {
-                                SubjectHeaderCard(
-                                    subject = displaySubject,
-                                    subjectType = subjectType,
-                                    sharedElementSource = source,
-                                )
-                            }
+                        val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            val epNumber =
+                                if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                            viewModel.toggleEpisodeWatched(episode.id, isWatched, epNumber)
+                        }
 
-                            val fullSubject = if (isTransitionStabilizing) null else uiState.subject
-                            if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
-                                item(key = "detail_loading_skeleton") {
-                                    SubjectDetailBodySkeleton()
-                                }
-                            } else if (fullSubject != null) {
-                                val subject = fullSubject
-                                // 2. 我的追番/阅读/收听/游玩与进度条面板
-                                item(key = "collection_progress_bar") {
-                                    SubjectPersonalProgressCard(
-                                        collection = uiState.collection,
-                                        totalEpisodes = totalEpisodes,
-                                        subjectType = subjectType,
-                                        onOpenSheet = { showCollectionSheet = true },
-                                        onToggleWatching = viewModel::toggleWatching,
-                                    )
-                                }
-
-                                // 3. 粘性二级分栏 Tab 栏
-                                stickyHeader(key = "subject_tabs_bar") {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.surface,
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
-                                    ) {
-                                        PrimaryTabRow(
-                                            selectedTabIndex = selectedTab.ordinal,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            SubjectDetailTab.entries.forEach { tab ->
-                                                val tabLabel = getTabLabel(tab, subjectType)
-                                                Tab(
-                                                    selected = selectedTab == tab,
-                                                    onClick = { selectedTab = tab },
-                                                    text = {
-                                                        Text(
-                                                            text =
-                                                                when (tab) {
-                                                                    SubjectDetailTab.EPISODES ->
-                                                                        if (currentEpisodes.isNotEmpty()) {
-                                                                            "$tabLabel (${currentEpisodes.size})"
-                                                                        } else {
-                                                                            tabLabel
-                                                                        }
-                                                                    SubjectDetailTab.COMMUNITY ->
-                                                                        if (uiState.subjectCommentTotal > 0) {
-                                                                            "$tabLabel (${uiState.subjectCommentTotal})"
-                                                                        } else {
-                                                                            tabLabel
-                                                                        }
-                                                                    else -> tabLabel
-                                                                },
-                                                            fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
-                                                        )
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 4. Tab 切换内容
-                                when (selectedTab) {
-                                    SubjectDetailTab.EPISODES -> {
-                                        val watchedInGroup =
-                                            currentEpisodes.count {
-                                                isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
-                                            }
-
-                                        item(key = "episodes_header") {
-                                            EpisodesSectionHeader(
-                                                totalEpisodes = currentEpisodes.size,
-                                                watchedEpisodes = watchedInGroup,
-                                                subjectType = subjectType,
-                                                isGridView = isGridView,
-                                                onToggleView = { isGridView = !isGridView },
-                                            )
-                                        }
-
-                                        if (availableGroups.size > 1) {
-                                            item(key = "episode_group_chips") {
-                                                EpisodeGroupFilterChips(
-                                                    availableGroups = availableGroups,
-                                                    groupedEpisodes = groupedEpisodes,
-                                                    selectedGroup = activeGroup,
-                                                    onGroupSelected = { selectedGroup = it },
-                                                )
-                                            }
-                                        }
-
-                                        if (currentEpisodes.isEmpty()) {
-                                            item(key = "episodes_empty") {
-                                                Box(
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(vertical = 32.dp),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    Text(
-                                                        text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    )
-                                                }
-                                            }
-                                        } else if (isGridView) {
-                                            item(key = "episodes_grid") {
-                                                EpisodeGrid(
-                                                    episodes = currentEpisodes,
-                                                    watchedCount = uiState.collection?.epStatus ?: 0,
-                                                    onToggleWatched = { episode, isWatched ->
-                                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                        val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                                                        viewModel.toggleEpisodeWatched(episode.id, isWatched, epNumber)
-                                                    },
-                                                    onEpisodeLongClick = { episode ->
-                                                        selectedEpisodeForDetail = episode
-                                                    },
-                                                )
-                                            }
-                                        } else {
-                                            items(items = currentEpisodes, key = { it.id }) { episode ->
-                                                val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
-                                                val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                                                EpisodeListItem(
-                                                    episode = episode,
-                                                    isWatched = isWatched,
-                                                    onClick = {
-                                                        selectedEpisodeForDetail = episode
-                                                    },
-                                                    onToggleWatched = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                        viewModel.toggleEpisodeWatched(episode.id, !isWatched, epNumber)
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    SubjectDetailTab.DETAILS -> {
-                                        item(key = "rating_distribution") {
-                                            RatingDistributionCard(
-                                                rating = subject.rating,
-                                                collection = subject.collection,
-                                                tags = subject.tags,
-                                                onTagClick = onTagClick,
-                                            )
-                                        }
-
-                                        if (uiState.isDetailsLoading &&
-                                            uiState.relations.isEmpty() &&
-                                            uiState.characters.isEmpty() &&
-                                            uiState.persons.isEmpty()
-                                        ) {
-                                            item(key = "details_loading_indicator") {
-                                                Box(
-                                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    CircularProgressIndicator(
-                                                        modifier = Modifier.size(24.dp),
-                                                        strokeWidth = 2.dp,
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        if (uiState.relations.isNotEmpty()) {
-                                            item(key = "relations_section") {
-                                                RelationsSection(
-                                                    relations = uiState.relations,
-                                                    onSubjectClick = onSubjectClick,
-                                                )
-                                            }
-                                        }
-
-                                        if (uiState.characters.isNotEmpty()) {
-                                            item(key = "characters_section") {
-                                                CharactersSection(
-                                                    characters = uiState.characters,
-                                                    onCharacterClick = handleCharacterClick,
-                                                    onActorClick = handlePersonClick,
-                                                    onPreviewCharacter = { previewCharacter = it },
-                                                )
-                                            }
-                                        }
-
-                                        if (uiState.persons.isNotEmpty()) {
-                                            item(key = "staff_section") {
-                                                StaffSection(
-                                                    persons = uiState.persons,
-                                                    onPersonClick = handlePersonClick,
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    SubjectDetailTab.COMMUNITY -> {
-                                        item(key = "community_tab_section") {
-                                            SubjectCommunitySection(
-                                                comments = uiState.subjectComments,
-                                                commentTotal = uiState.subjectCommentTotal,
-                                                isLoadingMoreComments = uiState.isLoadingMoreComments,
-                                                hasMoreComments = uiState.hasMoreComments,
-                                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
-                                                topics = uiState.subjectTopics,
-                                                onUrlClick = handleLinkClick,
-                                                isLoading = uiState.isCommunityLoading,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                        if (isWideScreen) {
+                            SubjectDetailWideLayout(
+                                displaySubject = displaySubject,
+                                fullSubject = fullSubject,
+                                subjectType = subjectType,
+                                uiState = uiState,
+                                source = source,
+                                totalEpisodes = totalEpisodes,
+                                selectedTab = selectedTab,
+                                onSelectTab = { selectedTab = it },
+                                currentEpisodes = currentEpisodes,
+                                availableGroups = availableGroups,
+                                groupedEpisodes = groupedEpisodes,
+                                activeGroup = activeGroup,
+                                onSelectGroup = { selectedGroup = it },
+                                isGridView = isGridView,
+                                onToggleGridView = { isGridView = !isGridView },
+                                onOpenCollectionSheet = { showCollectionSheet = true },
+                                onToggleWatching = viewModel::toggleWatching,
+                                onToggleEpisodeWatched = onToggleEpisodeWatched,
+                                onSelectEpisodeForDetail = { selectedEpisodeForDetail = it },
+                                onSubjectClick = onSubjectClick,
+                                onTagClick = onTagClick,
+                                onCharacterClick = handleCharacterClick,
+                                onPersonClick = handlePersonClick,
+                                onPreviewCharacter = { previewCharacter = it },
+                                onLinkClick = handleLinkClick,
+                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
+                                isTransitionStabilizing = isTransitionStabilizing,
+                            )
+                        } else {
+                            SubjectDetailCompactLayout(
+                                displaySubject = displaySubject,
+                                fullSubject = fullSubject,
+                                subjectType = subjectType,
+                                uiState = uiState,
+                                source = source,
+                                totalEpisodes = totalEpisodes,
+                                selectedTab = selectedTab,
+                                onSelectTab = { selectedTab = it },
+                                currentEpisodes = currentEpisodes,
+                                availableGroups = availableGroups,
+                                groupedEpisodes = groupedEpisodes,
+                                activeGroup = activeGroup,
+                                onSelectGroup = { selectedGroup = it },
+                                isGridView = isGridView,
+                                onToggleGridView = { isGridView = !isGridView },
+                                onOpenCollectionSheet = { showCollectionSheet = true },
+                                onToggleWatching = viewModel::toggleWatching,
+                                onToggleEpisodeWatched = onToggleEpisodeWatched,
+                                onSelectEpisodeForDetail = { selectedEpisodeForDetail = it },
+                                onSubjectClick = onSubjectClick,
+                                onTagClick = onTagClick,
+                                onCharacterClick = handleCharacterClick,
+                                onPersonClick = handlePersonClick,
+                                onPreviewCharacter = { previewCharacter = it },
+                                onLinkClick = handleLinkClick,
+                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
+                                isTransitionStabilizing = isTransitionStabilizing,
+                            )
                         }
                     }
                 }
@@ -704,5 +533,573 @@ fun SubjectDetailScreen(
                 onSubjectClick(relSubjectId)
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubjectDetailWideLayout(
+    displaySubject: Subject,
+    fullSubject: Subject?,
+    subjectType: SubjectType,
+    uiState: SubjectDetailUiState,
+    source: String,
+    totalEpisodes: Int,
+    selectedTab: SubjectDetailTab,
+    onSelectTab: (SubjectDetailTab) -> Unit,
+    currentEpisodes: List<Episode>,
+    availableGroups: List<EpisodeGroup>,
+    groupedEpisodes: Map<EpisodeGroup, List<Episode>>,
+    activeGroup: EpisodeGroup,
+    onSelectGroup: (EpisodeGroup) -> Unit,
+    isGridView: Boolean,
+    onToggleGridView: () -> Unit,
+    onOpenCollectionSheet: () -> Unit,
+    onToggleWatching: () -> Unit,
+    onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
+    onSelectEpisodeForDetail: (Episode) -> Unit,
+    onSubjectClick: (Long) -> Unit,
+    onTagClick: (String) -> Unit,
+    onCharacterClick: (Long) -> Unit,
+    onPersonClick: (Long) -> Unit,
+    onPreviewCharacter: (SubjectCharacter) -> Unit,
+    onLinkClick: (String) -> Unit,
+    onLoadMoreComments: () -> Unit,
+    isTransitionStabilizing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        // 左栏：条目海报大图、标题、打卡控制与评分分布（固定概览流）
+        LazyColumn(
+            modifier =
+                Modifier
+                    .weight(0.40f)
+                    .fillMaxHeight(),
+            contentPadding = PaddingValues(bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (uiState.error != null) {
+                item(key = "wide_inline_error") {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "同步提示：${uiState.error}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(12.dp),
+                        )
+                    }
+                }
+            }
+
+            // 1. 条目头部 Hero 卡片
+            item(key = "wide_header") {
+                SubjectHeaderCard(
+                    subject = displaySubject,
+                    subjectType = subjectType,
+                    sharedElementSource = source,
+                )
+            }
+
+            if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
+                item(key = "wide_detail_loading_skeleton") {
+                    SubjectDetailBodySkeleton()
+                }
+            } else if (fullSubject != null) {
+                // 2. 我的追番/阅读/收听/游玩与进度条面板
+                item(key = "wide_collection_progress_bar") {
+                    SubjectPersonalProgressCard(
+                        collection = uiState.collection,
+                        totalEpisodes = totalEpisodes,
+                        subjectType = subjectType,
+                        onOpenSheet = onOpenCollectionSheet,
+                        onToggleWatching = onToggleWatching,
+                    )
+                }
+
+                // 3. 评分统计与标签分布（在宽屏下常驻左侧）
+                item(key = "wide_rating_distribution") {
+                    RatingDistributionCard(
+                        rating = fullSubject.rating,
+                        collection = fullSubject.collection,
+                        tags = fullSubject.tags,
+                        onTagClick = onTagClick,
+                    )
+                }
+            }
+        }
+
+        // 右栏：顶部 Tab 栏 + 对应 Tab 独立滚动列表
+        Column(
+            modifier =
+                Modifier
+                    .weight(0.60f)
+                    .fillMaxHeight(),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+            ) {
+                PrimaryTabRow(
+                    selectedTabIndex = selectedTab.ordinal,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    SubjectDetailTab.entries.forEach { tab ->
+                        val tabLabel = getTabLabel(tab, subjectType)
+                        Tab(
+                            selected = selectedTab == tab,
+                            onClick = { onSelectTab(tab) },
+                            text = {
+                                Text(
+                                    text =
+                                        when (tab) {
+                                            SubjectDetailTab.EPISODES ->
+                                                if (currentEpisodes.isNotEmpty()) {
+                                                    "$tabLabel (${currentEpisodes.size})"
+                                                } else {
+                                                    tabLabel
+                                                }
+                                            SubjectDetailTab.COMMUNITY ->
+                                                if (uiState.subjectCommentTotal > 0) {
+                                                    "$tabLabel (${uiState.subjectCommentTotal})"
+                                                } else {
+                                                    tabLabel
+                                                }
+                                            else -> tabLabel
+                                        },
+                                    fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(top = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                }
+            } else if (fullSubject != null) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    when (selectedTab) {
+                        SubjectDetailTab.EPISODES -> {
+                            val watchedInGroup =
+                                currentEpisodes.count {
+                                    isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
+                                }
+
+                            item(key = "wide_episodes_header") {
+                                EpisodesSectionHeader(
+                                    totalEpisodes = currentEpisodes.size,
+                                    watchedEpisodes = watchedInGroup,
+                                    subjectType = subjectType,
+                                    isGridView = isGridView,
+                                    onToggleView = onToggleGridView,
+                                )
+                            }
+
+                            if (availableGroups.size > 1) {
+                                item(key = "wide_episode_group_chips") {
+                                    EpisodeGroupFilterChips(
+                                        availableGroups = availableGroups,
+                                        groupedEpisodes = groupedEpisodes,
+                                        selectedGroup = activeGroup,
+                                        onGroupSelected = onSelectGroup,
+                                    )
+                                }
+                            }
+
+                            if (currentEpisodes.isEmpty()) {
+                                item(key = "wide_episodes_empty") {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 32.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            } else if (isGridView) {
+                                item(key = "wide_episodes_grid") {
+                                    EpisodeGrid(
+                                        episodes = currentEpisodes,
+                                        watchedCount = uiState.collection?.epStatus ?: 0,
+                                        onToggleWatched = onToggleEpisodeWatched,
+                                        onEpisodeLongClick = onSelectEpisodeForDetail,
+                                    )
+                                }
+                            } else {
+                                items(items = currentEpisodes, key = { it.id }) { episode ->
+                                    val isWatched =
+                                        isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
+                                    EpisodeListItem(
+                                        episode = episode,
+                                        isWatched = isWatched,
+                                        onClick = { onSelectEpisodeForDetail(episode) },
+                                        onToggleWatched = {
+                                            onToggleEpisodeWatched(episode, !isWatched)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        SubjectDetailTab.DETAILS -> {
+                            if (uiState.isDetailsLoading &&
+                                uiState.relations.isEmpty() &&
+                                uiState.characters.isEmpty() &&
+                                uiState.persons.isEmpty()
+                            ) {
+                                item(key = "wide_details_loading_indicator") {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (uiState.relations.isNotEmpty()) {
+                                item(key = "wide_relations_section") {
+                                    RelationsSection(
+                                        relations = uiState.relations,
+                                        onSubjectClick = onSubjectClick,
+                                    )
+                                }
+                            }
+
+                            if (uiState.characters.isNotEmpty()) {
+                                item(key = "wide_characters_section") {
+                                    CharactersSection(
+                                        characters = uiState.characters,
+                                        onCharacterClick = onCharacterClick,
+                                        onActorClick = onPersonClick,
+                                        onPreviewCharacter = onPreviewCharacter,
+                                    )
+                                }
+                            }
+
+                            if (uiState.persons.isNotEmpty()) {
+                                item(key = "wide_staff_section") {
+                                    StaffSection(
+                                        persons = uiState.persons,
+                                        onPersonClick = onPersonClick,
+                                    )
+                                }
+                            }
+                        }
+
+                        SubjectDetailTab.COMMUNITY -> {
+                            item(key = "wide_community_tab_section") {
+                                SubjectCommunitySection(
+                                    comments = uiState.subjectComments,
+                                    commentTotal = uiState.subjectCommentTotal,
+                                    isLoadingMoreComments = uiState.isLoadingMoreComments,
+                                    hasMoreComments = uiState.hasMoreComments,
+                                    onLoadMoreComments = onLoadMoreComments,
+                                    topics = uiState.subjectTopics,
+                                    onUrlClick = onLinkClick,
+                                    isLoading = uiState.isCommunityLoading,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun SubjectDetailCompactLayout(
+    displaySubject: Subject,
+    fullSubject: Subject?,
+    subjectType: SubjectType,
+    uiState: SubjectDetailUiState,
+    source: String,
+    totalEpisodes: Int,
+    selectedTab: SubjectDetailTab,
+    onSelectTab: (SubjectDetailTab) -> Unit,
+    currentEpisodes: List<Episode>,
+    availableGroups: List<EpisodeGroup>,
+    groupedEpisodes: Map<EpisodeGroup, List<Episode>>,
+    activeGroup: EpisodeGroup,
+    onSelectGroup: (EpisodeGroup) -> Unit,
+    isGridView: Boolean,
+    onToggleGridView: () -> Unit,
+    onOpenCollectionSheet: () -> Unit,
+    onToggleWatching: () -> Unit,
+    onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
+    onSelectEpisodeForDetail: (Episode) -> Unit,
+    onSubjectClick: (Long) -> Unit,
+    onTagClick: (String) -> Unit,
+    onCharacterClick: (Long) -> Unit,
+    onPersonClick: (Long) -> Unit,
+    onPreviewCharacter: (SubjectCharacter) -> Unit,
+    onLinkClick: (String) -> Unit,
+    onLoadMoreComments: () -> Unit,
+    isTransitionStabilizing: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        if (uiState.error != null) {
+            item(key = "inline_error") {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "同步提示：${uiState.error}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+        }
+
+        // 1. 条目头部 Hero 卡片 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
+        item(key = "header") {
+            SubjectHeaderCard(
+                subject = displaySubject,
+                subjectType = subjectType,
+                sharedElementSource = source,
+            )
+        }
+
+        if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
+            item(key = "detail_loading_skeleton") {
+                SubjectDetailBodySkeleton()
+            }
+        } else if (fullSubject != null) {
+            val subject = fullSubject
+            // 2. 我的追番/阅读/收听/游玩与进度条面板
+            item(key = "collection_progress_bar") {
+                SubjectPersonalProgressCard(
+                    collection = uiState.collection,
+                    totalEpisodes = totalEpisodes,
+                    subjectType = subjectType,
+                    onOpenSheet = onOpenCollectionSheet,
+                    onToggleWatching = onToggleWatching,
+                )
+            }
+
+            // 3. 粘性二级分栏 Tab 栏
+            stickyHeader(key = "subject_tabs_bar") {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                ) {
+                    PrimaryTabRow(
+                        selectedTabIndex = selectedTab.ordinal,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        SubjectDetailTab.entries.forEach { tab ->
+                            val tabLabel = getTabLabel(tab, subjectType)
+                            Tab(
+                                selected = selectedTab == tab,
+                                onClick = { onSelectTab(tab) },
+                                text = {
+                                    Text(
+                                        text =
+                                            when (tab) {
+                                                SubjectDetailTab.EPISODES ->
+                                                    if (currentEpisodes.isNotEmpty()) {
+                                                        "$tabLabel (${currentEpisodes.size})"
+                                                    } else {
+                                                        tabLabel
+                                                    }
+                                                SubjectDetailTab.COMMUNITY ->
+                                                    if (uiState.subjectCommentTotal > 0) {
+                                                        "$tabLabel (${uiState.subjectCommentTotal})"
+                                                    } else {
+                                                        tabLabel
+                                                    }
+                                                else -> tabLabel
+                                            },
+                                        fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. Tab 切换内容
+            when (selectedTab) {
+                SubjectDetailTab.EPISODES -> {
+                    val watchedInGroup =
+                        currentEpisodes.count {
+                            isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
+                        }
+
+                    item(key = "episodes_header") {
+                        EpisodesSectionHeader(
+                            totalEpisodes = currentEpisodes.size,
+                            watchedEpisodes = watchedInGroup,
+                            subjectType = subjectType,
+                            isGridView = isGridView,
+                            onToggleView = onToggleGridView,
+                        )
+                    }
+
+                    if (availableGroups.size > 1) {
+                        item(key = "episode_group_chips") {
+                            EpisodeGroupFilterChips(
+                                availableGroups = availableGroups,
+                                groupedEpisodes = groupedEpisodes,
+                                selectedGroup = activeGroup,
+                                onGroupSelected = onSelectGroup,
+                            )
+                        }
+                    }
+
+                    if (currentEpisodes.isEmpty()) {
+                        item(key = "episodes_empty") {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else if (isGridView) {
+                        item(key = "episodes_grid") {
+                            EpisodeGrid(
+                                episodes = currentEpisodes,
+                                watchedCount = uiState.collection?.epStatus ?: 0,
+                                onToggleWatched = onToggleEpisodeWatched,
+                                onEpisodeLongClick = onSelectEpisodeForDetail,
+                            )
+                        }
+                    } else {
+                        items(items = currentEpisodes, key = { it.id }) { episode ->
+                            val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
+                            EpisodeListItem(
+                                episode = episode,
+                                isWatched = isWatched,
+                                onClick = { onSelectEpisodeForDetail(episode) },
+                                onToggleWatched = {
+                                    onToggleEpisodeWatched(episode, !isWatched)
+                                },
+                            )
+                        }
+                    }
+                }
+
+                SubjectDetailTab.DETAILS -> {
+                    item(key = "rating_distribution") {
+                        RatingDistributionCard(
+                            rating = subject.rating,
+                            collection = subject.collection,
+                            tags = subject.tags,
+                            onTagClick = onTagClick,
+                        )
+                    }
+
+                    if (uiState.isDetailsLoading &&
+                        uiState.relations.isEmpty() &&
+                        uiState.characters.isEmpty() &&
+                        uiState.persons.isEmpty()
+                    ) {
+                        item(key = "details_loading_indicator") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.relations.isNotEmpty()) {
+                        item(key = "relations_section") {
+                            RelationsSection(
+                                relations = uiState.relations,
+                                onSubjectClick = onSubjectClick,
+                            )
+                        }
+                    }
+
+                    if (uiState.characters.isNotEmpty()) {
+                        item(key = "characters_section") {
+                            CharactersSection(
+                                characters = uiState.characters,
+                                onCharacterClick = onCharacterClick,
+                                onActorClick = onPersonClick,
+                                onPreviewCharacter = onPreviewCharacter,
+                            )
+                        }
+                    }
+
+                    if (uiState.persons.isNotEmpty()) {
+                        item(key = "staff_section") {
+                            StaffSection(
+                                persons = uiState.persons,
+                                onPersonClick = onPersonClick,
+                            )
+                        }
+                    }
+                }
+
+                SubjectDetailTab.COMMUNITY -> {
+                    item(key = "community_tab_section") {
+                        SubjectCommunitySection(
+                            comments = uiState.subjectComments,
+                            commentTotal = uiState.subjectCommentTotal,
+                            isLoadingMoreComments = uiState.isLoadingMoreComments,
+                            hasMoreComments = uiState.hasMoreComments,
+                            onLoadMoreComments = onLoadMoreComments,
+                            topics = uiState.subjectTopics,
+                            onUrlClick = onLinkClick,
+                            isLoading = uiState.isCommunityLoading,
+                        )
+                    }
+                }
+            }
+        }
     }
 }

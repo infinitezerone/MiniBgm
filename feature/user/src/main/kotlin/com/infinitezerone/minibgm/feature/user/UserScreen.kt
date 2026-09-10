@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -213,83 +216,189 @@ fun UserScreenContent(
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                if (!uiState.isLoggedIn) {
-                    item(key = "unauthenticated_card") {
-                        UnauthenticatedCard(
-                            onLogin = onLogin,
-                            isAuthenticating = uiState.isAuthenticating,
-                        )
-                    }
-                } else {
-                    item(key = "profile_header") {
-                        UserProfileHeaderCard(
-                            profile = uiState.activeProfile,
-                            savedAccountsCount = uiState.savedAccounts.size,
-                            onManageAccountsClick = { showAccountSheet = true },
-                        )
+            val isWideScreen = LocalConfiguration.current.screenWidthDp >= 720
+
+            if (isWideScreen) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    // 左栏：个人资料概览、多账号管理与五维收藏分布
+                    LazyColumn(
+                        state = listState,
+                        modifier =
+                            Modifier
+                                .weight(0.45f)
+                                .fillMaxHeight(),
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        if (!uiState.isLoggedIn) {
+                            item(key = "wide_unauthenticated_card") {
+                                UnauthenticatedCard(
+                                    onLogin = onLogin,
+                                    isAuthenticating = uiState.isAuthenticating,
+                                )
+                            }
+                        } else {
+                            item(key = "wide_profile_header") {
+                                UserProfileHeaderCard(
+                                    profile = uiState.activeProfile,
+                                    savedAccountsCount = uiState.savedAccounts.size,
+                                    onManageAccountsClick = { showAccountSheet = true },
+                                )
+                            }
+
+                            if (uiState.savedAccounts.size > 1) {
+                                item(key = "wide_multi_account_card") {
+                                    MultiAccountQuickCard(
+                                        accounts = uiState.savedAccounts,
+                                        activeProfile = uiState.activeProfile,
+                                        onSwitchAccount = onSwitchAccount,
+                                        onManageAccountsClick = { showAccountSheet = true },
+                                        onAddAccountClick = {
+                                            showAccountSheet = false
+                                            onLogin()
+                                        },
+                                    )
+                                }
+                            }
+
+                            item(key = "wide_collections_overview") {
+                                CollectionOverviewCard(
+                                    isLoggedIn = true,
+                                    collectionCounts = uiState.collectionCounts,
+                                    isCountsLoading = uiState.isCountsLoading,
+                                    onCollectionClick = onCollectionClick,
+                                )
+                            }
+                        }
+
+                        if (!uiState.isLoggedIn) {
+                            item(key = "wide_collections_overview_placeholder") {
+                                CollectionOverviewCard(
+                                    isLoggedIn = false,
+                                    collectionCounts = emptyMap(),
+                                    isCountsLoading = false,
+                                    onCollectionClick = onCollectionClick,
+                                )
+                            }
+                        }
                     }
 
-                    if (uiState.savedAccounts.size > 1) {
-                        item(key = "multi_account_card") {
-                            MultiAccountQuickCard(
-                                accounts = uiState.savedAccounts,
+                    // 右栏：同步设置、提醒、缓存与系统信息
+                    LazyColumn(
+                        modifier =
+                            Modifier
+                                .weight(0.55f)
+                                .fillMaxHeight(),
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        item(key = "wide_settings_and_about") {
+                            SettingsSection(
+                                isLoggedIn = uiState.isLoggedIn,
                                 activeProfile = uiState.activeProfile,
-                                onSwitchAccount = onSwitchAccount,
+                                savedAccountsCount = uiState.savedAccounts.size,
+                                syncInterval = uiState.syncInterval,
+                                lastSyncTimestamp = uiState.lastSyncTimestamp,
+                                isSyncing = uiState.isSyncing,
+                                airingReminderEnabled = uiState.airingReminderEnabled,
+                                onToggleAiringReminder = onToggleAiringReminder,
+                                airingReminderHour = airingReminderHour,
+                                onOpenReminderHourDialog = { showReminderHourDialog = true },
+                                onOpenSyncDialog = { showSyncIntervalDialog = true },
+                                onSyncNow = onSyncNow,
+                                onOpenWebUrl = onOpenWebUrl,
+                                onClearCache = onClearCache,
+                                onLogoutCurrentClick = { showLogoutCurrentDialog = true },
+                                onLogoutAllClick = { showLogoutAllDialog = true },
+                            )
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    if (!uiState.isLoggedIn) {
+                        item(key = "unauthenticated_card") {
+                            UnauthenticatedCard(
+                                onLogin = onLogin,
+                                isAuthenticating = uiState.isAuthenticating,
+                            )
+                        }
+                    } else {
+                        item(key = "profile_header") {
+                            UserProfileHeaderCard(
+                                profile = uiState.activeProfile,
+                                savedAccountsCount = uiState.savedAccounts.size,
                                 onManageAccountsClick = { showAccountSheet = true },
-                                onAddAccountClick = {
-                                    showAccountSheet = false
-                                    onLogin()
-                                },
+                            )
+                        }
+
+                        if (uiState.savedAccounts.size > 1) {
+                            item(key = "multi_account_card") {
+                                MultiAccountQuickCard(
+                                    accounts = uiState.savedAccounts,
+                                    activeProfile = uiState.activeProfile,
+                                    onSwitchAccount = onSwitchAccount,
+                                    onManageAccountsClick = { showAccountSheet = true },
+                                    onAddAccountClick = {
+                                        showAccountSheet = false
+                                        onLogin()
+                                    },
+                                )
+                            }
+                        }
+
+                        item(key = "collections_overview") {
+                            CollectionOverviewCard(
+                                isLoggedIn = true,
+                                collectionCounts = uiState.collectionCounts,
+                                isCountsLoading = uiState.isCountsLoading,
+                                onCollectionClick = onCollectionClick,
                             )
                         }
                     }
 
-                    item(key = "collections_overview") {
-                        CollectionOverviewCard(
-                            isLoggedIn = true,
-                            collectionCounts = uiState.collectionCounts,
-                            isCountsLoading = uiState.isCountsLoading,
-                            onCollectionClick = onCollectionClick,
+                    if (!uiState.isLoggedIn) {
+                        item(key = "collections_overview_placeholder") {
+                            CollectionOverviewCard(
+                                isLoggedIn = false,
+                                collectionCounts = emptyMap(),
+                                isCountsLoading = false,
+                                onCollectionClick = onCollectionClick,
+                            )
+                        }
+                    }
+
+                    item(key = "settings_and_about") {
+                        SettingsSection(
+                            isLoggedIn = uiState.isLoggedIn,
+                            activeProfile = uiState.activeProfile,
+                            savedAccountsCount = uiState.savedAccounts.size,
+                            syncInterval = uiState.syncInterval,
+                            lastSyncTimestamp = uiState.lastSyncTimestamp,
+                            isSyncing = uiState.isSyncing,
+                            airingReminderEnabled = uiState.airingReminderEnabled,
+                            onToggleAiringReminder = onToggleAiringReminder,
+                            airingReminderHour = airingReminderHour,
+                            onOpenReminderHourDialog = { showReminderHourDialog = true },
+                            onOpenSyncDialog = { showSyncIntervalDialog = true },
+                            onSyncNow = onSyncNow,
+                            onOpenWebUrl = onOpenWebUrl,
+                            onClearCache = onClearCache,
+                            onLogoutCurrentClick = { showLogoutCurrentDialog = true },
+                            onLogoutAllClick = { showLogoutAllDialog = true },
                         )
                     }
-                }
-
-                if (!uiState.isLoggedIn) {
-                    item(key = "collections_overview_placeholder") {
-                        CollectionOverviewCard(
-                            isLoggedIn = false,
-                            collectionCounts = emptyMap(),
-                            isCountsLoading = false,
-                            onCollectionClick = onCollectionClick,
-                        )
-                    }
-                }
-
-                item(key = "settings_and_about") {
-                    SettingsSection(
-                        isLoggedIn = uiState.isLoggedIn,
-                        activeProfile = uiState.activeProfile,
-                        savedAccountsCount = uiState.savedAccounts.size,
-                        syncInterval = uiState.syncInterval,
-                        lastSyncTimestamp = uiState.lastSyncTimestamp,
-                        isSyncing = uiState.isSyncing,
-                        airingReminderEnabled = uiState.airingReminderEnabled,
-                        onToggleAiringReminder = onToggleAiringReminder,
-                        airingReminderHour = airingReminderHour,
-                        onOpenReminderHourDialog = { showReminderHourDialog = true },
-                        onOpenSyncDialog = { showSyncIntervalDialog = true },
-                        onSyncNow = onSyncNow,
-                        onOpenWebUrl = onOpenWebUrl,
-                        onClearCache = onClearCache,
-                        onLogoutCurrentClick = { showLogoutCurrentDialog = true },
-                        onLogoutAllClick = { showLogoutAllDialog = true },
-                    )
                 }
             }
         }

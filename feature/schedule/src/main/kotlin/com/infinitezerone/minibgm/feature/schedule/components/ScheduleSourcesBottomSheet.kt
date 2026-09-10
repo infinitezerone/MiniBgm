@@ -58,6 +58,7 @@ fun ScheduleSourcesBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
+        sheetMaxWidth = 600.dp,
         containerColor = MaterialTheme.colorScheme.surface,
         modifier = modifier,
     ) {
