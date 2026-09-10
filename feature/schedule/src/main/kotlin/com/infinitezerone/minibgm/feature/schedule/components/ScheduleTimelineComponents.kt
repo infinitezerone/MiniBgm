@@ -9,11 +9,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -62,10 +60,11 @@ import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.CatchupScheduleItem
-import java.time.ZoneId
-import java.time.ZonedDateTime
 
 enum class AirStatus {
     NORMAL,
@@ -74,25 +73,26 @@ enum class AirStatus {
     AIRED,
 }
 
+private fun getCurrentMinutesCst(): Int {
+    val millisInDay = (System.currentTimeMillis() + 8 * 3600_000L) % (24 * 3600_000L)
+    return (millisInDay / 60_000L).toInt()
+}
+
 fun getAirStatus(
     timeCst: String,
     isToday: Boolean,
+    currentMinutesCst: Int = getCurrentMinutesCst(),
 ): AirStatus {
-    if (!isToday || timeCst.isBlank()) return AirStatus.NORMAL
-    val parts = timeCst.split(":")
-    if (parts.size < 2) return AirStatus.NORMAL
-    val hour = parts[0].toIntOrNull() ?: return AirStatus.NORMAL
-    val minute = parts[1].toIntOrNull() ?: return AirStatus.NORMAL
-
-    val zoneCst = ZoneId.of("Asia/Shanghai")
-    val now = ZonedDateTime.now(zoneCst)
-    val today = now.toLocalDate()
-    val airDateTime = today.atTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59)).atZone(zoneCst)
-    val endDateTime = airDateTime.plusMinutes(35)
+    if (!isToday || timeCst.length < 3) return AirStatus.NORMAL
+    val colonIndex = timeCst.indexOf(':')
+    if (colonIndex <= 0 || colonIndex >= timeCst.length - 1) return AirStatus.NORMAL
+    val hour = timeCst.substring(0, colonIndex).toIntOrNull() ?: return AirStatus.NORMAL
+    val minute = timeCst.substring(colonIndex + 1).toIntOrNull() ?: return AirStatus.NORMAL
+    val slotMinutes = hour * 60 + minute
 
     return when {
-        now.isAfter(endDateTime) -> AirStatus.AIRED
-        now.isAfter(airDateTime) -> AirStatus.AIRING
+        currentMinutesCst > slotMinutes + 35 -> AirStatus.AIRED
+        currentMinutesCst >= slotMinutes -> AirStatus.AIRING
         else -> AirStatus.UPCOMING
     }
 }
@@ -104,19 +104,74 @@ fun TimelineSlotRow(
     schedules: List<AirSchedule>,
     isToday: Boolean,
     watchingSubjectIds: Set<Long>,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val airStatus = getAirStatus(time, isToday = isToday)
     val jstTime = schedules.firstOrNull()?.timeJst
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val statusColor =
+        when (airStatus) {
+            AirStatus.AIRING -> StatusAiring
+            AirStatus.UPCOMING -> MaterialTheme.colorScheme.primary
+            AirStatus.AIRED -> MaterialTheme.colorScheme.outline
+            AirStatus.NORMAL -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
 
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+                .drawBehind {
+                    // 左侧轨道轨线与节点绘制在 draw 阶段，消除 IntrinsicSize.Min 双重测量开销
+                    val trackCenterX = 51.dp.toPx()
+                    val dotCenterY = 11.dp.toPx()
+
+                    // 垂直轨道连线（向下延伸连接到下一个 item 的 spacing 8.dp）
+                    drawLine(
+                        color = outlineVariant,
+                        start = Offset(trackCenterX, 0f),
+                        end = Offset(trackCenterX, size.height + 8.dp.toPx()),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+
+                    // 状态节点
+                    when (airStatus) {
+                        AirStatus.AIRING -> {
+                            drawCircle(
+                                color = StatusAiring.copy(alpha = 0.25f),
+                                radius = 6.5.dp.toPx(),
+                                center = Offset(trackCenterX, dotCenterY),
+                            )
+                            drawCircle(
+                                color = StatusAiring,
+                                radius = 3.5.dp.toPx(),
+                                center = Offset(trackCenterX, dotCenterY),
+                            )
+                        }
+                        AirStatus.UPCOMING -> {
+                            drawCircle(
+                                color = statusColor.copy(alpha = 0.2f),
+                                radius = 5.5.dp.toPx(),
+                                center = Offset(trackCenterX, dotCenterY),
+                            )
+                            drawCircle(
+                                color = statusColor,
+                                radius = 3.dp.toPx(),
+                                center = Offset(trackCenterX, dotCenterY),
+                            )
+                        }
+                        else -> {
+                            drawCircle(
+                                color = outlineVariant,
+                                radius = 3.dp.toPx(),
+                                center = Offset(trackCenterX, dotCenterY),
+                            )
+                        }
+                    }
+                },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         TimelineTrackRail(
@@ -153,7 +208,6 @@ fun TimelineTrackRail(
     count: Int,
     modifier: Modifier = Modifier,
 ) {
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     val statusColor =
         when (airStatus) {
             AirStatus.AIRING -> StatusAiring
@@ -163,7 +217,7 @@ fun TimelineTrackRail(
         }
 
     Row(
-        modifier = modifier.fillMaxHeight(),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -234,60 +288,8 @@ fun TimelineTrackRail(
             }
         }
 
-        // 右列：贯穿时间线与节点
-        Box(
-            modifier =
-                Modifier
-                    .width(10.dp)
-                    .fillMaxHeight()
-                    .drawBehind {
-                        val centerX = size.width / 2
-                        val dotCenterY = 9.dp.toPx()
-
-                        // 垂直轨道连线（向下延伸连接到下一个 item 的 spacing）
-                        drawLine(
-                            color = outlineVariant,
-                            start = Offset(centerX, 0f),
-                            end = Offset(centerX, size.height + 12.dp.toPx()),
-                            strokeWidth = 2.dp.toPx(),
-                        )
-
-                        // 状态节点
-                        when (airStatus) {
-                            AirStatus.AIRING -> {
-                                drawCircle(
-                                    color = StatusAiring.copy(alpha = 0.25f),
-                                    radius = 6.5.dp.toPx(),
-                                    center = Offset(centerX, dotCenterY),
-                                )
-                                drawCircle(
-                                    color = StatusAiring,
-                                    radius = 3.5.dp.toPx(),
-                                    center = Offset(centerX, dotCenterY),
-                                )
-                            }
-                            AirStatus.UPCOMING -> {
-                                drawCircle(
-                                    color = statusColor.copy(alpha = 0.2f),
-                                    radius = 5.5.dp.toPx(),
-                                    center = Offset(centerX, dotCenterY),
-                                )
-                                drawCircle(
-                                    color = statusColor,
-                                    radius = 3.dp.toPx(),
-                                    center = Offset(centerX, dotCenterY),
-                                )
-                            }
-                            else -> {
-                                drawCircle(
-                                    color = outlineVariant,
-                                    radius = 3.dp.toPx(),
-                                    center = Offset(centerX, dotCenterY),
-                                )
-                            }
-                        }
-                    },
-        )
+        // 右列：占位 10.dp，轨道线与节点由父级 Row 的 drawBehind 统一绘制
+        Spacer(modifier = Modifier.width(10.dp))
     }
 }
 
@@ -296,7 +298,7 @@ fun TimelineTrackRail(
 fun ScheduleTimelineSingleCard(
     schedule: AirSchedule,
     isWatching: Boolean,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
@@ -306,7 +308,17 @@ fun ScheduleTimelineSingleCard(
     val originalTitle = schedule.title.takeIf { it.isNotBlank() && it != displayName }
 
     Card(
-        onClick = { onSubjectClick(schedule.bgmId) },
+        onClick = {
+            onSubjectClick(
+                SubjectDetailRoute(
+                    subjectId = schedule.bgmId,
+                    initialName = displayName,
+                    initialCoverUrl = schedule.coverUrl,
+                    initialScore = schedule.ratingScore,
+                    source = "schedule",
+                ),
+            )
+        },
         shape = RoundedCornerShape(14.dp),
         colors =
             CardDefaults.cardColors(
@@ -329,20 +341,20 @@ fun ScheduleTimelineSingleCard(
             modifier = Modifier.padding(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // 纯净封面：无任何盖脸黑标，保证视觉艺术完整性
-            Box(
+            // 纯净封面：无任何嵌套 Box 与比例冲突，直接承载共享元素过渡
+            CoverImage(
+                url = schedule.coverUrl,
+                contentDescription = displayName,
+                cornerRadius = 8.dp,
+                aspectRatio = 0.7f,
                 modifier =
                     Modifier
                         .width(58.dp)
-                        .height(82.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-            ) {
-                CoverImage(
-                    url = schedule.coverUrl,
-                    contentDescription = displayName,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
+                        ),
+            )
 
             // 内容区：自上而下的自然阅读动线
             Column(
@@ -568,7 +580,7 @@ fun SiteLinksRow(
 @Composable
 fun ScheduleCatchupSection(
     catchupItems: List<CatchupScheduleItem>,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onMarkEpisodeWatched: (Long, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -623,7 +635,17 @@ fun ScheduleCatchupSection(
                 catchupItems.forEach { item ->
                     val displayName = item.schedule.titleCn.ifBlank { item.schedule.title }
                     Surface(
-                        onClick = { onSubjectClick(item.schedule.bgmId) },
+                        onClick = {
+                            onSubjectClick(
+                                SubjectDetailRoute(
+                                    subjectId = item.schedule.bgmId,
+                                    initialName = displayName,
+                                    initialCoverUrl = item.schedule.coverUrl,
+                                    initialScore = item.schedule.ratingScore,
+                                    source = "catchup",
+                                ),
+                            )
+                        },
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surface,
                         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
@@ -635,15 +657,20 @@ fun ScheduleCatchupSection(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             Box(
-                                modifier =
-                                    Modifier
-                                        .size(width = 44.dp, height = 60.dp)
-                                        .clip(RoundedCornerShape(6.dp)),
+                                modifier = Modifier.width(44.dp).aspectRatio(0.7f),
                             ) {
                                 CoverImage(
                                     url = item.schedule.coverUrl,
                                     contentDescription = displayName,
-                                    modifier = Modifier.fillMaxSize(),
+                                    cornerRadius = 6.dp,
+                                    aspectRatio = 0.7f,
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .bgmSharedElement(
+                                                key = BgmSharedElementKeys.subjectCover(item.schedule.bgmId, "catchup"),
+                                                clipInOverlayDuringTransition = RoundedCornerShape(6.dp),
+                                            ),
                                 )
                                 Surface(
                                     color = MaterialTheme.colorScheme.primary,
@@ -713,7 +740,7 @@ fun ScheduleCatchupSection(
 fun ScheduleUntimedSection(
     schedules: List<AirSchedule>,
     watchingSubjectIds: Set<Long>,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,

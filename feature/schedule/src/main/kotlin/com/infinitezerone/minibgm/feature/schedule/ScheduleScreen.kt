@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.feature.schedule
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +12,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,13 +29,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
@@ -46,6 +46,7 @@ import com.infinitezerone.minibgm.feature.schedule.components.ScheduleCatchupSec
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
+import com.infinitezerone.minibgm.feature.schedule.components.ScheduleTimelineSkeleton
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleUntimedSection
 import com.infinitezerone.minibgm.feature.schedule.components.TimelineSlotRow
 import kotlinx.coroutines.flow.Flow
@@ -55,12 +56,13 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val viewModel: ScheduleViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
@@ -149,6 +151,11 @@ fun ScheduleScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
+            val watchingCountMap =
+                remember(uiState.weeklySchedules, uiState.watchingSubjectIds) {
+                    (1..7).associateWith { uiState.getWatchingCountForWeekday(it) }
+                }
+
             // 顶部星期胶囊导航（指示器 + 快速点击锚点）
             ModernDateCapsuleStrip(
                 dateItems = uiState.dateItems,
@@ -166,7 +173,7 @@ fun ScheduleScreen(
                         }
                     }
                 },
-                watchingCountMap = (1..7).associateWith { uiState.getWatchingCountForWeekday(it) },
+                watchingCountMap = watchingCountMap,
             )
 
             val currentWeekdayTotal = uiState.getTotalCountForWeekday(uiState.selectedWeekday)
@@ -187,12 +194,7 @@ fun ScheduleScreen(
             ) {
                 when {
                     uiState.isLoading && uiState.weeklySchedules.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
+                        ScheduleTimelineSkeleton()
                     }
 
                     uiState.error != null && uiState.weeklySchedules.isEmpty() -> {
@@ -210,8 +212,14 @@ fun ScheduleScreen(
                         ) { page ->
                             val weekday = page + 1
                             val isTodayPage = weekday == uiState.todayWeekday
-                            val timeGrouped = uiState.getTimeGroupedSchedulesForWeekday(weekday)
-                            val allDaySchedules = uiState.getAllDaySchedulesForWeekday(weekday)
+                            val timeGrouped =
+                                remember(uiState.weeklySchedules, weekday) {
+                                    uiState.getTimeGroupedSchedulesForWeekday(weekday)
+                                }
+                            val allDaySchedules =
+                                remember(uiState.weeklySchedules, weekday) {
+                                    uiState.getAllDaySchedulesForWeekday(weekday)
+                                }
                             val listState = weekdayListStates[weekday] ?: rememberLazyListState()
 
                             DayScheduleList(
@@ -222,7 +230,10 @@ fun ScheduleScreen(
                                 uiState = uiState,
                                 onSubjectClick = onSubjectClick,
                                 onToggleWatching = viewModel::toggleWatching,
-                                onMarkEpisodeWatched = viewModel::markEpisodeWatched,
+                                onMarkEpisodeWatched = { subjectId, ep ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    viewModel.markEpisodeWatched(subjectId, ep)
+                                },
                                 onShowSources = { selectedScheduleForSources = it },
                                 listState = listState,
                             )
@@ -249,7 +260,7 @@ private fun DayScheduleList(
     timeGrouped: Map<String, List<AirSchedule>>,
     allDaySchedules: List<AirSchedule>,
     uiState: ScheduleUiState,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWatching: (Long) -> Unit,
     onMarkEpisodeWatched: (Long, Int) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
