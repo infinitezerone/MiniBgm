@@ -1,11 +1,5 @@
 package com.infinitezerone.minibgm.feature.search.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,26 +30,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
+import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.component.skeletonNode
 
 /** 探索页双列瀑布流与焦点大卡骨架屏加载状态 */
 @Composable
-fun ExploreSkeletonLoading(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "skeletonPulse")
-    val alpha by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "skeletonAlpha",
-    )
-    val placeholderColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = alpha)
-
+fun ExploreSkeletonLoading(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
@@ -67,7 +54,7 @@ fun ExploreSkeletonLoading(modifier: Modifier = Modifier) {
         // 1. 顶部焦点大卡骨架
         item(span = StaggeredGridItemSpan.FullLine) {
             SpotlightSkeletonCard(
-                placeholderColor = placeholderColor,
+                skeletonState = skeletonState,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
         }
@@ -85,7 +72,7 @@ fun ExploreSkeletonLoading(modifier: Modifier = Modifier) {
         items(variations.size) { index ->
             WaterfallSkeletonCard(
                 variation = variations[index],
-                placeholderColor = placeholderColor,
+                skeletonState = skeletonState,
             )
         }
     }
@@ -93,8 +80,8 @@ fun ExploreSkeletonLoading(modifier: Modifier = Modifier) {
 
 @Composable
 fun SpotlightSkeletonCard(
-    placeholderColor: Color,
     modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
     Card(
         modifier =
@@ -119,19 +106,15 @@ fun SpotlightSkeletonCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.align(Alignment.TopStart),
             ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(width = 64.dp, height = 20.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(placeholderColor),
+                SkeletonBox(
+                    modifier = Modifier.size(width = 64.dp, height = 20.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    state = skeletonState,
                 )
-                Box(
-                    modifier =
-                        Modifier
-                            .size(width = 46.dp, height = 20.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(placeholderColor),
+                SkeletonBox(
+                    modifier = Modifier.size(width = 46.dp, height = 20.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    state = skeletonState,
                 )
             }
 
@@ -141,56 +124,50 @@ fun SpotlightSkeletonCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // 标题占位
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.6f)
-                            .height(20.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(placeholderColor),
+                            .height(20.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
 
                 // 标签占位行
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 44.dp, height = 18.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(placeholderColor),
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 44.dp, height = 18.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
                     )
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 52.dp, height = 18.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(placeholderColor),
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 52.dp, height = 18.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
                     )
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 40.dp, height = 18.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(placeholderColor),
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 40.dp, height = 18.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
                     )
                 }
 
                 // 剧情钩子引言占位
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.92f)
-                            .height(13.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(placeholderColor),
+                            .height(13.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.58f)
-                            .height(13.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(placeholderColor),
+                            .height(13.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
             }
         }
@@ -204,8 +181,8 @@ data class WaterfallCardVariation(
 @Composable
 fun WaterfallSkeletonCard(
     variation: WaterfallCardVariation,
-    placeholderColor: Color,
     modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -224,7 +201,10 @@ fun WaterfallSkeletonCard(
                         .fillMaxWidth()
                         .aspectRatio(0.72f)
                         .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                        .background(placeholderColor),
+                        .skeletonNode(
+                            state = skeletonState,
+                            shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                        ),
             ) {
                 // 左上角评分角标占位
                 Box(
@@ -246,62 +226,58 @@ fun WaterfallSkeletonCard(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // 标题占位
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.82f)
-                            .height(15.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(placeholderColor),
+                            .height(15.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
 
                 // 标签占位行
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 36.dp, height = 14.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(placeholderColor),
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 36.dp, height = 14.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
                     )
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = 44.dp, height = 14.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(placeholderColor),
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 44.dp, height = 14.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
                     )
                 }
 
                 // 参差安利文案行
                 if (variation.hookLines >= 1) {
-                    Box(
+                    SkeletonBox(
                         modifier =
                             Modifier
                                 .fillMaxWidth(0.92f)
-                                .height(11.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(placeholderColor),
+                                .height(11.dp),
+                        shape = RoundedCornerShape(3.dp),
+                        state = skeletonState,
                     )
                 }
                 if (variation.hookLines >= 2) {
-                    Box(
+                    SkeletonBox(
                         modifier =
                             Modifier
                                 .fillMaxWidth(0.68f)
-                                .height(11.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(placeholderColor),
+                                .height(11.dp),
+                        shape = RoundedCornerShape(3.dp),
+                        state = skeletonState,
                     )
                 }
                 if (variation.hookLines >= 3) {
-                    Box(
+                    SkeletonBox(
                         modifier =
                             Modifier
                                 .fillMaxWidth(0.46f)
-                                .height(11.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(placeholderColor),
+                                .height(11.dp),
+                        shape = RoundedCornerShape(3.dp),
+                        state = skeletonState,
                     )
                 }
             }

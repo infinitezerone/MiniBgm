@@ -44,6 +44,9 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 
 /**
  * 双列安利瀑布流卡片（小红书 / 小黑盒形态）：
@@ -58,7 +61,7 @@ import com.infinitezerone.minibgm.core.model.SubjectComment
 fun WaterfallSubjectCard(
     subject: Subject,
     isWished: Boolean,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWish: (Long) -> Unit,
     modifier: Modifier = Modifier,
     selectedTags: Set<String> = emptySet(),
@@ -96,7 +99,17 @@ fun WaterfallSubjectCard(
             }.take(3)
 
     Card(
-        onClick = { onSubjectClick(subject.id) },
+        onClick = {
+            onSubjectClick(
+                SubjectDetailRoute(
+                    subjectId = subject.id,
+                    initialName = primaryTitle,
+                    initialCoverUrl = subject.images?.bestImage.orEmpty(),
+                    initialScore = score,
+                    source = "explore",
+                ),
+            )
+        },
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
         colors =
@@ -118,7 +131,13 @@ fun WaterfallSubjectCard(
                     contentDescription = primaryTitle,
                     cornerRadius = 10.dp,
                     aspectRatio = 0.72f,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .bgmSharedElement(
+                                key = BgmSharedElementKeys.subjectCover(subject.id, "explore"),
+                                clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                            ),
                 )
 
                 // 评分与社区在看热度胶囊（左上角浮层）

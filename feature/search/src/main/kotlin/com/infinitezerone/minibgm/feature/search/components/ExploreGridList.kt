@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 双列瀑布流列表（支持上滑触底自动分页加载） */
@@ -37,7 +38,7 @@ fun WaterfallGridList(
     hasMore: Boolean,
     isLoadingMore: Boolean,
     onLoadMore: () -> Unit,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWish: (Long) -> Unit,
     gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     modifier: Modifier = Modifier,
