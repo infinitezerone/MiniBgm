@@ -44,6 +44,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 
 /**
  * 发现流顶部「今日焦点 / 深度安利」大卡（打破千篇一律的网格货架，注入编辑感与视觉重心）：
@@ -56,7 +57,7 @@ import com.infinitezerone.minibgm.core.model.SubjectComment
 fun ExploreSpotlightCard(
     subject: Subject,
     isWished: Boolean,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWish: (Long) -> Unit,
     modifier: Modifier = Modifier,
     selectedTags: Set<String> = emptySet(),
@@ -82,7 +83,16 @@ fun ExploreSpotlightCard(
             modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .clickable { onSubjectClick(subject.id) },
+                .clickable {
+                    onSubjectClick(
+                        SubjectDetailRoute(
+                            subjectId = subject.id,
+                            initialName = subject.displayName,
+                            initialCoverUrl = imageUrl,
+                            initialScore = score,
+                        ),
+                    )
+                },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),

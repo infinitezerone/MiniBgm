@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -62,6 +61,9 @@ import com.infinitezerone.minibgm.core.designsystem.theme.TypeRealContainer
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 
 /** 高质感详细卡片（多品类自适应徽章、关键词高亮、度量适配与 1-Tap 快捷三态打卡） */
 @OptIn(ExperimentalLayoutApi::class)
@@ -70,7 +72,7 @@ fun SearchResultCard(
     subject: Subject,
     currentStatus: CollectionType?,
     query: String,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleCollection: (CollectionType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -114,7 +116,17 @@ fun SearchResultCard(
         }
 
     Card(
-        onClick = { onSubjectClick(subject.id) },
+        onClick = {
+            onSubjectClick(
+                SubjectDetailRoute(
+                    subjectId = subject.id,
+                    initialName = primaryTitle,
+                    initialCoverUrl = subject.images?.bestImage.orEmpty(),
+                    initialScore = rating?.score ?: 0.0,
+                    source = "search_list",
+                ),
+            )
+        },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth(),
@@ -123,24 +135,20 @@ fun SearchResultCard(
             modifier = Modifier.padding(10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // 74dp x 104dp 高清封面
-            Box(
+            // 74dp 封面直接承载共享元素，消除嵌套 Box 与比例冲突
+            CoverImage(
+                url = subject.images?.bestImage.orEmpty(),
+                contentDescription = primaryTitle,
+                cornerRadius = 8.dp,
+                aspectRatio = 0.7f,
                 modifier =
                     Modifier
                         .width(74.dp)
-                        .height(104.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(
-                            BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                            RoundedCornerShape(8.dp),
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(subject.id, "search_list"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
-            ) {
-                CoverImage(
-                    url = subject.images?.bestImage.orEmpty(),
-                    contentDescription = primaryTitle,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            )
 
             // 右侧内容区
             Column(
@@ -323,7 +331,7 @@ fun SearchResultGridCard(
     subject: Subject,
     currentStatus: CollectionType?,
     query: String,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleDoing: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -338,7 +346,17 @@ fun SearchResultGridCard(
     val score = subject.rating?.score ?: 0.0
 
     Card(
-        onClick = { onSubjectClick(subject.id) },
+        onClick = {
+            onSubjectClick(
+                SubjectDetailRoute(
+                    subjectId = subject.id,
+                    initialName = primaryTitle,
+                    initialCoverUrl = subject.images?.bestImage.orEmpty(),
+                    initialScore = score,
+                    source = "search_grid",
+                ),
+            )
+        },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth(),
@@ -350,7 +368,10 @@ fun SearchResultGridCard(
                     Modifier
                         .fillMaxWidth()
                         .aspectRatio(3f / 4f)
-                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(subject.id, "search_grid"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                        ).clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 CoverImage(

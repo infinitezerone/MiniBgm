@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.search.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,14 +27,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
+import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 
 /** 骨架屏加载状态 */
 @Composable
-fun SearchSkeletonLoading(modifier: Modifier = Modifier) {
+fun SearchSkeletonLoading(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
     Column(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -50,41 +54,41 @@ fun SearchSkeletonLoading(modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Box(
+                    SkeletonBox(
                         modifier =
                             Modifier
                                 .width(74.dp)
-                                .height(104.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                .height(104.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        state = skeletonState,
                     )
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Box(
+                        SkeletonBox(
                             modifier =
                                 Modifier
                                     .fillMaxWidth(0.7f)
-                                    .height(18.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                    .height(18.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
                         )
-                        Box(
+                        SkeletonBox(
                             modifier =
                                 Modifier
                                     .fillMaxWidth(0.4f)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                    .height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
                         )
-                        Box(
+                        SkeletonBox(
                             modifier =
                                 Modifier
                                     .fillMaxWidth(0.55f)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                    .height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
                         )
                     }
                 }

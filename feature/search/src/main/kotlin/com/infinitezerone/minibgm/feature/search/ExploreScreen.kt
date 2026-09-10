@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.ActiveFilterPillRow
 import com.infinitezerone.minibgm.feature.search.components.ExploreEmptyState
@@ -64,7 +65,7 @@ import org.koin.androidx.compose.koinViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExploreScreen(
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,

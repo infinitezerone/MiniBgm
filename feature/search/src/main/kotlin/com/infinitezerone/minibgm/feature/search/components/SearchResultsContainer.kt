@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.SearchSort
 import com.infinitezerone.minibgm.feature.search.SearchViewMode
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -61,7 +62,7 @@ fun SearchResultsList(
     onViewModeToggle: () -> Unit,
     onToggleCollection: (Subject, CollectionType) -> Unit,
     onLoadMore: () -> Unit,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()

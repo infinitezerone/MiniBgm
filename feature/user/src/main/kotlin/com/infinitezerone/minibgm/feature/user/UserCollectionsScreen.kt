@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,8 +59,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
+import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -70,7 +74,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UserCollectionsScreen(
     initialType: CollectionType = CollectionType.DOING,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: UserCollectionsViewModel = koinViewModel(),
@@ -111,7 +115,7 @@ fun UserCollectionsContent(
     onFilterSelect: (CollectionSubjectFilter) -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: (CollectionType) -> Unit = {},
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: () -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
     modifier: Modifier = Modifier,
@@ -326,6 +330,7 @@ private fun CollectionTypeTabs(
 
 @Composable
 private fun CollectionLoadingView(modifier: Modifier = Modifier) {
+    val skeletonState = rememberSkeletonState()
     Column(
         modifier =
             modifier
@@ -334,13 +339,16 @@ private fun CollectionLoadingView(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         repeat(4) {
-            CollectionSkeletonCard()
+            CollectionSkeletonCard(skeletonState = skeletonState)
         }
     }
 }
 
 @Composable
-private fun CollectionSkeletonCard(modifier: Modifier = Modifier) {
+private fun CollectionSkeletonCard(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -357,42 +365,40 @@ private fun CollectionSkeletonCard(modifier: Modifier = Modifier) {
                     .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(width = 64.dp, height = 88.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)),
+            SkeletonBox(
+                modifier = Modifier.size(width = 64.dp, height = 88.dp),
+                shape = RoundedCornerShape(8.dp),
+                state = skeletonState,
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.65f)
-                            .height(16.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)),
+                            .height(16.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.35f)
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.4f)),
+                            .height(12.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Box(
+                SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth(0.85f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.3f)),
+                            .height(8.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
                 )
             }
         }
@@ -424,7 +430,7 @@ private fun SubjectFilterRow(
 private fun UserCollectionCard(
     collection: UserCollection,
     isUpdating: Boolean,
-    onSubjectClick: (Long) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -440,7 +446,17 @@ private fun UserCollectionCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .clickable { onSubjectClick(collection.subjectId) },
+                .clickable {
+                    onSubjectClick(
+                        SubjectDetailRoute(
+                            subjectId = collection.subjectId,
+                            initialName = title,
+                            initialCoverUrl = coverUrl,
+                            initialScore = subject?.rating?.score ?: 0.0,
+                            source = "user",
+                        ),
+                    )
+                },
         shape = RoundedCornerShape(16.dp),
         colors =
             CardDefaults.cardColors(
@@ -454,7 +470,13 @@ private fun UserCollectionCard(
             CoverImage(
                 url = coverUrl,
                 contentDescription = title,
-                modifier = Modifier.width(76.dp),
+                modifier =
+                    Modifier
+                        .width(76.dp)
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(collection.subjectId, "user"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                        ),
                 cornerRadius = 10.dp,
             )
 
