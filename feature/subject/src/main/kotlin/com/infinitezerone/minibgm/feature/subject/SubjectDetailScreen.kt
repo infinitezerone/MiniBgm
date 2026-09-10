@@ -22,7 +22,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -39,7 +38,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,9 +49,13 @@ import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.Rating
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
+import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.navigation.isNavEntering
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.CharacterDetailBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.CharacterImagePreviewDialog
@@ -67,6 +72,8 @@ import com.infinitezerone.minibgm.feature.subject.components.RatingDistributionC
 import com.infinitezerone.minibgm.feature.subject.components.RelationsSection
 import com.infinitezerone.minibgm.feature.subject.components.StaffSection
 import com.infinitezerone.minibgm.feature.subject.components.SubjectCommunitySection
+import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailBodySkeleton
+import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectHeaderCard
 import com.infinitezerone.minibgm.feature.subject.components.SubjectPersonalProgressCard
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
@@ -109,11 +116,15 @@ private fun getTabLabel(
 fun SubjectDetailScreen(
     subjectId: Long,
     onBackClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    initialName: String = "",
+    initialCoverUrl: String = "",
+    initialScore: Double = 0.0,
+    source: String = "",
     onSubjectClick: (Long) -> Unit = {},
     onTagClick: (String) -> Unit = {},
     onCharacterClick: ((Long) -> Unit)? = null,
     onPersonClick: ((Long) -> Unit)? = null,
-    modifier: Modifier = Modifier,
     viewModel: SubjectDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId) }),
 ) {
     val context = LocalContext.current
@@ -145,8 +156,55 @@ fun SubjectDetailScreen(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val subjectType = uiState.subject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
+    val isEntering = isNavEntering()
+    var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
+    if (!isEntering) {
+        hasEnteredTransitionFinished = true
+    }
+    val hasPreview = initialName.isNotBlank() || initialCoverUrl.isNotBlank()
+    val isTransitionStabilizing = isEntering && !hasEnteredTransitionFinished && hasPreview
+
+    val previewSubject =
+        if (hasPreview) {
+            remember(subjectId, initialName, initialCoverUrl, initialScore) {
+                Subject(
+                    id = subjectId,
+                    type = uiState.subject?.type ?: SubjectType.ANIME.value,
+                    name = initialName,
+                    nameCn = initialName,
+                    images =
+                        if (initialCoverUrl.isNotBlank()) {
+                            SubjectImages(
+                                large = initialCoverUrl,
+                                common = initialCoverUrl,
+                                medium = initialCoverUrl,
+                                small = initialCoverUrl,
+                                grid = initialCoverUrl,
+                            )
+                        } else {
+                            null
+                        },
+                    rating =
+                        if (initialScore > 0.0) {
+                            Rating(score = initialScore)
+                        } else {
+                            null
+                        },
+                )
+            }
+        } else {
+            null
+        }
+
+    val displaySubject =
+        if (isTransitionStabilizing) {
+            previewSubject
+        } else {
+            uiState.subject ?: previewSubject
+        }
+    val subjectType = displaySubject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
     var selectedTab by rememberSaveable { mutableStateOf(SubjectDetailTab.EPISODES) }
 
     LaunchedEffect(selectedTab) {
@@ -214,7 +272,7 @@ fun SubjectDetailScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = uiState.subject?.displayName ?: "条目详情",
+                        text = displaySubject?.displayName ?: "条目详情",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -249,31 +307,12 @@ fun SubjectDetailScreen(
             Column(
                 modifier = Modifier.fillMaxSize(),
             ) {
-                if (uiState.isLoading && uiState.subject == null) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-
                 when {
-                    uiState.subject == null && uiState.isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                CircularProgressIndicator()
-                                Text(
-                                    text = "正在加载条目详情...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                    displaySubject == null && uiState.isLoading -> {
+                        SubjectDetailFullSkeleton()
                     }
 
-                    uiState.subject == null && uiState.error != null -> {
+                    displaySubject == null && uiState.error != null -> {
                         Box(
                             modifier =
                                 Modifier
@@ -321,9 +360,9 @@ fun SubjectDetailScreen(
                         }
                     }
 
-                    uiState.subject != null -> {
-                        val subject = uiState.subject!!
-                        val totalEpisodes = if (subject.eps > 0) subject.eps else subject.totalEpisodes
+                    displaySubject != null -> {
+                        val totalEpisodes =
+                            if (displaySubject.eps > 0) displaySubject.eps else displaySubject.totalEpisodes
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
@@ -346,211 +385,225 @@ fun SubjectDetailScreen(
                                 }
                             }
 
-                            // 1. 条目头部 Hero 卡片
+                            // 1. 条目头部 Hero 卡片 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
                             item(key = "header") {
                                 SubjectHeaderCard(
-                                    subject = subject,
+                                    subject = displaySubject,
                                     subjectType = subjectType,
+                                    sharedElementSource = source,
                                 )
                             }
 
-                            // 2. 我的追番/阅读/收听/游玩与进度条面板
-                            item(key = "collection_progress_bar") {
-                                SubjectPersonalProgressCard(
-                                    collection = uiState.collection,
-                                    totalEpisodes = totalEpisodes,
-                                    subjectType = subjectType,
-                                    onOpenSheet = { showCollectionSheet = true },
-                                    onToggleWatching = viewModel::toggleWatching,
-                                )
-                            }
+                            val fullSubject = if (isTransitionStabilizing) null else uiState.subject
+                            if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
+                                item(key = "detail_loading_skeleton") {
+                                    SubjectDetailBodySkeleton()
+                                }
+                            } else if (fullSubject != null) {
+                                val subject = fullSubject
+                                // 2. 我的追番/阅读/收听/游玩与进度条面板
+                                item(key = "collection_progress_bar") {
+                                    SubjectPersonalProgressCard(
+                                        collection = uiState.collection,
+                                        totalEpisodes = totalEpisodes,
+                                        subjectType = subjectType,
+                                        onOpenSheet = { showCollectionSheet = true },
+                                        onToggleWatching = viewModel::toggleWatching,
+                                    )
+                                }
 
-                            // 3. 粘性二级分栏 Tab 栏
-                            stickyHeader(key = "subject_tabs_bar") {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surface,
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
-                                ) {
-                                    PrimaryTabRow(
-                                        selectedTabIndex = selectedTab.ordinal,
-                                        modifier = Modifier.fillMaxWidth(),
+                                // 3. 粘性二级分栏 Tab 栏
+                                stickyHeader(key = "subject_tabs_bar") {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
                                     ) {
-                                        SubjectDetailTab.entries.forEach { tab ->
-                                            val tabLabel = getTabLabel(tab, subjectType)
-                                            Tab(
-                                                selected = selectedTab == tab,
-                                                onClick = { selectedTab = tab },
-                                                text = {
+                                        PrimaryTabRow(
+                                            selectedTabIndex = selectedTab.ordinal,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            SubjectDetailTab.entries.forEach { tab ->
+                                                val tabLabel = getTabLabel(tab, subjectType)
+                                                Tab(
+                                                    selected = selectedTab == tab,
+                                                    onClick = { selectedTab = tab },
+                                                    text = {
+                                                        Text(
+                                                            text =
+                                                                when (tab) {
+                                                                    SubjectDetailTab.EPISODES ->
+                                                                        if (currentEpisodes.isNotEmpty()) {
+                                                                            "$tabLabel (${currentEpisodes.size})"
+                                                                        } else {
+                                                                            tabLabel
+                                                                        }
+                                                                    SubjectDetailTab.COMMUNITY ->
+                                                                        if (uiState.subjectCommentTotal > 0) {
+                                                                            "$tabLabel (${uiState.subjectCommentTotal})"
+                                                                        } else {
+                                                                            tabLabel
+                                                                        }
+                                                                    else -> tabLabel
+                                                                },
+                                                            fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 4. Tab 切换内容
+                                when (selectedTab) {
+                                    SubjectDetailTab.EPISODES -> {
+                                        val watchedInGroup =
+                                            currentEpisodes.count {
+                                                isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
+                                            }
+
+                                        item(key = "episodes_header") {
+                                            EpisodesSectionHeader(
+                                                totalEpisodes = currentEpisodes.size,
+                                                watchedEpisodes = watchedInGroup,
+                                                subjectType = subjectType,
+                                                isGridView = isGridView,
+                                                onToggleView = { isGridView = !isGridView },
+                                            )
+                                        }
+
+                                        if (availableGroups.size > 1) {
+                                            item(key = "episode_group_chips") {
+                                                EpisodeGroupFilterChips(
+                                                    availableGroups = availableGroups,
+                                                    groupedEpisodes = groupedEpisodes,
+                                                    selectedGroup = activeGroup,
+                                                    onGroupSelected = { selectedGroup = it },
+                                                )
+                                            }
+                                        }
+
+                                        if (currentEpisodes.isEmpty()) {
+                                            item(key = "episodes_empty") {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 32.dp),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
                                                     Text(
-                                                        text =
-                                                            when (tab) {
-                                                                SubjectDetailTab.EPISODES ->
-                                                                    if (currentEpisodes.isNotEmpty()) {
-                                                                        "$tabLabel (${currentEpisodes.size})"
-                                                                    } else {
-                                                                        tabLabel
-                                                                    }
-                                                                SubjectDetailTab.COMMUNITY ->
-                                                                    if (uiState.subjectCommentTotal > 0) {
-                                                                        "$tabLabel (${uiState.subjectCommentTotal})"
-                                                                    } else {
-                                                                        tabLabel
-                                                                    }
-                                                                else -> tabLabel
-                                                            },
-                                                        fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
+                                                        text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            // 4. Tab 切换内容
-                            when (selectedTab) {
-                                SubjectDetailTab.EPISODES -> {
-                                    val watchedInGroup = currentEpisodes.count { isEpisodeWatched(it, uiState.collection?.epStatus ?: 0) }
-
-                                    item(key = "episodes_header") {
-                                        EpisodesSectionHeader(
-                                            totalEpisodes = currentEpisodes.size,
-                                            watchedEpisodes = watchedInGroup,
-                                            subjectType = subjectType,
-                                            isGridView = isGridView,
-                                            onToggleView = { isGridView = !isGridView },
-                                        )
-                                    }
-
-                                    if (availableGroups.size > 1) {
-                                        item(key = "episode_group_chips") {
-                                            EpisodeGroupFilterChips(
-                                                availableGroups = availableGroups,
-                                                groupedEpisodes = groupedEpisodes,
-                                                selectedGroup = activeGroup,
-                                                onGroupSelected = { selectedGroup = it },
-                                            )
-                                        }
-                                    }
-
-                                    if (currentEpisodes.isEmpty()) {
-                                        item(key = "episodes_empty") {
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(vertical = 32.dp),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Text(
-                                                    text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                }
+                                            }
+                                        } else if (isGridView) {
+                                            item(key = "episodes_grid") {
+                                                EpisodeGrid(
+                                                    episodes = currentEpisodes,
+                                                    watchedCount = uiState.collection?.epStatus ?: 0,
+                                                    onToggleWatched = { episode, isWatched ->
+                                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                                        val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                                        viewModel.toggleEpisodeWatched(episode.id, isWatched, epNumber)
+                                                    },
+                                                    onEpisodeLongClick = { episode ->
+                                                        selectedEpisodeForDetail = episode
+                                                    },
                                                 )
                                             }
-                                        }
-                                    } else if (isGridView) {
-                                        item(key = "episodes_grid") {
-                                            EpisodeGrid(
-                                                episodes = currentEpisodes,
-                                                watchedCount = uiState.collection?.epStatus ?: 0,
-                                                onToggleWatched = { episode, isWatched ->
-                                                    val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                                                    viewModel.toggleEpisodeWatched(episode.id, isWatched, epNumber)
-                                                },
-                                                onEpisodeLongClick = { episode ->
-                                                    selectedEpisodeForDetail = episode
-                                                },
-                                            )
-                                        }
-                                    } else {
-                                        items(items = currentEpisodes, key = { it.id }) { episode ->
-                                            val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
-                                            val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                                            EpisodeListItem(
-                                                episode = episode,
-                                                isWatched = isWatched,
-                                                onClick = {
-                                                    selectedEpisodeForDetail = episode
-                                                },
-                                                onToggleWatched = {
-                                                    viewModel.toggleEpisodeWatched(episode.id, !isWatched, epNumber)
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-
-                                SubjectDetailTab.DETAILS -> {
-                                    item(key = "rating_distribution") {
-                                        RatingDistributionCard(
-                                            rating = subject.rating,
-                                            collection = subject.collection,
-                                            tags = subject.tags,
-                                            onTagClick = onTagClick,
-                                        )
-                                    }
-
-                                    if (uiState.isDetailsLoading &&
-                                        uiState.relations.isEmpty() &&
-                                        uiState.characters.isEmpty() &&
-                                        uiState.persons.isEmpty()
-                                    ) {
-                                        item(key = "details_loading_indicator") {
-                                            Box(
-                                                modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(24.dp),
-                                                    strokeWidth = 2.dp,
+                                        } else {
+                                            items(items = currentEpisodes, key = { it.id }) { episode ->
+                                                val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
+                                                val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                                EpisodeListItem(
+                                                    episode = episode,
+                                                    isWatched = isWatched,
+                                                    onClick = {
+                                                        selectedEpisodeForDetail = episode
+                                                    },
+                                                    onToggleWatched = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                                        viewModel.toggleEpisodeWatched(episode.id, !isWatched, epNumber)
+                                                    },
                                                 )
                                             }
                                         }
                                     }
 
-                                    if (uiState.relations.isNotEmpty()) {
-                                        item(key = "relations_section") {
-                                            RelationsSection(
-                                                relations = uiState.relations,
-                                                onSubjectClick = onSubjectClick,
+                                    SubjectDetailTab.DETAILS -> {
+                                        item(key = "rating_distribution") {
+                                            RatingDistributionCard(
+                                                rating = subject.rating,
+                                                collection = subject.collection,
+                                                tags = subject.tags,
+                                                onTagClick = onTagClick,
                                             )
+                                        }
+
+                                        if (uiState.isDetailsLoading &&
+                                            uiState.relations.isEmpty() &&
+                                            uiState.characters.isEmpty() &&
+                                            uiState.persons.isEmpty()
+                                        ) {
+                                            item(key = "details_loading_indicator") {
+                                                Box(
+                                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(24.dp),
+                                                        strokeWidth = 2.dp,
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (uiState.relations.isNotEmpty()) {
+                                            item(key = "relations_section") {
+                                                RelationsSection(
+                                                    relations = uiState.relations,
+                                                    onSubjectClick = onSubjectClick,
+                                                )
+                                            }
+                                        }
+
+                                        if (uiState.characters.isNotEmpty()) {
+                                            item(key = "characters_section") {
+                                                CharactersSection(
+                                                    characters = uiState.characters,
+                                                    onCharacterClick = handleCharacterClick,
+                                                    onActorClick = handlePersonClick,
+                                                    onPreviewCharacter = { previewCharacter = it },
+                                                )
+                                            }
+                                        }
+
+                                        if (uiState.persons.isNotEmpty()) {
+                                            item(key = "staff_section") {
+                                                StaffSection(
+                                                    persons = uiState.persons,
+                                                    onPersonClick = handlePersonClick,
+                                                )
+                                            }
                                         }
                                     }
 
-                                    if (uiState.characters.isNotEmpty()) {
-                                        item(key = "characters_section") {
-                                            CharactersSection(
-                                                characters = uiState.characters,
-                                                onCharacterClick = handleCharacterClick,
-                                                onActorClick = handlePersonClick,
-                                                onPreviewCharacter = { previewCharacter = it },
+                                    SubjectDetailTab.COMMUNITY -> {
+                                        item(key = "community_tab_section") {
+                                            SubjectCommunitySection(
+                                                comments = uiState.subjectComments,
+                                                commentTotal = uiState.subjectCommentTotal,
+                                                isLoadingMoreComments = uiState.isLoadingMoreComments,
+                                                hasMoreComments = uiState.hasMoreComments,
+                                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
+                                                topics = uiState.subjectTopics,
+                                                onUrlClick = handleLinkClick,
+                                                isLoading = uiState.isCommunityLoading,
                                             )
                                         }
-                                    }
-
-                                    if (uiState.persons.isNotEmpty()) {
-                                        item(key = "staff_section") {
-                                            StaffSection(
-                                                persons = uiState.persons,
-                                                onPersonClick = handlePersonClick,
-                                            )
-                                        }
-                                    }
-                                }
-
-                                SubjectDetailTab.COMMUNITY -> {
-                                    item(key = "community_tab_section") {
-                                        SubjectCommunitySection(
-                                            comments = uiState.subjectComments,
-                                            commentTotal = uiState.subjectCommentTotal,
-                                            isLoadingMoreComments = uiState.isLoadingMoreComments,
-                                            hasMoreComments = uiState.hasMoreComments,
-                                            onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
-                                            topics = uiState.subjectTopics,
-                                            onUrlClick = handleLinkClick,
-                                            isLoading = uiState.isCommunityLoading,
-                                        )
                                     }
                                 }
                             }
@@ -587,10 +640,12 @@ fun SubjectDetailScreen(
             onLoadComments = { viewModel.loadEpisodeComments(ep.id) },
             onDismiss = { selectedEpisodeForDetail = null },
             onToggleWatched = { episode, watched ->
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
                 viewModel.toggleEpisodeWatched(episode.id, watched, epNumber)
             },
             onMarkWatchedUpTo = { episode ->
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 viewModel.markWatchedUpTo(episode)
             },
             onUrlClick = handleLinkClick,

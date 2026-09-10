@@ -20,8 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +41,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
+import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectPerson
@@ -61,7 +61,7 @@ fun PersonDetailBottomSheet(
     onSubjectClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scrollState = rememberScrollState()
     var isSummaryExpanded by remember { mutableStateOf(false) }
 
@@ -130,7 +130,7 @@ fun PersonDetailBottomSheet(
                     cornerRadius = 12.dp,
                     aspectRatio = 0.8f,
                     alignment = Alignment.TopCenter,
-                    fallbackIcon = Icons.Filled.Person,
+                    placeholder = CoverPlaceholder.Person,
                 )
 
                 Column(
@@ -197,11 +197,16 @@ fun PersonDetailBottomSheet(
 
                     if (isLoading && detail == null) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 46.dp, height = 20.dp),
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 54.dp, height = 20.dp),
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -266,6 +271,36 @@ fun PersonDetailBottomSheet(
                                 )
                             }
                         }
+                    }
+                }
+            } else if (isLoading && detail == null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.3f).height(16.dp),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.92f).height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.85f).height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.55f).height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                        )
                     }
                 }
             }

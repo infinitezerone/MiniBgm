@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -57,6 +56,8 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import kotlin.math.roundToInt
 
 /** 条目头部卡片：立体圆角海报、完整译名与原名、年份季度徽章、评分与全站 Rank、可展开简介 */
@@ -65,6 +66,7 @@ fun SubjectHeaderCard(
     subject: Subject,
     subjectType: SubjectType,
     modifier: Modifier = Modifier,
+    sharedElementSource: String = "",
 ) {
     var isSummaryExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -82,20 +84,20 @@ fun SubjectHeaderCard(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // 立体圆角海报
-                Box(
+                // 立体圆角海报：无嵌套容器，与列表源端严格保持相同的宽高比与共享元素规格
+                CoverImage(
+                    url = subject.images?.bestImage.orEmpty(),
+                    contentDescription = subject.displayName,
+                    cornerRadius = 10.dp,
+                    aspectRatio = 0.7f,
                     modifier =
                         Modifier
                             .width(108.dp)
-                            .height(152.dp)
-                            .clip(RoundedCornerShape(10.dp)),
-                ) {
-                    CoverImage(
-                        url = subject.images?.bestImage.orEmpty(),
-                        contentDescription = subject.displayName,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                            .bgmSharedElement(
+                                key = BgmSharedElementKeys.subjectCover(subject.id, sharedElementSource),
+                                clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                            ),
+                )
 
                 // 右侧信息区
                 Column(

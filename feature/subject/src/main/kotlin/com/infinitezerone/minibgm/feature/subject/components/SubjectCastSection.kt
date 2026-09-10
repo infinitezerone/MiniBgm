@@ -24,8 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Card
@@ -55,6 +53,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
@@ -114,7 +113,6 @@ private fun RelationCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 8.dp,
                     aspectRatio = 0.7f,
-                    fallbackIcon = Icons.Filled.Movie,
                 )
                 if (relation.relation.isNotBlank()) {
                     Surface(
@@ -242,7 +240,7 @@ private fun CharacterCard(
                     cornerRadius = 8.dp,
                     aspectRatio = 0.72f,
                     alignment = Alignment.TopCenter,
-                    fallbackIcon = Icons.Filled.Person,
+                    placeholder = CoverPlaceholder.Person,
                 )
 
                 if (character.roleName.isNotBlank()) {
@@ -311,7 +309,7 @@ private fun CharacterCard(
                             cornerRadius = 9.dp,
                             aspectRatio = 1f,
                             alignment = Alignment.TopCenter,
-                            fallbackIcon = Icons.Filled.Person,
+                            placeholder = CoverPlaceholder.Person,
                         )
                         Text(
                             text = "CV: ${actor.name}",

@@ -61,7 +61,7 @@ fun EpisodeDetailBottomSheet(
     onUrlClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scrollState = rememberScrollState()
     val group = EpisodeGroup.fromType(episode.type)
     val episodeNumberText =
