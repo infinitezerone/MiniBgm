@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -325,6 +326,7 @@ private fun RelatedWorkCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 6.dp,
                     aspectRatio = 0.72f,
+                    fallbackIcon = Icons.Filled.Movie,
                 )
                 if (work.staff.isNotBlank()) {
                     Surface(

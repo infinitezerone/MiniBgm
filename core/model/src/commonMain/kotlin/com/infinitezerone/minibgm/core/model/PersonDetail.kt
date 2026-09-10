@@ -24,7 +24,12 @@ data class PersonDetail(
 ) {
     /** 最佳头像 URL */
     val bestAvatar: String
-        get() = images?.bestImage?.ifBlank { img.replace("http://", "https://") } ?: img.replace("http://", "https://")
+        get() {
+            val raw = images?.bestImage?.ifBlank { img } ?: img
+            return raw
+                .replace("http://", "https://")
+                .replace("lain.bgm.tv/pic/crt/l/", "lain.bgm.tv/r/400/pic/crt/l/")
+        }
 
     /** 格式化职业身份标签，例如 "声优 / 歌手 / 音乐家" */
     val careerText: String

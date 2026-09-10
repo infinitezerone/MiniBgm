@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -132,6 +133,7 @@ fun CharacterDetailBottomSheet(
                     cornerRadius = 12.dp,
                     aspectRatio = 0.72f,
                     alignment = Alignment.TopCenter,
+                    fallbackIcon = Icons.Filled.Person,
                 )
 
                 Column(
@@ -212,18 +214,17 @@ fun CharacterDetailBottomSheet(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         val actorImg = actor.images?.bestImage.orEmpty()
-                        if (actorImg.isNotBlank()) {
-                            CoverImage(
-                                url = actorImg,
-                                contentDescription = actor.name,
-                                modifier =
-                                    Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape),
-                                cornerRadius = 16.dp,
-                                aspectRatio = 1f,
-                            )
-                        }
+                        CoverImage(
+                            url = actorImg,
+                            contentDescription = actor.name,
+                            modifier =
+                                Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape),
+                            cornerRadius = 16.dp,
+                            aspectRatio = 1f,
+                            fallbackIcon = Icons.Filled.Person,
+                        )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "CV 声优",

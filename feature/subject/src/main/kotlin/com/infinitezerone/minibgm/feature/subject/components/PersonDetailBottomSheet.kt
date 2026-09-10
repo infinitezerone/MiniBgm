@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -129,6 +130,7 @@ fun PersonDetailBottomSheet(
                     cornerRadius = 12.dp,
                     aspectRatio = 0.8f,
                     alignment = Alignment.TopCenter,
+                    fallbackIcon = Icons.Filled.Person,
                 )
 
                 Column(
