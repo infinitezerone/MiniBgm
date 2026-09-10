@@ -23,13 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/**
- * 平板或折叠屏展开双联场景下，右侧详情面板尚未选择条目时的占位组件。
- */
+/** 平板或折叠屏展开双联场景下，右侧详情面板尚未选择条目时的占位组件。 */
 @Composable
-fun BgmDetailPlaceholder(
-    modifier: Modifier = Modifier,
-) {
+fun BgmDetailPlaceholder(modifier: Modifier = Modifier) {
     Box(
         contentAlignment = Alignment.Center,
         modifier =

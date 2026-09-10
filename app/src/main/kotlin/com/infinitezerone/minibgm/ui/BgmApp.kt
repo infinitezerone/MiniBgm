@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -22,9 +24,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
@@ -36,6 +41,7 @@ import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.core.navigation.rememberBgmNavState
 import com.infinitezerone.minibgm.navigation.BgmNavHost
 import com.infinitezerone.minibgm.ui.component.BgmFloatingNavigationBar
+import com.infinitezerone.minibgm.ui.component.NavDockSide
 
 @Composable
 fun BgmApp(
@@ -103,6 +109,17 @@ fun BgmApp(
     }
 
     val isTopLevel = navState.currentKey in navState.topLevelKeys
+    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
+    var dockSide by rememberSaveable { mutableStateOf(NavDockSide.LEFT) }
+    val animatedHorizontalBias by animateFloatAsState(
+        targetValue = if (dockSide == NavDockSide.LEFT) -1f else 1f,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow),
+        label = "dock_horizontal_bias",
+    )
+    val wideAlignment =
+        remember(animatedHorizontalBias) {
+            BiasAlignment(horizontalBias = animatedHorizontalBias, verticalBias = 0f)
+        }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -120,37 +137,65 @@ fun BgmApp(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // 悬浮胶囊底栏：进入二级页面时丝滑下沉隐藏，返回顶层时平滑升起
-            AnimatedVisibility(
-                visible = isTopLevel,
-                enter =
-                    slideInVertically(
-                        initialOffsetY = { it * 2 },
-                        animationSpec =
-                            spring(
-                                dampingRatio = 0.82f,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
-                    ) + fadeIn(animationSpec = tween(200)),
-                exit =
-                    slideOutVertically(
-                        targetOffsetY = { it * 2 },
-                        animationSpec =
-                            spring(
-                                dampingRatio = 0.82f,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
-                    ) + fadeOut(animationSpec = tween(150)),
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(bottom = 12.dp),
-            ) {
-                BgmFloatingNavigationBar(
-                    currentDestination = navState.currentTopLevelKey,
-                    onDestinationSelected = { route -> navState.navigateTo(route) },
-                )
+            if (isWideScreen) {
+                // 平板与折叠屏大屏：侧边垂直悬浮岛（支持像华为一样左右侧一键对飞与拖拽磁吸停靠）
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .systemBarsPadding()
+                            .padding(horizontal = 16.dp),
+                ) {
+                    BgmFloatingNavigationBar(
+                        currentDestination = navState.currentTopLevelKey,
+                        onDestinationSelected = { route -> navState.navigateTo(route) },
+                        isVertical = true,
+                        dockSide = dockSide,
+                        onToggleDockSide = {
+                            dockSide =
+                                if (dockSide == NavDockSide.LEFT) {
+                                    NavDockSide.RIGHT
+                                } else {
+                                    NavDockSide.LEFT
+                                }
+                        },
+                        modifier = Modifier.align(wideAlignment),
+                    )
+                }
+            } else {
+                // 手机端：居中悬浮胶囊底栏（二级页面自动下沉隐藏，返回顶层平滑升起）
+                AnimatedVisibility(
+                    visible = isTopLevel,
+                    enter =
+                        slideInVertically(
+                            initialOffsetY = { it * 2 },
+                            animationSpec =
+                                spring(
+                                    dampingRatio = 0.82f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                        ) + fadeIn(animationSpec = tween(200)),
+                    exit =
+                        slideOutVertically(
+                            targetOffsetY = { it * 2 },
+                            animationSpec =
+                                spring(
+                                    dampingRatio = 0.82f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                        ) + fadeOut(animationSpec = tween(150)),
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 12.dp),
+                ) {
+                    BgmFloatingNavigationBar(
+                        currentDestination = navState.currentTopLevelKey,
+                        onDestinationSelected = { route -> navState.navigateTo(route) },
+                        isVertical = false,
+                    )
+                }
             }
 
             if (isAuthenticating) {
