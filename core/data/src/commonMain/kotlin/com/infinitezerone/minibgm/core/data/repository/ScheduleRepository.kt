@@ -315,7 +315,7 @@ class ScheduleRepositoryImpl(
                 coverUrl = "",
                 ratingScore = 0.0,
                 beginUtc = item.begin,
-                weekday = TimeUtils.jstWeekdayOfEpoch(ruleStart),
+                weekday = TimeUtils.cstWeekdayOfEpoch(ruleStart),
                 timeCst = TimeUtils.formatToCstTime(item.begin),
                 timeJst = TimeUtils.formatToJstTime(item.begin),
                 sitesJson = json.encodeToString(item.sites.mapNotNull { s -> resolveSiteLink(s) }),
