@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.common
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -137,9 +138,7 @@ object TimeUtils {
         if (epochSeconds <= 0) return ""
         return try {
             val instant = Instant.fromEpochSeconds(epochSeconds)
-            val local = instant.toLocalDateTime(timeZoneCst)
-            @Suppress("DEPRECATION")
-            "${local.year}-${local.monthNumber.toString().padStart(2, '0')}-${local.dayOfMonth.toString().padStart(2, '0')}"
+            instant.toLocalDateTime(timeZoneCst).date.toString()
         } catch (_: Exception) {
             ""
         }
@@ -147,6 +146,6 @@ object TimeUtils {
 
     fun currentCstYearMonth(): Pair<Int, Int> {
         val local = Clock.System.now().toLocalDateTime(timeZoneCst)
-        return local.year to local.monthNumber
+        return local.year to local.month.number
     }
 }

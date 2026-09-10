@@ -12,6 +12,16 @@ class FakeCommunityRepository : CommunityRepository {
     private val subjectCommentsState = MutableStateFlow<Map<Long, SubjectCommentPage>>(emptyMap())
     private val subjectTopicsState = MutableStateFlow<Map<Long, List<SubjectTopic>>>(emptyMap())
 
+    var getEpisodeCommentsResult: AppResult<List<EpisodeComment>>? = null
+    var getEpisodeCommentsCallCount: Int = 0
+        private set
+    var getSubjectCommentsResult: AppResult<SubjectCommentPage>? = null
+    var getSubjectCommentsCallCount: Int = 0
+        private set
+    var getSubjectTopicsResult: AppResult<List<SubjectTopic>>? = null
+    var getSubjectTopicsCallCount: Int = 0
+        private set
+
     fun setEpisodeComments(
         episodeId: Long,
         comments: List<EpisodeComment>,
@@ -33,18 +43,29 @@ class FakeCommunityRepository : CommunityRepository {
         subjectTopicsState.value = subjectTopicsState.value + (subjectId to topics)
     }
 
-    override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> =
-        AppResult.Success(episodeCommentsState.value[episodeId].orEmpty())
+    override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> {
+        getEpisodeCommentsCallCount++
+        getEpisodeCommentsResult?.let { return it }
+        return AppResult.Success(episodeCommentsState.value[episodeId].orEmpty())
+    }
 
     override suspend fun getSubjectComments(
         subjectId: Long,
         limit: Int,
         offset: Int,
-    ): AppResult<SubjectCommentPage> = AppResult.Success(subjectCommentsState.value[subjectId] ?: SubjectCommentPage())
+    ): AppResult<SubjectCommentPage> {
+        getSubjectCommentsCallCount++
+        getSubjectCommentsResult?.let { return it }
+        return AppResult.Success(subjectCommentsState.value[subjectId] ?: SubjectCommentPage())
+    }
 
     override suspend fun getSubjectTopics(
         subjectId: Long,
         limit: Int,
         offset: Int,
-    ): AppResult<List<SubjectTopic>> = AppResult.Success(subjectTopicsState.value[subjectId].orEmpty())
+    ): AppResult<List<SubjectTopic>> {
+        getSubjectTopicsCallCount++
+        getSubjectTopicsResult?.let { return it }
+        return AppResult.Success(subjectTopicsState.value[subjectId].orEmpty())
+    }
 }

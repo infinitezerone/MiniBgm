@@ -97,7 +97,7 @@ class ScheduleRepositoryImpl(
         val nowMillis = TimeUtils.nowEpochMillis()
         val fromIso = TimeUtils.isoUtcFromEpochMillis(nowMillis - lookbackHours * HOUR_MILLIS)
         val toIso = TimeUtils.isoUtcFromEpochMillis(nowMillis + hoursAhead * HOUR_MILLIS)
-        val titles = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
+        val titles = scheduleDao.getSchedulesByIds(subjectIds).associateBy { it.bgmId }
         val storedEvents = airEventDao.getUpcomingEvents(subjectIds, fromIso, toIso)
         if (storedEvents.isNotEmpty()) {
             return resolveFromStoredEvents(storedEvents, titles)
