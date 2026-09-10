@@ -603,8 +603,8 @@ class ScheduleRepositoryImplTest {
             assertEquals(2, stored.size)
             val webOnly = stored.first { it.bgmId == 633836L }
             assertEquals("Re：从零开始的异世界生活 第四季 夺还篇", webOnly.titleCn)
-            // 周几由 broadcast 规则起点（日本时区）推导
-            assertEquals(TimeUtils.jstWeekdayOfEpoch(beginMillis), webOnly.weekday)
+            // 周几由 broadcast 规则起点（与应用时间表一致采用 CST 放送时区）推导
+            assertEquals(TimeUtils.cstWeekdayOfEpoch(beginMillis), webOnly.weekday)
             assertEquals(189046L, webOnly.anilistId)
             assertTrue(webOnly.broadcastRule.contains("P7D"))
             assertEquals(AirScheduleEntity.SOURCE_BGM_DATA, webOnly.source)
