@@ -12,8 +12,9 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
+    metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<ScheduleRoute> {
+    entry<ScheduleRoute>(metadata = metadata) {
         ScheduleScreen(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,

@@ -12,8 +12,9 @@ fun EntryProviderScope<NavKey>.exploreEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
+    metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<ExploreRoute> {
+    entry<ExploreRoute>(metadata = metadata) {
         ExploreScreen(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,
