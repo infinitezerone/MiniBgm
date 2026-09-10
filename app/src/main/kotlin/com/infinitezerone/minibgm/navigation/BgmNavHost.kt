@@ -192,13 +192,10 @@ fun BgmNavHost(
     }
 }
 
-private fun isTopLevelRoute(contentKey: Any?): Boolean {
-    val className =
-        when (contentKey) {
-            is Pair<*, *> -> contentKey.second?.toString() ?: ""
-            else -> contentKey?.javaClass?.name ?: ""
-        }
-    return className.endsWith("ScheduleRoute") ||
-        className.endsWith("ExploreRoute") ||
-        className.endsWith("UserRoute")
+internal fun isTopLevelRoute(contentKey: Any?): Boolean {
+    var route = contentKey
+    while (route is Pair<*, *>) {
+        route = route.second
+    }
+    return route is ScheduleRoute || route is ExploreRoute || route is UserRoute
 }
