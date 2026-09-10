@@ -78,6 +78,7 @@ fun EpisodeDetailBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = 600.dp,
         modifier = modifier,
     ) {
         Column(

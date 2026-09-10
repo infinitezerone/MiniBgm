@@ -80,6 +80,7 @@ fun ExploreFilterBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        sheetMaxWidth = 600.dp,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier,
     ) {
