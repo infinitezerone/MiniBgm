@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.common
 
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
@@ -57,12 +58,17 @@ object TimeUtils {
     /** epoch 毫秒 → UTC ISO-8601 字符串 */
     fun isoUtcFromEpochMillis(millis: Long): String = Instant.fromEpochMilliseconds(millis).toString()
 
-    /** 解析 UTC ISO-8601 字符串为 epoch 毫秒，失败返回 null */
+    /** 解析 UTC ISO-8601 字符串或 yyyy-MM-dd 日期为 epoch 毫秒，失败返回 null */
     fun epochMillisOfIso(isoUtcString: String): Long? =
         try {
             Instant.parse(isoUtcString).toEpochMilliseconds()
         } catch (_: Exception) {
-            null
+            try {
+                val dateStr = isoUtcString.substringBefore("T").trim()
+                LocalDate.parse(dateStr).atStartOfDayIn(timeZoneCst).toEpochMilliseconds()
+            } catch (_: Exception) {
+                null
+            }
         }
 
     /**
@@ -147,5 +153,29 @@ object TimeUtils {
     fun currentCstYearMonth(): Pair<Int, Int> {
         val local = Clock.System.now().toLocalDateTime(timeZoneCst)
         return local.year to local.month.number
+    }
+
+    /**
+     * 将 "HH:mm" 格式时间字符串转换为全天分钟数 (0..1439)；空或非法返回 9999
+     */
+    fun parseTimeToMinutes(timeStr: String): Int {
+        if (timeStr.length != 5 || timeStr[2] != ':') return 9999
+        val hour = timeStr.substring(0, 2).toIntOrNull() ?: return 9999
+        val minute = timeStr.substring(3, 5).toIntOrNull() ?: return 9999
+        if (hour !in 0..23 || minute !in 0..59) return 9999
+        return hour * 60 + minute
+    }
+
+    /**
+     * 规范化 ISO-8601 UTC 时间戳字符串（统一消除 .000 毫秒碎片，使 SQLite 文本排序与时刻绝对一致）。
+     * 若解析失败则返回原字符串。
+     */
+    fun normalizeIsoUtc(isoString: String): String {
+        if (isoString.isBlank()) return ""
+        return try {
+            Instant.parse(isoString).toString()
+        } catch (_: Exception) {
+            isoString
+        }
     }
 }

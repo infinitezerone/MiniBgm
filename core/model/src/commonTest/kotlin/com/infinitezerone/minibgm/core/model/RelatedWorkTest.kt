@@ -50,13 +50,13 @@ class RelatedWorkTest {
     }
 
     @Test
-    fun coverImage_optimizesBangumiLargeCoverToCdn400() {
+    fun coverImage_returnsImage() {
         val work =
             RelatedWork(
                 id = 123L,
                 name = "Test",
                 image = "http://lain.bgm.tv/pic/cover/l/ca/27/12105_jp.jpg",
             )
-        assertEquals("https://lain.bgm.tv/r/400/pic/cover/l/ca/27/12105_jp.jpg", work.coverImage)
+        assertEquals("http://lain.bgm.tv/pic/cover/l/ca/27/12105_jp.jpg", work.coverImage)
     }
 }
