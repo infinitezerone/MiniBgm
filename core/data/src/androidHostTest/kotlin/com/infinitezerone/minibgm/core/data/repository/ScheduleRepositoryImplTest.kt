@@ -66,11 +66,10 @@ class ScheduleRepositoryImplTest {
                 schedulesFlow.value.filter { it.bgmId in keepIds || it.source != "official" }
         }
 
-        override suspend fun deleteStaleBgmDataSchedules(isoUtc: String) {
-            val cutoff = TimeUtils.epochMillisOfIso(isoUtc) ?: return
+        override suspend fun deleteStaleBgmDataSchedules(date: String) {
             schedulesFlow.value =
                 schedulesFlow.value.filter {
-                    it.source != "bgm_data" || (TimeUtils.epochMillisOfIso(it.beginUtc) ?: 0L) >= cutoff
+                    it.source != "bgm_data" || it.airDate >= date
                 }
         }
 
@@ -85,9 +84,9 @@ class ScheduleRepositoryImplTest {
         override suspend fun insertAirEvents(events: List<AirEventEntity>) {
             val current =
                 this.events.value
-                    .associateBy { Triple(it.subjectId, it.episode, it.kind + "@" + it.source) }
+                    .associateBy { Triple(it.subjectId, it.episode, it.source) }
                     .toMutableMap()
-            events.forEach { current[Triple(it.subjectId, it.episode, it.kind + "@" + it.source)] = it }
+            events.forEach { current[Triple(it.subjectId, it.episode, it.source)] = it }
             this.events.value = current.values.toList()
         }
 
@@ -296,7 +295,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "无职转生 第三季",
                                 coverUrl = "",
                                 ratingScore = 8.5,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 7,
                                 timeCst = "",
                                 timeJst = "",
@@ -309,7 +308,8 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "Re：从零开始的异世界生活 第四季 夺还篇",
                                 coverUrl = "",
                                 ratingScore = 0.0,
-                                beginUtc = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS),
+                                airDate = TimeUtils.formatEpochSecondsToDate((TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS) / 1000),
+                                beginAtUtc = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS),
                                 weekday = 3,
                                 timeCst = "22:00",
                                 timeJst = "23:00",
@@ -373,7 +373,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "无职转生",
                                 coverUrl = "",
                                 ratingScore = 8.5,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 7,
                                 timeCst = "",
                                 timeJst = "",
@@ -505,7 +505,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "无职转生",
                                 coverUrl = "",
                                 ratingScore = 8.5,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 7,
                                 timeCst = "",
                                 timeJst = "",
@@ -681,7 +681,7 @@ class ScheduleRepositoryImplTest {
             assertIs<AppResult.Success<Unit>>(result)
             val stored = dao.getAllSchedulesList()
             val webOnly = stored.first { it.bgmId == 633836L }
-            assertEquals("https://lain.bgm.tv/pic/cover/c/sample_rezero.jpg", webOnly.coverUrl)
+            assertEquals("https://lain.bgm.tv/r/400/pic/cover/l/sample_rezero.jpg", webOnly.coverUrl)
             assertEquals(8.6, webOnly.ratingScore)
             assertEquals(16, webOnly.totalEpisodes)
             assertEquals("Re：从零开始的异世界生活 第四季 夺还篇", webOnly.titleCn)
@@ -724,7 +724,8 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "Re：从零开始的异世界生活 第四季 夺还篇",
                                 coverUrl = "",
                                 ratingScore = 0.0,
-                                beginUtc = beginIso,
+                                airDate = beginIso.substringBefore("T"),
+                                beginAtUtc = beginIso,
                                 weekday = 3,
                                 timeCst = "22:00",
                                 timeJst = "23:00",
@@ -774,7 +775,8 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "Re：从零开始的异世界生活 第四季 夺还篇",
                                 coverUrl = "",
                                 ratingScore = 0.0,
-                                beginUtc = ruleStartIso,
+                                airDate = ruleStartIso.substringBefore("T"),
+                                beginAtUtc = ruleStartIso,
                                 weekday = 3,
                                 timeCst = "22:00",
                                 timeJst = "23:00",
@@ -839,7 +841,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "标题 1",
                                 coverUrl = "https://example.com/cover1.jpg",
                                 ratingScore = 8.5,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 1,
                                 timeCst = "18:00",
                                 timeJst = "19:00",
@@ -851,7 +853,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "标题 2",
                                 coverUrl = "https://example.com/cover2.jpg",
                                 ratingScore = 7.5,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 2,
                                 timeCst = "20:00",
                                 timeJst = "21:00",
@@ -930,7 +932,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "回退动画",
                                 coverUrl = "https://example.com/cover.jpg",
                                 ratingScore = 8.0,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 3,
                                 timeCst = "21:00",
                                 timeJst = "22:00",
@@ -945,7 +947,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "超出范围动画",
                                 coverUrl = "https://example.com/cover.jpg",
                                 ratingScore = 7.0,
-                                beginUtc = "",
+                                airDate = "",
                                 weekday = 1,
                                 timeCst = "10:00",
                                 timeJst = "11:00",

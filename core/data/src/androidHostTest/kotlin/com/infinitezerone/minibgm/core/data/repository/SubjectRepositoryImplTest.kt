@@ -1,10 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.database.dao.EpisodeDao
-import com.infinitezerone.minibgm.core.database.dao.SubjectDao
-import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
-import com.infinitezerone.minibgm.core.database.entity.SubjectEntity
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
@@ -17,50 +13,16 @@ import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
 import com.infinitezerone.minibgm.core.network.model.UserCollectionPageResponse
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SubjectRepositoryImplTest {
-    private class FakeSubjectDao : SubjectDao {
-        val subjectsFlow = MutableStateFlow<Map<Long, SubjectEntity>>(emptyMap())
-
-        override fun getSubjectById(id: Long): Flow<SubjectEntity?> = subjectsFlow.map { it[id] }
-
-        override suspend fun insertSubjects(subjects: List<SubjectEntity>) {
-            val map = subjectsFlow.value.toMutableMap()
-            subjects.forEach { map[it.id] = it }
-            subjectsFlow.value = map
-        }
-
-        override suspend fun insertSubject(subject: SubjectEntity) {
-            val map = subjectsFlow.value.toMutableMap()
-            map[subject.id] = subject
-            subjectsFlow.value = map
-        }
-    }
-
-    private class FakeEpisodeDao : EpisodeDao {
-        private val episodesFlow = MutableStateFlow<Map<Long, List<EpisodeEntity>>>(emptyMap())
-
-        override fun getEpisodesBySubjectId(subjectId: Long): Flow<List<EpisodeEntity>> = episodesFlow.map { it[subjectId].orEmpty() }
-
-        override suspend fun insertEpisodes(episodes: List<EpisodeEntity>) {
-            val map = episodesFlow.value.toMutableMap()
-            val subjectId = episodes.firstOrNull()?.subjectId ?: return
-            map[subjectId] = episodes
-            episodesFlow.value = map
-        }
-
-        fun getStoredEpisodes(subjectId: Long): List<EpisodeEntity> = episodesFlow.value[subjectId].orEmpty()
-    }
-
     private class FakeBangumiApiService : BangumiApiService {
         var episodesResponse: EpisodePageResponse = EpisodePageResponse(total = 0, data = emptyList())
         var subjectResponse: Subject? = null
@@ -184,57 +146,64 @@ class SubjectRepositoryImplTest {
     }
 
     @Test
-    fun getEpisodesStream_mapsAllFieldsCorrectly() =
+    fun getEpisodesStream_initiallyEmpty_emitsAfterFetch() =
         runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
-            val apiService = FakeBangumiApiService()
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+            val apiService =
+                FakeBangumiApiService().apply {
+                    episodesResponse =
+                        EpisodePageResponse(
+                            total = 3,
+                            data =
+                                listOf(
+                                    Episode(
+                                        id = 101L,
+                                        sort = 1f,
+                                        ep = 1f,
+                                        name = "Ep 1",
+                                        nameCn = "第1集",
+                                        duration = "24:00",
+                                        airdate = "2023-10-01",
+                                        type = 0,
+                                        desc = "本篇第1集简介",
+                                        comment = 120,
+                                    ),
+                                    Episode(
+                                        id = 102L,
+                                        sort = 2f,
+                                        ep = 2f,
+                                        name = "SP 1",
+                                        nameCn = "特别篇1",
+                                        duration = "10:00",
+                                        airdate = "2023-10-15",
+                                        type = 1,
+                                        desc = "特别篇简介",
+                                        comment = 50,
+                                    ),
+                                    Episode(
+                                        id = 103L,
+                                        sort = 3f,
+                                        ep = 3f,
+                                        name = "OP 1 勇者",
+                                        nameCn = "片头曲1",
+                                        duration = "01:30",
+                                        airdate = "2023-10-01",
+                                        type = 2,
+                                        desc = "YOASOBI 演唱 OP",
+                                        comment = 88,
+                                    ),
+                                ),
+                        )
+                }
+            val repo = SubjectRepositoryImpl(apiService)
 
-            val testEntities =
-                listOf(
-                    EpisodeEntity(
-                        id = 101L,
-                        subjectId = 1L,
-                        sort = 1f,
-                        ep = 1f,
-                        name = "Ep 1",
-                        nameCn = "第1集",
-                        duration = "24:00",
-                        airdate = "2023-10-01",
-                        type = 0,
-                        desc = "本篇第1集简介",
-                        comment = 120,
-                    ),
-                    EpisodeEntity(
-                        id = 102L,
-                        subjectId = 1L,
-                        sort = 1f,
-                        ep = 1f,
-                        name = "SP 1",
-                        nameCn = "特别篇1",
-                        duration = "10:00",
-                        airdate = "2023-10-15",
-                        type = 1,
-                        desc = "特别篇简介",
-                        comment = 50,
-                    ),
-                    EpisodeEntity(
-                        id = 103L,
-                        subjectId = 1L,
-                        sort = 1f,
-                        ep = 1f,
-                        name = "OP 1 勇者",
-                        nameCn = "片头曲1",
-                        duration = "01:30",
-                        airdate = "2023-10-01",
-                        type = 2,
-                        desc = "YOASOBI 演唱 OP",
-                        comment = 88,
-                    ),
-                )
+            // 初始为空
+            val initial = repo.getEpisodesStream(1L).first()
+            assertEquals(0, initial.size)
 
-            episodeDao.insertEpisodes(testEntities)
+            // 拉取后立即注入内存缓存并下发流
+            val fetchResult = repo.fetchEpisodes(1L)
+            assertIs<AppResult.Success<List<Episode>>>(fetchResult)
+            assertEquals(3, fetchResult.data.size)
 
             val episodes = repo.getEpisodesStream(1L).first()
             assertEquals(3, episodes.size)
@@ -250,82 +219,17 @@ class SubjectRepositoryImplTest {
             assertEquals(1, ep1.type)
             assertEquals("特别篇简介", ep1.desc)
             assertEquals(50, ep1.comment)
-
-            val ep2 = episodes[2]
-            assertEquals(103L, ep2.id)
-            assertEquals(2, ep2.type)
-            assertEquals("YOASOBI 演唱 OP", ep2.desc)
-            assertEquals(88, ep2.comment)
-        }
-
-    @Test
-    fun fetchEpisodes_persistsTypeDescCommentToDatabase() =
-        runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
-            val apiService =
-                FakeBangumiApiService().apply {
-                    episodesResponse =
-                        EpisodePageResponse(
-                            total = 2,
-                            data =
-                                listOf(
-                                    Episode(
-                                        id = 201L,
-                                        sort = 1f,
-                                        ep = 1f,
-                                        name = "Main Episode",
-                                        nameCn = "正片第1集",
-                                        duration = "24:30",
-                                        airdate = "2023-10-01",
-                                        type = 0,
-                                        desc = "剧情介绍",
-                                        comment = 999,
-                                    ),
-                                    Episode(
-                                        id = 202L,
-                                        sort = 1f,
-                                        ep = 1f,
-                                        name = "Creditless ED",
-                                        nameCn = "无字ED",
-                                        duration = "01:30",
-                                        airdate = "2023-10-01",
-                                        type = 3,
-                                        desc = "ED 动画",
-                                        comment = 33,
-                                    ),
-                                ),
-                        )
-                }
-
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
-            val result = repo.fetchEpisodes(1001L)
-
-            assertIs<AppResult.Success<List<Episode>>>(result)
-            assertEquals(2, result.data.size)
-
-            val stored = episodeDao.getStoredEpisodes(1001L)
-            assertEquals(2, stored.size)
-            assertEquals(0, stored[0].type)
-            assertEquals("剧情介绍", stored[0].desc)
-            assertEquals(999, stored[0].comment)
-
-            assertEquals(3, stored[1].type)
-            assertEquals("ED 动画", stored[1].desc)
-            assertEquals(33, stored[1].comment)
         }
 
     @Test
     fun fetchEpisodes_onApiError_returnsAppResultError() =
         runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
             val apiService =
                 FakeBangumiApiService().apply {
                     shouldThrow = true
                 }
 
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+            val repo = SubjectRepositoryImpl(apiService)
             val result = repo.fetchEpisodes(1001L)
 
             assertIs<AppResult.Error>(result)
@@ -333,10 +237,8 @@ class SubjectRepositoryImplTest {
         }
 
     @Test
-    fun fetchSubjectDetail_persistsToDatabaseAndReturnsSuccess() =
+    fun fetchSubjectDetail_persistsToMemoryCacheAndEmitsToStream() =
         runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
             val testSubject =
                 Subject(
                     id = 528828L,
@@ -367,36 +269,51 @@ class SubjectRepositoryImplTest {
                 FakeBangumiApiService().apply {
                     subjectResponse = testSubject
                 }
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+            val repo = SubjectRepositoryImpl(apiService)
+
+            // 拉取前流为 null
+            assertNull(repo.getSubjectStream(528828L).first())
 
             val result = repo.fetchSubjectDetail(528828L)
             assertIs<AppResult.Success<Subject>>(result)
             assertEquals("骸骨騎士様", result.data.name)
 
             val streamSubject = repo.getSubjectStream(528828L).first()
-            kotlin.test.assertNotNull(streamSubject)
+            assertNotNull(streamSubject)
             assertEquals(7.5, streamSubject.rating?.score)
             assertEquals(450, streamSubject.rating?.total)
             assertEquals(200, streamSubject.rating?.count?.get("8"))
             assertEquals(50, streamSubject.collection?.doing)
             assertEquals(1, streamSubject.tags.size)
             assertEquals("异世界", streamSubject.tags[0].name)
+        }
 
-            val storedEntity = subjectDao.subjectsFlow.value[528828L]
-            kotlin.test.assertNotNull(storedEntity)
-            assertTrue(storedEntity.updatedAt > 0L)
+    @Test
+    fun fetchSubjectDetail_lruEviction_evictsOldestWhenExceedingCapacity() =
+        runTest {
+            val apiService = FakeBangumiApiService()
+            val repo = SubjectRepositoryImpl(apiService, maxMemoryEntries = 2)
+
+            repo.fetchSubjectDetail(1L)
+            repo.fetchSubjectDetail(2L)
+            assertNotNull(repo.getSubjectStream(1L).first())
+            assertNotNull(repo.getSubjectStream(2L).first())
+
+            // 写入第 3 个，应淘汰最早的 1L
+            repo.fetchSubjectDetail(3L)
+            assertNull(repo.getSubjectStream(1L).first())
+            assertNotNull(repo.getSubjectStream(2L).first())
+            assertNotNull(repo.getSubjectStream(3L).first())
         }
 
     @Test
     fun fetchSubjectDetail_onError_returnsAppResultError() =
         runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
             val apiService =
                 FakeBangumiApiService().apply {
                     shouldThrow = true
                 }
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+            val repo = SubjectRepositoryImpl(apiService)
 
             val result = repo.fetchSubjectDetail(528828L)
             assertIs<AppResult.Error>(result)
@@ -406,13 +323,11 @@ class SubjectRepositoryImplTest {
     @Test
     fun fetchSubjectDetail_onCancellation_rethrows() =
         runTest {
-            val subjectDao = FakeSubjectDao()
-            val episodeDao = FakeEpisodeDao()
             val apiService =
                 FakeBangumiApiService().apply {
                     cancellationToThrow = true
                 }
-            val repo = SubjectRepositoryImpl(apiService, subjectDao, episodeDao)
+            val repo = SubjectRepositoryImpl(apiService)
 
             kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
                 repo.fetchSubjectDetail(528828L)

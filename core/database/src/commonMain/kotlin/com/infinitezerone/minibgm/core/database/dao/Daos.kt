@@ -7,26 +7,12 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
-import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
-import com.infinitezerone.minibgm.core.database.entity.SubjectEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface SubjectDao {
-    @Query("SELECT * FROM subjects WHERE id = :id")
-    fun getSubjectById(id: Long): Flow<SubjectEntity?>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSubjects(subjects: List<SubjectEntity>)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSubject(subject: SubjectEntity)
-}
-
-@Dao
 interface AirScheduleDao {
-    @Query("SELECT * FROM air_schedules WHERE weekday = :weekday ORDER BY timeCst ASC")
+    @Query("SELECT * FROM air_schedules WHERE weekday = :weekday ORDER BY sortMinutes ASC, ratingScore DESC")
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirScheduleEntity>>
 
     @Query("SELECT * FROM air_schedules")
@@ -46,8 +32,8 @@ interface AirScheduleDao {
     suspend fun deleteOfficialSchedulesNotIn(keepIds: List<Long>)
 
     /** 清理超出名单窗口的 bgm-data 合并行（防止过期网播番长期滞留） */
-    @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND beginUtc < :isoUtc")
-    suspend fun deleteStaleBgmDataSchedules(isoUtc: String)
+    @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND airDate < :date")
+    suspend fun deleteStaleBgmDataSchedules(date: String)
 
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
@@ -77,15 +63,6 @@ interface AirEventDao {
         fromIso: String,
         toIso: String,
     ): List<AirEventEntity>
-}
-
-@Dao
-interface EpisodeDao {
-    @Query("SELECT * FROM episodes WHERE subjectId = :subjectId ORDER BY sort ASC")
-    fun getEpisodesBySubjectId(subjectId: Long): Flow<List<EpisodeEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertEpisodes(episodes: List<EpisodeEntity>)
 }
 
 @Dao

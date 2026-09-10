@@ -1,0 +1,277 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "2e1cfd303f3f04159a31f91c5f852e37",
+    "entities": [
+      {
+        "tableName": "air_schedules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`bgmId` INTEGER NOT NULL, `title` TEXT NOT NULL, `titleCn` TEXT NOT NULL, `coverUrl` TEXT NOT NULL, `ratingScore` REAL NOT NULL, `airDate` TEXT NOT NULL, `beginAtUtc` TEXT, `sortMinutes` INTEGER NOT NULL, `weekday` INTEGER NOT NULL, `timeCst` TEXT NOT NULL, `timeJst` TEXT NOT NULL, `sitesJson` TEXT NOT NULL, `anilistId` INTEGER, `broadcastRule` TEXT NOT NULL, `totalEpisodes` INTEGER NOT NULL, `source` TEXT NOT NULL, `nextEpisode` INTEGER NOT NULL, `nextEpisodeAtUtc` TEXT NOT NULL, `nextEpisodeKind` TEXT NOT NULL, PRIMARY KEY(`bgmId`))",
+        "fields": [
+          {
+            "fieldPath": "bgmId",
+            "columnName": "bgmId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleCn",
+            "columnName": "titleCn",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coverUrl",
+            "columnName": "coverUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ratingScore",
+            "columnName": "ratingScore",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "airDate",
+            "columnName": "airDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "beginAtUtc",
+            "columnName": "beginAtUtc",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortMinutes",
+            "columnName": "sortMinutes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weekday",
+            "columnName": "weekday",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeCst",
+            "columnName": "timeCst",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeJst",
+            "columnName": "timeJst",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sitesJson",
+            "columnName": "sitesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "anilistId",
+            "columnName": "anilistId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "broadcastRule",
+            "columnName": "broadcastRule",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalEpisodes",
+            "columnName": "totalEpisodes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextEpisode",
+            "columnName": "nextEpisode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextEpisodeAtUtc",
+            "columnName": "nextEpisodeAtUtc",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextEpisodeKind",
+            "columnName": "nextEpisodeKind",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "bgmId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_air_schedules_weekday_sortMinutes_ratingScore",
+            "unique": false,
+            "columnNames": [
+              "weekday",
+              "sortMinutes",
+              "ratingScore"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_air_schedules_weekday_sortMinutes_ratingScore` ON `${TABLE_NAME}` (`weekday`, `sortMinutes`, `ratingScore`)"
+          }
+        ]
+      },
+      {
+        "tableName": "user_collections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` INTEGER NOT NULL, `subjectId` INTEGER NOT NULL, `subjectType` INTEGER NOT NULL, `type` INTEGER NOT NULL, `epStatus` INTEGER NOT NULL, `updatedAt` TEXT NOT NULL, PRIMARY KEY(`userId`, `subjectId`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectId",
+            "columnName": "subjectId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectType",
+            "columnName": "subjectType",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epStatus",
+            "columnName": "epStatus",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "userId",
+            "subjectId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_user_collections_userId_type_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "userId",
+              "type",
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_user_collections_userId_type_updatedAt` ON `${TABLE_NAME}` (`userId`, `type`, `updatedAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "air_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`subjectId` INTEGER NOT NULL, `episode` INTEGER NOT NULL, `airAtUtc` TEXT NOT NULL, `kind` TEXT NOT NULL, `source` TEXT NOT NULL, PRIMARY KEY(`subjectId`, `episode`, `source`))",
+        "fields": [
+          {
+            "fieldPath": "subjectId",
+            "columnName": "subjectId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "episode",
+            "columnName": "episode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "airAtUtc",
+            "columnName": "airAtUtc",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "subjectId",
+            "episode",
+            "source"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_air_events_kind_airAtUtc",
+            "unique": false,
+            "columnNames": [
+              "kind",
+              "airAtUtc"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_air_events_kind_airAtUtc` ON `${TABLE_NAME}` (`kind`, `airAtUtc`)"
+          },
+          {
+            "name": "index_air_events_airAtUtc",
+            "unique": false,
+            "columnNames": [
+              "airAtUtc"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_air_events_airAtUtc` ON `${TABLE_NAME}` (`airAtUtc`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2e1cfd303f3f04159a31f91c5f852e37')"
+    ]
+  }
+}

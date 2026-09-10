@@ -13,6 +13,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
+import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -61,6 +62,7 @@ object BgmHttpClient {
             install(ContentNegotiation) {
                 json(jsonConfig)
             }
+            install(HttpCache)
             install(ContentEncoding) {
                 gzip()
                 deflate()
