@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +42,12 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
+
+private const val MAX_FEATURED_ITEMS = 10
+private const val POSTER_GRID_COLUMNS = 3
+private const val MIN_ITEMS_FOR_VIEW_TOGGLE = 6
+private const val MIN_ROLES_FOR_FILTER = 2
+private const val MIN_ITEMS_FOR_ROLE_FILTER = 4
 
 /**
  * 关联作品/出演作品展示区：
@@ -114,7 +119,7 @@ fun RelatedWorksSection(
                 fontWeight = FontWeight.Bold,
             )
 
-            if (aggregatedWorks.size > 6) {
+            if (aggregatedWorks.size > MIN_ITEMS_FOR_VIEW_TOGGLE) {
                 val toggleContainerColor =
                     if (isGridView) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -155,7 +160,7 @@ fun RelatedWorksSection(
         }
 
         // 2. 多职位分类筛选标签 (仅当存在 2 个及以上不同职位，且作品总数 > 4 时展示)
-        if (availableRoles.size >= 2 && aggregatedWorks.size > 4) {
+        if (availableRoles.size >= MIN_ROLES_FOR_FILTER && aggregatedWorks.size > MIN_ITEMS_FOR_ROLE_FILTER) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -192,9 +197,9 @@ fun RelatedWorksSection(
 
         // 3. 作品列表渲染
         if (!isGridView) {
-            // 精选横滑模式（最多展示 10 部，第 11 项为“查看全部”卡片）
-            val previewWorks = remember(filteredWorks) { filteredWorks.take(10) }
-            val hasMore = filteredWorks.size > 10
+            // 精选横滑模式（最多展示 MAX_FEATURED_ITEMS 部，第 11 项为“查看全部”卡片）
+            val previewWorks = remember(filteredWorks) { filteredWorks.take(MAX_FEATURED_ITEMS) }
+            val hasMore = filteredWorks.size > MAX_FEATURED_ITEMS
 
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -265,8 +270,8 @@ fun RelatedWorksSection(
                 }
             }
         } else {
-            // 3 列纵向海报墙网格模式
-            val chunkedWorks = remember(filteredWorks) { filteredWorks.chunked(3) }
+            // 海报墙网格模式（POSTER_GRID_COLUMNS 列纵向排列）
+            val chunkedWorks = remember(filteredWorks) { filteredWorks.chunked(POSTER_GRID_COLUMNS) }
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -290,7 +295,7 @@ fun RelatedWorksSection(
                                 )
                             }
                         }
-                        repeat(3 - rowWorks.size) {
+                        repeat(POSTER_GRID_COLUMNS - rowWorks.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
@@ -326,7 +331,6 @@ private fun RelatedWorkCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 6.dp,
                     aspectRatio = 0.72f,
-                    fallbackIcon = Icons.Filled.Movie,
                 )
                 if (work.staff.isNotBlank()) {
                     Surface(

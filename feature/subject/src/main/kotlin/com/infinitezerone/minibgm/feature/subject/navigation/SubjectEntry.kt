@@ -14,6 +14,10 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     entry<SubjectDetailRoute> { route ->
         SubjectDetailScreen(
             subjectId = route.subjectId,
+            initialName = route.initialName,
+            initialCoverUrl = route.initialCoverUrl,
+            initialScore = route.initialScore,
+            source = route.source,
             onBackClick = onBackClick,
             onSubjectClick = onSubjectClick,
             onTagClick = onTagClick,
