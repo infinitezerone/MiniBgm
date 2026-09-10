@@ -53,6 +53,8 @@ class ScheduleRepositoryImplTest {
 
         override suspend fun getAllSchedulesList(): List<AirScheduleEntity> = schedulesFlow.value
 
+        override suspend fun getSchedulesByIds(ids: List<Long>): List<AirScheduleEntity> = schedulesFlow.value.filter { it.bgmId in ids }
+
         override suspend fun insertSchedules(schedules: List<AirScheduleEntity>) {
             val currentMap = schedulesFlow.value.associateBy { it.bgmId }.toMutableMap()
             schedules.forEach { currentMap[it.bgmId] = it }

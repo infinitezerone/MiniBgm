@@ -61,45 +61,58 @@ class AuthTokensDataSource(
         accessToken: String,
         refreshToken: String,
     ) {
-        val current = currentState()
-        val accountTokens = AccountTokens(accessToken = accessToken, refreshToken = refreshToken, userId = userId)
-        val updatedAccounts = current.accounts + (userId to accountTokens)
-        val newState = AuthTokensState(activeUserId = userId, accounts = updatedAccounts)
-        saveState(newState)
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: AuthTokensState()
+            val accountTokens = AccountTokens(accessToken = accessToken, refreshToken = refreshToken, userId = userId)
+            val updatedAccounts = current.accounts + (userId to accountTokens)
+            val newState = AuthTokensState(activeUserId = userId, accounts = updatedAccounts)
+            encodeState(newState)
+        }
     }
 
     suspend fun saveTokens(
         accessToken: String,
         refreshToken: String,
     ) {
-        val current = currentState()
-        val targetUserId =
-            current.activeUserId.takeIf { it != 0L }
-                ?: current.accounts.keys.firstOrNull()
-                ?: 0L
-        saveTokens(targetUserId, accessToken, refreshToken)
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: AuthTokensState()
+            val targetUserId =
+                current.activeUserId.takeIf { it != 0L }
+                    ?: current.accounts.keys.firstOrNull()
+                    ?: 0L
+            val accountTokens = AccountTokens(accessToken = accessToken, refreshToken = refreshToken, userId = targetUserId)
+            val updatedAccounts = current.accounts + (targetUserId to accountTokens)
+            val newState = current.copy(accounts = updatedAccounts)
+            encodeState(newState)
+        }
     }
 
     suspend fun setActiveUser(userId: Long) {
-        val current = currentState()
-        if (current.accounts.containsKey(userId)) {
-            saveState(current.copy(activeUserId = userId))
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: return@updateData blob
+            if (current.accounts.containsKey(userId)) {
+                encodeState(current.copy(activeUserId = userId))
+            } else {
+                blob
+            }
         }
     }
 
     suspend fun removeTokens(userId: Long) {
-        val current = currentState()
-        val updatedAccounts = current.accounts - userId
-        val newActiveId =
-            if (current.activeUserId == userId) {
-                updatedAccounts.keys.firstOrNull() ?: 0L
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: return@updateData ""
+            val updatedAccounts = current.accounts - userId
+            if (updatedAccounts.isEmpty()) {
+                ""
             } else {
-                current.activeUserId
+                val newActiveId =
+                    if (current.activeUserId == userId) {
+                        updatedAccounts.keys.firstOrNull() ?: 0L
+                    } else {
+                        current.activeUserId
+                    }
+                encodeState(AuthTokensState(activeUserId = newActiveId, accounts = updatedAccounts))
             }
-        if (updatedAccounts.isEmpty()) {
-            clear()
-        } else {
-            saveState(AuthTokensState(activeUserId = newActiveId, accounts = updatedAccounts))
         }
     }
 
@@ -115,10 +128,9 @@ class AuthTokensDataSource(
     }
 
     @OptIn(ExperimentalEncodingApi::class)
-    private suspend fun saveState(state: AuthTokensState) {
+    private fun encodeState(state: AuthTokensState): String {
         val json = Json.encodeToString(AuthTokensState.serializer(), state)
-        val blob = Base64.Default.encode(crypto.encrypt(json.encodeToByteArray()))
-        dataStore.updateData { blob }
+        return Base64.Default.encode(crypto.encrypt(json.encodeToByteArray()))
     }
 
     /** 密文损坏（如跨设备恢复后无法解密）时按"未登录"处理，避免崩溃循环 */

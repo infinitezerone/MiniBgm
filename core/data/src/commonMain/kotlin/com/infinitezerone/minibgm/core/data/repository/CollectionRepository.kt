@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 interface CollectionRepository : UserDataClearable {
@@ -177,7 +179,12 @@ class CollectionRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("获取收藏总数"))
         }
 
+    private val countsMutex = Mutex()
     private val collectionCountsCache = mutableMapOf<String, CachedCounts>()
+
+    private suspend fun clearCountsCache() {
+        countsMutex.withLock { collectionCountsCache.clear() }
+    }
 
     private data class CachedCounts(
         val counts: Map<CollectionType, Int>,
@@ -190,7 +197,7 @@ class CollectionRepositoryImpl(
     ): AppResult<Map<CollectionType, Int>> =
         try {
             val now = TimeUtils.nowEpochMillis()
-            val cached = collectionCountsCache[username]
+            val cached = countsMutex.withLock { collectionCountsCache[username] }
             if (!force && cached != null && (now - cached.timestamp) < CACHE_TTL_MILLIS) {
                 AppResult.Success(cached.counts)
             } else {
@@ -207,7 +214,9 @@ class CollectionRepositoryImpl(
                     counts.putIfAbsent(type, 0)
                 }
                 val resultMap = counts.toMap()
-                collectionCountsCache[username] = CachedCounts(resultMap, now)
+                countsMutex.withLock {
+                    collectionCountsCache[username] = CachedCounts(resultMap, now)
+                }
                 AppResult.Success(resultMap)
             }
         } catch (e: CancellationException) {
@@ -270,7 +279,7 @@ class CollectionRepositoryImpl(
                     private = private,
                     epStatus = epStatus,
                 )
-                collectionCountsCache.clear()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -328,7 +337,7 @@ class CollectionRepositoryImpl(
 
                 // 5. 远端打卡成功后，写入最终对齐状态
                 saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
-                collectionCountsCache.clear()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -367,7 +376,7 @@ class CollectionRepositoryImpl(
 
                 // 5. 远端打卡成功后，写入最终对齐状态
                 saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
-                collectionCountsCache.clear()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -572,13 +581,13 @@ class CollectionRepositoryImpl(
 
     override suspend fun clearUserData(userId: Long) =
         withContext(NonCancellable) {
-            collectionCountsCache.clear()
+            clearCountsCache()
             userCollectionDao.clearByUserId(userId)
         }
 
     override suspend fun clearAllUserData() =
         withContext(NonCancellable) {
-            collectionCountsCache.clear()
+            clearCountsCache()
             userCollectionDao.clearAll()
         }
 

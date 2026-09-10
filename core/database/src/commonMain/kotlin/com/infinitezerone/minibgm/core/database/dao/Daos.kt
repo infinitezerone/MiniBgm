@@ -35,6 +35,9 @@ interface AirScheduleDao {
     @Query("SELECT * FROM air_schedules")
     suspend fun getAllSchedulesList(): List<AirScheduleEntity>
 
+    @Query("SELECT * FROM air_schedules WHERE bgmId IN (:ids)")
+    suspend fun getSchedulesByIds(ids: List<Long>): List<AirScheduleEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSchedules(schedules: List<AirScheduleEntity>)
 
