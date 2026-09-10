@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
@@ -43,8 +44,16 @@ fun ExploreSkeletonLoading(
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
+    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val columns =
+        if (isWideScreen) {
+            StaggeredGridCells.Adaptive(minSize = 168.dp)
+        } else {
+            StaggeredGridCells.Fixed(2)
+        }
+
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
+        columns = columns,
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalItemSpacing = 10.dp,
