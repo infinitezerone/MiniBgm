@@ -82,6 +82,7 @@ class UserCollectionsViewModel(
     val uiState: StateFlow<UserCollectionsUiState> = _uiState.asStateFlow()
 
     private val loadJobs = mutableMapOf<CollectionType, Job>()
+    private var isInitialized = false
 
     init {
         viewModelScope.launch {
@@ -90,10 +91,15 @@ class UserCollectionsViewModel(
             }
         }
         viewModelScope.launch {
+            var initialProfileObserved = false
             authRepository.activeProfile.collect { profile ->
                 val previousProfile = _uiState.value.activeProfile
                 _uiState.update { it.copy(activeProfile = profile) }
-                if (profile != null && previousProfile != null && previousProfile.id != profile.id) {
+                if (!initialProfileObserved) {
+                    initialProfileObserved = true
+                    return@collect
+                }
+                if (profile != null && (previousProfile == null || previousProfile.id != profile.id)) {
                     loadJobs.values.forEach { it.cancel() }
                     loadJobs.clear()
                     _uiState.update { state ->
@@ -107,12 +113,27 @@ class UserCollectionsViewModel(
                         )
                     }
                     loadCollectionsForType(_uiState.value.selectedType, isRefresh = false)
+                } else if (profile == null && previousProfile != null) {
+                    loadJobs.values.forEach { it.cancel() }
+                    loadJobs.clear()
+                    _uiState.update { state ->
+                        state.copy(
+                            collectionsByType = emptyMap(),
+                            loadingTypes = emptySet(),
+                            loadingMoreTypes = emptySet(),
+                            hasMoreByType = emptyMap(),
+                            errorByType = mapOf(state.selectedType to "请先登录 Bangumi 账号"),
+                            error = "请先登录 Bangumi 账号",
+                        )
+                    }
                 }
             }
         }
     }
 
     fun setInitialType(type: CollectionType) {
+        if (isInitialized) return
+        isInitialized = true
         _uiState.update { it.copy(selectedType = type) }
         loadCollectionsForType(type, isRefresh = false)
     }

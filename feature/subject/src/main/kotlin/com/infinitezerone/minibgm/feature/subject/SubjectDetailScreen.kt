@@ -51,6 +51,7 @@ import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.CharacterDetailBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.CharacterImagePreviewDialog
 import com.infinitezerone.minibgm.feature.subject.components.CharactersSection
@@ -69,7 +70,6 @@ import com.infinitezerone.minibgm.feature.subject.components.SubjectCommunitySec
 import com.infinitezerone.minibgm.feature.subject.components.SubjectHeaderCard
 import com.infinitezerone.minibgm.feature.subject.components.SubjectPersonalProgressCard
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
-import com.infinitezerone.minibgm.feature.subject.components.launchCustomTab
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -180,12 +180,12 @@ fun SubjectDetailScreen(
                 if (ep != null) {
                     selectedEpisodeForDetail = ep
                 } else {
-                    launchCustomTab(context, url)
+                    context.launchWebUrl(url)
                 }
             }
-            is BgmLink.Topic -> launchCustomTab(context, url)
-            is BgmLink.User -> launchCustomTab(context, url)
-            is BgmLink.External -> launchCustomTab(context, url)
+            is BgmLink.Topic -> context.launchWebUrl(url)
+            is BgmLink.User -> context.launchWebUrl(url)
+            is BgmLink.External -> context.launchWebUrl(url)
         }
     }
 

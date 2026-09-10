@@ -159,31 +159,30 @@ class SearchViewModel(
             }
 
             val currentType = _uiState.value.userCollections[subject.id]
-            val newType = if (currentType == targetType) null else targetType
+            if (currentType == targetType) {
+                // 已标记为该状态，无需重复打卡（Bangumi v0 API 不支持 Subject 删除收藏操作）
+                return@launch
+            }
+
             val subjectType = SubjectType.fromValue(subject.type)
             val verb = targetType.getVerb(subjectType)
-            val feedbackMsg = if (newType != null) "已标记为「$verb」" else "已取消收藏"
+            val feedbackMsg = "已标记为「$verb」"
 
             // 0ms 乐观更新本地 UI
             _uiState.update { state ->
                 val updated = state.userCollections.toMutableMap()
-                if (newType != null) {
-                    updated[subject.id] = newType
-                } else {
-                    updated.remove(subject.id)
-                }
+                updated[subject.id] = targetType
                 state.copy(userCollections = updated, userMessage = feedbackMsg)
             }
 
             // 后台静默同步至 Bangumi 远端（防因导航切换取消）
             withContext(NonCancellable) {
                 val syncResult =
-                    if (newType != null) {
-                        collectionRepository.updateCollectionStatus(subject.id, newType)
-                    } else {
-                        // 若取消收藏，可选择更新或保留
-                        collectionRepository.updateCollectionStatus(subject.id, targetType)
-                    }
+                    collectionRepository.updateCollectionStatus(
+                        subjectId = subject.id,
+                        type = targetType,
+                        subjectType = subject.type,
+                    )
 
                 if (syncResult is AppResult.Error) {
                     // 同步失败，回滚状态

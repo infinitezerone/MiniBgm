@@ -116,6 +116,7 @@ class ExploreViewModel(
                     is AppResult.Error -> {
                         _uiState.update {
                             it.copy(
+                                wishedSubjectIds = it.wishedSubjectIds - subjectId,
                                 userMessage = result.message.ifBlank { "添加收藏失败，请先确认登录状态" },
                             )
                         }

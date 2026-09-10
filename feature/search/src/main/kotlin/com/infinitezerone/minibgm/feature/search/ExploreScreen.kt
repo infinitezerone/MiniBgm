@@ -1,7 +1,5 @@
 package com.infinitezerone.minibgm.feature.search
 
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.ActiveFilterPillRow
 import com.infinitezerone.minibgm.feature.search.components.ExploreEmptyState
 import com.infinitezerone.minibgm.feature.search.components.ExploreErrorState
@@ -280,11 +279,7 @@ fun ExploreScreen(
                         onClick = {
                             coroutineScope.launch {
                                 val authorizeUrl = viewModel.beginLogin()
-                                CustomTabsIntent
-                                    .Builder()
-                                    .setEphemeralBrowsingEnabled(true)
-                                    .build()
-                                    .launchUrl(context, Uri.parse(authorizeUrl))
+                                context.launchWebUrl(authorizeUrl, isAuth = true)
                             }
                         },
                     ) {

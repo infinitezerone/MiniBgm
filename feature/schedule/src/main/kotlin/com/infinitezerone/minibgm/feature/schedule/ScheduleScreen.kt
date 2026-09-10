@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
@@ -47,7 +48,6 @@ import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleUntimedSection
 import com.infinitezerone.minibgm.feature.schedule.components.TimelineSlotRow
-import com.infinitezerone.minibgm.feature.schedule.components.openWebUrl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -237,7 +237,7 @@ fun ScheduleScreen(
         ScheduleSourcesBottomSheet(
             schedule = schedule,
             onDismissRequest = { selectedScheduleForSources = null },
-            onOpenUrl = { openWebUrl(context, it) },
+            onOpenUrl = { context.launchWebUrl(it) },
         )
     }
 }

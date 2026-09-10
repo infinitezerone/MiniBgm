@@ -1,7 +1,5 @@
 package com.infinitezerone.minibgm.feature.search
 
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -23,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.SearchCategoryTabs
 import com.infinitezerone.minibgm.feature.search.components.SearchErrorState
 import com.infinitezerone.minibgm.feature.search.components.SearchIdleView
@@ -172,11 +171,7 @@ fun SearchScreen(
             onConfirmLogin = {
                 coroutineScope.launch {
                     val authorizeUrl = viewModel.beginLogin()
-                    CustomTabsIntent
-                        .Builder()
-                        .setEphemeralBrowsingEnabled(true)
-                        .build()
-                        .launchUrl(context, Uri.parse(authorizeUrl))
+                    context.launchWebUrl(authorizeUrl, isAuth = true)
                 }
             },
         )

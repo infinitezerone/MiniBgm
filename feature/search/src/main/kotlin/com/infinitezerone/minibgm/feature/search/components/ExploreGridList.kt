@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 双列瀑布流列表（支持上滑触底自动分页加载） */
 @Composable
@@ -42,7 +43,8 @@ fun WaterfallGridList(
     modifier: Modifier = Modifier,
 ) {
     // 监听触底自动触发加载下一页
-    LaunchedEffect(gridState, subjects.size, hasMore, isLoadingMore) {
+    LaunchedEffect(gridState, subjects.size, hasMore) {
+        if (!hasMore) return@LaunchedEffect
         snapshotFlow {
             val total = gridState.layoutInfo.totalItemsCount
             val lastVisible =
@@ -50,7 +52,7 @@ fun WaterfallGridList(
                     .lastOrNull()
                     ?.index ?: 0
             total > 0 && lastVisible >= total - 6
-        }.collect { shouldLoad ->
+        }.distinctUntilChanged().collect { shouldLoad ->
             if (shouldLoad && hasMore && !isLoadingMore) {
                 onLoadMore()
             }

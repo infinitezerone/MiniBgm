@@ -21,14 +21,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScheduleViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private val today = LocalDate.now().dayOfWeek.value
+    private val today = ScheduleViewModel.currentCstDate().dayOfWeek.value
 
     private fun createViewModel(
         repository: FakeScheduleRepository = FakeScheduleRepository(),

@@ -148,10 +148,6 @@ class UserViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
-    val isLoggedIn: StateFlow<Boolean> =
-        authRepository.isLoggedIn
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-
     /** 刷新个人中心：同步最新个人资料与全量收藏统计 */
     fun refresh(onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
