@@ -48,6 +48,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectPerson
+import com.infinitezerone.minibgm.core.model.aggregateBySubject
 
 /**
  * 原生人物/制作团队/声优详情底栏：支持头像、职业标签、生平维基与直接在端内跳转代表作作品
@@ -259,9 +260,10 @@ fun PersonDetailBottomSheet(
 
             // 4. 代表作/参与作品横滑列表（点击直接在端内无缝跳转看番）
             if (relatedWorks.isNotEmpty()) {
+                val displayWorks = remember(relatedWorks) { relatedWorks.aggregateBySubject() }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "参与作品 (${relatedWorks.size})",
+                        text = "参与作品 (${displayWorks.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -270,7 +272,7 @@ fun PersonDetailBottomSheet(
                         contentPadding = PaddingValues(horizontal = 0.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        items(items = relatedWorks, key = { it.id }) { work ->
+                        items(items = displayWorks, key = { it.id }) { work ->
                             Card(
                                 onClick = {
                                     onDismiss()

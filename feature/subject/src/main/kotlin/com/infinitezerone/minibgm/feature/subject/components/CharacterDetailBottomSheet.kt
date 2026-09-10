@@ -49,6 +49,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
+import com.infinitezerone.minibgm.core.model.aggregateBySubject
 
 /**
  * 原生角色详情底栏：支持立绘、声优联动、属性生平与直接在端内跳转出演作品
@@ -303,9 +304,10 @@ fun CharacterDetailBottomSheet(
 
             // 4. 出演作品横滑列表（点击作品直接在端内无缝跳转看番）
             if (relatedWorks.isNotEmpty()) {
+                val displayWorks = remember(relatedWorks) { relatedWorks.aggregateBySubject() }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "出演作品 (${relatedWorks.size})",
+                        text = "出演作品 (${displayWorks.size})",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -314,7 +316,7 @@ fun CharacterDetailBottomSheet(
                         contentPadding = PaddingValues(horizontal = 0.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        items(items = relatedWorks, key = { it.id }) { work ->
+                        items(items = displayWorks, key = { it.id }) { work ->
                             Card(
                                 onClick = {
                                     onDismiss()
