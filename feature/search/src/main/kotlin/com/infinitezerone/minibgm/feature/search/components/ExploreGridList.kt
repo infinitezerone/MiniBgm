@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
@@ -60,8 +61,16 @@ fun WaterfallGridList(
         }
     }
 
+    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val columns =
+        if (isWideScreen) {
+            StaggeredGridCells.Adaptive(minSize = 168.dp)
+        } else {
+            StaggeredGridCells.Fixed(2)
+        }
+
     LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Adaptive(minSize = 168.dp),
+        columns = columns,
         state = gridState,
         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),

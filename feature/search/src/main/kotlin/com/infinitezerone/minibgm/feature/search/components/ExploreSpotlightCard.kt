@@ -44,7 +44,9 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
+import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 
 /**
  * 发现流顶部「今日焦点 / 深度安利」大卡（打破千篇一律的网格货架，注入编辑感与视觉重心）：
@@ -90,6 +92,7 @@ fun ExploreSpotlightCard(
                             initialName = subject.displayName,
                             initialCoverUrl = imageUrl,
                             initialScore = score,
+                            source = "explore",
                         ),
                     )
                 },
@@ -108,7 +111,13 @@ fun ExploreSpotlightCard(
                 model = imageUrl,
                 contentDescription = subject.displayName,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(subject.id, "explore"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(12.dp),
+                        ),
             )
 
             // 2. 纵向暗色渐变遮罩（确保文字在任何明暗背景下都绝对清晰）
