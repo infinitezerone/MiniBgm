@@ -19,6 +19,7 @@ import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.Tag
+import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
@@ -237,7 +238,7 @@ class SubjectRepositoryImpl(
 
     override suspend fun fetchCharacterSubjects(id: Long): AppResult<List<RelatedWork>> =
         asAppResult(errorMessage = { it.toUserFriendlyMessage("获取角色参演作品") }) {
-            apiService.getCharacterSubjects(id)
+            apiService.getCharacterSubjects(id).aggregateBySubject()
         }
 
     override suspend fun fetchPersons(subjectId: Long): AppResult<List<SubjectPerson>> =
@@ -252,7 +253,7 @@ class SubjectRepositoryImpl(
 
     override suspend fun fetchPersonSubjects(id: Long): AppResult<List<RelatedWork>> =
         asAppResult(errorMessage = { it.toUserFriendlyMessage("获取演职员作品") }) {
-            apiService.getPersonSubjects(id)
+            apiService.getPersonSubjects(id).aggregateBySubject()
         }
 
     override suspend fun fetchRelations(subjectId: Long): AppResult<List<SubjectRelation>> =

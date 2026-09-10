@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,12 +73,13 @@ fun RelationsSection(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
+        val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 0.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(items = relations, key = { "${it.id}_${it.relation}" }) { relation ->
+            items(items = uniqueRelations, key = { "${it.id}_${it.relation}" }) { relation ->
                 RelationCard(
                     relation = relation,
                     onClick = { onSubjectClick(relation.id) },
@@ -191,12 +193,13 @@ fun CharactersSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        val uniqueCharacters = remember(characters) { characters.distinctBy { it.id } }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 0.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(items = characters, key = { it.id }) { character ->
+            items(items = uniqueCharacters, key = { it.id }) { character ->
                 CharacterCard(
                     character = character,
                     onCharacterClick = onCharacterClick,

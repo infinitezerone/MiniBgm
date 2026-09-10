@@ -725,6 +725,36 @@ class SubjectDetailViewModelTest {
         }
 
     @Test
+    fun loadPersonDetail_aggregatesDuplicateSubjectsAndCombinesStaff() =
+        runTest {
+            val personId = 3083L
+            val personDetail = PersonDetail(id = personId, name = "吉浦康裕")
+            val rawWorks =
+                listOf(
+                    RelatedWork(id = 29414L, name = "サカサマのパテマ", staff = "原作"),
+                    RelatedWork(id = 29414L, name = "サカサマのパテマ", staff = "导演"),
+                    RelatedWork(id = 29414L, name = "サカサマのパテマ", staff = "脚本"),
+                    RelatedWork(id = 1001L, name = "イヴの時間", staff = "导演"),
+                )
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendPersonDetail(personDetail)
+                    sendPersonSubjects(personId, rawWorks)
+                }
+
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
+            viewModel.loadPersonDetail(personId)
+            testScheduler.advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(2, state.selectedPersonWorks.size)
+            assertEquals(29414L, state.selectedPersonWorks[0].id)
+            assertEquals("原作 / 导演 / 脚本", state.selectedPersonWorks[0].staff)
+            assertEquals(1001L, state.selectedPersonWorks[1].id)
+            assertEquals("导演", state.selectedPersonWorks[1].staff)
+        }
+
+    @Test
     fun initialLoad_onlyFetchesCoreData_andSkipsDetailsAndCommunity() =
         runTest {
             var detailCalls = 0

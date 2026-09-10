@@ -20,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -440,7 +441,7 @@ class SubjectDetailViewModel(
                 state.copy(
                     isLoadingEntityDetail = false,
                     selectedCharacterDetail = (detailResult as? AppResult.Success)?.data,
-                    selectedCharacterWorks = (worksResult as? AppResult.Success)?.data.orEmpty(),
+                    selectedCharacterWorks = (worksResult as? AppResult.Success)?.data?.aggregateBySubject().orEmpty(),
                 )
             }
         }
@@ -465,7 +466,7 @@ class SubjectDetailViewModel(
                 state.copy(
                     isLoadingEntityDetail = false,
                     selectedPersonDetail = (detailResult as? AppResult.Success)?.data,
-                    selectedPersonWorks = (worksResult as? AppResult.Success)?.data.orEmpty(),
+                    selectedPersonWorks = (worksResult as? AppResult.Success)?.data?.aggregateBySubject().orEmpty(),
                 )
             }
         }
