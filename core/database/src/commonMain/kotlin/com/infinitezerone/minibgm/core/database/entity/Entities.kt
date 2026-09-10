@@ -4,57 +4,21 @@ import androidx.room3.Entity
 import androidx.room3.Index
 import androidx.room3.PrimaryKey
 
-@Entity(tableName = "subjects")
-data class SubjectEntity(
-    @PrimaryKey val id: Long,
-    val type: Int,
-    val name: String,
-    val nameCn: String,
-    val summary: String,
-    val date: String,
-    val eps: Int,
-    val totalEpisodes: Int,
-    val coverUrl: String,
-    val ratingScore: Double,
-    val ratingRank: Int,
-    val ratingTotal: Int = 0,
-    val ratingCountJson: String = "",
-    val collectionWish: Int = 0,
-    val collectionCollect: Int = 0,
-    val collectionDoing: Int = 0,
-    val collectionOnHold: Int = 0,
-    val collectionDropped: Int = 0,
-    val tagsJson: String = "",
-    val updatedAt: Long = 0L,
-)
-
 @Entity(
-    tableName = "episodes",
-    indices = [Index(value = ["subjectId"])],
+    tableName = "air_schedules",
+    indices = [
+        Index(value = ["weekday", "sortMinutes", "ratingScore"]),
+    ],
 )
-data class EpisodeEntity(
-    @PrimaryKey val id: Long,
-    val subjectId: Long,
-    val sort: Float,
-    val ep: Float,
-    val name: String,
-    val nameCn: String,
-    val duration: String,
-    val airdate: String,
-    val type: Int = 0,
-    val desc: String = "",
-    val comment: Int = 0,
-    val isCollected: Boolean = false,
-)
-
-@Entity(tableName = "air_schedules")
 data class AirScheduleEntity(
     @PrimaryKey val bgmId: Long,
     val title: String,
     val titleCn: String,
     val coverUrl: String,
     val ratingScore: Double,
-    val beginUtc: String,
+    val airDate: String = "",
+    val beginAtUtc: String? = null,
+    val sortMinutes: Int = UNKNOWN_SORT_MINUTES,
     val weekday: Int,
     val timeCst: String,
     val timeJst: String,
@@ -73,22 +37,29 @@ data class AirScheduleEntity(
     val nextEpisodeAtUtc: String = "",
     /** 下一话时刻可信度（actual / scheduled / predicted），空串表示未知 */
     val nextEpisodeKind: String = "",
-    val updatedAt: Long = 0L,
 ) {
+    /** 向后兼容属性：若有带具体时间的 UTC 则优先返回，否则退化为裸日期 */
+    val beginUtc: String
+        get() = beginAtUtc ?: airDate
+
     companion object {
         const val SOURCE_OFFICIAL = "official"
         const val SOURCE_BGM_DATA = "bgm_data"
+        const val UNKNOWN_SORT_MINUTES = 9999
     }
 }
 
 /**
  * 逐话播出事件流：时刻表排期的第一手事实。
- * 同一话允许多源并存（kind/source 进主键），由仓库层按
- * actual > scheduled > predicted 仲裁后回写条目的 next* 字段。
+ * 主键为 (subjectId, episode, source)，同一来源在同一话只保留最新一条事件记录。
  */
 @Entity(
     tableName = "air_events",
-    primaryKeys = ["subjectId", "episode", "kind", "source"],
+    primaryKeys = ["subjectId", "episode", "source"],
+    indices = [
+        Index(value = ["kind", "airAtUtc"]),
+        Index(value = ["airAtUtc"]),
+    ],
 )
 data class AirEventEntity(
     val subjectId: Long,
@@ -99,10 +70,17 @@ data class AirEventEntity(
     val source: String,
 )
 
+/**
+ * 用户追番状态与进度索引表：
+ * 仅用于时刻表「我追的」过滤、桌面小组件、开播提醒以及打卡时的本地秒级响应。
+ * 个人评分与长短评属于展示层数据，由远端实时下发，不在此表持久化。
+ */
 @Entity(
     tableName = "user_collections",
     primaryKeys = ["userId", "subjectId"],
-    indices = [Index(value = ["userId", "type"])],
+    indices = [
+        Index(value = ["userId", "type", "updatedAt"]),
+    ],
 )
 data class UserCollectionEntity(
     val userId: Long,

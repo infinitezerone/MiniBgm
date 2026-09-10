@@ -1,32 +1,25 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.asAppResult
-import com.infinitezerone.minibgm.core.database.dao.EpisodeDao
-import com.infinitezerone.minibgm.core.database.dao.SubjectDao
-import com.infinitezerone.minibgm.core.database.entity.EpisodeEntity
-import com.infinitezerone.minibgm.core.database.entity.SubjectEntity
 import com.infinitezerone.minibgm.core.model.CharacterDetail
-import com.infinitezerone.minibgm.core.model.CollectionCount
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PersonDetail
-import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
-import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
-import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 interface SubjectRepository {
     fun getSubjectStream(id: Long): Flow<Subject?>
@@ -52,128 +45,35 @@ interface SubjectRepository {
     suspend fun fetchRelations(subjectId: Long): AppResult<List<SubjectRelation>>
 }
 
-private val repositoryJson =
-    Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
-    }
-
 class SubjectRepositoryImpl(
     private val apiService: BangumiApiService,
-    private val subjectDao: SubjectDao,
-    private val episodeDao: EpisodeDao,
+    private val maxMemoryEntries: Int = DEFAULT_MAX_ENTRIES,
 ) : SubjectRepository {
+    private val cacheMutex = Mutex()
+    private val subjectsState = MutableStateFlow<Map<Long, Subject>>(emptyMap())
+    private val episodesState = MutableStateFlow<Map<Long, List<Episode>>>(emptyMap())
+    private val subjectAccessOrder = mutableListOf<Long>()
+    private val episodeAccessOrder = mutableListOf<Long>()
+
     override fun getSubjectStream(id: Long): Flow<Subject?> =
-        subjectDao.getSubjectById(id).map { entity ->
-            entity?.let {
-                val ratingCount =
-                    if (it.ratingCountJson.isNotBlank()) {
-                        try {
-                            repositoryJson.decodeFromString<Map<String, Int>>(it.ratingCountJson)
-                        } catch (e: Exception) {
-                            emptyMap()
-                        }
-                    } else {
-                        emptyMap()
-                    }
-                val tagsList =
-                    if (it.tagsJson.isNotBlank()) {
-                        try {
-                            repositoryJson.decodeFromString<List<Tag>>(it.tagsJson)
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
-                    } else {
-                        emptyList()
-                    }
-                val collectionCount =
-                    if (it.collectionWish > 0 ||
-                        it.collectionCollect > 0 ||
-                        it.collectionDoing > 0 ||
-                        it.collectionOnHold > 0 ||
-                        it.collectionDropped > 0
-                    ) {
-                        CollectionCount(
-                            wish = it.collectionWish,
-                            collect = it.collectionCollect,
-                            doing = it.collectionDoing,
-                            onHold = it.collectionOnHold,
-                            dropped = it.collectionDropped,
-                        )
-                    } else {
-                        null
-                    }
-                Subject(
-                    id = it.id,
-                    type = it.type,
-                    name = it.name,
-                    nameCn = it.nameCn,
-                    summary = it.summary,
-                    date = it.date,
-                    eps = it.eps,
-                    totalEpisodes = it.totalEpisodes,
-                    images = SubjectImages(large = it.coverUrl),
-                    rating =
-                        Rating(
-                            score = it.ratingScore,
-                            rank = it.ratingRank,
-                            total = it.ratingTotal,
-                            count = ratingCount,
-                        ),
-                    collection = collectionCount,
-                    tags = tagsList,
-                )
-            }
-        }
+        subjectsState
+            .map { it[id] }
+            .distinctUntilChanged()
 
     override suspend fun fetchSubjectDetail(id: Long): AppResult<Subject> =
         try {
             val subject = apiService.getSubject(id)
-            val ratingCountJson =
-                if (!subject.rating?.count.isNullOrEmpty()) {
-                    try {
-                        repositoryJson.encodeToString(subject.rating!!.count)
-                    } catch (e: Exception) {
-                        ""
-                    }
-                } else {
-                    ""
+            cacheMutex.withLock {
+                subjectAccessOrder.remove(id)
+                subjectAccessOrder.add(id)
+                val newMap = subjectsState.value.toMutableMap()
+                newMap[id] = subject
+                while (subjectAccessOrder.size > maxMemoryEntries) {
+                    val evictedId = subjectAccessOrder.removeAt(0)
+                    newMap.remove(evictedId)
                 }
-            val tagsJson =
-                if (subject.tags.isNotEmpty()) {
-                    try {
-                        repositoryJson.encodeToString(subject.tags)
-                    } catch (e: Exception) {
-                        ""
-                    }
-                } else {
-                    ""
-                }
-            val entity =
-                SubjectEntity(
-                    id = subject.id,
-                    type = subject.type,
-                    name = subject.name,
-                    nameCn = subject.nameCn,
-                    summary = subject.summary,
-                    date = subject.date,
-                    eps = subject.eps,
-                    totalEpisodes = subject.totalEpisodes,
-                    coverUrl = subject.images?.bestImage ?: "",
-                    ratingScore = subject.rating?.score ?: 0.0,
-                    ratingRank = subject.rating?.rank ?: 0,
-                    ratingTotal = subject.rating?.total ?: 0,
-                    ratingCountJson = ratingCountJson,
-                    collectionWish = subject.collection?.wish ?: 0,
-                    collectionCollect = subject.collection?.collect ?: 0,
-                    collectionDoing = subject.collection?.doing ?: 0,
-                    collectionOnHold = subject.collection?.onHold ?: 0,
-                    collectionDropped = subject.collection?.dropped ?: 0,
-                    tagsJson = tagsJson,
-                    updatedAt = TimeUtils.nowEpochMillis(),
-                )
-            subjectDao.insertSubject(entity)
+                subjectsState.value = newMap
+            }
             AppResult.Success(subject)
         } catch (e: CancellationException) {
             throw e
@@ -182,43 +82,24 @@ class SubjectRepositoryImpl(
         }
 
     override fun getEpisodesStream(subjectId: Long): Flow<List<Episode>> =
-        episodeDao.getEpisodesBySubjectId(subjectId).map { entities ->
-            entities.map {
-                Episode(
-                    id = it.id,
-                    sort = it.sort,
-                    ep = it.ep,
-                    name = it.name,
-                    nameCn = it.nameCn,
-                    duration = it.duration,
-                    airdate = it.airdate,
-                    type = it.type,
-                    desc = it.desc,
-                    comment = it.comment,
-                )
-            }
-        }
+        episodesState
+            .map { it[subjectId].orEmpty() }
+            .distinctUntilChanged()
 
     override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> =
         try {
             val response = apiService.getEpisodes(subjectId, limit = 100)
-            val entities =
-                response.data.map {
-                    EpisodeEntity(
-                        id = it.id,
-                        subjectId = subjectId,
-                        sort = it.sort,
-                        ep = it.ep,
-                        name = it.name,
-                        nameCn = it.nameCn,
-                        duration = it.duration,
-                        airdate = it.airdate,
-                        type = it.type,
-                        desc = it.desc,
-                        comment = it.comment,
-                    )
+            cacheMutex.withLock {
+                episodeAccessOrder.remove(subjectId)
+                episodeAccessOrder.add(subjectId)
+                val newMap = episodesState.value.toMutableMap()
+                newMap[subjectId] = response.data
+                while (episodeAccessOrder.size > maxMemoryEntries) {
+                    val evictedId = episodeAccessOrder.removeAt(0)
+                    newMap.remove(evictedId)
                 }
-            episodeDao.insertEpisodes(entities)
+                episodesState.value = newMap
+            }
             AppResult.Success(response.data)
         } catch (e: CancellationException) {
             throw e
@@ -260,4 +141,8 @@ class SubjectRepositoryImpl(
         asAppResult(errorMessage = { it.toUserFriendlyMessage("获取关联作品") }) {
             apiService.getSubjectRelations(subjectId)
         }
+
+    companion object {
+        const val DEFAULT_MAX_ENTRIES = 30
+    }
 }

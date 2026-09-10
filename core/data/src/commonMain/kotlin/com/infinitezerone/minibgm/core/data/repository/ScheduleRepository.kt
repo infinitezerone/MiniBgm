@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
@@ -273,13 +274,20 @@ class ScheduleRepositoryImpl(
             val dataItem = bgmMap[entity.bgmId] ?: return@map entity
             val siteLinks = dataItem.sites.mapNotNull { s -> resolveSiteLink(s) }
             val rule = dataItem.broadcast.ifBlank { entity.broadcastRule }
-            val begin = dataItem.begin.ifBlank { entity.beginUtc }
-            val (calcEp, calcAirUtc) = calculateNextEpisode(begin, rule, entity.totalEpisodes, now)
+            val normalizedBegin = TimeUtils.normalizeIsoUtc(dataItem.begin)
+            val beginAtUtc = normalizedBegin.ifBlank { entity.beginAtUtc }
+            val airDate = entity.airDate.ifBlank { dataItem.begin.substringBefore("T") }
+            val timeCst = TimeUtils.formatToCstTime(beginAtUtc ?: "").ifBlank { entity.timeCst }
+            val timeJst = TimeUtils.formatToJstTime(beginAtUtc ?: "").ifBlank { entity.timeJst }
+            val sortMinutes = TimeUtils.parseTimeToMinutes(timeCst)
+            val (calcEp, calcAirUtc) = calculateNextEpisode(beginAtUtc ?: airDate, rule, entity.totalEpisodes, now)
             entity.copy(
                 titleCn = entity.titleCn.ifBlank { dataItem.chineseTitle },
-                beginUtc = begin,
-                timeCst = TimeUtils.formatToCstTime(begin).ifBlank { entity.timeCst },
-                timeJst = TimeUtils.formatToJstTime(begin).ifBlank { entity.timeJst },
+                airDate = airDate,
+                beginAtUtc = beginAtUtc,
+                sortMinutes = sortMinutes,
+                timeCst = timeCst,
+                timeJst = timeJst,
                 sitesJson = json.encodeToString(siteLinks),
                 anilistId =
                     entity.anilistId
@@ -307,16 +315,20 @@ class ScheduleRepositoryImpl(
             val beginMillis = TimeUtils.epochMillisOfIso(item.begin) ?: return@mapNotNull null
             if (beginMillis < windowStart || beginMillis > windowEnd) return@mapNotNull null
             val ruleStart = TimeUtils.parseBroadcastRule(item.broadcast)?.first ?: beginMillis
-            val (nextEp, nextEpUtc) = calculateNextEpisode(item.begin, item.broadcast, 0, now)
+            val normalizedBegin = TimeUtils.normalizeIsoUtc(item.begin)
+            val (nextEp, nextEpUtc) = calculateNextEpisode(normalizedBegin, item.broadcast, 0, now)
+            val timeCst = TimeUtils.formatToCstTime(item.begin)
             AirScheduleEntity(
                 bgmId = bgmId,
                 title = item.title,
                 titleCn = item.chineseTitle,
                 coverUrl = "",
                 ratingScore = 0.0,
-                beginUtc = item.begin,
+                airDate = item.begin.substringBefore("T"),
+                beginAtUtc = normalizedBegin.ifBlank { null },
+                sortMinutes = TimeUtils.parseTimeToMinutes(timeCst),
                 weekday = TimeUtils.cstWeekdayOfEpoch(ruleStart),
-                timeCst = TimeUtils.formatToCstTime(item.begin),
+                timeCst = timeCst,
                 timeJst = TimeUtils.formatToJstTime(item.begin),
                 sitesJson = json.encodeToString(item.sites.mapNotNull { s -> resolveSiteLink(s) }),
                 anilistId =
@@ -349,7 +361,8 @@ class ScheduleRepositoryImpl(
         val keepIds = entities.map { it.bgmId }.toSet()
         airEventDao.deleteEventsNotIn(keepIds.toList())
         airEventDao.deleteStalePredictedEvents(nowIso)
-        scheduleDao.deleteStaleBgmDataSchedules(TimeUtils.isoUtcFromEpochMillis(nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS))
+        val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
+        scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
 
         // 用户在看收藏过滤：有在看数据时仅对在看条目发起 AniList 精准排期校验（削减 95% 请求量）
         val trackingSubjectIds =
@@ -522,9 +535,11 @@ class ScheduleRepositoryImpl(
             bgmId = subject.id,
             title = subject.name,
             titleCn = subject.nameCn,
-            coverUrl = (subject.images?.bestImage.orEmpty()).replace("http://", "https://"),
+            coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty()),
             ratingScore = subject.rating?.score ?: 0.0,
-            beginUtc = subject.airDate,
+            airDate = subject.airDate,
+            beginAtUtc = null,
+            sortMinutes = AirScheduleEntity.UNKNOWN_SORT_MINUTES,
             weekday = officialWeekday,
             timeCst = "",
             timeJst = "",
@@ -536,7 +551,6 @@ class ScheduleRepositoryImpl(
             nextEpisode = 0,
             nextEpisodeAtUtc = "",
             nextEpisodeKind = "",
-            updatedAt = 0L,
         )
 
     private fun mergeScheduleEntity(
@@ -544,9 +558,9 @@ class ScheduleRepositoryImpl(
         officialWeekday: Int,
         existing: AirScheduleEntity,
     ): AirScheduleEntity {
-        val coverUrl = (subject.images?.bestImage.orEmpty()).replace("http://", "https://")
+        val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
         val titleCn = subject.nameCn.ifBlank { existing.titleCn }
-        val beginUtc = existing.beginUtc.takeIf { it.isNotBlank() } ?: subject.airDate
+        val airDate = existing.airDate.ifBlank { subject.airDate }
         val totalEpisodes =
             subject.eps.takeIf { it > 0 }
                 ?: subject.totalEpisodes.takeIf { it > 0 }
@@ -557,7 +571,7 @@ class ScheduleRepositoryImpl(
             titleCn = titleCn,
             coverUrl = coverUrl,
             ratingScore = subject.rating?.score ?: 0.0,
-            beginUtc = beginUtc,
+            airDate = airDate,
             weekday = officialWeekday,
             totalEpisodes = totalEpisodes,
             source = AirScheduleEntity.SOURCE_OFFICIAL,
@@ -599,8 +613,10 @@ class ScheduleRepositoryImpl(
             bgmId = bgmId,
             title = title,
             titleCn = titleCn,
-            coverUrl = coverUrl,
+            coverUrl = BgmImageUtils.optimizeBgmImageUrl(coverUrl),
             ratingScore = ratingScore,
+            airDate = airDate,
+            beginAtUtc = beginAtUtc,
             beginUtc = beginUtc,
             weekday = weekday,
             timeCst = timeCst,
@@ -630,7 +646,7 @@ class ScheduleRepositoryImpl(
 
         return schedules.map { entity ->
             val subject = metadataByBgmId[entity.bgmId] ?: return@map entity
-            val coverUrl = (subject.images?.bestImage ?: "").replace("http://", "https://")
+            val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
             val rating = subject.rating?.score ?: 0.0
             val eps = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes
             entity.copy(
