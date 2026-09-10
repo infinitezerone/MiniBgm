@@ -1,8 +1,5 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import android.content.Context
-import android.content.Intent
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,13 +41,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectTopic
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 
 internal const val BGM_BASE_URL = "https://bgm.tv"
 
@@ -325,7 +322,7 @@ fun SubjectCommunitySection(
                         topics.take(6).forEachIndexed { index, topic ->
                             SubjectTopicItem(
                                 topic = topic,
-                                onClick = { launchCustomTab(context, "$BGM_BASE_URL/subject/topic/${topic.id}") },
+                                onClick = { context.launchWebUrl("$BGM_BASE_URL/subject/topic/${topic.id}") },
                             )
                             if (index < topics.take(6).lastIndex) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -486,24 +483,5 @@ fun SubjectTopicItem(
                 }
             }
         }
-    }
-}
-
-/** 使用 Chrome Custom Tabs 在应用内优雅打开网页 */
-fun launchCustomTab(
-    context: Context,
-    url: String,
-) {
-    try {
-        val customTabsIntent =
-            CustomTabsIntent
-                .Builder()
-                .setShowTitle(true)
-                .setUrlBarHidingEnabled(true)
-                .build()
-        customTabsIntent.launchUrl(context, url.toUri())
-    } catch (e: Exception) {
-        val fallbackIntent = Intent(Intent.ACTION_VIEW, url.toUri())
-        context.startActivity(fallbackIntent)
     }
 }

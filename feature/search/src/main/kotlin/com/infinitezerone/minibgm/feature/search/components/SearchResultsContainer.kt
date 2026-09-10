@@ -42,6 +42,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.feature.search.SearchSort
 import com.infinitezerone.minibgm.feature.search.SearchViewMode
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 搜索结果列表（支持多维排序、列表/网格双模切换与无限滚动触底加载） */
 @Composable
@@ -123,7 +124,8 @@ fun SearchResultsList(
 
         when (viewMode) {
             SearchViewMode.LIST -> {
-                LaunchedEffect(listState, results.size, hasMore, isLoadingMore) {
+                LaunchedEffect(listState, results.size, hasMore) {
+                    if (!hasMore) return@LaunchedEffect
                     snapshotFlow {
                         val total = listState.layoutInfo.totalItemsCount
                         val lastVisible =
@@ -131,7 +133,7 @@ fun SearchResultsList(
                                 .lastOrNull()
                                 ?.index ?: 0
                         total > 0 && lastVisible >= total - 4
-                    }.collect { shouldLoad ->
+                    }.distinctUntilChanged().collect { shouldLoad ->
                         if (shouldLoad && hasMore && !isLoadingMore) {
                             onLoadMore()
                         }
@@ -166,7 +168,8 @@ fun SearchResultsList(
             }
 
             SearchViewMode.GRID -> {
-                LaunchedEffect(gridState, results.size, hasMore, isLoadingMore) {
+                LaunchedEffect(gridState, results.size, hasMore) {
+                    if (!hasMore) return@LaunchedEffect
                     snapshotFlow {
                         val total = gridState.layoutInfo.totalItemsCount
                         val lastVisible =
@@ -174,7 +177,7 @@ fun SearchResultsList(
                                 .lastOrNull()
                                 ?.index ?: 0
                         total > 0 && lastVisible >= total - 6
-                    }.collect { shouldLoad ->
+                    }.distinctUntilChanged().collect { shouldLoad ->
                         if (shouldLoad && hasMore && !isLoadingMore) {
                             onLoadMore()
                         }

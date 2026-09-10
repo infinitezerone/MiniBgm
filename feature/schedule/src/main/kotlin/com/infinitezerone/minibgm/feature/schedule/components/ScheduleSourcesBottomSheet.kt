@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,36 +53,7 @@ fun ScheduleSourcesBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val displayName = schedule.titleCn.ifBlank { schedule.title }
-    val sortedLinks =
-        remember(schedule.siteLinks) {
-            val priorityOrder =
-                listOf(
-                    "bilibili",
-                    "gamer",
-                    "gamer_hk",
-                    "bahamut",
-                    "iqiyi",
-                    "qq",
-                    "youku",
-                    "mikan",
-                    "muse_tw",
-                    "muse_hk",
-                    "ani_one",
-                    "ani_one_asia",
-                    "netflix",
-                    "disneyplus",
-                    "crunchyroll",
-                    "abema",
-                    "danime",
-                    "unext",
-                    "prime",
-                    "nicovideo",
-                )
-            schedule.siteLinks.distinctBy { it.displayName }.sortedBy { link ->
-                val index = priorityOrder.indexOf(link.siteName.lowercase())
-                if (index >= 0) index else 100
-            }
-        }
+    val sortedLinks = remember(schedule.siteLinks) { schedule.siteLinks.sortedBySitePriority() }
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,

@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -203,6 +204,27 @@ class UserCollectionsViewModelTest {
         }
 
     @Test
+    fun setInitialType_whenCalledAgainOnRotation_doesNotResetSelectedType() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            viewModel.uiState.first { it.collections.isNotEmpty() }
+            assertEquals(CollectionType.DOING, viewModel.uiState.value.selectedType)
+
+            // 用户手动切换到 WISH
+            viewModel.selectType(CollectionType.WISH)
+            assertEquals(CollectionType.WISH, viewModel.uiState.value.selectedType)
+
+            // 模拟屏幕旋转，界面重新传入 initialType
+            viewModel.setInitialType(CollectionType.DOING)
+            // 选中的 Tab 必须保持在 WISH，不被踢回 DOING
+            assertEquals(CollectionType.WISH, viewModel.uiState.value.selectedType)
+        }
+
+    @Test
     fun loadMore_appendsNewCollectionsAndUpdatesPaginationState() =
         runTest {
             val collectionRepo = FakeCollectionRepository()
@@ -246,5 +268,54 @@ class UserCollectionsViewModelTest {
 
             viewModel.loadMore(CollectionType.DOING)
             assertEquals(1, collectionRepo.fetchUserCollectionsCallCount)
+        }
+
+    @Test
+    fun loginAfterUnauthenticated_triggersReloadAndClearsError() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = false, initialProfile = null)
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            val unauthState = viewModel.uiState.first { it.error != null }
+            assertFalse(unauthState.isLoggedIn)
+            assertEquals("请先登录 Bangumi 账号", unauthState.error)
+            assertTrue(unauthState.collections.isEmpty())
+
+            // 用户登录成功
+            authRepo.setLoggedIn(true)
+            authRepo.setActiveProfile(sampleUserProfile)
+
+            // 验证自动触发加载并清空错误态
+            val loggedInState = viewModel.uiState.first { it.collections.isNotEmpty() }
+            assertTrue(loggedInState.isLoggedIn)
+            assertNull(loggedInState.error)
+            assertEquals(1, loggedInState.collections.size)
+            assertEquals(sampleSubject.id, loggedInState.collections.first().subjectId)
+            assertEquals(1, collectionRepo.fetchUserCollectionsCallCount)
+        }
+
+    @Test
+    fun logout_clearsCollectionsAndSetsUnauthenticatedError() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = true, initialProfile = sampleUserProfile)
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            val loggedInState = viewModel.uiState.first { it.collections.isNotEmpty() }
+            assertEquals(1, loggedInState.collections.size)
+
+            // 账号登出
+            authRepo.setLoggedIn(false)
+            authRepo.setActiveProfile(null)
+
+            // 验证已缓存的收藏数据被清空，并显示未登录提示
+            val loggedOutState = viewModel.uiState.first { !it.isLoggedIn && it.error != null }
+            assertEquals("请先登录 Bangumi 账号", loggedOutState.error)
+            assertTrue(loggedOutState.collections.isEmpty())
         }
 }

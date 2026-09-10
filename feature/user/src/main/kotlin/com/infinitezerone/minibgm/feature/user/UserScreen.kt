@@ -1,9 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,6 +46,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -65,7 +64,7 @@ fun UserScreen(
     val coroutineScope = rememberCoroutineScope()
 
     val openWebUrl = { url: String ->
-        CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+        context.launchWebUrl(url)
     }
 
     // 开启提醒时顺带请求通知权限（Android 13+；拒绝仅影响送达，不影响开关本身）
@@ -83,11 +82,7 @@ fun UserScreen(
         onLogin = {
             coroutineScope.launch {
                 val authorizeUrl = viewModel.beginLogin()
-                CustomTabsIntent
-                    .Builder()
-                    .setEphemeralBrowsingEnabled(true)
-                    .build()
-                    .launchUrl(context, Uri.parse(authorizeUrl))
+                context.launchWebUrl(authorizeUrl, isAuth = true)
             }
         },
         onRefresh = {

@@ -61,7 +61,7 @@ class AppModuleTest : KoinTest {
 
             val viewModel: UserViewModel = get()
             assertNotNull(viewModel)
-            assertEquals(false, viewModel.isLoggedIn.first())
+            assertEquals(false, viewModel.uiState.value.isLoggedIn)
         }
 
     @Test

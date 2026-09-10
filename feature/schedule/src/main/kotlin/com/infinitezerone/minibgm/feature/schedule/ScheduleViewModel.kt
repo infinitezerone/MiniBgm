@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.ZoneId
 
 /** 待补番剧条目（包含所属日期与已看/在播进度） */
 @Immutable
@@ -49,7 +50,7 @@ data class ScheduleUiState(
     val isRefreshing: Boolean = false,
     val error: String? = null,
     val selectedWeekday: Int,
-    val todayWeekday: Int = LocalDate.now().dayOfWeek.value,
+    val todayWeekday: Int = ScheduleViewModel.currentCstDate().dayOfWeek.value,
     val dateItems: List<WeekdayDateItem> = emptyList(),
     val weeklySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val watchingSubjectIds: Set<Long> = emptySet(),
@@ -152,7 +153,7 @@ class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
 ) : ViewModel() {
-    private val selectedWeekday = MutableStateFlow(LocalDate.now().dayOfWeek.value)
+    private val selectedWeekday = MutableStateFlow(currentCstDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
@@ -219,7 +220,7 @@ class ScheduleViewModel(
             filterFlow,
             statusFlow,
         ) { weeklySchedules, (watchingIds, collectionMap), (weekday, onlyWatch), (refreshing, error) ->
-            val currentToday = LocalDate.now()
+            val currentToday = currentCstDate()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
 
@@ -289,7 +290,7 @@ class ScheduleViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue =
                 run {
-                    val initialToday = LocalDate.now()
+                    val initialToday = currentCstDate()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
                         isLoading = true,
@@ -386,6 +387,10 @@ class ScheduleViewModel(
     }
 
     companion object {
+        val CST_ZONE_ID: ZoneId = ZoneId.of("Asia/Shanghai")
+
+        fun currentCstDate(): LocalDate = LocalDate.now(CST_ZONE_ID)
+
         fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> {
             val todayWeekday = today.dayOfWeek.value
             val monday = today.minusDays((todayWeekday - 1).toLong())

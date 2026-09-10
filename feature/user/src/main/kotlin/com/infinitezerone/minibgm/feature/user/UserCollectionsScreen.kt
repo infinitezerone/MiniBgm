@@ -63,6 +63,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -205,15 +206,15 @@ fun UserCollectionsContent(
                 val listState = listStates[page]
 
                 // 触底加载监听：滑动到列表末尾（倒数第 3 项以内）且有更多数据时自动触发增量加载
-                LaunchedEffect(listState, pageHasMore, isPageLoadingMore) {
-                    if (!pageHasMore || isPageLoadingMore) return@LaunchedEffect
+                LaunchedEffect(listState, pageCollections.size, pageHasMore) {
+                    if (!pageHasMore) return@LaunchedEffect
                     snapshotFlow {
                         val layoutInfo = listState.layoutInfo
                         val totalItems = layoutInfo.totalItemsCount
                         val lastVisibleItemIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                         totalItems > 0 && lastVisibleItemIndex >= totalItems - 3
-                    }.collect { shouldLoadMore ->
-                        if (shouldLoadMore) {
+                    }.distinctUntilChanged().collect { shouldLoadMore ->
+                        if (shouldLoadMore && pageHasMore && !isPageLoadingMore) {
                             onLoadMore(pageType)
                         }
                     }

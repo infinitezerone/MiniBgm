@@ -1,12 +1,10 @@
 package com.infinitezerone.minibgm
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +17,7 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -68,24 +67,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
         handleOAuthIntent(intent)
-        if (intent?.getBooleanExtra(EXTRA_OPEN_SCHEDULE, false) == true) {
+        if (intent.getBooleanExtra(EXTRA_OPEN_SCHEDULE, false)) {
             openSchedule = true
+            intent.removeExtra(EXTRA_OPEN_SCHEDULE)
         }
-        val subjectId = intent?.getLongExtra(EXTRA_SUBJECT_ID, -1L) ?: -1L
+        val subjectId = intent.getLongExtra(EXTRA_SUBJECT_ID, -1L)
         if (subjectId > 0L) {
             openSubjectId = subjectId
+            intent.removeExtra(EXTRA_SUBJECT_ID)
         }
-        if (intent?.getBooleanExtra(EXTRA_TRIGGER_LOGIN, false) == true) {
+        if (intent.getBooleanExtra(EXTRA_TRIGGER_LOGIN, false)) {
             openUser = true
+            intent.removeExtra(EXTRA_TRIGGER_LOGIN)
             lifecycleScope.launch {
                 runCatching {
                     val authorizeUrl = authRepository.beginLogin()
-                    CustomTabsIntent
-                        .Builder()
-                        .setEphemeralBrowsingEnabled(true)
-                        .build()
-                        .launchUrl(this@MainActivity, Uri.parse(authorizeUrl))
+                    launchWebUrl(authorizeUrl, isAuth = true)
                 }.onFailure {
                     snackbarHostState.showSnackbar("启动登录失败，请重试")
                 }
@@ -102,6 +101,8 @@ class MainActivity : ComponentActivity() {
     private fun handleOAuthIntent(intent: Intent?) {
         val data = intent?.data ?: return
         if (data.scheme == "minibgm" && data.host == "oauth" && data.path == "/callback") {
+            // 消费深链数据，防止旋转屏幕或 Activity 重建重复触发二次兑换
+            intent.data = null
             val error = data.getQueryParameter("error")
             if (error != null) {
                 lifecycleScope.launch {

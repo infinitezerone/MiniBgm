@@ -370,6 +370,28 @@ class SearchViewModelTest {
         }
 
     @Test
+    fun toggleCollectionWhenAlreadyInTargetTypeIsNoOp() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = true)
+            val collectionRepo = FakeCollectionRepository()
+            val viewModel = createViewModel(collectionRepo = collectionRepo, authRepo = authRepo)
+
+            // 先标记为 DOING
+            viewModel.toggleCollection(sampleSubject, CollectionType.DOING)
+            advanceUntilIdle()
+
+            assertEquals(CollectionType.DOING, viewModel.uiState.value.userCollections[sampleSubject.id])
+            assertEquals(1, collectionRepo.updateCollectionCallCount)
+
+            // 再次点击相同状态 DOING，应为幂等 no-op，不再发起打卡调用，保留原状态
+            viewModel.toggleCollection(sampleSubject, CollectionType.DOING)
+            advanceUntilIdle()
+
+            assertEquals(CollectionType.DOING, viewModel.uiState.value.userCollections[sampleSubject.id])
+            assertEquals(1, collectionRepo.updateCollectionCallCount)
+        }
+
+    @Test
     fun searchHistoryIsLoadedAndUpdatedOnSearch() =
         runTest {
             val repository = FakeSearchRepository()

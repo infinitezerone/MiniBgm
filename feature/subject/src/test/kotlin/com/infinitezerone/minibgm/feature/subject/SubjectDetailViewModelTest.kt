@@ -176,6 +176,37 @@ class SubjectDetailViewModelTest {
         }
 
     @Test
+    fun refresh_whenRemoteCollectionIsNull_clearsCollectionInUiState() =
+        runTest {
+            val subjectRepo =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection)
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = subjectRepo,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertEquals(sampleUserCollection, viewModel.uiState.value.collection)
+
+            // 当远端查到未收藏时（返回 Success(null)），刷新应正确将状态更新为 null
+            collectionRepo.clearAllUserData()
+            viewModel.refresh()
+            testScheduler.advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.collection)
+        }
+
+    @Test
     fun updateCollectionStatus_callsRepository() =
         runTest {
             val subjectRepo = FakeSubjectRepository()
@@ -472,6 +503,84 @@ class SubjectDetailViewModelTest {
         }
 
     @Test
+    fun loadCommunityTabIfNeeded_onAllNetworkErrors_doesNotLockLoadedStateAndAllowsRetry() =
+        runTest {
+            val communityRepo =
+                FakeCommunityRepository().apply {
+                    getSubjectCommentsResult = AppResult.Error(IllegalStateException("网络连接超时"))
+                    getSubjectTopicsResult = AppResult.Error(IllegalStateException("网络连接超时"))
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepo,
+                )
+
+            // 初次切 Tab，全部网络失败
+            viewModel.loadCommunityTabIfNeeded()
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isCommunityLoading)
+            assertEquals(1, communityRepo.getSubjectCommentsCallCount)
+            assertEquals(1, communityRepo.getSubjectTopicsCallCount)
+
+            // 再次切回 Tab，不应被锁定，应能发起二次重试
+            viewModel.loadCommunityTabIfNeeded()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(2, communityRepo.getSubjectCommentsCallCount)
+            assertEquals(2, communityRepo.getSubjectTopicsCallCount)
+        }
+
+    @Test
+    fun loadEpisodeComments_onNetworkError_doesNotCacheEmptyListAndAllowsRetry() =
+        runTest {
+            val epId = 777L
+            val comments =
+                listOf(
+                    EpisodeComment(
+                        id = 1L,
+                        user = CommentUser(id = 1L, username = "otaku", nickname = "宅友"),
+                        content = "精彩绝伦！",
+                    ),
+                )
+            val communityRepo =
+                FakeCommunityRepository().apply {
+                    getEpisodeCommentsResult = AppResult.Error(IllegalStateException("网络异常"))
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepo,
+                )
+
+            // 首次请求失败
+            viewModel.loadEpisodeComments(epId)
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isEpisodeCommentsLoading)
+            assertFalse(
+                viewModel.uiState.value.episodeComments
+                    .containsKey(epId),
+            )
+            assertEquals(1, communityRepo.getEpisodeCommentsCallCount)
+
+            // 网络恢复，二次点击应重新发起请求并成功写入缓存
+            communityRepo.getEpisodeCommentsResult = AppResult.Success(comments)
+            viewModel.loadEpisodeComments(epId)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(2, communityRepo.getEpisodeCommentsCallCount)
+            assertEquals(comments, viewModel.uiState.value.episodeComments[epId])
+        }
+
+    @Test
     fun loadMoreSubjectComments_appendsNewCommentsAndUpdatesPaginationState() =
         runTest {
             val initialComment = SubjectComment(id = 1L, comment = "第一条短评")
@@ -538,6 +647,54 @@ class SubjectDetailViewModelTest {
             val clearedState = viewModel.uiState.value
             assertNull(clearedState.selectedCharacterDetail)
             assertTrue(clearedState.selectedCharacterWorks.isEmpty())
+        }
+
+    @Test
+    fun loadCharacterDetail_clearsPreviousPersonAndCharacterState() =
+        runTest {
+            val charId = 123L
+            val charDetail = CharacterDetail(id = charId, name = "角色1")
+            val charWorks = listOf(RelatedWork(id = 10L, name = "作品1", staff = "主角"))
+            val personId = 456L
+            val personDetail = PersonDetail(id = personId, name = "種﨑敦美", career = listOf("seiyu"))
+            val personWorks = listOf(RelatedWork(id = 100L, name = "作品2", staff = "声优"))
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendCharacterDetail(charDetail)
+                    sendCharacterSubjects(charId, charWorks)
+                    sendPersonDetail(personDetail)
+                    sendPersonSubjects(personId, personWorks)
+                }
+
+            val viewModel = SubjectDetailViewModel(repository, sampleSubject.id, FakeCollectionRepository(), FakeCommunityRepository())
+
+            // 1. 先加载人物详情
+            viewModel.loadPersonDetail(personId)
+            testScheduler.advanceUntilIdle()
+            assertEquals(personDetail, viewModel.uiState.value.selectedPersonDetail)
+            assertEquals(personWorks, viewModel.uiState.value.selectedPersonWorks)
+
+            // 2. 切换加载角色详情，人物状态和作品必须被清空
+            viewModel.loadCharacterDetail(charId)
+            testScheduler.advanceUntilIdle()
+            assertEquals(charDetail, viewModel.uiState.value.selectedCharacterDetail)
+            assertEquals(charWorks, viewModel.uiState.value.selectedCharacterWorks)
+            assertNull(viewModel.uiState.value.selectedPersonDetail)
+            assertTrue(
+                viewModel.uiState.value.selectedPersonWorks
+                    .isEmpty(),
+            )
+
+            // 3. 再次切回人物详情，角色状态和作品必须被清空
+            viewModel.loadPersonDetail(personId)
+            testScheduler.advanceUntilIdle()
+            assertEquals(personDetail, viewModel.uiState.value.selectedPersonDetail)
+            assertEquals(personWorks, viewModel.uiState.value.selectedPersonWorks)
+            assertNull(viewModel.uiState.value.selectedCharacterDetail)
+            assertTrue(
+                viewModel.uiState.value.selectedCharacterWorks
+                    .isEmpty(),
+            )
         }
 
     @Test

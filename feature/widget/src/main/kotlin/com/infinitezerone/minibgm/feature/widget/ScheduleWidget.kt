@@ -23,6 +23,7 @@ import coil3.SingletonImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
@@ -40,7 +41,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import org.koin.core.context.GlobalContext
-import java.time.Instant
 import java.time.ZoneId
 
 /**
@@ -108,11 +108,7 @@ class ScheduleWidget : GlanceAppWidget() {
                     if (!isLoggedIn) {
                         scheduleRepo
                             ?.getSchedulesByWeekday(
-                                Instant
-                                    .ofEpochMilli(System.currentTimeMillis())
-                                    .atZone(ZoneId.systemDefault())
-                                    .dayOfWeek
-                                    .value,
+                                TimeUtils.cstWeekdayOfEpoch(System.currentTimeMillis()),
                             )?.firstOrNull()
                             .orEmpty()
                     } else {

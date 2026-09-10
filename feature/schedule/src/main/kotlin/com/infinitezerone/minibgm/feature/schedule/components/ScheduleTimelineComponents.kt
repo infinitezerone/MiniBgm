@@ -1,9 +1,5 @@
 package com.infinitezerone.minibgm.feature.schedule.components
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -65,6 +61,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.sortedBySitePriority
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.CatchupScheduleItem
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -96,58 +94,6 @@ fun getAirStatus(
         now.isAfter(endDateTime) -> AirStatus.AIRED
         now.isAfter(airDateTime) -> AirStatus.AIRING
         else -> AirStatus.UPCOMING
-    }
-}
-
-fun sortSiteLinks(links: List<SiteLink>): List<SiteLink> {
-    val priorityOrder =
-        listOf(
-            "bilibili",
-            "gamer",
-            "gamer_hk",
-            "bahamut",
-            "iqiyi",
-            "qq",
-            "youku",
-            "mikan",
-            "muse_tw",
-            "muse_hk",
-            "ani_one",
-            "ani_one_asia",
-            "netflix",
-            "disneyplus",
-            "crunchyroll",
-            "abema",
-            "danime",
-            "unext",
-            "prime",
-            "nicovideo",
-        )
-    return links.distinctBy { it.displayName }.sortedBy { link ->
-        val index = priorityOrder.indexOf(link.siteName.lowercase())
-        if (index >= 0) index else 100
-    }
-}
-
-fun openWebUrl(
-    context: Context,
-    url: String,
-) {
-    if (url.isBlank()) return
-    try {
-        val uri = Uri.parse(url)
-        CustomTabsIntent
-            .Builder()
-            .setShowTitle(true)
-            .build()
-            .launchUrl(context, uri)
-    } catch (_: Exception) {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            // Ignore if no browser can handle
-        }
     }
 }
 
@@ -483,7 +429,7 @@ fun ScheduleTimelineSingleCard(
                     if (schedule.siteLinks.isNotEmpty()) {
                         SiteLinksRow(
                             links = schedule.siteLinks,
-                            onOpenUrl = { openWebUrl(context, it) },
+                            onOpenUrl = { context.launchWebUrl(it) },
                             onShowMoreSources = { onShowSources(schedule) },
                         )
                     } else {
@@ -561,7 +507,7 @@ fun SiteLinksRow(
     onShowMoreSources: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sortedLinks = remember(links) { sortSiteLinks(links) }
+    val sortedLinks = remember(links) { links.sortedBySitePriority() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),

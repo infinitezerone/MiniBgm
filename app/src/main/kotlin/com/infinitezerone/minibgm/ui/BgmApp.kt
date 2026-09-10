@@ -69,7 +69,7 @@ fun BgmApp(
         )
 
     // 通知点击直达"放送"Tab：消费标记后自动切到时间表
-    androidx.compose.runtime.LaunchedEffect(openSchedule) {
+    LaunchedEffect(openSchedule) {
         if (openSchedule) {
             navState.navigateTo(ScheduleRoute)
             onScheduleNavigated()
@@ -77,7 +77,7 @@ fun BgmApp(
     }
 
     // 小组件单项点击直达番剧详情页：消费标记后直达对应番剧
-    androidx.compose.runtime.LaunchedEffect(openSubjectId) {
+    LaunchedEffect(openSubjectId) {
         val subjectId = openSubjectId
         if (subjectId != null && subjectId > 0L) {
             navState.navigateTo(SubjectDetailRoute(subjectId))
@@ -86,7 +86,7 @@ fun BgmApp(
     }
 
     // 小组件点击去登录直达"我的"Tab：消费标记后切到用户中心
-    androidx.compose.runtime.LaunchedEffect(openUser) {
+    LaunchedEffect(openUser) {
         if (openUser) {
             navState.navigateTo(UserRoute)
             onUserNavigated()

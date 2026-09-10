@@ -119,13 +119,16 @@ class SubjectDetailViewModel(
                 episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
                 collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
 
-                val remoteCollection = (collectionResult as? AppResult.Success)?.data
-
                 _uiState.update { current ->
                     current.copy(
                         isLoading = false,
                         subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
-                        collection = remoteCollection ?: current.collection,
+                        collection =
+                            if (collectionResult is AppResult.Success) {
+                                collectionResult.data
+                            } else {
+                                current.collection
+                            },
                     )
                 }
             }
@@ -145,6 +148,11 @@ class SubjectDetailViewModel(
                 val personsResult = subjectRepository.fetchPersons(subjectId)
                 val relationsResult = subjectRepository.fetchRelations(subjectId)
 
+                val hasAnySuccess =
+                    charactersResult is AppResult.Success ||
+                        personsResult is AppResult.Success ||
+                        relationsResult is AppResult.Success
+
                 _uiState.update { current ->
                     current.copy(
                         isDetailsLoading = false,
@@ -153,7 +161,9 @@ class SubjectDetailViewModel(
                         relations = (relationsResult as? AppResult.Success)?.data ?: current.relations,
                     )
                 }
-                detailsLoaded = true
+                if (hasAnySuccess) {
+                    detailsLoaded = true
+                }
             }
     }
 
@@ -170,6 +180,9 @@ class SubjectDetailViewModel(
                 val subjectCommentsResult = communityRepository.getSubjectComments(subjectId, limit = 15)
                 val subjectTopicsResult = communityRepository.getSubjectTopics(subjectId, limit = 5)
 
+                val commentsSuccess = subjectCommentsResult is AppResult.Success
+                val topicsSuccess = subjectTopicsResult is AppResult.Success
+
                 val commentsPage = (subjectCommentsResult as? AppResult.Success)?.data
                 val topics = (subjectTopicsResult as? AppResult.Success)?.data.orEmpty()
 
@@ -182,7 +195,9 @@ class SubjectDetailViewModel(
                         subjectTopics = if (topics.isNotEmpty()) topics else current.subjectTopics,
                     )
                 }
-                communityLoaded = true
+                if (commentsSuccess || topicsSuccess) {
+                    communityLoaded = true
+                }
             }
     }
 
@@ -357,11 +372,18 @@ class SubjectDetailViewModel(
             _uiState.update { it.copy(isEpisodeCommentsLoading = true) }
             val result = communityRepository.getEpisodeComments(episodeId)
             _uiState.update { state ->
-                val comments = (result as? AppResult.Success)?.data.orEmpty()
-                state.copy(
-                    isEpisodeCommentsLoading = false,
-                    episodeComments = state.episodeComments + (episodeId to comments),
-                )
+                when (result) {
+                    is AppResult.Success -> {
+                        state.copy(
+                            isEpisodeCommentsLoading = false,
+                            episodeComments = state.episodeComments + (episodeId to result.data),
+                        )
+                    }
+                    is AppResult.Error -> {
+                        state.copy(isEpisodeCommentsLoading = false)
+                    }
+                    is AppResult.Loading -> state
+                }
             }
         }
     }
@@ -405,6 +427,8 @@ class SubjectDetailViewModel(
             _uiState.update {
                 it.copy(
                     isLoadingEntityDetail = true,
+                    selectedCharacterDetail = null,
+                    selectedCharacterWorks = emptyList(),
                     selectedPersonDetail = null,
                     selectedPersonWorks = emptyList(),
                 )
@@ -430,6 +454,8 @@ class SubjectDetailViewModel(
                     isLoadingEntityDetail = true,
                     selectedCharacterDetail = null,
                     selectedCharacterWorks = emptyList(),
+                    selectedPersonDetail = null,
+                    selectedPersonWorks = emptyList(),
                 )
             }
             val detailResult = subjectRepository.fetchPersonDetail(personId)

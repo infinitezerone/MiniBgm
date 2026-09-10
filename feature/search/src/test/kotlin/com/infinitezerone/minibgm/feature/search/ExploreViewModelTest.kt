@@ -147,6 +147,29 @@ class ExploreViewModelTest {
         }
 
     @Test
+    fun toggleWishWhenUpdateFailsRollsBackWishedIds() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository =
+                FakeCollectionRepository().apply {
+                    updateCollectionResult = AppResult.Error(RuntimeException("网络故障"), "网络异常")
+                }
+            val authRepository = FakeAuthRepository(initialLoggedIn = true)
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            viewModel.toggleWish(sampleSubject.id)
+            advanceUntilIdle()
+
+            // 验证失败后从 wishedSubjectIds 中回滚
+            assertFalse(
+                viewModel.uiState.value.wishedSubjectIds
+                    .contains(sampleSubject.id),
+            )
+            assertEquals("网络异常", viewModel.uiState.value.userMessage)
+        }
+
+    @Test
     fun onSeasonSelectTriggersNewSearchWithUpdatedAirDate() =
         runTest {
             val searchRepository = FakeSearchRepository()
