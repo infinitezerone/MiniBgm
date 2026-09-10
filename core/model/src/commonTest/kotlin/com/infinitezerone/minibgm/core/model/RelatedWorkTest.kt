@@ -48,4 +48,15 @@ class RelatedWorkTest {
         assertEquals(100L, aggregated[0].id)
         assertEquals("导演 / 分镜", aggregated[0].staff)
     }
+
+    @Test
+    fun coverImage_optimizesBangumiLargeCoverToCdn400() {
+        val work =
+            RelatedWork(
+                id = 123L,
+                name = "Test",
+                image = "http://lain.bgm.tv/pic/cover/l/ca/27/12105_jp.jpg",
+            )
+        assertEquals("https://lain.bgm.tv/r/400/pic/cover/l/ca/27/12105_jp.jpg", work.coverImage)
+    }
 }

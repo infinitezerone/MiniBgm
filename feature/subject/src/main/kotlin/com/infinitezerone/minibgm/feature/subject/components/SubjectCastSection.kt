@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Card
@@ -112,6 +114,7 @@ private fun RelationCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 8.dp,
                     aspectRatio = 0.7f,
+                    fallbackIcon = Icons.Filled.Movie,
                 )
                 if (relation.relation.isNotBlank()) {
                     Surface(
@@ -239,6 +242,7 @@ private fun CharacterCard(
                     cornerRadius = 8.dp,
                     aspectRatio = 0.72f,
                     alignment = Alignment.TopCenter,
+                    fallbackIcon = Icons.Filled.Person,
                 )
 
                 if (character.roleName.isNotBlank()) {
@@ -300,16 +304,15 @@ private fun CharacterCard(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                     ) {
                         val actorImage = actor.images?.bestImage.orEmpty()
-                        if (actorImage.isNotBlank()) {
-                            CoverImage(
-                                url = actorImage,
-                                contentDescription = actor.name,
-                                modifier = Modifier.size(18.dp),
-                                cornerRadius = 9.dp,
-                                aspectRatio = 1f,
-                                alignment = Alignment.TopCenter,
-                            )
-                        }
+                        CoverImage(
+                            url = actorImage,
+                            contentDescription = actor.name,
+                            modifier = Modifier.size(18.dp),
+                            cornerRadius = 9.dp,
+                            aspectRatio = 1f,
+                            alignment = Alignment.TopCenter,
+                            fallbackIcon = Icons.Filled.Person,
+                        )
                         Text(
                             text = "CV: ${actor.name}",
                             style = MaterialTheme.typography.labelSmall,

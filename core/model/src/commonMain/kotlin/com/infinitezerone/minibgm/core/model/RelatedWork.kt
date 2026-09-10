@@ -19,7 +19,10 @@ data class RelatedWork(
         get() = nameCn.ifBlank { name }
 
     val coverImage: String
-        get() = image.replace("http://", "https://")
+        get() =
+            image
+                .replace("http://", "https://")
+                .replace("lain.bgm.tv/pic/cover/l/", "lain.bgm.tv/r/400/pic/cover/l/")
 }
 
 /**
