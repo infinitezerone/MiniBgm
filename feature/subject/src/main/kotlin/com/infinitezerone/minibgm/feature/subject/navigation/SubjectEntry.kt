@@ -10,8 +10,9 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit = {},
     onTagClick: (String) -> Unit = {},
+    metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<SubjectDetailRoute> { route ->
+    entry<SubjectDetailRoute>(metadata = metadata) { route ->
         SubjectDetailScreen(
             subjectId = route.subjectId,
             initialName = route.initialName,

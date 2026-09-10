@@ -12,10 +12,14 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
@@ -31,10 +35,11 @@ import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
 import com.infinitezerone.minibgm.feature.search.navigation.searchEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
+import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 fun BgmNavHost(
     navState: BgmNavState,
@@ -53,6 +58,8 @@ fun BgmNavHost(
             navState.tabReselectionEvents.filter { it == UserRoute }.map { }
         }
 
+    val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>()
+
     SharedTransitionLayout(modifier = modifier) {
         CompositionLocalProvider(
             LocalSharedTransitionScope provides this,
@@ -70,6 +77,10 @@ fun BgmNavHost(
                                     navState.navigateTo(SearchRoute())
                                 },
                                 scrollToTop = scheduleScrollToTop,
+                                metadata =
+                                    ListDetailSceneStrategy.listPane(
+                                        detailPlaceholder = { BgmDetailPlaceholder() },
+                                    ),
                             )
 
                             userEntry(
@@ -91,6 +102,7 @@ fun BgmNavHost(
                                 onTagClick = { tag ->
                                     navState.navigateTo(SearchRoute(initialQuery = tag))
                                 },
+                                metadata = ListDetailSceneStrategy.detailPane(),
                             )
 
                             searchEntry(
@@ -108,10 +120,15 @@ fun BgmNavHost(
                                     navState.navigateTo(SearchRoute())
                                 },
                                 scrollToTop = exploreScrollToTop,
+                                metadata =
+                                    ListDetailSceneStrategy.listPane(
+                                        detailPlaceholder = { BgmDetailPlaceholder() },
+                                    ),
                             )
                         },
                     ),
                 onBack = { navState.goBack() },
+                sceneStrategies = listOf(listDetailStrategy),
                 transitionSpec = {
                     val fromKey = initialState.key
                     val toKey = targetState.key
