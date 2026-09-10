@@ -24,6 +24,10 @@ data class SearchRoute(
 @Serializable
 data class SubjectDetailRoute(
     val subjectId: Long,
+    val initialName: String = "",
+    val initialCoverUrl: String = "",
+    val initialScore: Double = 0.0,
+    val source: String = "",
 ) : NavKey
 
 @Serializable
