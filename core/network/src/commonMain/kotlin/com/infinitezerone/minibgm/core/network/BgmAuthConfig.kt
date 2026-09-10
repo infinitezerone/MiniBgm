@@ -13,7 +13,7 @@ import io.ktor.http.URLBuilder
 data class BgmAuthConfig(
     val clientId: String = "bgm69976a90e07dcf869",
     val redirectUri: String = "minibgm://oauth/callback",
-    val tokenProxyUrl: String = "https://bgmplus-auth.shadow2go.dpdns.org/oauth/token",
+    val tokenProxyUrl: String = "https://bgmplus-auth.zeronex.dpdns.org/oauth/token",
 ) {
     /**
      * 构造供浏览器 / Custom Tabs 打开的 Bangumi 官方网页授权地址。
