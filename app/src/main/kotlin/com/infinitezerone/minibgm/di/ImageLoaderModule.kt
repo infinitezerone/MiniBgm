@@ -8,6 +8,7 @@ import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.infinitezerone.minibgm.BuildConfig
+import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.DefaultRequest
@@ -45,17 +46,24 @@ val imageLoaderModule =
             ImageLoader
                 .Builder(context)
                 .components {
-                    // 全局拦截器：将所有明文 http:// 图片地址自动升轨为安全 https://，防止 Android Cleartext 限制
+                    // 全局拦截器：
+                    // 1. 将所有 http:// 图片地址自动升轨为安全 https://，防止 Android Cleartext 限制与 301 重定向开销；
+                    // 2. 将 Bangumi 未压缩扫图（/pic/cover/l/、/pic/crt/l/、/pic/user/l/）透明优化为
+                    //    官方 CDN 400px WebP 压缩规格（/r/400/...），节约 ~75% 移动端带宽并收敛 Coil 缓存键。
                     add(
                         Interceptor { chain ->
                             val request = chain.request
                             val data = request.data
-                            if (data is String && data.startsWith("http://", ignoreCase = true)) {
-                                val secureUrl = data.replaceFirst("http://", "https://", ignoreCase = true)
-                                chain.withRequest(request.newBuilder().data(secureUrl).build()).proceed()
-                            } else {
-                                chain.proceed()
+                            if (data is String) {
+                                val optimizedUrl = BgmImageUtils.optimizeBgmImageUrl(data)
+                                if (optimizedUrl != data) {
+                                    return@Interceptor chain
+                                        .withRequest(
+                                            request.newBuilder().data(optimizedUrl).build(),
+                                        ).proceed()
+                                }
                             }
+                            chain.proceed()
                         },
                     )
                     add(KtorNetworkFetcherFactory(httpClient = { client }))
