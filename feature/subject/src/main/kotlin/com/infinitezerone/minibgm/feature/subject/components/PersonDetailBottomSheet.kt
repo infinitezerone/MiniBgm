@@ -1,11 +1,11 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -22,8 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,11 +40,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectPerson
-import com.infinitezerone.minibgm.core.model.aggregateBySubject
 
 /**
  * 原生人物/制作团队/声优详情底栏：支持头像、职业标签、生平维基与直接在端内跳转代表作作品
@@ -68,9 +64,10 @@ fun PersonDetailBottomSheet(
     val scrollState = rememberScrollState()
     var isSummaryExpanded by remember { mutableStateOf(false) }
 
-    val personId = person?.id ?: detail?.id ?: return
     val personName = person?.name ?: detail?.name.orEmpty()
-    val personAvatar = detail?.bestAvatar?.ifBlank { person?.images?.bestImage.orEmpty() } ?: person?.images?.bestImage.orEmpty()
+    val personAvatar =
+        detail?.bestAvatar?.ifBlank { person?.images?.bestImage.orEmpty() }
+            ?: person?.images?.bestImage.orEmpty()
     val summary = detail?.summary.orEmpty()
 
     ModalBottomSheet(
@@ -87,133 +84,140 @@ fun PersonDetailBottomSheet(
                     .padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // 1. 顶部标题栏（人物名、身份职位与关闭）
+            // 1. 顶部标题栏（档案标签与关闭）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
-                        text = personName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        text = if (!person?.relation.isNullOrBlank()) "人物档案 · ${person.relation}" else "人物档案",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
-                    if (!person?.relation.isNullOrBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Text(
-                                text = person.relation,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
                 }
 
-                IconButton(onClick = onDismiss) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp),
+                ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "关闭",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
 
-            // 2. 主体头像与基础信息
+            // 2. 主体形象与现代胶囊元数据（Hero Section）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top,
             ) {
                 CoverImage(
                     url = personAvatar,
                     contentDescription = personName,
-                    modifier = Modifier.width(105.dp),
-                    cornerRadius = 10.dp,
-                    aspectRatio = 1f,
+                    modifier = Modifier.width(108.dp),
+                    cornerRadius = 12.dp,
+                    aspectRatio = 0.8f,
                     alignment = Alignment.TopCenter,
                 )
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    if (detail?.careerText?.isNotBlank() == true) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "职业：",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(text = detail.careerText, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                        }
-                    }
+                    Text(
+                        text = personName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
 
-                    detail?.genderText?.let { gender ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "性别：",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(text = gender, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (!detail?.careerText.isNullOrBlank()) {
+                            detail.career.forEach { rawCareer ->
+                                val careerLabel =
+                                    when (rawCareer.lowercase()) {
+                                        "seiyu" -> "声优"
+                                        "artist" -> "歌手"
+                                        "writer" -> "作家"
+                                        "illustrator" -> "插画师"
+                                        "actor" -> "演员"
+                                        else -> rawCareer
+                                    }
+                                EntityInfoPill(
+                                    text = careerLabel,
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
                         }
-                    }
 
-                    detail?.birthdayText?.let { birthday ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "生日：",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        detail?.genderText?.let { gender ->
+                            EntityInfoPill(
+                                text = gender,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
-                            Text(text = birthday, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                         }
-                    }
 
-                    val stat = detail?.stat
-                    if (stat != null && stat.collects > 0) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "关注：",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        detail?.birthdayText?.let { birthday ->
+                            EntityInfoPill(
+                                text = birthday,
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Text(text = "${stat.collects} 人收藏", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                        }
+
+                        val collects = detail?.stat?.collects ?: 0
+                        if (collects > 0) {
+                            EntityInfoPill(
+                                text = "$collects 关注",
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
                         }
                     }
 
                     if (isLoading && detail == null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
 
-            // 3. 人物履历简介
+            // 3. 人物履历生平简介
             if (summary.isNotBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
+                Surface(
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
                     border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(14.dp)
+                                .animateContentSize(),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
@@ -226,28 +230,34 @@ fun PersonDetailBottomSheet(
                             text = summary.trim(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = if (isSummaryExpanded) Int.MAX_VALUE else 4,
+                            lineHeight = 18.sp,
+                            maxLines = if (isSummaryExpanded) Int.MAX_VALUE else 3,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (summary.length > 120) {
+                        if (summary.length > 90) {
                             Row(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(4.dp))
                                         .clickable { isSummaryExpanded = !isSummaryExpanded }
-                                        .padding(vertical = 2.dp),
+                                        .padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = if (isSummaryExpanded) "收起简介" else "展开完整简介",
+                                    text = if (isSummaryExpanded) "收起完整简介" else "展开完整简介",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Icon(
-                                    imageVector = if (isSummaryExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                    imageVector =
+                                        if (isSummaryExpanded) {
+                                            Icons.Filled.KeyboardArrowUp
+                                        } else {
+                                            Icons.Filled.KeyboardArrowDown
+                                        },
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(14.dp),
@@ -258,70 +268,15 @@ fun PersonDetailBottomSheet(
                 }
             }
 
-            // 4. 代表作/参与作品横滑列表（点击直接在端内无缝跳转看番）
-            if (relatedWorks.isNotEmpty()) {
-                val displayWorks = remember(relatedWorks) { relatedWorks.aggregateBySubject() }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "参与作品 (${displayWorks.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(horizontal = 0.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        items(items = displayWorks, key = { it.id }) { work ->
-                            Card(
-                                onClick = {
-                                    onDismiss()
-                                    onSubjectClick(work.id)
-                                },
-                                modifier = Modifier.width(96.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            ) {
-                                Column(modifier = Modifier.padding(6.dp)) {
-                                    Box {
-                                        CoverImage(
-                                            url = work.coverImage,
-                                            contentDescription = work.displayName,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            cornerRadius = 6.dp,
-                                            aspectRatio = 0.72f,
-                                        )
-                                        if (work.staff.isNotBlank()) {
-                                            Surface(
-                                                shape = RoundedCornerShape(topStart = 6.dp, bottomEnd = 6.dp),
-                                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
-                                                modifier = Modifier.align(Alignment.TopStart),
-                                            ) {
-                                                Text(
-                                                    text = work.staff,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = work.displayName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // 4. 代表作/参与作品展示区（精选横滑 + 3列海报网格墙双模式）
+            RelatedWorksSection(
+                title = "参与作品",
+                works = relatedWorks,
+                onSubjectClick = onSubjectClick,
+                onDismiss = onDismiss,
+                badgeContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+                badgeContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
         }
     }
 }
