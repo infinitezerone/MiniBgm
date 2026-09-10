@@ -38,7 +38,21 @@ data class SubjectImages(
      * 同时强制转换为 https，避免 301 Moved Permanently 重定向与额外 TLS 握手开销。
      */
     val bestImage: String
-        get() = (common.ifBlank { medium.ifBlank { large } }).replace("http://", "https://")
+        get() {
+            val raw = (common.ifBlank { medium.ifBlank { large } }).replace("http://", "https://")
+            if (raw.contains("lain.bgm.tv")) {
+                if (raw.contains("/pic/cover/c/")) {
+                    return raw.replace("/pic/cover/c/", "/r/400/pic/cover/l/")
+                }
+                if (raw.contains("/pic/cover/m/")) {
+                    return raw.replace("/pic/cover/m/", "/r/400/pic/cover/l/")
+                }
+                if (raw.contains("/pic/cover/l/") && !raw.contains("/r/")) {
+                    return raw.replace("/pic/cover/l/", "/r/400/pic/cover/l/")
+                }
+            }
+            return raw
+        }
 
     /** 适用于大图画廊、全屏海报的高清大图 */
     val largeImage: String
