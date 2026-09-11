@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.di
 
+import com.infinitezerone.minibgm.feature.subject.EpisodeDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -11,6 +12,16 @@ val subjectModule =
             SubjectDetailViewModel(
                 subjectRepository = get(),
                 subjectId = subjectId,
+                collectionRepository = get(),
+                communityRepository = get(),
+            )
+        }
+
+        viewModel { (subjectId: Long, episodeId: Long) ->
+            EpisodeDetailViewModel(
+                subjectId = subjectId,
+                episodeId = episodeId,
+                subjectRepository = get(),
                 collectionRepository = get(),
                 communityRepository = get(),
             )

@@ -38,11 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -216,7 +216,8 @@ fun UserScreenContent(
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            val isWideScreen = LocalConfiguration.current.screenWidthDp >= 720
+            val adaptiveInfo = LocalWindowAdaptiveInfo.current
+            val isWideScreen = adaptiveInfo.isWide
 
             if (isWideScreen) {
                 Row(

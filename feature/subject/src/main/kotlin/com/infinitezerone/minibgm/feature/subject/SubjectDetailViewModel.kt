@@ -29,9 +29,25 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** 条目详情页二级分栏枚举 */
+enum class SubjectDetailTab(
+    val label: String,
+) {
+    EPISODES("📺 章节打卡"),
+    DETAILS("📖 资料与演职员"),
+    COMMUNITY("💬 社区吐槽"),
+}
+
 /** 条目详情页 UI 状态 */
 data class SubjectDetailUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
+    val selectedTab: SubjectDetailTab = SubjectDetailTab.EPISODES,
+    val isEpisodeGridView: Boolean = true,
+    val selectedEpisodeForDetail: Episode? = null,
+    val activeCharacter: SubjectCharacter? = null,
+    val activePerson: SubjectPerson? = null,
+    val showCollectionSheet: Boolean = false,
     val error: String? = null,
     val subject: Subject? = null,
     val episodes: List<Episode> = emptyList(),
@@ -65,9 +81,7 @@ class SubjectDetailViewModel(
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
 
     init {
-        // 先拉取条目详情与章节（写入本地库）；错误仅转为文案，不中断流程
-        refresh()
-        // 订阅本地库流：fetch 写库后由 combine 单一流合并进 UiState（单一数据源，防止分散并发派发导致重组风暴）
+        // 先订阅本地库/内存缓存流：如果仓库中已有缓存，立刻合成进入 UiState，秒开无白屏
         viewModelScope.launch {
             combine(
                 subjectRepository.getSubjectStream(subjectId),
@@ -90,10 +104,13 @@ class SubjectDetailViewModel(
                         subject = subject ?: state.subject,
                         episodes = episodes,
                         collection = mergedCollection,
+                        isLoading = if (subject != null || state.subject != null) false else state.isLoading,
                     )
                 }
             }
         }
+        // 拉取条目详情与章节（写入本地库）；错误仅转为文案，不中断流程
+        refresh(isUserPullToRefresh = false)
     }
 
     private var detailsLoaded = false
@@ -103,26 +120,45 @@ class SubjectDetailViewModel(
     private var communityJob: Job? = null
 
     /** 刷新/重新拉取条目、分集与收藏数据（首屏核心三要素） */
-    fun refresh() {
+    fun refresh(isUserPullToRefresh: Boolean = false) {
         refreshJob?.cancel()
         detailsLoaded = false
         communityLoaded = false
         refreshJob =
             viewModelScope.launch {
-                _uiState.update { it.copy(isLoading = true, error = null) }
+                _uiState.update { current ->
+                    current.copy(
+                        isLoading = if (isUserPullToRefresh || current.subject == null) true else false,
+                        isRefreshing = isUserPullToRefresh,
+                        error = null,
+                    )
+                }
 
                 // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
                 val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
                 val episodesResult = subjectRepository.fetchEpisodes(subjectId)
                 val collectionResult = collectionRepository.fetchCollection(subjectId)
 
-                subjectResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
-                episodesResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
-                collectionResult.onError { _, message -> _uiState.update { it.copy(error = message) } }
+                subjectResult.onError { _, message ->
+                    if (_uiState.value.subject == null) {
+                        _uiState.update { it.copy(error = message) }
+                    }
+                }
+                episodesResult.onError { _, message ->
+                    if (_uiState.value.subject == null) {
+                        _uiState.update { it.copy(error = message) }
+                    }
+                }
+                collectionResult.onError { _, message ->
+                    if (_uiState.value.subject == null) {
+                        _uiState.update { it.copy(error = message) }
+                    }
+                }
 
                 _uiState.update { current ->
                     current.copy(
                         isLoading = false,
+                        isRefreshing = false,
                         subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
                         collection =
                             if (collectionResult is AppResult.Success) {
@@ -133,6 +169,81 @@ class SubjectDetailViewModel(
                     )
                 }
             }
+    }
+
+    /** 切换详情页二级 Tab，并自动按需加载对应数据 */
+    fun selectTab(tab: SubjectDetailTab) {
+        _uiState.update { it.copy(selectedTab = tab) }
+        when (tab) {
+            SubjectDetailTab.EPISODES -> Unit
+            SubjectDetailTab.DETAILS -> loadDetailsTabIfNeeded()
+            SubjectDetailTab.COMMUNITY -> loadCommunityTabIfNeeded()
+        }
+    }
+
+    /** 切换分集列表的宫格视图/详细列表视图 */
+    fun setEpisodeGridView(isGrid: Boolean) {
+        _uiState.update { it.copy(isEpisodeGridView = isGrid) }
+    }
+
+    /** 打开分集详情底栏 */
+    fun openEpisodeDetail(episode: Episode) {
+        _uiState.update { it.copy(selectedEpisodeForDetail = episode) }
+    }
+
+    /** 关闭分集详情底栏 */
+    fun dismissEpisodeDetail() {
+        _uiState.update { it.copy(selectedEpisodeForDetail = null) }
+    }
+
+    /** 控制收藏状态底栏显隐 */
+    fun setCollectionSheetVisible(visible: Boolean) {
+        _uiState.update { it.copy(showCollectionSheet = visible) }
+    }
+
+    /** 点击并打开角色详情底栏 */
+    fun openCharacterDetail(characterId: Long) {
+        val character =
+            _uiState.value.characters.firstOrNull { it.id == characterId }
+                ?: SubjectCharacter(id = characterId, name = "")
+        _uiState.update {
+            it.copy(
+                activeCharacter = character,
+                activePerson = null,
+                selectedEpisodeForDetail = null,
+            )
+        }
+        loadCharacterDetail(characterId)
+    }
+
+    /** 点击并打开人物/主创详情底栏 */
+    fun openPersonDetail(personId: Long) {
+        val person =
+            _uiState.value.persons.firstOrNull { it.id == personId }
+                ?: SubjectPerson(id = personId, name = "")
+        _uiState.update {
+            it.copy(
+                activePerson = person,
+                activeCharacter = null,
+                selectedEpisodeForDetail = null,
+            )
+        }
+        loadPersonDetail(personId)
+    }
+
+    /** 关闭角色或人物详情底栏并清空所有临时选中实体状态 */
+    fun dismissEntityDetail() {
+        _uiState.update {
+            it.copy(
+                activeCharacter = null,
+                activePerson = null,
+                selectedCharacterDetail = null,
+                selectedCharacterWorks = emptyList(),
+                selectedPersonDetail = null,
+                selectedPersonWorks = emptyList(),
+                isLoadingEntityDetail = false,
+            )
+        }
     }
 
     /**
@@ -473,15 +584,5 @@ class SubjectDetailViewModel(
     }
 
     /** 关闭角色或人物详情底栏并清空状态 */
-    fun clearEntityDetail() {
-        _uiState.update {
-            it.copy(
-                selectedCharacterDetail = null,
-                selectedCharacterWorks = emptyList(),
-                selectedPersonDetail = null,
-                selectedPersonWorks = emptyList(),
-                isLoadingEntityDetail = false,
-            )
-        }
-    }
+    fun clearEntityDetail() = dismissEntityDetail()
 }

@@ -84,6 +84,20 @@ class BgmNavStateTest {
         }
 
     @Test
+    fun scrollToTopFor_emitsSignalOnMatchingTabReselection() =
+        runTest {
+            val state = newState()
+            var triggered = false
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                state.scrollToTopFor(ScheduleRoute).collect { triggered = true }
+            }
+
+            state.navigateTo(ScheduleRoute)
+
+            assertEquals(true, triggered)
+        }
+
+    @Test
     fun goBackFromDetail_popsDetail() {
         val state = newState()
         state.navigateTo(SubjectDetailRoute(1L))
