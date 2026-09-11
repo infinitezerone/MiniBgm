@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.navigation
 
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
+import androidx.compose.material3.adaptive.layout.PaneScaffoldDirective
 import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
 import androidx.compose.material3.adaptive.layout.calculatePaneScaffoldDirective
 import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
@@ -19,19 +20,26 @@ import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
-fun rememberBgmListDetailStrategy(): ListDetailSceneStrategy<NavKey> {
+fun rememberBgmPaneDirective(): PaneScaffoldDirective {
     val windowAdaptiveInfo = currentWindowAdaptiveInfoV2()
-    val directive =
-        remember(windowAdaptiveInfo) {
-            calculatePaneScaffoldDirective(windowAdaptiveInfo).copy(
-                horizontalPartitionSpacerSize = 0.dp,
-            )
-        }
-    return rememberListDetailSceneStrategy(
-        directive = directive,
-        backNavigationBehavior = BackNavigationBehavior.PopUntilContentChange,
-    )
+    return remember(windowAdaptiveInfo) {
+        calculatePaneScaffoldDirective(windowAdaptiveInfo).copy(
+            horizontalPartitionSpacerSize = 0.dp,
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+val PaneScaffoldDirective.isSplitLayout: Boolean
+    get() = maxHorizontalPartitions > 1
+
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+fun rememberBgmListDetailStrategy(directive: PaneScaffoldDirective = rememberBgmPaneDirective()): ListDetailSceneStrategy<NavKey> =
+    rememberListDetailSceneStrategy(
+        directive = directive,
+        backNavigationBehavior = BackNavigationBehavior.PopUntilCurrentDestinationChange,
+    )
 
 /** 列表 Pane 元数据；右侧未选择条目时默认展示作品占位页 [BgmDetailPlaceholder] */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)

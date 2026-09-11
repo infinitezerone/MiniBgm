@@ -47,7 +47,9 @@ fun BgmNavHost(
     val exploreScrollToTop = remember(navState) { navState.scrollToTopFor(ExploreRoute) }
     val userScrollToTop = remember(navState) { navState.scrollToTopFor(UserRoute) }
 
-    val listDetailStrategy = rememberBgmListDetailStrategy()
+    val directive = rememberBgmPaneDirective()
+    val isSplitMode = directive.isSplitLayout
+    val listDetailStrategy = rememberBgmListDetailStrategy(directive = directive)
 
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
         if (navState.currentKey is SearchRoute) {
@@ -66,9 +68,10 @@ fun BgmNavHost(
     }
 
     SharedTransitionLayout(modifier = modifier) {
-        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        val sharedScope = if (isSplitMode) null else this
+        CompositionLocalProvider(LocalSharedTransitionScope provides sharedScope) {
             NavDisplay(
-                sharedTransitionScope = this,
+                sharedTransitionScope = sharedScope,
                 entries =
                     navState.toEntries(
                         entryProvider {
