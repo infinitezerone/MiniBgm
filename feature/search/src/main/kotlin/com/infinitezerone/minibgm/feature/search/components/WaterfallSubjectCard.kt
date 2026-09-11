@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -47,6 +48,8 @@ import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+
+private val GENERIC_TAG_FILTER = setOf("TV", "日本", "动画", "原创", "漫画改", "轻改", "小说改", "漫改")
 
 /**
  * 双列安利瀑布流卡片（小红书 / 小黑盒形态）：
@@ -74,29 +77,33 @@ fun WaterfallSubjectCard(
     val score = rating?.score ?: 0.0
     val doingCount = subject.collection?.doing ?: 0
 
-    // 智能提取有悬念或情绪感的安利钩子（过滤掉枯燥的百科说明）
+    // 智能提取有悬念或情绪感的安利钩子（过滤掉枯燥的百科说明），使用 remember 避免滚动重组高频计算
     val summaryQuote =
-        subject.summary
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull { line ->
-                line.isNotBlank() &&
-                    !line.startsWith("电视动画") &&
-                    !line.startsWith("《") &&
-                    !line.startsWith("改编自") &&
-                    !line.startsWith("由")
-            } ?: subject.summary
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
+        remember(subject.summary) {
+            subject.summary
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { line ->
+                    line.isNotBlank() &&
+                        !line.startsWith("电视动画") &&
+                        !line.startsWith("《") &&
+                        !line.startsWith("改编自") &&
+                        !line.startsWith("由")
+                } ?: subject.summary
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotBlank() }
+        }
 
-    // 筛选有性格、高共鸣的同好标签（剔除冷冰冰的格式标签）
+    // 筛选有性格、高共鸣的同好标签（剔除冷冰冰的格式标签），使用 remember 避免高频集合创建与过滤
     val flavorfulTags =
-        subject.tags
-            .filter { tag ->
-                tag.name !in setOf("TV", "日本", "动画", "原创", "漫画改", "轻改", "小说改", "漫改") &&
-                    !tag.name.all { c -> c.isDigit() }
-            }.take(3)
+        remember(subject.tags) {
+            subject.tags
+                .filter { tag ->
+                    tag.name !in GENERIC_TAG_FILTER &&
+                        !tag.name.all { c -> c.isDigit() }
+                }.take(3)
+        }
 
     Card(
         onClick = {

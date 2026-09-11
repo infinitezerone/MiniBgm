@@ -30,7 +30,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
@@ -44,13 +43,7 @@ fun ExploreSkeletonLoading(
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
-    val columns =
-        if (isWideScreen) {
-            StaggeredGridCells.Adaptive(minSize = 168.dp)
-        } else {
-            StaggeredGridCells.Fixed(2)
-        }
+    val columns = StaggeredGridCells.Adaptive(minSize = 160.dp)
 
     LazyVerticalStaggeredGrid(
         columns = columns,
@@ -68,13 +61,11 @@ fun ExploreSkeletonLoading(
             )
         }
 
-        // 2. 双列瀑布流骨架卡片（模拟不同高度的参差节奏）
+        // 2. 双列瀑布流骨架卡片（精简为首屏 4 张，兼顾视觉饱满度与帧率流畅性）
         val variations =
             listOf(
-                WaterfallCardVariation(hookLines = 2),
                 WaterfallCardVariation(hookLines = 1),
-                WaterfallCardVariation(hookLines = 3),
-                WaterfallCardVariation(hookLines = 0),
+                WaterfallCardVariation(hookLines = 2),
                 WaterfallCardVariation(hookLines = 2),
                 WaterfallCardVariation(hookLines = 1),
             )
@@ -116,12 +107,7 @@ fun SpotlightSkeletonCard(
                 modifier = Modifier.align(Alignment.TopStart),
             ) {
                 SkeletonBox(
-                    modifier = Modifier.size(width = 64.dp, height = 20.dp),
-                    shape = RoundedCornerShape(6.dp),
-                    state = skeletonState,
-                )
-                SkeletonBox(
-                    modifier = Modifier.size(width = 46.dp, height = 20.dp),
+                    modifier = Modifier.size(width = 88.dp, height = 20.dp),
                     shape = RoundedCornerShape(6.dp),
                     state = skeletonState,
                 )
@@ -145,17 +131,12 @@ fun SpotlightSkeletonCard(
                 // 标签占位行
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SkeletonBox(
-                        modifier = Modifier.size(width = 44.dp, height = 18.dp),
+                        modifier = Modifier.size(width = 48.dp, height = 18.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                     SkeletonBox(
-                        modifier = Modifier.size(width = 52.dp, height = 18.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        state = skeletonState,
-                    )
-                    SkeletonBox(
-                        modifier = Modifier.size(width = 40.dp, height = 18.dp),
+                        modifier = Modifier.size(width = 56.dp, height = 18.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
@@ -165,15 +146,7 @@ fun SpotlightSkeletonCard(
                 SkeletonBox(
                     modifier =
                         Modifier
-                            .fillMaxWidth(0.92f)
-                            .height(13.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    state = skeletonState,
-                )
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(0.58f)
+                            .fillMaxWidth(0.88f)
                             .height(13.dp),
                     shape = RoundedCornerShape(4.dp),
                     state = skeletonState,
@@ -247,12 +220,12 @@ fun WaterfallSkeletonCard(
                 // 标签占位行
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     SkeletonBox(
-                        modifier = Modifier.size(width = 36.dp, height = 14.dp),
+                        modifier = Modifier.size(width = 40.dp, height = 14.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                     SkeletonBox(
-                        modifier = Modifier.size(width = 44.dp, height = 14.dp),
+                        modifier = Modifier.size(width = 48.dp, height = 14.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
@@ -274,16 +247,6 @@ fun WaterfallSkeletonCard(
                         modifier =
                             Modifier
                                 .fillMaxWidth(0.68f)
-                                .height(11.dp),
-                        shape = RoundedCornerShape(3.dp),
-                        state = skeletonState,
-                    )
-                }
-                if (variation.hookLines >= 3) {
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(0.46f)
                                 .height(11.dp),
                         shape = RoundedCornerShape(3.dp),
                         state = skeletonState,

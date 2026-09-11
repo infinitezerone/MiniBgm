@@ -22,8 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
@@ -36,6 +38,8 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -357,6 +361,16 @@ private class SkeletonNode(
     private var job: Job? = null
     private var coordinates: LayoutCoordinates? = null
 
+    // 缓存根坐标与尺寸，避免每帧高频遍历布局树（findRootCoordinates / positionInRoot）
+    private var cachedOriginInRoot: Offset? = null
+    private var cachedRootSize: IntSize? = null
+
+    // 缓存 Shape 几何轮廓，避免每帧重复分配 Outline.Rounded 产生 GC 抖动
+    private var cachedOutline: Outline? = null
+    private var cachedOutlineSize: Size = Size.Unspecified
+    private var cachedOutlineLayoutDirection: LayoutDirection? = null
+    private var cachedOutlineShape: Shape? = null
+
     override fun onAttach() {
         onParamsChanged()
     }
@@ -364,13 +378,41 @@ private class SkeletonNode(
     override fun onDetach() {
         job?.cancel()
         job = null
+        coordinates = null
+        cachedOriginInRoot = null
+        cachedRootSize = null
+        cachedOutline = null
+        cachedOutlineShape = null
     }
 
     override fun onPlaced(coordinates: LayoutCoordinates) {
         this.coordinates = coordinates
+        updateCoordinatesCache(coordinates)
+    }
+
+    private fun updateCoordinatesCache(coords: LayoutCoordinates) {
+        if (useRootCoordinates && coords.isAttached) {
+            val root = coords.findRootCoordinates()
+            if (root.isAttached) {
+                cachedRootSize = root.size
+                cachedOriginInRoot = coords.positionInRoot()
+            } else {
+                cachedRootSize = null
+                cachedOriginInRoot = null
+            }
+        } else {
+            cachedRootSize = null
+            cachedOriginInRoot = null
+        }
     }
 
     fun onParamsChanged() {
+        if (cachedOutlineShape != shape) {
+            cachedOutline = null
+            cachedOutlineShape = null
+        }
+        coordinates?.let { updateCoordinatesCache(it) }
+
         if (progressState != null) {
             job?.cancel()
             job = null
@@ -403,11 +445,31 @@ private class SkeletonNode(
             }
     }
 
+    private fun ContentDrawScope.obtainOutline(): Outline {
+        val currentSize = size
+        val currentDirection = layoutDirection
+        val currentShape = shape
+        var outline = cachedOutline
+        if (outline == null ||
+            cachedOutlineSize != currentSize ||
+            cachedOutlineLayoutDirection != currentDirection ||
+            cachedOutlineShape != currentShape
+        ) {
+            outline = currentShape.createOutline(currentSize, currentDirection, this)
+            cachedOutline = outline
+            cachedOutlineSize = currentSize
+            cachedOutlineLayoutDirection = currentDirection
+            cachedOutlineShape = currentShape
+        }
+        return outline
+    }
+
     override fun ContentDrawScope.draw() {
         drawContent()
 
+        val outline = obtainOutline()
+
         if (!shimmerEnabled) {
-            val outline = shape.createOutline(size, layoutDirection, this)
             drawOutline(outline = outline, color = baseColor)
             return
         }
@@ -419,9 +481,22 @@ private class SkeletonNode(
         val progressValue = progressState?.value ?: progress.value
         val coords = coordinates
         val isCoordsAttached = coords != null && coords.isAttached
-        val rootCoordinates = if (useRootCoordinates && isCoordsAttached) coords.findRootCoordinates() else null
-        val rootSize = rootCoordinates?.takeIf { it.isAttached }?.size
-        val originInRoot = if (isCoordsAttached) coords.positionInRoot() else null
+
+        // 优先使用 onPlaced 阶段计算的根坐标缓存；若缺失且 attached 则单次懒加载
+        val originInRoot =
+            cachedOriginInRoot ?: if (useRootCoordinates && isCoordsAttached) {
+                val root = coords.findRootCoordinates()
+                if (root.isAttached) {
+                    cachedRootSize = root.size
+                    coords.positionInRoot().also { cachedOriginInRoot = it }
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        val rootSize = cachedRootSize
+
         val maxDim =
             if (rootSize != null) {
                 sqrt(rootSize.width.toFloat() * rootSize.width + rootSize.height.toFloat() * rootSize.height)
@@ -460,8 +535,8 @@ private class SkeletonNode(
                 start = startPoint,
                 end = endPoint,
             )
-        val outline = shape.createOutline(size, layoutDirection, this)
         drawOutline(outline = outline, brush = brush)
-        invalidateDraw()
+        // 注意：无需显式调用 invalidateDraw()，progressState/progress.value 作为 Snapshot State
+        // 在 Draw 阶段被读取时，Compose 会自动挂载观察者，在下一帧动画值更新时自动精准触发局部重绘。
     }
 }
