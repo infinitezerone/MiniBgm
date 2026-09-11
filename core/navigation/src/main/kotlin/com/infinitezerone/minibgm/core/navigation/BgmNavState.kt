@@ -108,14 +108,24 @@ class BgmNavState(
             when (key) {
                 is SubjectDetailRoute -> {
                     // 当从列表选择条目详情时（尤其是分栏模式下左右双栏同屏展示），
-                    // 替换掉当前栈中已有的条目详情或详情子层级（条目详情、关联条目、分集讨论），
+                    // 替换掉当前栈中已有的条目详情或详情子层级（条目详情、关联条目、分集讨论、标签专题），
                     // 避免用户在列表连续点击多个条目时在栈内无限堆叠，
                     // 保证返回时直接回到当前列表/占位页，而非倒退返回上一个条目。
-                    removeAll { it is SubjectDetailRoute || it is LinkedSubjectRoute || it is EpisodeDetailRoute }
+                    removeAll {
+                        it is SubjectDetailRoute ||
+                            it is LinkedSubjectRoute ||
+                            it is EpisodeDetailRoute ||
+                            it is TagSubjectsRoute
+                    }
                 }
                 is SearchRoute, is UserCollectionsRoute -> {
                     // 进入新的列表二级页面时，清理先前残留的详情层级
-                    removeAll { it is SubjectDetailRoute || it is LinkedSubjectRoute || it is EpisodeDetailRoute }
+                    removeAll {
+                        it is SubjectDetailRoute ||
+                            it is LinkedSubjectRoute ||
+                            it is EpisodeDetailRoute ||
+                            it is TagSubjectsRoute
+                    }
                     remove(key)
                 }
                 else -> {

@@ -93,6 +93,66 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToTagSubjects_preservesSubjectDetailInBackStack() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(TagSubjectsRoute("搞笑"))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(1L), TagSubjectsRoute("搞笑")),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+
+        assertEquals(SubjectDetailRoute(1L), state.currentKey)
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(1L)),
+            state.currentSubStack.toList(),
+        )
+    }
+
+    @Test
+    fun navigateFromTagSubjectsToLinkedSubject_allowsMultiLevelBackNavigation() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(TagSubjectsRoute("科幻"))
+        state.navigateTo(LinkedSubjectRoute(2L))
+
+        assertEquals(
+            listOf<NavKey>(
+                ScheduleRoute,
+                SubjectDetailRoute(1L),
+                TagSubjectsRoute("科幻"),
+                LinkedSubjectRoute(2L),
+            ),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+        assertEquals(TagSubjectsRoute("科幻"), state.currentKey)
+
+        state.goBack()
+        assertEquals(SubjectDetailRoute(1L), state.currentKey)
+
+        state.goBack()
+        assertEquals(ScheduleRoute, state.currentKey)
+    }
+
+    @Test
+    fun navigateToNewSubjectDetail_clearsTagSubjectsFromBackStack() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(TagSubjectsRoute("日常"))
+        state.navigateTo(SubjectDetailRoute(3L))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(3L)),
+            state.currentSubStack.toList(),
+        )
+    }
+
+    @Test
     fun navigateToOtherTab_recordsTopLevelHistory() {
         val state = newState()
 

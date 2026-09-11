@@ -57,3 +57,13 @@ data class EpisodeDetailRoute(
     val episodeName: String = "",
     val episodeNameCn: String = "",
 ) : NavKey
+
+/**
+ * 标签专题条目路由（从条目详情页点击热门标签触发）；
+ * 在分栏大屏模式下作为 extraPane 展现在右侧，避免打乱左侧主列表与当前条目上下文。
+ */
+@Serializable
+data class TagSubjectsRoute(
+    val tag: String,
+    val initialType: Int = 0,
+) : NavKey
