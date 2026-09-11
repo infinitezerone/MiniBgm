@@ -49,6 +49,50 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToDifferentDetail_replacesExistingDetailInsteadOfStacking() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(SubjectDetailRoute(2L))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(2L)),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+
+        assertEquals(ScheduleRoute, state.currentKey)
+        assertEquals(listOf<NavKey>(ScheduleRoute), state.currentSubStack.toList())
+    }
+
+    @Test
+    fun navigateToDetail_replacesExistingLinkedSubjectAndEpisodeDetail() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(LinkedSubjectRoute(10L))
+        state.navigateTo(EpisodeDetailRoute(episodeId = 100L, subjectId = 10L))
+
+        state.navigateTo(SubjectDetailRoute(2L))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(2L)),
+            state.currentSubStack.toList(),
+        )
+    }
+
+    @Test
+    fun navigateToSearchRoute_clearsExistingDetail() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(SearchRoute())
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SearchRoute()),
+            state.currentSubStack.toList(),
+        )
+    }
+
+    @Test
     fun navigateToOtherTab_recordsTopLevelHistory() {
         val state = newState()
 
