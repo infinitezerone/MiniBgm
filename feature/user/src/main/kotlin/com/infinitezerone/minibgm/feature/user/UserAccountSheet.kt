@@ -28,11 +28,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -44,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,12 +58,11 @@ internal fun AccountManagementBottomSheet(
     onLogoutAllClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
 
-    ModalBottomSheet(
+    BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        sheetMaxWidth = 600.dp,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {

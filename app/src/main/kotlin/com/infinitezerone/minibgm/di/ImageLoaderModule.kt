@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.di
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
+import coil3.gif.AnimatedImageDecoder
 import coil3.intercept.Interceptor
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -46,6 +47,9 @@ val imageLoaderModule =
             ImageLoader
                 .Builder(context)
                 .components {
+                    // 支持动态 GIF 与 WebP 动图原生高效解码（minSdk 31+）
+                    add(AnimatedImageDecoder.Factory())
+
                     // 全局拦截器：
                     // 1. 将所有 http:// 图片地址自动升轨为安全 https://，防止 Android Cleartext 限制与 301 重定向开销；
                     // 2. 将 Bangumi 未压缩扫图（/pic/cover/l/、/pic/crt/l/、/pic/user/l/）透明优化为

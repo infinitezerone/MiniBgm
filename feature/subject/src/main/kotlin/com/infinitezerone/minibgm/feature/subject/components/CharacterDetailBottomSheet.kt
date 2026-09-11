@@ -26,10 +26,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,9 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -64,7 +64,7 @@ fun CharacterDetailBottomSheet(
     onActorClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val scrollState = rememberScrollState()
     var isSummaryExpanded by remember { mutableStateOf(false) }
 
@@ -74,10 +74,9 @@ fun CharacterDetailBottomSheet(
             ?: detail?.images?.bestImage.orEmpty()
     val summary = detail?.summary.orEmpty()
 
-    ModalBottomSheet(
+    BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        sheetMaxWidth = 600.dp,
         modifier = modifier,
     ) {
         Column(

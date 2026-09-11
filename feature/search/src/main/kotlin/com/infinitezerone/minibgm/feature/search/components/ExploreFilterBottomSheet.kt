@@ -26,7 +26,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
@@ -42,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.feature.search.DEFAULT_SEASONS
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreSort
@@ -77,10 +77,9 @@ fun ExploreFilterBottomSheet(
     var customTagText by remember { mutableStateOf("") }
     var selectedTimeCategory by remember { mutableStateOf(selectedSeason.category) }
 
-    ModalBottomSheet(
+    BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        sheetMaxWidth = 600.dp,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier,
     ) {

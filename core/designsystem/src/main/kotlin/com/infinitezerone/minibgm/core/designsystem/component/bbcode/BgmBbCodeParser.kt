@@ -16,11 +16,23 @@ sealed interface BbCodeBlock {
     ) : BbCodeBlock
 
     /**
-     * 独立图片块：如 [img]https://...[/img] 或 [IMG]...[/IMG]
+     * 独立图片块：如 [img]https://...[/img] 或 [img=224,126]https://...[/img]，
+     * 支持被 [mask] 标签包裹时的黑幕剧透属性 [isMasked]。
      */
     data class Image(
         val url: String,
-    ) : BbCodeBlock
+        val width: Int? = null,
+        val height: Int? = null,
+        val isMasked: Boolean = false,
+    ) : BbCodeBlock {
+        val aspectRatio: Float?
+            get() =
+                if (width != null && height != null && width > 0 && height > 0) {
+                    width.toFloat() / height.toFloat()
+                } else {
+                    null
+                }
+    }
 
     /**
      * 富文本段落块
@@ -62,13 +74,17 @@ sealed interface BbInlineElement {
     ) : BbInlineElement
 
     /**
-     * Bangumi 经典娘表情贴图：如 (bgm38)
+     * Bangumi 经典娘表情贴图：如 (bgm38), (musume_14), (blake_01)
      */
     data class Sticker(
         val code: String,
-        val stickerId: Int,
+        val stickerId: String,
         val url: String,
-    ) : BbInlineElement
+        val isLarge: Boolean = false,
+    ) : BbInlineElement {
+        val id: Int
+            get() = stickerId.filter { it.isDigit() }.toIntOrNull() ?: 0
+    }
 }
 
 /**
@@ -79,11 +95,56 @@ sealed interface BbInlineElement {
  */
 object BgmBbCodeParser {
     private val QUOTE_REGEX = Regex("""\[quote\]([\s\S]*?)\[/quote\]""", RegexOption.IGNORE_CASE)
-    private val IMG_REGEX = Regex("""\[img\]([\s\S]*?)\[/img\]""", RegexOption.IGNORE_CASE)
+    private val FULL_IMG_REGEX = Regex("""\[img((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/img\]""", RegexOption.IGNORE_CASE)
+    private val MASKED_IMG_REGEX =
+        Regex("""\[__bgm_masked_img__((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/__bgm_masked_img__\]""", RegexOption.IGNORE_CASE)
     private val QUOTE_AUTHOR_REGEX = Regex("""^(?:\[b\])?(.*?)(?:\[/b\])?\s*(?:说|:)\s*:\s*([\s\S]*)$""", RegexOption.DOT_MATCHES_ALL)
-    private val STICKER_REGEX = Regex("""\(bgm(\d+)\)""")
+    private val STICKER_REGEX = Regex("""\((bgm|musume_?|blake_?)(\d+)\)""", RegexOption.IGNORE_CASE)
     private val MASK_REGEX = Regex("""\[mask\]([\s\S]*?)\[/mask\]""", RegexOption.IGNORE_CASE)
     private val UNWANTED_TAGS_REGEX = Regex("""\[/?(?:photo=\d+|right|size=\d+|color=[^\]]+)\]""", RegexOption.IGNORE_CASE)
+
+    /**
+     * 将包含 [img] 的 [mask] 标签解构转换：使其中的图片标记为 [__bgm_masked_img__]，
+     * 并确保 mask 内部包裹的其他伴随文本仍保留为 [mask] 标签以便在段落中作为黑幕剧透渲染。
+     */
+    private fun preprocessMaskedImages(text: String): String {
+        if (!text.contains("[mask", ignoreCase = true) || !text.contains("[img", ignoreCase = true)) {
+            return text
+        }
+
+        val maskWithImgRegex = Regex("""\[mask\]([\s\S]*?)(?:\[/mask\]|$)""", RegexOption.IGNORE_CASE)
+        return maskWithImgRegex.replace(text) { matchResult ->
+            val inner = matchResult.groupValues[1]
+            if (!inner.contains("[img", ignoreCase = true)) {
+                matchResult.value
+            } else {
+                val sb = StringBuilder()
+                var lastIdx = 0
+                for (imgMatch in FULL_IMG_REGEX.findAll(inner)) {
+                    val textBefore = inner.substring(lastIdx, imgMatch.range.first).trim()
+                    if (textBefore.isNotEmpty()) {
+                        sb.append("[mask]").append(textBefore).append("[/mask]\n")
+                    }
+                    val tagArgs = imgMatch.groupValues[1]
+                    val imgUrl = imgMatch.groupValues[2].trim()
+                    sb
+                        .append("[__bgm_masked_img__")
+                        .append(tagArgs)
+                        .append("]")
+                        .append(imgUrl)
+                        .append("[/__bgm_masked_img__]\n")
+                    lastIdx = imgMatch.range.last + 1
+                }
+                if (lastIdx < inner.length) {
+                    val textAfter = inner.substring(lastIdx).trim()
+                    if (textAfter.isNotEmpty()) {
+                        sb.append("[mask]").append(textAfter).append("[/mask]\n")
+                    }
+                }
+                sb.toString()
+            }
+        }
+    }
 
     /**
      * 将原始评论文本解析为块级语法树列表
@@ -92,17 +153,23 @@ object BgmBbCodeParser {
         val trimmed = rawText.trim()
         if (trimmed.isEmpty()) return emptyList()
 
+        val preprocessed = preprocessMaskedImages(trimmed)
+
         val blocks = mutableListOf<BbCodeBlock>()
         var currentIndex = 0
 
-        // 统一匹配 [quote]...[/quote] 与 [img]...[/img] 两种块级元素
-        val blockRegex = Regex("""(\[quote\][\s\S]*?\[/quote\]|\[img\][\s\S]*?\[/img\])""", RegexOption.IGNORE_CASE)
-        val matches = blockRegex.findAll(trimmed)
+        // 统一匹配 [quote]...[/quote]、[__bgm_masked_img__...] 与 [img ...]...[/img] 块级元素
+        val blockRegex =
+            Regex(
+                """(\[quote\][\s\S]*?\[/quote\]|\[__bgm_masked_img__(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/__bgm_masked_img__\]|\[img(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/img\])""",
+                RegexOption.IGNORE_CASE,
+            )
+        val matches = blockRegex.findAll(preprocessed)
 
         for (match in matches) {
             val range = match.range
             if (range.first > currentIndex) {
-                val textSegment = trimmed.substring(currentIndex, range.first).trim()
+                val textSegment = preprocessed.substring(currentIndex, range.first).trim()
                 if (textSegment.isNotEmpty()) {
                     blocks.add(parseParagraph(textSegment))
                 }
@@ -125,30 +192,83 @@ object BgmBbCodeParser {
                 } else {
                     blocks.add(BbCodeBlock.Quote(author = null, content = quoteInner))
                 }
+            } else if (matchedStr.startsWith("[__bgm_masked_img__", ignoreCase = true)) {
+                val matchResult = MASKED_IMG_REGEX.find(matchedStr)
+                if (matchResult != null) {
+                    val tagArgs = matchResult.groupValues[1]
+                    val imgUrl = matchResult.groupValues[2].trim()
+                    val (w, h) = parseImageDimensions(tagArgs)
+                    if (imgUrl.isNotBlank()) {
+                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = true))
+                    }
+                }
             } else if (matchedStr.startsWith("[img", ignoreCase = true)) {
-                val imgUrl =
-                    IMG_REGEX
-                        .find(matchedStr)
-                        ?.groupValues
-                        ?.get(1)
-                        ?.trim()
-                        .orEmpty()
-                if (imgUrl.isNotBlank()) {
-                    blocks.add(BbCodeBlock.Image(url = imgUrl))
+                val matchResult = FULL_IMG_REGEX.find(matchedStr)
+                if (matchResult != null) {
+                    val tagArgs = matchResult.groupValues[1]
+                    val imgUrl = matchResult.groupValues[2].trim()
+                    val (w, h) = parseImageDimensions(tagArgs)
+                    if (imgUrl.isNotBlank()) {
+                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = false))
+                    }
                 }
             }
 
             currentIndex = range.last + 1
         }
 
-        if (currentIndex < trimmed.length) {
-            val remaining = trimmed.substring(currentIndex).trim()
+        if (currentIndex < preprocessed.length) {
+            val remaining = preprocessed.substring(currentIndex).trim()
             if (remaining.isNotEmpty()) {
                 blocks.add(parseParagraph(remaining))
             }
         }
 
         return blocks
+    }
+
+    /**
+     * 解析 [img] 标签中的尺寸属性（如 [img=224,126], [img=224x126], [img width=224 height=126]）
+     */
+    private fun parseImageDimensions(rawArgs: String): Pair<Int?, Int?> {
+        val clean = rawArgs.trim()
+        if (clean.isEmpty()) return null to null
+
+        // 1. [img=224,126] 或 [img=224x126] 或 [img=224]
+        if (clean.startsWith("=")) {
+            val value = clean.removePrefix("=").trim().trim('"', '\'')
+            if (value.contains(",")) {
+                val parts = value.split(",")
+                val w = parts.getOrNull(0)?.trim()?.toIntOrNull()
+                val h = parts.getOrNull(1)?.trim()?.toIntOrNull()
+                return w to h
+            }
+            if (value.contains("x", ignoreCase = true)) {
+                val parts = value.split(Regex("[xX]"))
+                val w = parts.getOrNull(0)?.trim()?.toIntOrNull()
+                val h = parts.getOrNull(1)?.trim()?.toIntOrNull()
+                return w to h
+            }
+            val w = value.toIntOrNull()
+            return w to null
+        }
+
+        // 2. [img width=224 height=126] 或 [img w=224 h=126]
+        val widthRegex = Regex("""\b(?:width|w)\s*=\s*["']?(\d+)["']?""", RegexOption.IGNORE_CASE)
+        val heightRegex = Regex("""\b(?:height|h)\s*=\s*["']?(\d+)["']?""", RegexOption.IGNORE_CASE)
+        val w =
+            widthRegex
+                .find(clean)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull()
+        val h =
+            heightRegex
+                .find(clean)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull()
+        return w to h
     }
 
     /**
@@ -161,8 +281,12 @@ object BgmBbCodeParser {
         val elements = mutableListOf<BbInlineElement>()
         var maskCounter = 0
 
-        // 正则识别 [mask]...[/mask] 与 (bgmXX) 贴图
-        val inlineTokenRegex = Regex("""(\[mask\][\s\S]*?\[/mask\]|\(bgm\d+\))""", RegexOption.IGNORE_CASE)
+        // 正则识别 [mask]...[/mask] 与 (bgmXX) / (musume_XX) / (blake_XX) 贴图
+        val inlineTokenRegex =
+            Regex(
+                """(\[mask\][\s\S]*?\[/mask\]|\((?:bgm|musume_?|blake_?)\d+\))""",
+                RegexOption.IGNORE_CASE,
+            )
         var currentIndex = 0
 
         val matches = inlineTokenRegex.findAll(cleanParagraph)
@@ -185,23 +309,28 @@ object BgmBbCodeParser {
                         .orEmpty()
                 val maskId = "mask_${++maskCounter}_${inner.hashCode()}"
                 elements.add(BbInlineElement.Mask(id = maskId, text = inner))
-            } else if (token.startsWith("(bgm", ignoreCase = true)) {
-                val stickerNumStr =
-                    STICKER_REGEX
-                        .find(token)
-                        ?.groupValues
-                        ?.get(1)
-                        .orEmpty()
-                val stickerId = stickerNumStr.toIntOrNull() ?: 0
-                val paddedNum = stickerId.toString().padStart(2, '0')
-                val stickerUrl = "https://lain.bgm.tv/img/smiles/tv/$paddedNum.gif"
-                elements.add(
-                    BbInlineElement.Sticker(
-                        code = token,
-                        stickerId = stickerId,
-                        url = stickerUrl,
-                    ),
-                )
+            } else if (token.startsWith("(", ignoreCase = true)) {
+                val stickerMatch = STICKER_REGEX.find(token)
+                if (stickerMatch != null) {
+                    val prefix = stickerMatch.groupValues[1].lowercase().removeSuffix("_")
+                    val num = stickerMatch.groupValues[2].toIntOrNull() ?: 0
+                    val paddedNum = num.toString().padStart(2, '0')
+                    val (category, url, isLarge) =
+                        when (prefix) {
+                            "musume" -> Triple("musume", "https://lain.bgm.tv/img/smiles/musume/musume_$paddedNum.gif", true)
+                            "blake" -> Triple("blake", "https://lain.bgm.tv/img/smiles/blake/blake_$paddedNum.gif", true)
+                            else -> Triple("bgm", "https://lain.bgm.tv/img/smiles/tv/$paddedNum.gif", false)
+                        }
+                    val stickerId = "${category}_$paddedNum"
+                    elements.add(
+                        BbInlineElement.Sticker(
+                            code = token,
+                            stickerId = stickerId,
+                            url = url,
+                            isLarge = isLarge,
+                        ),
+                    )
+                }
             }
 
             currentIndex = range.last + 1

@@ -19,13 +19,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -50,7 +50,7 @@ fun CollectionStatusBottomSheet(
     onDismiss: () -> Unit,
     onSave: (type: CollectionType, rate: Int?, comment: String?, private: Boolean) -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     var selectedType by rememberSaveable {
         mutableStateOf(
             currentCollection?.type?.let { CollectionType.fromValue(it) } ?: CollectionType.DOING,
@@ -60,10 +60,9 @@ fun CollectionStatusBottomSheet(
     var comment by rememberSaveable { mutableStateOf(currentCollection?.comment.orEmpty()) }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
 
-    ModalBottomSheet(
+    BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        sheetMaxWidth = 600.dp,
     ) {
         Column(
             modifier =
