@@ -11,7 +11,6 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,13 +23,13 @@ import kotlinx.coroutines.withContext
 
 /**
  * 搜索功能 ViewModel：
- * - [onQueryChange] 支持 300ms 防抖自动搜索与空白自动重置；
- * - [onTypeSelect] 切换分类即时以新分类重搜；
- * - [onSortChange] 切换排序维度（综合 / 高分 / 排名 / 最新）；
+ * - [onQueryChange] 仅更新输入框内容，空白时自动重置搜索结果回到历史发现页；
+ * - [search] 响应软键盘搜索/手动点击搜索按钮，触发网络请求；
+ * - [onTypeSelect] 切换分类（已搜索时即时以新分类重搜）；
+ * - [onSortChange] 切换排序维度（综合 / 热门 / 高分 / 排名）；
  * - [onViewModeToggle] 切换列表 / 3列海报网格视图；
  * - [toggleCollection] 0ms 乐观快捷打卡（自适应动词：想看/想读/想听/想玩），未登录弹窗拦截；
  * - [loadMore] 触底增量分页加载；
- * - [search] 响应软键盘搜索/手动提交，跳过防抖立即执行；
  * - [clearQuery] 一键清空输入与结果。
  */
 class SearchViewModel(
@@ -41,7 +40,6 @@ class SearchViewModel(
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
 
-    private var debounceJob: Job? = null
     private var searchJob: Job? = null
     private var loadMoreJob: Job? = null
 
@@ -82,8 +80,14 @@ class SearchViewModel(
     }
 
     fun onQueryChange(query: String) {
-        _uiState.update { it.copy(query = query) }
-        debounceJob?.cancel()
+        if (_uiState.value.query == query) return
+        _uiState.update {
+            it.copy(
+                query = query,
+                hasSearched = false,
+                error = null,
+            )
+        }
 
         if (query.isBlank()) {
             searchJob?.cancel()
@@ -99,22 +103,14 @@ class SearchViewModel(
                     error = null,
                 )
             }
-            return
         }
-
-        debounceJob =
-            viewModelScope.launch {
-                delay(DEBOUNCE_MILLIS)
-                performSearch(query, _uiState.value.selectedType, _uiState.value.selectedSort)
-            }
     }
 
     fun onTypeSelect(type: Int) {
         if (_uiState.value.selectedType == type) return
         _uiState.update { it.copy(selectedType = type) }
-        val currentQuery = _uiState.value.query
-        if (currentQuery.isNotBlank()) {
-            debounceJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.isNotBlank() && _uiState.value.hasSearched) {
             performSearch(currentQuery, type, _uiState.value.selectedSort)
         }
     }
@@ -128,9 +124,8 @@ class SearchViewModel(
                 results = sortResults(rawSearchResults, sort),
             )
         }
-        val currentQuery = _uiState.value.query
-        if (currentQuery.isNotBlank()) {
-            debounceJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.isNotBlank() && _uiState.value.hasSearched) {
             // 2. 服务端异步全局排序查询
             performSearch(
                 query = currentQuery,
@@ -217,11 +212,11 @@ class SearchViewModel(
         _uiState.update { it.copy(userMessage = null) }
     }
 
-    fun search() {
-        val currentQuery = _uiState.value.query
-        if (currentQuery.isNotBlank()) {
-            debounceJob?.cancel()
-            performSearch(currentQuery, _uiState.value.selectedType)
+    fun search(overrideQuery: String? = null) {
+        val targetQuery = (overrideQuery ?: _uiState.value.query).trim()
+        if (targetQuery.isNotBlank()) {
+            _uiState.update { it.copy(query = targetQuery, hasSearched = true) }
+            performSearch(targetQuery, _uiState.value.selectedType, _uiState.value.selectedSort)
         }
     }
 
@@ -238,13 +233,13 @@ class SearchViewModel(
     }
 
     fun clearQuery() {
-        debounceJob?.cancel()
         searchJob?.cancel()
         loadMoreJob?.cancel()
         rawSearchResults = emptyList()
         _uiState.update {
             it.copy(
                 query = "",
+                hasSearched = false,
                 isLoading = false,
                 isLoadingMore = false,
                 hasMore = false,
@@ -318,6 +313,7 @@ class SearchViewModel(
             viewModelScope.launch {
                 _uiState.update {
                     it.copy(
+                        hasSearched = true,
                         isLoading = true,
                         isLoadingMore = false,
                         hasMore = false,
@@ -388,7 +384,6 @@ class SearchViewModel(
         }
 
     companion object {
-        private const val DEBOUNCE_MILLIS = 300L
         private const val PAGE_SIZE = 20
     }
 }

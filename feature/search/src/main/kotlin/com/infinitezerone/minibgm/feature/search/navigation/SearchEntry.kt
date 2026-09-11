@@ -10,8 +10,9 @@ import com.infinitezerone.minibgm.feature.search.SearchScreen
 fun EntryProviderScope<NavKey>.searchEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: (() -> Unit)? = null,
+    metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<SearchRoute> { route ->
+    entry<SearchRoute>(metadata = metadata) { route ->
         SearchScreen(
             initialQuery = route.initialQuery,
             onSubjectClick = onSubjectClick,

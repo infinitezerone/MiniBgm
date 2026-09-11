@@ -39,6 +39,7 @@ class SearchViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals("", state.query)
+        assertFalse(state.hasSearched)
         assertEquals(0, state.selectedType)
         assertEquals(SearchSort.MATCH, state.selectedSort)
         assertEquals(SearchViewMode.LIST, state.viewMode)
@@ -52,7 +53,7 @@ class SearchViewModelTest {
     }
 
     @Test
-    fun onQueryChangeTriggersDebouncedSearch() =
+    fun onQueryChangeUpdatesQueryWithoutTriggeringSearch() =
         runTest {
             val repository = FakeSearchRepository()
             repository.searchResult = AppResult.Success(SearchResult(total = 1, list = listOf(sampleSubject)))
@@ -61,20 +62,17 @@ class SearchViewModelTest {
             viewModel.onQueryChange("芙莉莲")
 
             assertEquals("芙莉莲", viewModel.uiState.value.query)
-            advanceTimeBy(200)
-            assertEquals(0, repository.searchCallCount)
-
-            advanceTimeBy(150)
+            assertFalse(viewModel.uiState.value.hasSearched)
+            advanceTimeBy(500)
             advanceUntilIdle()
 
-            assertEquals(1, repository.searchCallCount)
-            val state = viewModel.uiState.value
-            assertFalse(state.isLoading)
-            assertEquals(1, state.results.size)
-            assertEquals(1, state.totalCount)
-            assertFalse(state.hasMore)
-            assertEquals("葬送的芙莉莲", state.results.first().nameCn)
-            assertNull(state.error)
+            // 输入过程中不自动发起网络请求
+            assertEquals(0, repository.searchCallCount)
+            assertFalse(viewModel.uiState.value.hasSearched)
+            assertTrue(
+                viewModel.uiState.value.results
+                    .isEmpty(),
+            )
         }
 
     @Test
@@ -85,9 +83,11 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("芙莉莲")
+            viewModel.search()
             advanceUntilIdle()
             assertEquals(1, repository.searchCallCount)
             assertEquals(1, viewModel.uiState.value.results.size)
+            assertTrue(viewModel.uiState.value.hasSearched)
 
             viewModel.onQueryChange("   ")
             advanceUntilIdle()
@@ -98,18 +98,20 @@ class SearchViewModelTest {
             assertEquals(0, state.totalCount)
             assertFalse(state.hasMore)
             assertFalse(state.isLoading)
+            assertFalse(state.hasSearched)
             assertNull(state.error)
             assertEquals(1, repository.searchCallCount)
         }
 
     @Test
-    fun onTypeSelectSwitchesTypeAndSearchesWhenQueryPresent() =
+    fun onTypeSelectSwitchesTypeAndSearchesWhenHasSearched() =
         runTest {
             val repository = FakeSearchRepository()
             repository.searchResult = AppResult.Success(SearchResult(total = 1, list = listOf(sampleSubject)))
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("芙莉莲")
+            viewModel.search()
             advanceUntilIdle()
             assertEquals(1, repository.searchCallCount)
 
@@ -121,11 +123,12 @@ class SearchViewModelTest {
         }
 
     @Test
-    fun onTypeSelectDoesNotSearchWhenQueryBlank() =
+    fun onTypeSelectDoesNotSearchWhenNotYetSearched() =
         runTest {
             val repository = FakeSearchRepository()
             val viewModel = createViewModel(searchRepo = repository)
 
+            viewModel.onQueryChange("芙莉莲")
             viewModel.onTypeSelect(2)
             advanceUntilIdle()
 
@@ -134,7 +137,7 @@ class SearchViewModelTest {
         }
 
     @Test
-    fun searchTriggersImmediateSearchWithoutDebounce() =
+    fun searchTriggersSearchWhenQueryPresent() =
         runTest {
             val repository = FakeSearchRepository()
             repository.searchResult = AppResult.Success(SearchResult(total = 1, list = listOf(sampleSubject)))
@@ -146,6 +149,7 @@ class SearchViewModelTest {
 
             assertEquals(1, repository.searchCallCount)
             assertEquals(1, viewModel.uiState.value.results.size)
+            assertTrue(viewModel.uiState.value.hasSearched)
         }
 
     @Test
@@ -156,6 +160,7 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("芙莉莲")
+            viewModel.search()
             advanceUntilIdle()
             assertEquals(1, viewModel.uiState.value.results.size)
 
@@ -163,6 +168,7 @@ class SearchViewModelTest {
 
             val state = viewModel.uiState.value
             assertEquals("", state.query)
+            assertFalse(state.hasSearched)
             assertTrue(state.results.isEmpty())
             assertEquals(0, state.totalCount)
             assertFalse(state.hasMore)
@@ -178,10 +184,12 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("测试")
+            viewModel.search()
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
             assertFalse(state.isLoading)
+            assertTrue(state.hasSearched)
             assertTrue(state.results.isEmpty())
             assertEquals("搜索请求失败", state.error)
         }
@@ -194,6 +202,7 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("测试")
+            viewModel.search()
             advanceUntilIdle()
             assertEquals("搜索请求失败", viewModel.uiState.value.error)
 
@@ -207,7 +216,7 @@ class SearchViewModelTest {
         }
 
     @Test
-    fun rapidQueryChangesOnlyExecutesLatestQuery() =
+    fun rapidQueryChangesDoesNotTriggerSearchUntilSearchClicked() =
         runTest {
             val repository = FakeSearchRepository()
             repository.searchResult = AppResult.Success(SearchResult(total = 1, list = listOf(sampleSubject)))
@@ -218,13 +227,19 @@ class SearchViewModelTest {
             viewModel.onQueryChange("ab")
             advanceTimeBy(100)
             viewModel.onQueryChange("abc")
-            advanceTimeBy(100)
-            assertEquals(0, repository.searchCallCount)
-
-            advanceTimeBy(300)
+            advanceTimeBy(500)
             advanceUntilIdle()
 
+            // 无论输入多快或停顿多久，未点击搜索前不发起请求
+            assertEquals(0, repository.searchCallCount)
+            assertEquals("abc", viewModel.uiState.value.query)
+            assertFalse(viewModel.uiState.value.hasSearched)
+
+            // 点击搜索后发起请求
+            viewModel.search()
+            advanceUntilIdle()
             assertEquals(1, repository.searchCallCount)
+            assertTrue(viewModel.uiState.value.hasSearched)
             assertEquals("abc", viewModel.uiState.value.query)
         }
 
@@ -242,6 +257,7 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("鬼灭之刃")
+            viewModel.search()
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
@@ -266,6 +282,7 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("鬼灭之刃")
+            viewModel.search()
             advanceUntilIdle()
             assertEquals(22, viewModel.uiState.value.results.size)
 
@@ -300,6 +317,7 @@ class SearchViewModelTest {
             val viewModel = createViewModel(searchRepo = repository)
 
             viewModel.onQueryChange("测试")
+            viewModel.search()
             advanceUntilIdle()
 
             // 切换为高分优先，验证即时排序及服务端参数传递
@@ -403,6 +421,12 @@ class SearchViewModelTest {
 
             viewModel.onQueryChange("芙莉莲")
             advanceTimeBy(350)
+            advanceUntilIdle()
+
+            // 仅输入未点击搜索，不计入搜索历史
+            assertEquals(0, repository.addHistoryCallCount)
+
+            viewModel.search()
             advanceUntilIdle()
 
             assertTrue(
