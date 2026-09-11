@@ -38,7 +38,7 @@ val PaneScaffoldDirective.isSplitLayout: Boolean
 fun rememberBgmListDetailStrategy(directive: PaneScaffoldDirective = rememberBgmPaneDirective()): ListDetailSceneStrategy<NavKey> =
     rememberListDetailSceneStrategy(
         directive = directive,
-        backNavigationBehavior = BackNavigationBehavior.PopUntilCurrentDestinationChange,
+        backNavigationBehavior = BackNavigationBehavior.PopUntilContentChange,
     )
 
 /** 列表 Pane 元数据；右侧未选择条目时默认展示作品占位页 [BgmDetailPlaceholder] */

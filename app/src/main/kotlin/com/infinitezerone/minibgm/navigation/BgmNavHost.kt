@@ -20,11 +20,13 @@ import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
+import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
 import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
 import com.infinitezerone.minibgm.feature.search.navigation.searchEntry
+import com.infinitezerone.minibgm.feature.search.navigation.tagSubjectsEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.episodeDetailEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
@@ -115,7 +117,7 @@ fun BgmNavHost(
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
                                 onTagClick = { tag ->
-                                    navState.navigateTo(SearchRoute(initialQuery = tag))
+                                    navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
                                 metadata = bgmDetailPane(),
                             )
@@ -127,7 +129,15 @@ fun BgmNavHost(
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
                                 onTagClick = { tag ->
-                                    navState.navigateTo(SearchRoute(initialQuery = tag))
+                                    navState.navigateTo(TagSubjectsRoute(tag = tag))
+                                },
+                                metadata = bgmExtraPane(),
+                            )
+
+                            tagSubjectsEntry(
+                                onBackClick = { navState.goBack() },
+                                onSubjectClick = { subjectId ->
+                                    navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 metadata = bgmExtraPane(),
                             )
