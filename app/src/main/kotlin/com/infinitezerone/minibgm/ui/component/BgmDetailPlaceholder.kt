@@ -19,13 +19,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 /** 平板或折叠屏展开双联场景下，右侧详情面板尚未选择条目时的占位组件。 */
 @Composable
-fun BgmDetailPlaceholder(modifier: Modifier = Modifier) {
+fun BgmDetailPlaceholder(
+    modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Outlined.Tv,
+    title: String = "选择作品查看详情",
+    subtitle: String = "在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽",
+) {
     Box(
         contentAlignment = Alignment.Center,
         modifier =
@@ -47,7 +53,7 @@ fun BgmDetailPlaceholder(modifier: Modifier = Modifier) {
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Tv,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(48.dp),
@@ -57,7 +63,7 @@ fun BgmDetailPlaceholder(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "选择番剧查看详情",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -66,7 +72,7 @@ fun BgmDetailPlaceholder(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "在左侧时间表或探索流中轻点任意条目\n右侧将原地展示专属海报、追番进度与社区吐槽",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
