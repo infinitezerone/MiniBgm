@@ -119,12 +119,12 @@ fun SearchScreen(
                     )
                 }
 
-                uiState.query.isBlank() && uiState.results.isEmpty() -> {
+                !uiState.hasSearched -> {
                     SearchIdleView(
                         searchHistory = uiState.searchHistory,
                         onKeywordClick = { keyword ->
                             viewModel.onQueryChange(keyword)
-                            viewModel.search()
+                            viewModel.search(keyword)
                         },
                         onDeleteHistoryItem = viewModel::deleteHistoryItem,
                         onClearAllHistory = viewModel::clearAllHistory,

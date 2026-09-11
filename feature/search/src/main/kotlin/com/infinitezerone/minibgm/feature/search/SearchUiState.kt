@@ -50,6 +50,7 @@ enum class SearchViewMode {
 @Immutable
 data class SearchUiState(
     val query: String = "",
+    val hasSearched: Boolean = false,
     val selectedType: Int = 0,
     val selectedSort: SearchSort = SearchSort.MATCH,
     val viewMode: SearchViewMode = SearchViewMode.LIST,
