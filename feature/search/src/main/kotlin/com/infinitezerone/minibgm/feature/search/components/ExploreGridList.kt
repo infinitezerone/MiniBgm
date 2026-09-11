@@ -18,10 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectComment
@@ -61,13 +61,8 @@ fun WaterfallGridList(
         }
     }
 
-    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
-    val columns =
-        if (isWideScreen) {
-            StaggeredGridCells.Adaptive(minSize = 168.dp)
-        } else {
-            StaggeredGridCells.Fixed(2)
-        }
+    val columns = StaggeredGridCells.Adaptive(minSize = 160.dp)
+    val remainingSubjects = remember(subjects) { if (subjects.size > 1) subjects.drop(1) else emptyList() }
 
     LazyVerticalStaggeredGrid(
         columns = columns,
@@ -95,8 +90,11 @@ fun WaterfallGridList(
         }
 
         // 2. 双列瀑布流卡片（展示其余条目）
-        val remainingSubjects = if (subjects.size > 1) subjects.drop(1) else emptyList()
-        items(remainingSubjects, key = { it.id }) { subject ->
+        items(
+            items = remainingSubjects,
+            key = { it.id },
+            contentType = { "waterfall_card" },
+        ) { subject ->
             WaterfallSubjectCard(
                 subject = subject,
                 isWished = wishedSubjectIds.contains(subject.id),
