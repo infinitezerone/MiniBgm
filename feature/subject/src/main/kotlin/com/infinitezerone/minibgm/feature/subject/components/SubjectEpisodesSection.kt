@@ -322,12 +322,14 @@ fun EpisodeGrid(
     onToggleWatched: (episode: Episode, isWatched: Boolean) -> Unit,
     onEpisodeLongClick: (Episode) -> Unit,
     modifier: Modifier = Modifier,
+    columns: Int = 6,
 ) {
+    val columnCount = columns.coerceAtLeast(1)
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        episodes.chunked(6).forEach { rowEpisodes ->
+        episodes.chunked(columnCount).forEach { rowEpisodes ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -414,7 +416,7 @@ fun EpisodeGrid(
                     }
                 }
                 // 补齐末行空位保持对齐
-                repeat(6 - rowEpisodes.size) {
+                repeat(columnCount - rowEpisodes.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }

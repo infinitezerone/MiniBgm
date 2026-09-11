@@ -26,12 +26,15 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +51,7 @@ private const val POSTER_GRID_COLUMNS = 3
 private const val MIN_ITEMS_FOR_VIEW_TOGGLE = 6
 private const val MIN_ROLES_FOR_FILTER = 2
 private const val MIN_ITEMS_FOR_ROLE_FILTER = 4
+private const val INITIAL_GRID_DISPLAY_LIMIT = 18
 
 /**
  * 关联作品/出演作品展示区：
@@ -66,8 +70,9 @@ fun RelatedWorksSection(
     if (works.isEmpty()) return
 
     val aggregatedWorks = remember(works) { works.aggregateBySubject() }
-    var isGridView by remember { mutableStateOf(false) }
-    var selectedRoleFilter by remember { mutableStateOf<String?>(null) }
+    var isGridView by rememberSaveable { mutableStateOf(false) }
+    var selectedRoleFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var gridDisplayLimit by rememberSaveable { mutableIntStateOf(INITIAL_GRID_DISPLAY_LIMIT) }
 
     // 提取出现频率最高的多职位分类（用于创作者/角色身兼多职时精准过滤）
     val availableRoles =
@@ -270,8 +275,13 @@ fun RelatedWorksSection(
                 }
             }
         } else {
-            // 海报墙网格模式（POSTER_GRID_COLUMNS 列纵向排列）
-            val chunkedWorks = remember(filteredWorks) { filteredWorks.chunked(POSTER_GRID_COLUMNS) }
+            // 海报墙网格模式（POSTER_GRID_COLUMNS 列纵向排列，带上限保护与展开更多）
+            val displayedWorks =
+                remember(filteredWorks, gridDisplayLimit) {
+                    filteredWorks.take(gridDisplayLimit)
+                }
+            val hasMoreGridWorks = filteredWorks.size > gridDisplayLimit
+            val chunkedWorks = remember(displayedWorks) { displayedWorks.chunked(POSTER_GRID_COLUMNS) }
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -298,6 +308,16 @@ fun RelatedWorksSection(
                         repeat(POSTER_GRID_COLUMNS - rowWorks.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
+                    }
+                }
+
+                if (hasMoreGridWorks) {
+                    val remainingCount = filteredWorks.size - gridDisplayLimit
+                    OutlinedButton(
+                        onClick = { gridDisplayLimit += 24 },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    ) {
+                        Text("展开更多作品 (剩余 $remainingCount 部)")
                     }
                 }
             }

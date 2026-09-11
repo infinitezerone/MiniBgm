@@ -872,4 +872,140 @@ class SubjectDetailViewModelTest {
             testScheduler.advanceUntilIdle()
             assertEquals(1, collectionRepository.markEpisodesWatchedUpToCallCount)
         }
+
+    @Test
+    fun selectTab_switchesTabAndLoadsDetailsIfNeeded() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                    sendCharacters(sampleSubject.id, sampleCharacterList)
+                    sendPersons(sampleSubject.id, samplePersonList)
+                    sendRelations(sampleSubject.id, sampleRelationList)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertEquals(SubjectDetailTab.EPISODES, viewModel.uiState.value.selectedTab)
+            assertTrue(
+                viewModel.uiState.value.characters
+                    .isEmpty(),
+            )
+
+            viewModel.selectTab(SubjectDetailTab.DETAILS)
+            assertEquals(SubjectDetailTab.DETAILS, viewModel.uiState.value.selectedTab)
+            assertEquals(sampleCharacterList, viewModel.uiState.value.characters)
+            assertEquals(samplePersonList, viewModel.uiState.value.persons)
+            assertEquals(sampleRelationList, viewModel.uiState.value.relations)
+        }
+
+    @Test
+    fun stateHoisting_controlsGridAndSheetVisibility() =
+        runTest {
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertTrue(viewModel.uiState.value.isEpisodeGridView)
+            assertFalse(viewModel.uiState.value.showCollectionSheet)
+
+            viewModel.setEpisodeGridView(false)
+            assertFalse(viewModel.uiState.value.isEpisodeGridView)
+
+            viewModel.setCollectionSheetVisible(true)
+            assertTrue(viewModel.uiState.value.showCollectionSheet)
+
+            viewModel.setCollectionSheetVisible(false)
+            assertFalse(viewModel.uiState.value.showCollectionSheet)
+        }
+
+    @Test
+    fun stateHoisting_openAndDismissEpisodeDetail() =
+        runTest {
+            val targetEpisode = sampleEpisodeList.first()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertNull(viewModel.uiState.value.selectedEpisodeForDetail)
+
+            viewModel.openEpisodeDetail(targetEpisode)
+            assertEquals(targetEpisode, viewModel.uiState.value.selectedEpisodeForDetail)
+
+            viewModel.dismissEpisodeDetail()
+            assertNull(viewModel.uiState.value.selectedEpisodeForDetail)
+        }
+
+    @Test
+    fun stateHoisting_openAndDismissEntityDetail() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendCharacters(sampleSubject.id, sampleCharacterList)
+                    sendPersons(sampleSubject.id, samplePersonList)
+                    fetchCharacterDetailResult = {
+                        AppResult.Success(
+                            CharacterDetail(
+                                id = 101L,
+                                name = "Test Character",
+                                summary = "Character Summary",
+                            ),
+                        )
+                    }
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            viewModel.loadDetailsTabIfNeeded()
+            viewModel.openCharacterDetail(101L)
+
+            assertEquals(
+                101L,
+                viewModel.uiState.value.activeCharacter
+                    ?.id,
+            )
+            assertNull(viewModel.uiState.value.activePerson)
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                "Test Character",
+                viewModel.uiState.value.selectedCharacterDetail
+                    ?.name,
+            )
+
+            // 切换打开 Person，应清空 Character
+            viewModel.openPersonDetail(201L)
+            assertEquals(
+                201L,
+                viewModel.uiState.value.activePerson
+                    ?.id,
+            )
+            assertNull(viewModel.uiState.value.activeCharacter)
+            assertNull(viewModel.uiState.value.selectedCharacterDetail)
+
+            // 关闭 entity detail
+            viewModel.dismissEntityDetail()
+            assertNull(viewModel.uiState.value.activeCharacter)
+            assertNull(viewModel.uiState.value.activePerson)
+            assertNull(viewModel.uiState.value.selectedPersonDetail)
+        }
 }

@@ -121,10 +121,10 @@ fun SubjectHeaderCard(
                         )
                     }
 
-                    // 类型徽章、放送/发行日期与集数标签
-                    Row(
+                    // 类型徽章、放送/发行日期与集数标签（采用 FlowRow 避免小屏/大字号下胶囊文字被挤压换行）
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier.padding(top = 2.dp),
                     ) {
                         Surface(
@@ -136,6 +136,8 @@ fun SubjectHeaderCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                             )
                         }
@@ -150,6 +152,8 @@ fun SubjectHeaderCard(
                                     text = dateText,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 )
                             }
@@ -162,9 +166,11 @@ fun SubjectHeaderCard(
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             ) {
                                 Text(
-                                    text = "全 $episodeCount ${subjectType.unitName}",
+                                    text = "全${episodeCount}${subjectType.unitName}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 )
                             }
@@ -214,6 +220,8 @@ fun SubjectHeaderCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
                                     )
                                 }
@@ -224,6 +232,8 @@ fun SubjectHeaderCard(
                                     text = "${rating.total}人",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    softWrap = false,
                                 )
                             }
                         }

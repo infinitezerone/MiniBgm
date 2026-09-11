@@ -5,8 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
@@ -14,9 +12,12 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberDecoratedNavEntries
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 /**
  * 创建可在配置变更与进程死亡后恢复的导航状态（对齐 NiA 的 core:navigation 模式）：
@@ -69,6 +70,9 @@ class BgmNavState(
 
     /** 当在顶层 Tab 根页面再次点击当前 Tab 时分发的重选事件流（用于列表平滑回顶等手势） */
     val tabReselectionEvents: SharedFlow<NavKey> = _tabReselectionEvents.asSharedFlow()
+
+    /** 获取指定顶层 Tab 重选事件流并转换为触发回顶的 Flow<Unit> */
+    fun scrollToTopFor(route: NavKey): Flow<Unit> = tabReselectionEvents.filter { it == route }.map { }
 
     /**
      * 重复点击当前 Tab → 若在子栈则重置到根部，若已在根部则派发重选回顶事件；
@@ -132,14 +136,16 @@ class BgmNavState(
      * 起始 Tab 的条目始终在列（exit through home），其余 Tab 的栈状态仍被保留，只是不参与渲染。
      */
     @Composable
-    fun toEntries(entryProvider: (NavKey) -> NavEntry<NavKey>): SnapshotStateList<NavEntry<NavKey>> {
+    fun toEntries(entryProvider: (NavKey) -> NavEntry<NavKey>): List<NavEntry<NavKey>> {
+        val saveableStateHolderDecorator = rememberSaveableStateHolderNavEntryDecorator<NavKey>()
+        val viewModelStoreDecorator = rememberViewModelStoreNavEntryDecorator<NavKey>()
+        val decorators =
+            remember(saveableStateHolderDecorator, viewModelStoreDecorator) {
+                listOf(saveableStateHolderDecorator, viewModelStoreDecorator)
+            }
+
         val decoratedEntries =
             subStacks.mapValues { (_, stack) ->
-                val decorators =
-                    listOf(
-                        rememberSaveableStateHolderNavEntryDecorator<NavKey>(),
-                        rememberViewModelStoreNavEntryDecorator<NavKey>(),
-                    )
                 rememberDecoratedNavEntries(
                     backStack = stack,
                     entryDecorators = decorators,
@@ -147,8 +153,9 @@ class BgmNavState(
                 )
             }
 
-        return topLevelStack
-            .flatMap { decoratedEntries[it] ?: emptyList() }
-            .toMutableStateList()
+        return remember(topLevelStack.toList(), decoratedEntries) {
+            topLevelStack
+                .flatMap { decoratedEntries[it] ?: emptyList() }
+        }
     }
 }
