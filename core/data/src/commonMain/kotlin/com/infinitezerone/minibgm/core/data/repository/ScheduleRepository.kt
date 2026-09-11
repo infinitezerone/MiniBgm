@@ -190,6 +190,7 @@ class ScheduleRepositoryImpl(
                 // bgm-data 合并插入的网络独播番（不在官方日历中）必须保留
                 scheduleDao.deleteOfficialSchedulesNotIn(entities.map { it.bgmId })
                 scheduleDao.insertSchedules(entities)
+                runCatchingCancellable { syncAirEvents() }
             }
             AppResult.Success(Unit)
         } catch (e: CancellationException) {
@@ -355,12 +356,12 @@ class ScheduleRepositoryImpl(
         val entities = scheduleDao.getAllSchedulesList()
         if (entities.isEmpty()) return
         val nowMillis = TimeUtils.nowEpochMillis()
-        val nowIso = TimeUtils.isoUtcFromEpochMillis(nowMillis)
+        val staleIso = TimeUtils.isoUtcFromEpochMillis(nowMillis - WEEK_MILLIS)
 
-        // 事件与名单裁剪：过期预计事件、已消失条目的事件、超出名单窗口的 bgm_data 合并行
+        // 事件与名单裁剪：过期预计事件（保留当前播出周期）、已消失条目的事件、超出名单窗口的 bgm_data 合并行
         val keepIds = entities.map { it.bgmId }.toSet()
         airEventDao.deleteEventsNotIn(keepIds.toList())
-        airEventDao.deleteStalePredictedEvents(nowIso)
+        airEventDao.deleteStalePredictedEvents(staleIso)
         val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
         scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
 
@@ -387,6 +388,7 @@ class ScheduleRepositoryImpl(
 
         // 2. 规则推算（predicted）：只服务 AniList 未覆盖的条目
         val predictedEvents = generatePredictedAirEvents(entities, coveredSubjects, nowMillis)
+        airEventDao.deleteAllPredictedEvents()
         if (predictedEvents.isNotEmpty()) {
             airEventDao.insertAirEvents(predictedEvents)
         }
@@ -454,18 +456,28 @@ class ScheduleRepositoryImpl(
                 TimeUtils.parseBroadcastRule(entity.broadcastRule)
                     ?: run {
                         val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return@run null
-                        beginMillis to DAY_MILLIS
+                        // 无官方周期播出规则且开播时间已超过 1 年的长篇番剧（如柯南、海贼王），不可按简单周期间隔推算话数
+                        if (nowMillis - beginMillis > 365L * DAY_MILLIS) return@run null
+                        beginMillis to WEEK_MILLIS
                     }
                     ?: continue
             val (startMillis, periodMillis) = rule
-            var episode = ((nowMillis - startMillis) / periodMillis).toInt() + 1
-            if (episode < 1) episode = 1
-            if (entity.totalEpisodes in 1..(episode - 1)) continue // 官方话数已播完，不再预计
-            var airAt = startMillis + (episode - 1L) * periodMillis
-            while (airAt < nowMillis) {
-                airAt += periodMillis
-                episode += 1
-            }
+            if (periodMillis <= 0L) continue
+
+            // 当条目已开播时，保留当前播出周期内最近播出的一话（即使几小时前已开播，仍是当前周期归属话数）
+            val (startEp, firstAirAt) =
+                if (startMillis <= nowMillis) {
+                    val baseEp = ((nowMillis - startMillis) / periodMillis).toInt() + 1
+                    val baseAirAt = startMillis + (baseEp - 1L) * periodMillis
+                    baseEp to baseAirAt
+                } else {
+                    1 to startMillis
+                }
+
+            if (entity.totalEpisodes in 1..(startEp - 1)) continue // 官方话数已播完，不再预计
+
+            var episode = startEp
+            var airAt = firstAirAt
             var generated = 0
             while (airAt <= nowMillis + PREDICTED_HORIZON_DAYS * DAY_MILLIS && generated < MAX_PREDICTED_EVENTS) {
                 if (entity.totalEpisodes <= 0 || episode <= entity.totalEpisodes) {
@@ -479,6 +491,7 @@ class ScheduleRepositoryImpl(
                         )
                     generated += 1
                 }
+                if (entity.totalEpisodes in 1..episode) break
                 airAt += periodMillis
                 episode += 1
             }
@@ -500,12 +513,20 @@ class ScheduleRepositoryImpl(
                         event to millis
                     }
             if (events.isEmpty()) {
-                return@map entity
+                return@map entity.copy(
+                    nextEpisode = 0,
+                    nextEpisodeAtUtc = "",
+                    nextEpisodeKind = "",
+                )
             }
             val closest =
                 events.minWithOrNull(
                     compareBy({ abs(it.second - nowMillis) }, { AirEventKind.rank(it.first.kind) }),
-                ) ?: return@map entity
+                ) ?: return@map entity.copy(
+                    nextEpisode = 0,
+                    nextEpisodeAtUtc = "",
+                    nextEpisodeKind = "",
+                )
             val (closestEvent, closestMillis) = closest
             val next = events.filter { it.second > nowMillis }.minByOrNull { it.second }
             entity.copy(
@@ -605,9 +626,7 @@ class ScheduleRepositoryImpl(
                 emptyList()
             }
 
-        val calculatedEp =
-            nextEpisode.takeIf { it > 0 }
-                ?: TimeUtils.calculateCurrentEpisode(beginUtc)
+        val calculatedEp = nextEpisode.takeIf { it > 0 } ?: 0
 
         return AirSchedule(
             bgmId = bgmId,
@@ -630,10 +649,10 @@ class ScheduleRepositoryImpl(
 
     /**
      * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
-     * 仅对 coverUrl 为空的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
+     * 仅对 coverUrl 为空或尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
      */
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
-        val missing = schedules.filter { it.coverUrl.isBlank() }.take(5)
+        val missing = schedules.filter { it.coverUrl.isBlank() || it.totalEpisodes == 0 }.take(5)
         if (missing.isEmpty()) return schedules
 
         val metadataByBgmId =
@@ -649,10 +668,11 @@ class ScheduleRepositoryImpl(
             val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
             val rating = subject.rating?.score ?: 0.0
             val eps = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes
+            val resolvedEpisodes = if (eps > 0) eps else -1
             entity.copy(
                 coverUrl = coverUrl.ifBlank { entity.coverUrl },
                 ratingScore = if (entity.ratingScore == 0.0) rating else entity.ratingScore,
-                totalEpisodes = if (entity.totalEpisodes == 0) eps else entity.totalEpisodes,
+                totalEpisodes = if (entity.totalEpisodes == 0) resolvedEpisodes else entity.totalEpisodes,
                 titleCn = entity.titleCn.ifBlank { subject.nameCn },
             )
         }
@@ -668,7 +688,8 @@ class ScheduleRepositoryImpl(
             TimeUtils.parseBroadcastRule(broadcastRule)
                 ?: run {
                     val beginMillis = TimeUtils.epochMillisOfIso(beginUtc) ?: return 0 to ""
-                    beginMillis to (7L * 24 * 60 * 60 * 1000)
+                    if (nowMillis - beginMillis > 365L * DAY_MILLIS) return 0 to ""
+                    beginMillis to WEEK_MILLIS
                 }
         val (startMillis, periodMillis) = rule
         if (periodMillis <= 0L) return 0 to ""
@@ -679,7 +700,10 @@ class ScheduleRepositoryImpl(
 
         val elapsed = nowMillis - startMillis
         val airedCount = (elapsed / periodMillis).toInt() + 1
-        if (totalEpisodes in 1..airedCount) {
+        if (totalEpisodes in 1..(airedCount - 1)) {
+            return 0 to ""
+        }
+        if (totalEpisodes > 0 && airedCount == totalEpisodes) {
             return airedCount to ""
         }
         val nextEpisode = airedCount + 1

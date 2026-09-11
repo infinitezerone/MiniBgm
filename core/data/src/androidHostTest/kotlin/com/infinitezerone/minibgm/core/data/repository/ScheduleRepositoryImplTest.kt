@@ -98,6 +98,10 @@ class ScheduleRepositoryImplTest {
                 events.value.filter { it.kind != AirEventKind.PREDICTED || (TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L) >= cutoff }
         }
 
+        override suspend fun deleteAllPredictedEvents() {
+            events.value = events.value.filter { it.kind != AirEventKind.PREDICTED }
+        }
+
         override suspend fun deleteEventsNotIn(keepIds: List<Long>) {
             events.value = events.value.filter { it.subjectId in keepIds }
         }
@@ -806,6 +810,213 @@ class ScheduleRepositoryImplTest {
             val updated = dao.getAllSchedulesList().single()
             assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
             assertTrue(updated.nextEpisode > 0)
+        }
+
+    @Test
+    fun syncAirEvents_retainsCurrentCycleAiredEpisode_andCapsAtTotalEpisodes() =
+        runTest {
+            // 场景类似《从后面来的神威先生》：条目首播于 10 周前的周五 00:00，总集数 12 话
+            // 当前时刻为周五 15:00（第 11 话已于 15 小时前开播，第 12 话在 6 天后）
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val fifteenHoursAgo = nowMillis - 15 * 3600 * 1000L
+            val tenWeeksAgo = fifteenHoursAgo - 10 * 7 * DAY_MILLIS
+            val ruleStartIso = TimeUtils.isoUtcFromEpochMillis(tenWeeksAgo)
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 627136L,
+                                title = "うしろの正面カムイさん",
+                                titleCn = "从后面来的神威先生",
+                                coverUrl = "https://example.com/kamui.jpg",
+                                ratingScore = 6.0,
+                                airDate = ruleStartIso.substringBefore("T"),
+                                beginAtUtc = ruleStartIso,
+                                weekday = TimeUtils.cstWeekdayOfEpoch(fifteenHoursAgo),
+                                timeCst = "00:00",
+                                timeJst = "01:00",
+                                sitesJson = "[]",
+                                broadcastRule = "R/$ruleStartIso/P7D",
+                                totalEpisodes = 12,
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
+            // 应当保留本周期内刚播出的第 11 话，以及下周预定的第 12 话，且受总集数 12 话限制不再生成第 13 话
+            assertEquals(listOf(11, 12), storedEvents.map { it.episode })
+            assertTrue(storedEvents.all { it.kind == AirEventKind.PREDICTED })
+
+            // 仲裁回写：最近事件为 15 小时前播出的第 11 话（距离当前 15h 远小于下周第 12 话的 153h）
+            val updated = dao.getAllSchedulesList().single()
+            assertEquals(11, updated.nextEpisode)
+            assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
+            // 下一话预期时刻应指向第 12 话时刻
+            val expectedNextAirIso = TimeUtils.isoUtcFromEpochMillis(fifteenHoursAgo + 7 * DAY_MILLIS)
+            assertEquals(expectedNextAirIso, updated.nextEpisodeAtUtc)
+        }
+
+    @Test
+    fun syncAirEvents_withoutBroadcastRule_predictsWeeklyEpisodesInsteadOfDaily() =
+        runTest {
+            // 无 broadcastRule 的普通季度番条目（如 9 周前开播，无 bangumi-data 规则映射）
+            // 应当按周播（7天）而非日播（1天）推算，当前第 10 话而非第 64 话
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val nineWeeksAgo = nowMillis - 9 * 7 * DAY_MILLIS
+            val airDate = TimeUtils.formatEpochSecondsToDate(nineWeeksAgo / 1000)
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 624691L,
+                                title = "喜羊羊与灰太狼之破界山海诀",
+                                titleCn = "喜羊羊与灰太狼之破界山海诀",
+                                coverUrl = "https://example.com/cover.jpg",
+                                ratingScore = 6.5,
+                                airDate = airDate,
+                                beginAtUtc = "${airDate}T00:00:00Z",
+                                weekday = TimeUtils.cstWeekdayOfEpoch(nineWeeksAgo),
+                                timeCst = "00:00",
+                                timeJst = "01:00",
+                                sitesJson = "[]",
+                                broadcastRule = "", // 无规则
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val updated = dao.getAllSchedulesList().single()
+            assertEquals(10, updated.nextEpisode)
+            assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
+        }
+
+    @Test
+    fun syncBangumiData_longRunningAnimeWithoutRule_doesNotPredictEpisode() =
+        runTest {
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 899L,
+                                title = "名探偵コナン",
+                                titleCn = "名侦探柯南",
+                                coverUrl = "https://example.com/conan.jpg",
+                                ratingScore = 8.8,
+                                airDate = "1996-01-08",
+                                weekday = 6,
+                                timeCst = "",
+                                timeJst = "",
+                                sitesJson = "[]",
+                                broadcastRule = "",
+                                totalEpisodes = 1340,
+                                nextEpisode = 11206, // 历史遗留的脏数据
+                                nextEpisodeKind = AirEventKind.PREDICTED,
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val updated = dao.getAllSchedulesList().single()
+            // 开播超 1 年且无规则的长篇番不胡乱推算，旧脏数据被清理为 0
+            assertEquals(0, updated.nextEpisode)
+            assertEquals("", updated.nextEpisodeKind)
+        }
+
+    @Test
+    fun syncBangumiData_completedAnime_clearsNextEpisode() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            // 11 周前开播，总集数 9 话（已于 2 周前播完）
+            val elevenWeeksAgo = nowMillis - 11 * 7 * DAY_MILLIS
+            val airDate = TimeUtils.formatEpochSecondsToDate(elevenWeeksAgo / 1000)
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 481295L,
+                                title = "X-Men '97 Season 2",
+                                titleCn = "X战警97 第二季",
+                                coverUrl = "https://example.com/xmen.jpg",
+                                ratingScore = 8.5,
+                                airDate = airDate,
+                                beginAtUtc = "${airDate}T00:00:00Z",
+                                weekday = 6,
+                                timeCst = "00:00",
+                                timeJst = "01:00",
+                                sitesJson = "[]",
+                                broadcastRule = "",
+                                totalEpisodes = 9,
+                                nextEpisode = 74, // 历史脏数据
+                                nextEpisodeKind = AirEventKind.PREDICTED,
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val updated = dao.getAllSchedulesList().single()
+            // 已播完的番剧不再预计后续话数，脏数据被清理为 0
+            assertEquals(0, updated.nextEpisode)
+            assertEquals("", updated.nextEpisodeKind)
         }
 
     @Test

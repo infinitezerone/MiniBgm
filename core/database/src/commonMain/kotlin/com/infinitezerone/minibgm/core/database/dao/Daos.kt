@@ -50,6 +50,9 @@ interface AirEventDao {
     @Query("DELETE FROM air_events WHERE kind = 'predicted' AND airAtUtc < :isoUtc")
     suspend fun deleteStalePredictedEvents(isoUtc: String)
 
+    @Query("DELETE FROM air_events WHERE kind = 'predicted'")
+    suspend fun deleteAllPredictedEvents()
+
     @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
     suspend fun deleteEventsNotIn(keepIds: List<Long>)
 
