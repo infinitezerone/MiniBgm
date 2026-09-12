@@ -26,6 +26,15 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
+        with:
+          path: BgmPlus
+
+      # 复合构建依赖：includeBuild("../MiniAgent") 需要其源码位于同级目录
+      - name: Checkout MiniAgent (composite build)
+        uses: actions/checkout@v5
+        with:
+          repository: infinitezerone/MiniAgent
+          path: MiniAgent
 
       # 项目固定 JVM toolchain 25（Kotlin jvmTarget 25），CI JDK 必须对齐
       - name: Set up JDK 25
@@ -41,7 +50,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+        run: chmod +x BgmPlus/gradlew
 
       # 单次调用合并检查：共享同一次配置阶段与 daemon
       # （此前拆成多次 ./gradlew 调用，每次都付一遍配置开销）
@@ -51,4 +60,5 @@ jobs:
       # assembleRelease：release 变体启用 R8 混淆与资源收缩，必须在每次 CI 编译，
       # 否则 proguard 缺 keep 规则等问题只在打 tag 时第一次暴露（CI 上无 keystore，回退 debug 签名）
       - name: Spotless + Tests + CRAP Check + Assemble
+        working-directory: BgmPlus
         run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug assembleRelease --stacktrace
