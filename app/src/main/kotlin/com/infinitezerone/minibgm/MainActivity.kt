@@ -40,9 +40,8 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            window.isNavigationBarContrastEnforced = false
-        }
+        // minSdk 31 > Q(29)，导航栏对比度强制关闭始终可用（消除手势区遮挡）
+        window.isNavigationBarContrastEnforced = false
         handleIntent(intent)
         setContent {
             MiniBgmTheme {
