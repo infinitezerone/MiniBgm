@@ -90,6 +90,26 @@ class BgmTokenServiceTest {
         }
 
     @Test
+    fun `刷新遭遇 429 限流时上抛 RateLimited 而非降级为 null 误登出`() =
+        runTest {
+            // 行为钉子：共享 HttpResponseValidator 将 429 映射为 RateLimited，
+            // refreshOrNull 的 RateLimited 分支原样上抛——限流绝不触发清凭据自动登出。
+            // 若未来有人移除校验器映射或改动降级分支，此测试会失败
+            val engine =
+                MockEngine {
+                    respond(
+                        """{"error":"rate_limited"}""",
+                        HttpStatusCode.TooManyRequests,
+                        headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            assertFailsWith<BgmNetworkException.RateLimited> {
+                service(engine).refreshOrNull("valid-token")
+            }
+        }
+
+    @Test
     fun `刷新成功时正常返回凭据`() =
         runTest {
             val engine =

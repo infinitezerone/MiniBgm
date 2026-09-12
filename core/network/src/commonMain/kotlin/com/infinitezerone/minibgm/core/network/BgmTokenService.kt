@@ -97,6 +97,8 @@ class BgmTokenService(
             }
         val body = response.bodyAsText()
         if (!response.status.isSuccess()) {
+            // 注：429 在 BgmHttpClient 的 HttpResponseValidator 中已映射为 RateLimited，
+            // 不会走到这里；此处兜底覆盖校验器未映射的状态码（如 400 invalid_grant）
             throw BgmNetworkException.ServerError(response.status.value)
         }
         return BgmHttpClient.jsonConfig.decodeFromString(BgmTokenResponse.serializer(), body)
