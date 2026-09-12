@@ -57,6 +57,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UserScreen(
     onCollectionClick: (CollectionType) -> Unit = {},
+    onOpenAgentChat: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
@@ -113,6 +114,7 @@ fun UserScreen(
         },
         onCollectionClick = onCollectionClick,
         onSelectSyncInterval = viewModel::setSyncInterval,
+        onOpenAgentChat = onOpenAgentChat,
         onSyncNow = {
             viewModel.syncBangumiDataNow { success ->
                 coroutineScope.launch {
@@ -136,6 +138,7 @@ fun UserScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserScreenContent(
+    onOpenAgentChat: () -> Unit = {},
     uiState: UserUiState,
     onLogin: () -> Unit,
     onRefresh: () -> Unit,
@@ -313,6 +316,7 @@ fun UserScreenContent(
                                 onOpenReminderHourDialog = { showReminderHourDialog = true },
                                 onOpenSyncDialog = { showSyncIntervalDialog = true },
                                 onSyncNow = onSyncNow,
+                                onOpenAgentChat = onOpenAgentChat,
                                 onOpenWebUrl = onOpenWebUrl,
                                 onClearCache = onClearCache,
                                 onLogoutCurrentClick = { showLogoutCurrentDialog = true },
@@ -394,6 +398,7 @@ fun UserScreenContent(
                             onOpenReminderHourDialog = { showReminderHourDialog = true },
                             onOpenSyncDialog = { showSyncIntervalDialog = true },
                             onSyncNow = onSyncNow,
+                            onOpenAgentChat = onOpenAgentChat,
                             onOpenWebUrl = onOpenWebUrl,
                             onClearCache = onClearCache,
                             onLogoutCurrentClick = { showLogoutCurrentDialog = true },

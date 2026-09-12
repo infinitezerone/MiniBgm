@@ -129,7 +129,7 @@ class BgmNavState(
                             it is TagSubjectsRoute
                     }
                 }
-                is SearchRoute, is UserCollectionsRoute -> {
+                is SearchRoute, is UserCollectionsRoute, is AgentChatRoute -> {
                     // 进入新的列表二级页面时，清理先前残留的详情层级；
                     // 同类二级页（不同 query/type 的搜索、收藏）按层级语义替换而非堆叠，
                     // 避免返回时倒退经过过期的旧搜索结果

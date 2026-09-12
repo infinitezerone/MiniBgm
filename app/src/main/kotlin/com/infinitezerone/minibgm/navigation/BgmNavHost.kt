@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.infinitezerone.minibgm.core.navigation.AgentChatRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
@@ -23,6 +24,7 @@ import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
+import com.infinitezerone.minibgm.feature.agent.navigation.agentChatEntry
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
 import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
 import com.infinitezerone.minibgm.feature.search.navigation.searchEntry
@@ -101,6 +103,7 @@ fun BgmNavHost(
                                 onCollectionClick = { type ->
                                     navState.navigateTo(UserCollectionsRoute(type.value))
                                 },
+                                onOpenAgentChat = { navState.navigateTo(AgentChatRoute) },
                                 scrollToTop = userScrollToTop,
                             )
 
@@ -109,6 +112,8 @@ fun BgmNavHost(
                                 onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
+
+                            agentChatEntry(onBackClick = { navState.goBack() })
 
                             subjectEntry(
                                 onBackClick = { navState.goBack() },

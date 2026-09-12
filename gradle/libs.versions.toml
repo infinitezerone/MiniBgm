@@ -29,6 +29,8 @@ kover = "0.9.9"
 kermit = "2.1.0"
 
 [libraries]
+miniagent-agent-loop = { group = "com.miniagent", name = "agent-loop" }
+miniagent-provider-cloud = { group = "com.miniagent", name = "provider-cloud" }
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-core-splashscreen" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core-ktx" }

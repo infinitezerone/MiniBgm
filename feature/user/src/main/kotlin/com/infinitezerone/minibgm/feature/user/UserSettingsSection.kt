@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -73,6 +74,7 @@ internal fun SettingsSection(
     onOpenReminderHourDialog: () -> Unit,
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
+    onOpenAgentChat: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
     onLogoutCurrentClick: () -> Unit,
@@ -124,6 +126,14 @@ internal fun SettingsSection(
                     title = "播放源自动同步",
                     subtitle = "周期：${syncInterval.displayName}",
                     onClick = onOpenSyncDialog,
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.SmartToy,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = "Agent 助手（实验）",
+                    subtitle = "自然语言查询时刻表与开播",
+                    onClick = onOpenAgentChat,
                 )
 
                 HorizontalDivider(

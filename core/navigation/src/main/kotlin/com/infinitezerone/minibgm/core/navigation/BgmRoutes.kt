@@ -65,6 +65,12 @@ data class EpisodeDetailRoute(
 ) : BgmRoute
 
 /**
+ * Agent 聊天路由（自然语言助手入口）；与 SearchRoute 同层级：二级列表页语义。
+ */
+@Serializable
+data object AgentChatRoute : BgmRoute
+
+/**
  * 标签专题条目路由（从条目详情页点击热门标签触发）；
  * 在分栏大屏模式下作为 extraPane 展现在右侧，避免打乱左侧主列表与当前条目上下文。
  */
