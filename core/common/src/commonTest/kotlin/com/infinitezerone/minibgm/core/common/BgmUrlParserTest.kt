@@ -155,4 +155,63 @@ class BgmUrlParserTest {
         assertEquals("@sai", BgmUrlParser.formatDisplayLabel(BgmLink.User("sai")))
         assertEquals("https://bilibili.com", BgmUrlParser.formatDisplayLabel(BgmLink.External("https://bilibili.com")))
     }
+
+    // ---- 域名识别边界（安全行为钉子：伪造 host 绝不能路由进应用内跳转） ----
+
+    @Test
+    fun parse_userinfoSpoofing_isRejectedAsExternal() {
+        // bgm.tv 出现在 userinfo 位置时真实 host 是 evil.com，必须拒绝
+        val result = BgmUrlParser.parse("https://bgm.tv@evil.com/subject/123")
+        assertIs<BgmLink.External>(result)
+    }
+
+    @Test
+    fun parse_lookalikeDomains_areRejectedAsExternal() {
+        val lookalikes =
+            listOf(
+                "https://evilbgm.tv/subject/123",
+                "https://bgm.tv.evil.com/subject/123",
+                "https://bgm.tv.evil.com.evil/subject/123",
+                "evilbgm.tv/subject/123",
+            )
+        for (url in lookalikes) {
+            val result = BgmUrlParser.parse(url)
+            assertIs<BgmLink.External>(result, "Expected External for lookalike: $url")
+        }
+    }
+
+    @Test
+    fun parse_protocolRelativeBgmUrl_isRecognized() {
+        val result = BgmUrlParser.parse("//bgm.tv/subject/123")
+        assertEquals(BgmLink.Subject(123L), result)
+    }
+
+    @Test
+    fun parse_bareDomainWithoutScheme_isRecognized() {
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("bgm.tv/subject/123"))
+        assertEquals(BgmLink.Episode(456L), BgmUrlParser.parse("bangumi.tv/ep/456"))
+    }
+
+    @Test
+    fun parse_uppercaseSchemeAndHost_isRecognized() {
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("HTTPS://BGM.TV/subject/123"))
+    }
+
+    @Test
+    fun parse_subdomainsOfBgmDomain_areRecognized() {
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://www.bgm.tv/subject/123"))
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://next.bgm.tv/subject/123"))
+    }
+
+    @Test
+    fun parse_portAndQueryAndFragment_areStripped() {
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://bgm.tv/subject/123?page=1"))
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://bgm.tv/subject/123#comment_456"))
+    }
+
+    @Test
+    fun parse_trailingSlashAndDeepPaths_areTolerated() {
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://bgm.tv/subject/123/"))
+        assertEquals(BgmLink.Subject(123L), BgmUrlParser.parse("https://bgm.tv/subject/123/comments"))
+    }
 }
