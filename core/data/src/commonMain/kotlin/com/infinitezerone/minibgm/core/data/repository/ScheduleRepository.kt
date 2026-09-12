@@ -405,9 +405,17 @@ class ScheduleRepositoryImpl(
         nowMillis: Long,
     ): Pair<List<AirEventEntity>, Set<Long>> {
         val withAnilistId = entities.filter { it.anilistId != null }
+        // 窗口：回看锚定开播（超窗条目取不到锚点，由调用侧降级为规则预测）+ 前瞻预计期
+        val windowFromEpoch = (nowMillis - ANILIST_WINDOW_LOOKBACK_DAYS * DAY_MILLIS) / 1000
+        val windowToEpoch = (nowMillis + PREDICTED_HORIZON_DAYS * DAY_MILLIS) / 1000
         val schedulesByAnilistId =
-            runCatching { anilistService.getAiringSchedules(withAnilistId.mapNotNull { it.anilistId }) }
-                .getOrElse { emptyMap() }
+            runCatching {
+                anilistService.getAiringSchedules(
+                    anilistIds = withAnilistId.mapNotNull { it.anilistId },
+                    fromEpochSeconds = windowFromEpoch,
+                    toEpochSeconds = windowToEpoch,
+                )
+            }.getOrElse { emptyMap() }
         val anilistEvents = mutableListOf<AirEventEntity>()
         val coveredSubjects = mutableSetOf<Long>()
 
@@ -723,6 +731,13 @@ class ScheduleRepositoryImpl(
         const val PREDICTED_HORIZON_DAYS = 30L
         const val MAX_PREDICTED_EVENTS = 6
         const val OFFSET_TOLERANCE_MILLIS = 3L * DAY_MILLIS
+
+        /**
+         * AniList 查询窗口：回看 26 周（覆盖两季在播条目的开播锚点）+ 前瞻 30 天。
+         * AniList 连接查询默认 perPage 仅 20 且按播出时间升序，无窗口时超过 20 话的
+         * 在播条目只能取到最早的话数，当前周期缺失且预测被跳过，nextEpisode 永久冻结。
+         */
+        const val ANILIST_WINDOW_LOOKBACK_DAYS = 182L
 
         private fun buildBilibiliUrl(id: String): String =
             when {
