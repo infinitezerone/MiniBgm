@@ -43,6 +43,7 @@ data class AgentChatUiState(
  */
 class AgentChatViewModel(
     private val toolsFactory: MiniBgmAgentTools,
+    private val providerFactory: (CloudModelConfig) -> com.miniagent.agentloop.LlmProvider = ::OpenAiCompatibleProvider,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AgentChatUiState())
     val uiState: StateFlow<AgentChatUiState> = _uiState.asStateFlow()
@@ -66,7 +67,7 @@ class AgentChatViewModel(
             )
         }
 
-        val provider = OpenAiCompatibleProvider(CloudModelConfig(state.baseUrl, state.apiKey, state.model))
+        val provider = providerFactory(CloudModelConfig(state.baseUrl, state.apiKey, state.model))
         val loop = AgentLoop(provider = provider, tools = toolsFactory.create())
         runJob?.cancel()
         runJob =
