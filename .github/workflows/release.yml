@@ -120,5 +120,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release-artifacts/*
+          files: BgmPlus/release-artifacts/*
           generate_release_notes: true
