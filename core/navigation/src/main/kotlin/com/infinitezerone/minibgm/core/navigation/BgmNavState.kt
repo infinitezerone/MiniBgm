@@ -63,6 +63,11 @@ class BgmNavState(
             subStacks[currentTopLevelKey]
                 ?: error("Sub stack for $currentTopLevelKey does not exist")
 
+    /** 各顶层 Tab 的子栈深度（供测试断言返回链上界） */
+    @get:VisibleForTesting
+    val subStackSizes: Map<NavKey, Int>
+        get() = subStacks.mapValues { (_, stack) -> stack.size }
+
     /** 当前 Tab 栈顶 key，即屏幕上可见的目的地 */
     val currentKey: NavKey by derivedStateOf { currentSubStack.last() }
 
@@ -104,8 +109,14 @@ class BgmNavState(
     }
 
     private fun goToKey(key: NavKey) {
+        // 所有路由必须实现 BgmRoute（sealed 层级），入栈语义 when 因此为编译期穷尽匹配：
+        // 新增路由类型必须在此显式声明层级语义，否则编译不过（杜绝静默落入 push 兜底分支）
+        val route =
+            checkNotNull(key as? BgmRoute) {
+                "Navigation keys must implement BgmRoute (see BgmRoutes.kt): $key"
+            }
         currentSubStack.apply {
-            when (key) {
+            when (route) {
                 is SubjectDetailRoute -> {
                     // 当从列表选择条目详情时（尤其是分栏模式下左右双栏同屏展示），
                     // 替换掉当前栈中已有的条目详情或详情子层级（条目详情、关联条目、分集讨论、标签专题），
@@ -119,19 +130,22 @@ class BgmNavState(
                     }
                 }
                 is SearchRoute, is UserCollectionsRoute -> {
-                    // 进入新的列表二级页面时，清理先前残留的详情层级
+                    // 进入新的列表二级页面时，清理先前残留的详情层级；
+                    // 同类二级页（不同 query/type 的搜索、收藏）按层级语义替换而非堆叠，
+                    // 避免返回时倒退经过过期的旧搜索结果
                     removeAll {
                         it is SubjectDetailRoute ||
                             it is LinkedSubjectRoute ||
                             it is EpisodeDetailRoute ||
                             it is TagSubjectsRoute
                     }
-                    remove(key)
+                    removeAll { it::class == key::class }
                 }
-                else -> {
-                    // single-top：已在栈内则先移除，保证同一目的地不重复入栈
-                    remove(key)
-                }
+                // 钻取链层级：关联条目、分集讨论、标签专题允许逐层压栈（single-top 去重相同 key）
+                is LinkedSubjectRoute, is EpisodeDetailRoute, is TagSubjectsRoute -> remove(key)
+                // 顶层 Tab 根永远是子栈首元素，不允许作为子页入栈（走 navigateTo 的顶层分支）
+                is ScheduleRoute, is ExploreRoute, is UserRoute ->
+                    error("Top-level route cannot be pushed onto a sub stack: $key")
             }
             add(key)
         }

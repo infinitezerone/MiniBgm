@@ -16,6 +16,7 @@ import kotlin.test.fail
  * 6. 传输与存储框架隔离：feature 源码严禁 import io.ktor.* 或 androidx.room.*
  * 7. 主题一致性：feature 源码严禁硬编码 Color(0x...)，必须使用 :core:designsystem 主题 token
  * 8. 裸 IO 隔离：feature 源码严禁手写底层网络传输（HttpURLConnection / java.net.*）与私有磁盘 IO（cacheDir / filesDir / FileOutputStream）
+ * 9. 路由 sealed 契约：NavKey 路由必须实现 BgmRoutes.kt 中的 sealed BgmRoute（让 BgmNavState 入栈语义 when 编译期穷尽，新增路由必须显式声明层级语义）
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -334,6 +335,53 @@ class ArchitectureRulesTest {
                 "违反单一数据源与离线设计原则（Feature 层严禁手写底层网络传输与私有磁盘缓存，网络与持久化必须经由 :core:data Repositories 统一调度）：\n" +
                     violations.joinToString("\n"),
             )
+        }
+    }
+
+    @Test
+    fun navigation_routes_are_sealed_and_declared_only_in_bgm_routes() {
+        val routesFile =
+            File(projectRoot, "core/navigation/src/main/kotlin/com/infinitezerone/minibgm/core/navigation/BgmRoutes.kt")
+        assertTrue(routesFile.isFile, "BgmRoutes.kt 未找到: ${routesFile.absolutePath}")
+        val content = routesFile.readText()
+        assertTrue(
+            content.contains("sealed interface BgmRoute : NavKey"),
+            "BgmRoutes.kt 必须声明 sealed interface BgmRoute : NavKey —— sealed 层级让 BgmNavState 的" +
+                "入栈语义 when 编译期穷尽：新增路由必须显式声明层级（详情层级 replace / 二级列表页同类替换 / 钻取链压栈），" +
+                "否则编译不过，杜绝静默落入 push 兜底分支造成返回栈堆叠",
+        )
+
+        // 路由式声明（行尾 `: NavKey` 的 class/object）只允许出现在 BgmRoutes.kt 的 sealed 接口上；
+        // 其他文件直接实现 NavKey 会绕过编译期穷尽检查
+        val declarationTail = Regex("""^\s*\)?\s*:\s*NavKey\s*$""")
+        val declarationInline = Regex("""^(data\s+)?(object|class)\s+\w+.*:\s*NavKey\s*$""")
+        val violations = mutableListOf<String>()
+        listOf("core", "feature", "app", "sync").forEach { dirName ->
+            val dir = File(projectRoot, dirName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .filter {
+                    it.isFile &&
+                        it.extension == "kt" &&
+                        it != routesFile &&
+                        !it.path.replace(File.separatorChar, '/').contains("/build/")
+                }.forEach { sourceFile ->
+                    val relPath = sourceFile.relativeTo(projectRoot).path
+                    sourceFile.readLines().forEachIndexed { index, line ->
+                        val trimmed = line.trim()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+                            return@forEachIndexed
+                        }
+                        if (declarationTail.matches(trimmed) || declarationInline.matches(trimmed)) {
+                            violations.add("$relPath:${index + 1} 直接实现 NavKey（路由必须声明在 BgmRoutes.kt 并实现 BgmRoute）-> $trimmed")
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail("违反路由 sealed 契约：\n" + violations.joinToString("\n"))
         }
     }
 }

@@ -5,21 +5,27 @@ import kotlinx.serialization.Serializable
 
 /**
  * MiniBgm 全局类型安全路由契约（Navigation 3 NavKey）
+ *
+ * 所有路由必须实现 [BgmRoute]（sealed 层级）：这使 [BgmNavState] 的入栈语义
+ * `when` 成为编译期穷尽匹配——新增路由时必须显式声明其层级语义
+ * （详情层级 replace / 二级列表页同类替换 / 钻取链压栈），否则编译不过。
+ * 严禁在模块其他文件直接实现 NavKey（见 ArchitectureRulesTest 路由红线）。
  */
+sealed interface BgmRoute : NavKey
 
 @Serializable
-data object ScheduleRoute : NavKey
+data object ScheduleRoute : BgmRoute
 
 @Serializable
-data object ExploreRoute : NavKey
+data object ExploreRoute : BgmRoute
 
 @Serializable
-data object UserRoute : NavKey
+data object UserRoute : BgmRoute
 
 @Serializable
 data class SearchRoute(
     val initialQuery: String = "",
-) : NavKey
+) : BgmRoute
 
 @Serializable
 data class SubjectDetailRoute(
@@ -28,7 +34,7 @@ data class SubjectDetailRoute(
     val initialCoverUrl: String = "",
     val initialScore: Double = 0.0,
     val source: String = "",
-) : NavKey
+) : BgmRoute
 
 /**
  * 关联/外链条目详情路由（由分集评论外链或关联作品触发）；
@@ -41,12 +47,12 @@ data class LinkedSubjectRoute(
     val initialCoverUrl: String = "",
     val initialScore: Double = 0.0,
     val source: String = "",
-) : NavKey
+) : BgmRoute
 
 @Serializable
 data class UserCollectionsRoute(
     val initialType: Int = 3,
-) : NavKey
+) : BgmRoute
 
 @Serializable
 data class EpisodeDetailRoute(
@@ -56,7 +62,7 @@ data class EpisodeDetailRoute(
     val episodeType: Int = 0,
     val episodeName: String = "",
     val episodeNameCn: String = "",
-) : NavKey
+) : BgmRoute
 
 /**
  * 标签专题条目路由（从条目详情页点击热门标签触发）；
@@ -66,4 +72,4 @@ data class EpisodeDetailRoute(
 data class TagSubjectsRoute(
     val tag: String,
     val initialType: Int = 0,
-) : NavKey
+) : BgmRoute
