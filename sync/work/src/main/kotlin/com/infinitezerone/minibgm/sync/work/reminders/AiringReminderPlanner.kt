@@ -27,8 +27,11 @@ object AiringReminderPlanner {
     }
 
     /**
-     * 开播前提醒：挑选已进入提前窗口（0 < 距开播 ≤ leadMinutes）且当日尚未提醒过的单集。
+     * 开播前提醒：挑选已进入提前窗口（0 < 距开播 ≤ leadMinutes）且尚未提醒过的单集。
      * 不受每日提醒时刻约束——临近开播的时间敏感提醒需要实时发出。
+     *
+     * 去重按内容键（subjectId:episode:airAtUtc）跨日生效：临近午夜开播的剧集在日期
+     * 翻转前后各进入一次窗口时不会重复提醒；日期前缀仅用于存储侧按天裁剪过期键。
      */
     fun pickPreAir(
         enabled: Boolean,
@@ -41,18 +44,21 @@ object AiringReminderPlanner {
     ): List<UpcomingAiring> {
         if (!enabled) return emptyList()
         if (!isLoggedIn) return emptyList()
-        val notifiedToday = notifiedKeys.filter { it.startsWith("$today:") }.toSet()
+        val notifiedContent = notifiedKeys.map { it.substringAfter(':') }.toSet()
         return upcoming.filter { item ->
             val airAt = runCatching { TimeUtils.epochMillisOfIso(item.airAtUtc) }.getOrNull()
             val deltaMillis = airAt?.let { it - nowEpochMillis } ?: 0L
             deltaMillis in 1..leadMinutes * 60_000L &&
-                preAirKey(today, item) !in notifiedToday
+                preAirContentKey(item) !in notifiedContent
         }
     }
 
-    /** 逐集提醒去重键；日期前缀让读取侧可以天然裁剪掉过期键 */
+    /** 逐集提醒存储键；日期前缀让读取侧可以天然裁剪掉过期键 */
     fun preAirKey(
         today: String,
         item: UpcomingAiring,
-    ): String = "$today:${item.subjectId}:${item.episode}"
+    ): String = "$today:${preAirContentKey(item)}"
+
+    /** 跨日稳定的去重内容键：同一集（含同话数重播的不同时刻）只提醒一次 */
+    fun preAirContentKey(item: UpcomingAiring): String = "${item.subjectId}:${item.episode}:${item.airAtUtc}"
 }
