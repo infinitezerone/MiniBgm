@@ -164,7 +164,10 @@ class UserViewModel(
                     if (currentProfile != null) {
                         refreshCollectionCounts(currentProfile, force = true)
                     }
-                    collectionRepository.syncWatchingCollections()
+                    // 追番收藏同步失败必须反映到刷新结果，否则 UI 会误报成功、用户停留在过期收藏数据上
+                    if (collectionRepository.syncWatchingCollections() is AppResult.Error) {
+                        success = false
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

@@ -247,6 +247,29 @@ class UserViewModelTest {
         }
 
     @Test
+    fun refresh_reportsFailure_whenCollectionsSyncFails() =
+        runTest {
+            // 回归：追番收藏同步失败曾被静默丢弃，下拉刷新误报成功，
+            // 用户会停留在过期的收藏数据上
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.syncWatchingResult = AppResult.Error(RuntimeException("offline"), "网络异常")
+            collectionRepo.sendCollection(com.infinitezerone.minibgm.core.testing.data.sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            var refreshDone: Boolean? = null
+            viewModel.refresh { success ->
+                refreshDone = success
+            }
+
+            assertEquals(false, refreshDone)
+        }
+
+    @Test
     fun settingsChange_doesNotTriggerCollectionCountsReload() =
         runTest {
             val authRepo =
