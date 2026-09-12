@@ -80,47 +80,47 @@ class EpisodeDetailViewModel(
         refreshJob?.cancel()
         refreshJob =
             viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isRefreshing = isUserPullToRefresh,
-                    isCommentsLoading = true,
-                    error = null,
-                )
-            }
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = isUserPullToRefresh,
+                        isCommentsLoading = true,
+                        error = null,
+                    )
+                }
 
-            // 若分集本地尚未载入，先同步拉取条目分集列表
-            if (_uiState.value.episode == null) {
-                val epResult = subjectRepository.fetchEpisodes(subjectId)
-                if (epResult is AppResult.Success) {
-                    val ep = epResult.data.firstOrNull { it.id == episodeId }
-                    if (ep != null) {
-                        _uiState.update { it.copy(episode = ep, isLoading = false) }
+                // 若分集本地尚未载入，先同步拉取条目分集列表
+                if (_uiState.value.episode == null) {
+                    val epResult = subjectRepository.fetchEpisodes(subjectId)
+                    if (epResult is AppResult.Success) {
+                        val ep = epResult.data.firstOrNull { it.id == episodeId }
+                        if (ep != null) {
+                            _uiState.update { it.copy(episode = ep, isLoading = false) }
+                        }
+                    }
+                }
+
+                // 拉取分集吐槽短评
+                val commentsResult = communityRepository.getEpisodeComments(episodeId)
+                _uiState.update { current ->
+                    when (commentsResult) {
+                        is AppResult.Success ->
+                            current.copy(
+                                comments = commentsResult.data,
+                                isCommentsLoading = false,
+                                isRefreshing = false,
+                                isLoading = false,
+                            )
+                        is AppResult.Error ->
+                            current.copy(
+                                isCommentsLoading = false,
+                                isRefreshing = false,
+                                isLoading = false,
+                                error = if (current.comments.isEmpty()) commentsResult.message else null,
+                            )
+                        is AppResult.Loading -> current
                     }
                 }
             }
-
-            // 拉取分集吐槽短评
-            val commentsResult = communityRepository.getEpisodeComments(episodeId)
-            _uiState.update { current ->
-                when (commentsResult) {
-                    is AppResult.Success ->
-                        current.copy(
-                            comments = commentsResult.data,
-                            isCommentsLoading = false,
-                            isRefreshing = false,
-                            isLoading = false,
-                        )
-                    is AppResult.Error ->
-                        current.copy(
-                            isCommentsLoading = false,
-                            isRefreshing = false,
-                            isLoading = false,
-                            error = if (current.comments.isEmpty()) commentsResult.message else null,
-                        )
-                    is AppResult.Loading -> current
-                }
-            }
-        }
     }
 
     /** 切换当前分集观看打卡状态 */

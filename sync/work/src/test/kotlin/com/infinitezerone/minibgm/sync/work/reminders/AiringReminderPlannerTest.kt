@@ -233,12 +233,27 @@ class AiringReminderPlannerTest {
     }
 
     @Test
-    fun pickPreAir_ignoresKeysFromOtherDays() {
+    fun pickPreAir_dedupesSameAiringAcrossMidnight() {
+        // 回归：临近午夜开播的剧集在日期翻转前后各进入一次窗口，
+        // 去重必须按内容（subjectId:episode:airAtUtc）跨日生效而非按通知日
         val item = airingAt(10)
         val planned =
             pickPreAir(
                 item,
-                notifiedKeys = listOf("2026-09-05:${item.subjectId}:${item.episode}"),
+                notifiedKeys = listOf("2026-09-05:" + AiringReminderPlanner.preAirContentKey(item)),
+            )
+
+        assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun pickPreAir_doesNotDedupeDifferentAirings() {
+        val item = airingAt(10)
+        val otherAiring = item.copy(airAtUtc = "2026-09-07T15:00:00Z")
+        val planned =
+            pickPreAir(
+                item,
+                notifiedKeys = listOf("2026-09-05:" + AiringReminderPlanner.preAirContentKey(otherAiring)),
             )
 
         assertEquals(1, planned.size)
