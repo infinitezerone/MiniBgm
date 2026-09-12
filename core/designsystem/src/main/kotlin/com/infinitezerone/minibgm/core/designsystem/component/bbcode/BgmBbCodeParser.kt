@@ -94,7 +94,6 @@ sealed interface BbInlineElement {
  * 具备极高容错性，针对未闭合标签或畸形输入提供平滑降级，确保永不崩溃。
  */
 object BgmBbCodeParser {
-    private val QUOTE_REGEX = Regex("""\[quote\]([\s\S]*?)\[/quote\]""", RegexOption.IGNORE_CASE)
     private val FULL_IMG_REGEX = Regex("""\[img((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/img\]""", RegexOption.IGNORE_CASE)
     private val MASKED_IMG_REGEX =
         Regex("""\[__bgm_masked_img__((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/__bgm_masked_img__\]""", RegexOption.IGNORE_CASE)
@@ -147,6 +146,42 @@ object BgmBbCodeParser {
     }
 
     /**
+     * 从 [from] 起查找平衡的 [quote]...[/quote]（支持嵌套），返回 整块区间 to 内容区间。
+     * 未闭合时内容取到文末（平滑降级）；找不到返回 null。
+     */
+    private fun findBalancedQuote(
+        text: String,
+        from: Int,
+    ): Pair<IntRange, IntRange>? {
+        val open = text.indexOf("[quote]", from, ignoreCase = true)
+        if (open < 0) return null
+        val contentStart = open + "[quote]".length
+        var depth = 1
+        var idx = contentStart
+        while (idx <= text.length) {
+            val nextOpen = text.indexOf("[quote]", idx, ignoreCase = true)
+            val nextClose = text.indexOf("[/quote]", idx, ignoreCase = true)
+            when {
+                // 未闭合：内容取到文末
+                nextClose < 0 -> return (open..text.lastIndex) to (contentStart..text.lastIndex)
+                // 嵌套的开标签出现在下一个闭标签之前
+                nextOpen in 0 until nextClose -> {
+                    depth++
+                    idx = nextOpen + "[quote]".length
+                }
+                else -> {
+                    depth--
+                    if (depth == 0) {
+                        return (open..(nextClose + "[/quote]".length - 1)) to (contentStart until nextClose)
+                    }
+                    idx = nextClose + "[/quote]".length
+                }
+            }
+        }
+        return (open..text.lastIndex) to (contentStart..text.lastIndex)
+    }
+
+    /**
      * 将原始评论文本解析为块级语法树列表
      */
     fun parseBlocks(rawText: String): List<BbCodeBlock> {
@@ -158,32 +193,37 @@ object BgmBbCodeParser {
         val blocks = mutableListOf<BbCodeBlock>()
         var currentIndex = 0
 
-        // 统一匹配 [quote]...[/quote]、[__bgm_masked_img__...] 与 [img ...]...[/img] 块级元素
-        val blockRegex =
+        // 非引用块级元素（屏蔽图 / 普通图片）
+        val imgBlockRegex =
             Regex(
-                """(\[quote\][\s\S]*?\[/quote\]|\[__bgm_masked_img__(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/__bgm_masked_img__\]|\[img(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/img\])""",
+                """(\[__bgm_masked_img__(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/__bgm_masked_img__\]|\[img(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/img\])""",
                 RegexOption.IGNORE_CASE,
             )
-        val matches = blockRegex.findAll(preprocessed)
 
-        for (match in matches) {
-            val range = match.range
-            if (range.first > currentIndex) {
-                val textSegment = preprocessed.substring(currentIndex, range.first).trim()
-                if (textSegment.isNotEmpty()) {
-                    blocks.add(parseParagraph(textSegment))
+        while (currentIndex <= preprocessed.lastIndex) {
+            val quote = findBalancedQuote(preprocessed, currentIndex)
+            val imgMatch = imgBlockRegex.find(preprocessed, currentIndex)
+            val nextQuoteStart = quote?.first?.first ?: Int.MAX_VALUE
+            val nextImgStart = imgMatch?.range?.first ?: Int.MAX_VALUE
+
+            if (nextQuoteStart == Int.MAX_VALUE && nextImgStart == Int.MAX_VALUE) {
+                // 剩余纯文本
+                val remaining = preprocessed.substring(currentIndex).trim()
+                if (remaining.isNotEmpty()) {
+                    blocks.add(parseParagraph(remaining))
                 }
+                break
             }
 
-            val matchedStr = match.value
-            if (matchedStr.startsWith("[quote", ignoreCase = true)) {
-                val quoteInner =
-                    QUOTE_REGEX
-                        .find(matchedStr)
-                        ?.groupValues
-                        ?.get(1)
-                        ?.trim()
-                        .orEmpty()
+            if (nextQuoteStart <= nextImgStart) {
+                val (blockRange, contentRange) = quote!!
+                if (blockRange.first > currentIndex) {
+                    val textSegment = preprocessed.substring(currentIndex, blockRange.first).trim()
+                    if (textSegment.isNotEmpty()) {
+                        blocks.add(parseParagraph(textSegment))
+                    }
+                }
+                val quoteInner = preprocessed.substring(contentRange).trim()
                 val authorMatch = QUOTE_AUTHOR_REGEX.find(quoteInner)
                 if (authorMatch != null) {
                     val author = authorMatch.groupValues[1].trim()
@@ -192,35 +232,32 @@ object BgmBbCodeParser {
                 } else {
                     blocks.add(BbCodeBlock.Quote(author = null, content = quoteInner))
                 }
-            } else if (matchedStr.startsWith("[__bgm_masked_img__", ignoreCase = true)) {
-                val matchResult = MASKED_IMG_REGEX.find(matchedStr)
+                currentIndex = blockRange.last + 1
+            } else {
+                val match = imgMatch!!
+                if (match.range.first > currentIndex) {
+                    val textSegment = preprocessed.substring(currentIndex, match.range.first).trim()
+                    if (textSegment.isNotEmpty()) {
+                        blocks.add(parseParagraph(textSegment))
+                    }
+                }
+                val matchedStr = match.value
+                val isMasked = matchedStr.startsWith("[__bgm_masked_img__", ignoreCase = true)
+                val matchResult =
+                    if (isMasked) {
+                        MASKED_IMG_REGEX.find(matchedStr)
+                    } else {
+                        FULL_IMG_REGEX.find(matchedStr)
+                    }
                 if (matchResult != null) {
                     val tagArgs = matchResult.groupValues[1]
                     val imgUrl = matchResult.groupValues[2].trim()
                     val (w, h) = parseImageDimensions(tagArgs)
                     if (imgUrl.isNotBlank()) {
-                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = true))
+                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = isMasked))
                     }
                 }
-            } else if (matchedStr.startsWith("[img", ignoreCase = true)) {
-                val matchResult = FULL_IMG_REGEX.find(matchedStr)
-                if (matchResult != null) {
-                    val tagArgs = matchResult.groupValues[1]
-                    val imgUrl = matchResult.groupValues[2].trim()
-                    val (w, h) = parseImageDimensions(tagArgs)
-                    if (imgUrl.isNotBlank()) {
-                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = false))
-                    }
-                }
-            }
-
-            currentIndex = range.last + 1
-        }
-
-        if (currentIndex < preprocessed.length) {
-            val remaining = preprocessed.substring(currentIndex).trim()
-            if (remaining.isNotEmpty()) {
-                blocks.add(parseParagraph(remaining))
+                currentIndex = match.range.last + 1
             }
         }
 
@@ -371,12 +408,65 @@ object BgmBbCodeParser {
             '’',
         )
 
+    /** 行内样式的可继承表示：嵌套标签时子元素在父样式上叠加 */
+    private data class InlineStyle(
+        val isBold: Boolean = false,
+        val isItalic: Boolean = false,
+        val isUnderline: Boolean = false,
+        val isStrikethrough: Boolean = false,
+        val url: String? = null,
+    ) {
+        val isEmpty: Boolean
+            get() = !isBold && !isItalic && !isUnderline && !isStrikethrough && url == null
+    }
+
+    private fun InlineStyle.merge(other: InlineStyle): InlineStyle =
+        InlineStyle(
+            isBold = isBold || other.isBold,
+            isItalic = isItalic || other.isItalic,
+            isUnderline = isUnderline || other.isUnderline,
+            isStrikethrough = isStrikethrough || other.isStrikethrough,
+            url = other.url ?: url,
+        )
+
+    private fun applyStyle(
+        elements: List<BbInlineElement>,
+        style: InlineStyle,
+    ): List<BbInlineElement> =
+        elements.map { element ->
+            when (element) {
+                is BbInlineElement.Plain ->
+                    BbInlineElement.Styled(
+                        text = element.text,
+                        isBold = style.isBold,
+                        isItalic = style.isItalic,
+                        isUnderline = style.isUnderline,
+                        isStrikethrough = style.isStrikethrough,
+                        url = style.url,
+                    )
+                is BbInlineElement.Styled ->
+                    element.copy(
+                        isBold = element.isBold || style.isBold,
+                        isItalic = element.isItalic || style.isItalic,
+                        isUnderline = element.isUnderline || style.isUnderline,
+                        isStrikethrough = element.isStrikethrough || style.isStrikethrough,
+                        url = element.url ?: style.url,
+                    )
+                else -> element // Mask / Sticker 保持原样
+            }
+        }
+
     /**
-     * 解析基础格式化标签：[b], [i], [s], [u], [url] 以及裸 URL 链接识别
+     * 解析基础格式化标签：[b], [i], [s], [u], [url] 以及裸 URL 链接识别。
+     * 支持嵌套（如 [b]粗体[i]粗斜体[/i][/b]）：子标签在父样式上递归叠加，
+     * 未被任何标签识别的内容原样保留，不会把原始标签文本渲染给用户。
      */
-    private fun parseFormattedText(text: String): List<BbInlineElement> {
+    private fun parseFormattedText(
+        text: String,
+        style: InlineStyle = InlineStyle(),
+    ): List<BbInlineElement> {
         if (!text.contains('[') || !text.contains(']')) {
-            return parsePlainAndRawUrls(text)
+            return parsePlainAndRawUrls(text, style)
         }
 
         val results = mutableListOf<BbInlineElement>()
@@ -389,7 +479,7 @@ object BgmBbCodeParser {
             if (range.first > currentIndex) {
                 val plainPart = text.substring(currentIndex, range.first)
                 if (plainPart.isNotEmpty()) {
-                    results.addAll(parsePlainAndRawUrls(plainPart))
+                    results.addAll(parsePlainAndRawUrls(plainPart, style))
                 }
             }
 
@@ -402,36 +492,29 @@ object BgmBbCodeParser {
             val innerContent = match.groups[3]?.value.orEmpty()
 
             when (tagName) {
-                "b" -> {
-                    results.add(BbInlineElement.Styled(text = innerContent, isBold = true))
-                }
-                "i" -> {
-                    results.add(BbInlineElement.Styled(text = innerContent, isItalic = true))
-                }
-                "s" -> {
-                    results.add(BbInlineElement.Styled(text = innerContent, isStrikethrough = true))
-                }
-                "u" -> {
-                    results.add(BbInlineElement.Styled(text = innerContent, isUnderline = true))
-                }
+                "b" -> results.addAll(applyStyle(parseFormattedText(innerContent, style), style.copy(isBold = true)))
+                "i" -> results.addAll(applyStyle(parseFormattedText(innerContent, style), style.copy(isItalic = true)))
+                "s" ->
+                    results.addAll(
+                        applyStyle(parseFormattedText(innerContent, style), style.copy(isStrikethrough = true)),
+                    )
+                "u" ->
+                    results.addAll(
+                        applyStyle(parseFormattedText(innerContent, style), style.copy(isUnderline = true)),
+                    )
                 "url" -> {
                     val url = tagArg?.ifBlank { null } ?: innerContent.trim()
-                    val isRawUrlDisplay = tagArg == null || innerContent.trim().equals(url, ignoreCase = true)
-                    val displayText =
-                        if (isRawUrlDisplay) {
-                            val link = BgmUrlParser.parse(url)
-                            if (link !is BgmLink.External) {
-                                BgmUrlParser.formatDisplayLabel(link)
-                            } else {
-                                innerContent
-                            }
-                        } else {
-                            innerContent
-                        }
-                    results.add(BbInlineElement.Styled(text = displayText, url = url, isUnderline = true))
+                    // 子内容递归解析：内容即 URL 时裸链接自动美化 Bangumi 文案，
+                    // 自定义文案则作为 Plain 被叠加 url + 下划线样式
+                    results.addAll(
+                        applyStyle(
+                            parseFormattedText(innerContent, style),
+                            style.merge(InlineStyle(isUnderline = true, url = url)),
+                        ),
+                    )
                 }
                 else -> {
-                    results.add(BbInlineElement.Plain(innerContent))
+                    results.addAll(parsePlainAndRawUrls(innerContent, style))
                 }
             }
 
@@ -441,19 +524,30 @@ object BgmBbCodeParser {
         if (currentIndex < text.length) {
             val remaining = text.substring(currentIndex)
             if (remaining.isNotEmpty()) {
-                results.addAll(parsePlainAndRawUrls(remaining))
+                results.addAll(parsePlainAndRawUrls(remaining, style))
             }
         }
 
-        return if (results.isEmpty()) listOf(BbInlineElement.Plain(text)) else results
+        return if (results.isEmpty()) {
+            applyStyle(listOf(BbInlineElement.Plain(text)), style)
+        } else {
+            results
+        }
     }
 
     /**
      * 解析普通文本段落中的裸 URL（Autolink），并自动美化 Bangumi 内部链接文案
      */
-    private fun parsePlainAndRawUrls(text: String): List<BbInlineElement> {
+    private fun parsePlainAndRawUrls(
+        text: String,
+        style: InlineStyle = InlineStyle(),
+    ): List<BbInlineElement> {
         if (!text.contains("http://", ignoreCase = true) && !text.contains("https://", ignoreCase = true)) {
-            return if (text.isNotEmpty()) listOf(BbInlineElement.Plain(text)) else emptyList()
+            return when {
+                text.isEmpty() -> emptyList()
+                style.isEmpty -> listOf(BbInlineElement.Plain(text))
+                else -> applyStyle(listOf(BbInlineElement.Plain(text)), style)
+            }
         }
 
         val results = mutableListOf<BbInlineElement>()
@@ -465,7 +559,13 @@ object BgmBbCodeParser {
             if (range.first > currentIndex) {
                 val plainBefore = text.substring(currentIndex, range.first)
                 if (plainBefore.isNotEmpty()) {
-                    results.add(BbInlineElement.Plain(plainBefore))
+                    results.add(
+                        if (style.isEmpty) {
+                            BbInlineElement.Plain(plainBefore)
+                        } else {
+                            applyStyle(listOf(BbInlineElement.Plain(plainBefore)), style).first()
+                        },
+                    )
                 }
             }
 
@@ -484,10 +584,25 @@ object BgmBbCodeParser {
                     } else {
                         rawUrl
                     }
-                results.add(BbInlineElement.Styled(text = displayText, url = rawUrl, isUnderline = true))
+                results.add(
+                    BbInlineElement.Styled(
+                        text = displayText,
+                        url = rawUrl,
+                        isUnderline = true,
+                        isBold = style.isBold,
+                        isItalic = style.isItalic,
+                        isStrikethrough = style.isStrikethrough,
+                    ),
+                )
             }
             if (trailingPunct.isNotEmpty()) {
-                results.add(BbInlineElement.Plain(trailingPunct))
+                results.add(
+                    if (style.isEmpty) {
+                        BbInlineElement.Plain(trailingPunct)
+                    } else {
+                        applyStyle(listOf(BbInlineElement.Plain(trailingPunct)), style).first()
+                    },
+                )
             }
 
             currentIndex = range.last + 1
@@ -496,10 +611,20 @@ object BgmBbCodeParser {
         if (currentIndex < text.length) {
             val remaining = text.substring(currentIndex)
             if (remaining.isNotEmpty()) {
-                results.add(BbInlineElement.Plain(remaining))
+                results.add(
+                    if (style.isEmpty) {
+                        BbInlineElement.Plain(remaining)
+                    } else {
+                        applyStyle(listOf(BbInlineElement.Plain(remaining)), style).first()
+                    },
+                )
             }
         }
 
-        return if (results.isEmpty()) listOf(BbInlineElement.Plain(text)) else results
+        return if (results.isEmpty()) {
+            applyStyle(listOf(BbInlineElement.Plain(text)), style)
+        } else {
+            results
+        }
     }
 }

@@ -162,12 +162,38 @@ private fun BgmBbCodeQuote(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            BgmBbCodeParagraph(
-                paragraph = remember(quote.content) { BgmBbCodeParser.parseParagraph(quote.content) },
-                style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
-                color = color.copy(alpha = 0.85f),
-                onUrlClick = onUrlClick,
-            )
+            // 引用内容走完整块级管线递归渲染：支持嵌套引用、引用内图片与行内样式，
+            // 内容严格短于原文，递归必然收敛
+            val nestedBlocks =
+                remember(quote.content) { BgmBbCodeParser.parseBlocks(quote.content) }
+            if (nestedBlocks.isEmpty()) {
+                BgmBbCodeParagraph(
+                    paragraph = remember(quote.content) { BgmBbCodeParser.parseParagraph(quote.content) },
+                    style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
+                    color = color.copy(alpha = 0.85f),
+                    onUrlClick = onUrlClick,
+                )
+            } else {
+                nestedBlocks.forEach { block ->
+                    when (block) {
+                        is BbCodeBlock.Quote ->
+                            BgmBbCodeQuote(
+                                quote = block,
+                                style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
+                                color = color.copy(alpha = 0.85f),
+                                onUrlClick = onUrlClick,
+                            )
+                        is BbCodeBlock.Image -> BgmBbCodeImage(image = block, onUrlClick = onUrlClick)
+                        is BbCodeBlock.Paragraph ->
+                            BgmBbCodeParagraph(
+                                paragraph = block,
+                                style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
+                                color = color.copy(alpha = 0.85f),
+                                onUrlClick = onUrlClick,
+                            )
+                    }
+                }
+            }
         }
     }
 }
