@@ -479,4 +479,38 @@ class SearchViewModelTest {
             assertTrue(url.contains("bgm.tv/oauth/authorize"))
             assertEquals(1, authRepo.beginLoginCallCount)
         }
+
+    @Test
+    fun loadMore_advancesServerCursor_pastOverlappingPages() =
+        runTest {
+            // 回归：翻页 offset 曾用去重后的列表长度——当服务端某页与已有结果重叠
+            // （数据漂移），去重使列表长度停滞，offset 永远追不上，翻页在重叠区间死循环
+            val searchRepo = FakeSearchRepository()
+            val initialPage = SearchResult(total = 50, list = (1L..20L).map { sampleSubject.copy(id = it) })
+            searchRepo.searchResult = AppResult.Success(initialPage)
+            val viewModel = createViewModel(searchRepo = searchRepo)
+
+            viewModel.search("fate")
+            advanceUntilIdle()
+            assertEquals(20, viewModel.uiState.value.results.size)
+
+            // 第二页与首页重叠（ids 15-34，重叠 6 条）：去重后列表仅长 34
+            val overlappingPage = SearchResult(total = 50, list = (15L..34L).map { sampleSubject.copy(id = it) })
+            searchRepo.searchResult = AppResult.Success(overlappingPage)
+            viewModel.loadMore()
+            advanceUntilIdle()
+            assertEquals(34, viewModel.uiState.value.results.size)
+            assertTrue(viewModel.uiState.value.hasMore)
+
+            // 第三页请求 offset 必须是 40（服务端游标 = 20 + 20），而非列表长度 34；
+            // 否则请求 offset=34 会再次返回重叠区间，翻页死循环
+            val thirdPage = SearchResult(total = 50, list = (35L..44L).map { sampleSubject.copy(id = it) })
+            searchRepo.searchResult = AppResult.Success(thirdPage)
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(3, searchRepo.searchCallCount)
+            assertEquals(40, searchRepo.lastSearchOffset)
+            assertEquals(44, viewModel.uiState.value.results.size)
+        }
 }

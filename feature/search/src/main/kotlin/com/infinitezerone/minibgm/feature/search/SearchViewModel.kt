@@ -43,6 +43,13 @@ class SearchViewModel(
     private var searchJob: Job? = null
     private var loadMoreJob: Job? = null
 
+    /**
+     * 服务端分页游标：翻页 offset 必须用"已向服务端索取的条目数"推进，
+     * 而非去重后的列表长度——服务端数据漂移导致某页与已有结果重叠时，
+     * 去重会让列表长度停滞，若用列表长度做 offset 会在重叠区间死循环。
+     */
+    private var serverCursor = 0
+
     // 存储未排序的原始搜索数据，方便即时客户端切换排序
     private var rawSearchResults: List<Subject> = emptyList()
 
@@ -258,7 +265,7 @@ class SearchViewModel(
         loadMoreJob =
             viewModelScope.launch {
                 _uiState.update { it.copy(isLoadingMore = true) }
-                val currentOffset = rawSearchResults.size
+                val currentOffset = serverCursor
                 when (
                     val result =
                         searchRepository.searchSubjects(
@@ -274,6 +281,8 @@ class SearchViewModel(
                         val existingIds = rawSearchResults.map { s -> s.id }.toSet()
                         val uniqueNew = newItems.filter { it.id !in existingIds }
                         rawSearchResults = rawSearchResults + uniqueNew
+                        // 游标按服务端实际返回条数推进，与去重后的列表长度解耦
+                        serverCursor = currentOffset + newItems.size
                         val newTotal = if (result.data.total > 0) result.data.total else state.totalCount
                         val sorted = sortResults(rawSearchResults, state.selectedSort)
 
@@ -334,6 +343,7 @@ class SearchViewModel(
                     is AppResult.Success -> {
                         val data = result.data
                         rawSearchResults = data.list
+                        serverCursor = data.list.size
                         val sorted = sortResults(data.list, sort)
                         _uiState.update {
                             it.copy(
