@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
+import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.sync.work.R
 
 /**
@@ -27,15 +28,13 @@ class AiringReminderNotifier(
 
     fun notify(upcoming: List<UpcomingAiring>) {
         val manager = NotificationManagerCompat.from(context)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    context.getString(R.string.airing_reminder_channel_name),
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ),
-            )
-        }
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.airing_reminder_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ),
+        )
 
         val listText =
             upcoming.joinToString("\n") { item ->
@@ -60,15 +59,13 @@ class AiringReminderNotifier(
      */
     fun notifyImminent(upcoming: List<UpcomingAiring>) {
         val manager = NotificationManagerCompat.from(context)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    PRE_AIR_CHANNEL_ID,
-                    context.getString(R.string.airing_pre_air_channel_name),
-                    NotificationManager.IMPORTANCE_HIGH,
-                ),
-            )
-        }
+        manager.createNotificationChannel(
+            NotificationChannel(
+                PRE_AIR_CHANNEL_ID,
+                context.getString(R.string.airing_pre_air_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ),
+        )
 
         val listText =
             upcoming.joinToString("\n") { item ->
@@ -103,8 +100,8 @@ class AiringReminderNotifier(
     private fun launchAppIntent(): PendingIntent? {
         val launch =
             context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-                // 与 :app MainActivity.EXTRA_OPEN_SCHEDULE 契约对齐（模块边界不允许直接引用）
-                putExtra("open_schedule", true)
+                // 编译期契约：extra 键与 :app MainActivity 消费端共用 BgmNavIntents 常量
+                putExtra(BgmNavIntents.EXTRA_OPEN_SCHEDULE, true)
             } ?: return null
         return PendingIntent.getActivity(
             context,
