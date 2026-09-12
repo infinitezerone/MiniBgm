@@ -209,34 +209,13 @@ class ExploreViewModel(
             viewModelScope.launch {
                 _uiState.update { it.copy(isLoadingMore = true) }
 
-                val rankFilter =
-                    if (currentState.selectedSort in setOf(ExploreSort.RANK, ExploreSort.SCORE) ||
-                        currentState.selectedMood == ExploreMood.MASTERPIECE
-                    ) {
-                        listOf(">0")
-                    } else {
-                        null
-                    }
-
-                val filter =
-                    SearchFilter(
-                        type = currentState.selectedCategory.type?.let { listOf(it) },
-                        tag = currentState.selectedTags.toList().ifEmpty { null },
-                        airDate = currentState.selectedSeason.airDateFilter,
-                        rank = rankFilter,
-                        nsfw = false,
-                    )
-                val request =
-                    SearchSubjectsRequest(
-                        sort = currentState.selectedSort.sortKey,
-                        filter = filter,
-                    )
-
-                val offset = currentState.subjects.size
+                // 翻页 offset 必须用服务端游标 pageOffset 而非 subjects.size：
+                // 去重可能丢弃部分返回条目，两者一旦错位就会跳过或重复返回数据
+                val offset = currentState.pageOffset
                 when (
                     val result =
                         searchRepository.searchSubjectsAdvanced(
-                            request = request,
+                            request = buildExploreRequest(currentState),
                             limit = PAGE_SIZE,
                             offset = offset,
                         )
@@ -269,11 +248,36 @@ class ExploreViewModel(
             }
     }
 
+    /** 统一构建探索页搜索请求，避免首屏与翻页两份 filter 逻辑漂移 */
+    private fun buildExploreRequest(state: ExploreUiState): SearchSubjectsRequest {
+        val rankFilter =
+            if (state.selectedSort in setOf(ExploreSort.RANK, ExploreSort.SCORE) ||
+                state.selectedMood == ExploreMood.MASTERPIECE
+            ) {
+                listOf(">0")
+            } else {
+                null
+            }
+        val filter =
+            SearchFilter(
+                type = state.selectedCategory.type?.let { listOf(it) },
+                tag = state.selectedTags.toList().ifEmpty { null },
+                airDate = state.selectedSeason.airDateFilter,
+                rank = rankFilter,
+                nsfw = false,
+            )
+        return SearchSubjectsRequest(
+            sort = state.selectedSort.sortKey,
+            filter = filter,
+        )
+    }
+
     private fun loadDiscovery(isRefresh: Boolean = false) {
         fetchJob?.cancel()
         loadMoreJob?.cancel()
         hotCommentsJob?.cancel()
         val currentState = _uiState.value
+        val request = buildExploreRequest(currentState)
         fetchJob =
             viewModelScope.launch {
                 _uiState.update {
@@ -283,29 +287,6 @@ class ExploreViewModel(
                         it.copy(isLoading = true, hotComments = emptyMap(), error = null)
                     }
                 }
-
-                val rankFilter =
-                    if (currentState.selectedSort in setOf(ExploreSort.RANK, ExploreSort.SCORE) ||
-                        currentState.selectedMood == ExploreMood.MASTERPIECE
-                    ) {
-                        listOf(">0")
-                    } else {
-                        null
-                    }
-
-                val filter =
-                    SearchFilter(
-                        type = currentState.selectedCategory.type?.let { listOf(it) },
-                        tag = currentState.selectedTags.toList().ifEmpty { null },
-                        airDate = currentState.selectedSeason.airDateFilter,
-                        rank = rankFilter,
-                        nsfw = false,
-                    )
-                val request =
-                    SearchSubjectsRequest(
-                        sort = currentState.selectedSort.sortKey,
-                        filter = filter,
-                    )
 
                 when (val result = searchRepository.searchSubjectsAdvanced(request = request, limit = PAGE_SIZE, offset = 0)) {
                     is AppResult.Success -> {

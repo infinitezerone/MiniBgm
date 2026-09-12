@@ -18,6 +18,10 @@ class FakeSearchRepository : SearchRepository {
         private set
     var lastAdvancedRequest: SearchSubjectsRequest? = null
         private set
+    var lastAdvancedOffset: Int? = null
+        private set
+    var lastAdvancedLimit: Int? = null
+        private set
     var advancedSearchResult: AppResult<List<Subject>> = AppResult.Success(emptyList())
 
     private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
@@ -68,6 +72,8 @@ class FakeSearchRepository : SearchRepository {
     ): AppResult<List<Subject>> {
         advancedSearchCallCount++
         lastAdvancedRequest = request
+        lastAdvancedOffset = offset
+        lastAdvancedLimit = limit
         return advancedSearchResult
     }
 }
