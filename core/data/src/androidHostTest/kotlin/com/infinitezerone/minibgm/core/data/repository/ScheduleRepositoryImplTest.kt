@@ -119,9 +119,15 @@ class ScheduleRepositoryImplTest {
     private class FakeAniListService : AniListService {
         var schedules: Map<Long, List<AniListAiringEpisode>> = emptyMap()
         var requestedIds: List<Long> = emptyList()
+        var requestedWindow: Pair<Long?, Long?>? = null
 
-        override suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>> {
+        override suspend fun getAiringSchedules(
+            anilistIds: List<Long>,
+            fromEpochSeconds: Long?,
+            toEpochSeconds: Long?,
+        ): Map<Long, List<AniListAiringEpisode>> {
             requestedIds = anilistIds
+            requestedWindow = fromEpochSeconds to toEpochSeconds
             return schedules.filterKeys { it in anilistIds.toSet() }
         }
     }
@@ -754,6 +760,12 @@ class ScheduleRepositoryImplTest {
             val result = repo.syncBangumiData(force = true)
 
             assertIs<AppResult.Success<Unit>>(result)
+            // 窗口回归：AniList 查询必须带时间窗口（上游默认 perPage 仅 20，
+            // 无窗口时超过 20 话的在播条目取不到当前周期，nextEpisode 冻结在旧话数）；
+            // 锚点（开播时刻）必须落在回看窗内，否则偏移推导无法进行
+            val (fromEpoch, toEpoch) = anilist.requestedWindow!!
+            assertEquals(beginMillis / 1000 >= fromEpoch!!, true)
+            assertEquals(toEpoch!! >= TimeUtils.nowEpochMillis() / 1000, true)
             // 逐话事件已按偏移换算成 bgm 话数（第 1/2 话）
             val storedEvents = airEventDao.getAllAirEvents()
             assertEquals(setOf(1, 2), storedEvents.map { it.episode }.toSet())
