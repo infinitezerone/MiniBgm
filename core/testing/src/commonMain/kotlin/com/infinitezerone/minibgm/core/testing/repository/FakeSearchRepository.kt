@@ -12,6 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
 class FakeSearchRepository : SearchRepository {
     var searchCallCount: Int = 0
         private set
+    var lastSearchOffset: Int? = null
+        private set
+    var lastSearchLimit: Int? = null
+        private set
     var searchResult: AppResult<SearchResult> = AppResult.Success(SearchResult())
 
     var advancedSearchCallCount: Int = 0
@@ -62,6 +66,8 @@ class FakeSearchRepository : SearchRepository {
     ): AppResult<SearchResult> {
         searchCallCount++
         lastSort = sort
+        lastSearchOffset = offset
+        lastSearchLimit = limit
         return searchResult
     }
 
