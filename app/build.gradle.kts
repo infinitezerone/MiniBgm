@@ -70,6 +70,7 @@ dependencies {
     implementation(project(":feature:subject"))
     implementation(project(":feature:search"))
     implementation(project(":feature:widget"))
+    implementation(project(":feature:agent"))
     implementation(project(":sync:work"))
 
     implementation(libs.koin.androidx.workmanager)
