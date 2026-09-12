@@ -35,25 +35,32 @@ class BgmSyncWorker(
             val startTime = TimeUtils.nowEpochMillis()
             log.d { "[SYNC_WORKER:START] attempt=$runAttemptCount" }
             val scheduleResult = scheduleRepository.syncBangumiData(force = false)
-            if (tokenProvider.activeUserId.first() != null) {
-                collectionRepository.syncWatchingCollections()
-            }
+            // 追番收藏是用户核心数据，同步失败必须参与重试判定而非静默吞掉；
+            // 重试成本低：时刻表侧有 ETag，304 不会重复拉全量
+            val collectionError =
+                if (tokenProvider.activeUserId.first() != null) {
+                    collectionRepository.syncWatchingCollections() as? AppResult.Error
+                } else {
+                    null
+                }
             val duration = TimeUtils.nowEpochMillis() - startTime
-            when (scheduleResult) {
-                is AppResult.Success -> {
+            val failure = scheduleResult as? AppResult.Error ?: collectionError
+            when (failure) {
+                is AppResult.Error -> {
+                    log.e(failure.throwable) {
+                        "[SYNC_WORKER:FAILED] took ${duration}ms attempt=$runAttemptCount " +
+                            "message=${failure.throwable.message} " +
+                            "stage=${if (scheduleResult is AppResult.Error) "schedule" else "collections"}"
+                    }
+                    if (runAttemptCount < 3) Result.retry() else Result.failure()
+                }
+                else -> {
                     log.i { "[SYNC_WORKER:SUCCESS] took ${duration}ms notify syncCompletionObserver" }
                     // 新排期已写入本地，通知下游（如桌面小组件）自行刷新：数据一到就上屏，
                     // 而不是等下一次心跳。具体消费方由 SyncCompletionObserver 接口解耦。
                     syncCompletionObserver.onSyncSucceeded()
                     Result.success()
                 }
-                is AppResult.Error -> {
-                    log.e(scheduleResult.throwable) {
-                        "[SYNC_WORKER:FAILED] took ${duration}ms attempt=$runAttemptCount message=${scheduleResult.throwable.message}"
-                    }
-                    if (runAttemptCount < 3) Result.retry() else Result.failure()
-                }
-                is AppResult.Loading -> Result.success()
             }
         }
 
