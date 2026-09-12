@@ -103,6 +103,22 @@ class AgentChatViewModel(
                     if (result.stopReason == com.miniagent.agentloop.AgentStopReason.MAX_STEPS) {
                         _uiState.update { it.copy(isThinking = false) }
                     }
+                } catch (ce: kotlinx.coroutines.CancellationException) {
+                    throw ce
+                } catch (e: com.miniagent.provider.cloud.CloudProviderException) {
+                    _uiState.update {
+                        it.copy(
+                            bubbles = it.bubbles + AgentChatBubble(AgentBubbleRole.AGENT, "调用模型失败：${e.message}"),
+                            isThinking = false,
+                        )
+                    }
+                } catch (e: Exception) {
+                    _uiState.update {
+                        it.copy(
+                            bubbles = it.bubbles + AgentChatBubble(AgentBubbleRole.AGENT, "出错了：${e.message ?: e::class.simpleName}"),
+                            isThinking = false,
+                        )
+                    }
                 } finally {
                     _uiState.update { it.copy(isThinking = false) }
                 }
