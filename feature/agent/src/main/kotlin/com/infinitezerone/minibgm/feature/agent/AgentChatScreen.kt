@@ -98,7 +98,7 @@ fun AgentChatScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(items = uiState.bubbles, key = { it.hashCode() }) { bubble ->
+                items(items = uiState.bubbles, key = { it.id }) { bubble ->
                     val alignment = if (bubble.role == AgentBubbleRole.USER) Alignment.End else Alignment.Start
                     val bubbleColor =
                         when (bubble.role) {

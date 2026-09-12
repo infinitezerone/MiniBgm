@@ -19,16 +19,14 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * 回归：线上 v0.2.9 崩溃 —— 模型服务返回非 HTTP 报文（HTML）时，引擎异常
- * 穿透 send() 的 try/finally 导致未捕获崩溃。修复后 Provider 异常必须转成
- * 错误气泡且 isThinking 复位，绝不允许抛出到协程外。
+ * 回归：v0.2.9 崩溃 —— 模型服务返回非 HTTP 报文（HTML）时，引擎异常穿透
+ * send() 导致未捕获崩溃。修复后 Provider 异常必须转成错误气泡且 isThinking 复位。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AgentChatViewModelErrorTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    /** 空 schedule 桩：本组测试只关心模型调用失败路径 */
     private class StubScheduleRepository : ScheduleRepository {
         override fun getSchedulesByWeekday(weekday: Int) = error("unused")
 
@@ -49,10 +47,16 @@ class AgentChatViewModelErrorTest {
         override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) = Unit
     }
 
+    private fun createViewModel(provider: LlmProvider): AgentChatViewModel =
+        AgentChatViewModel(
+            toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
+            providerFactory = { provider },
+        )
+
     @Test
     fun send_modelFailure_becomesErrorBubbleInsteadOfCrash() =
         runTest {
-            val throwingProvider =
+            val provider =
                 object : LlmProvider {
                     override suspend fun complete(request: CompletionRequest): CompletionResponse =
                         throw CloudProviderException(
@@ -60,11 +64,7 @@ class AgentChatViewModelErrorTest {
                             message = "无法连接或解析模型服务响应：Unsupported HTTP version: <html>",
                         )
                 }
-            val viewModel =
-                AgentChatViewModel(
-                    toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
-                    providerFactory = { throwingProvider },
-                )
+            val viewModel = createViewModel(provider)
             viewModel.updateConfig(baseUrl = "https://api.example.com/v1", apiKey = "k", model = "m")
 
             viewModel.send("今天有什么更新")
@@ -84,20 +84,17 @@ class AgentChatViewModelErrorTest {
                     .text
                     .contains("Unsupported HTTP version"),
             )
+            assertEquals(AgentBubbleRole.AGENT, state.bubbles.last().role)
         }
 
     @Test
     fun send_unknownError_becomesErrorBubble() =
         runTest {
-            val throwingProvider =
+            val provider =
                 object : LlmProvider {
                     override suspend fun complete(request: CompletionRequest): CompletionResponse = throw IllegalStateException("weird")
                 }
-            val viewModel =
-                AgentChatViewModel(
-                    toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
-                    providerFactory = { throwingProvider },
-                )
+            val viewModel = createViewModel(provider)
             viewModel.updateConfig("https://x/v1", "k", "m")
 
             viewModel.send("hi")
