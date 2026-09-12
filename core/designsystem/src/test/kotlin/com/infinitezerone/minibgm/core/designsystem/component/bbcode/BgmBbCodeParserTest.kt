@@ -309,4 +309,90 @@ class BgmBbCodeParserTest {
         assertEquals("https://github.com", styled.text)
         assertEquals("https://github.com", styled.url)
     }
+
+    // ---- 嵌套场景（回归） ----
+
+    @Test
+    fun parseBlocks_balancedNestedQuotes_noLiteralTrailingTag() {
+        // 回归：旧实现用惰性正则匹配到第一个 [/quote]，嵌套引用会把剩余文本
+        // "b[/quote]" 泄漏为段落，用户看到字面闭合标签
+        val input = "[quote][quote]inner[/quote]outer[/quote]reply"
+
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(2, blocks.size)
+        val quote = blocks[0] as BbCodeBlock.Quote
+        assertNull(quote.author)
+        assertEquals("[quote]inner[/quote]outer", quote.content)
+        assertTrue(blocks[1] is BbCodeBlock.Paragraph)
+
+        // 引用内容可被再次解析为 嵌套 Quote + 段落（渲染器递归依赖此行为）
+        val nested = BgmBbCodeParser.parseBlocks(quote.content)
+        assertEquals(2, nested.size)
+        assertTrue(nested[0] is BbCodeBlock.Quote)
+        assertEquals("inner", (nested[0] as BbCodeBlock.Quote).content)
+        assertEquals("outer", (nested[1] as BbCodeBlock.Paragraph).rawText)
+    }
+
+    @Test
+    fun parseBlocks_nestedQuoteWithAuthor() {
+        val input = "[quote][b]甲[/b] 说: [quote][b]乙[/b] 说: 原始发言[/quote]同意[/quote]"
+
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(1, blocks.size)
+        val quote = blocks[0] as BbCodeBlock.Quote
+        assertEquals("甲", quote.author)
+        assertEquals("[quote][b]乙[/b] 说: 原始发言[/quote]同意", quote.content)
+    }
+
+    @Test
+    fun parseBlocks_unterminatedQuote_degradesGracefully() {
+        // 未闭合引用：内容取到文末，不崩溃也不丢失
+        val input = "[quote]没有闭合的引用"
+
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(1, blocks.size)
+        assertEquals("没有闭合的引用", (blocks[0] as BbCodeBlock.Quote).content)
+    }
+
+    @Test
+    fun parseParagraph_nestedStyles_mergedFlags() {
+        // 回归：嵌套标签旧实现只吃掉外层，内层标签以字面文本渲染给用户
+        val paragraph =
+            BgmBbCodeParser.parseParagraph("[b]bold [i]bold-italic[/i][/b] plain")
+
+        val bold = paragraph.elements.filterIsInstance<BbInlineElement.Styled>().first()
+        assertEquals("bold ", bold.text)
+        assertTrue(bold.isBold)
+        assertFalse(bold.isItalic)
+
+        val boldItalic = paragraph.elements.filterIsInstance<BbInlineElement.Styled>().last()
+        assertEquals("bold-italic", boldItalic.text)
+        assertTrue(boldItalic.isBold)
+        assertTrue(boldItalic.isItalic)
+
+        assertEquals(
+            " plain",
+            paragraph.elements
+                .filterIsInstance<BbInlineElement.Plain>()
+                .single()
+                .text,
+        )
+    }
+
+    @Test
+    fun parseParagraph_nestedUrlInsideBold_keepsBothStyles() {
+        val paragraph = BgmBbCodeParser.parseParagraph("[b]see [url=https://bgm.tv/subject/1]subject[/url][/b]")
+
+        val styledElements = paragraph.elements.filterIsInstance<BbInlineElement.Styled>()
+        assertEquals(2, styledElements.size)
+        assertEquals("see ", styledElements[0].text)
+        assertTrue(styledElements[0].isBold)
+        assertEquals("subject", styledElements[1].text)
+        assertTrue(styledElements[1].isBold)
+        assertTrue(styledElements[1].isUnderline)
+        assertEquals("https://bgm.tv/subject/1", styledElements[1].url)
+    }
 }
