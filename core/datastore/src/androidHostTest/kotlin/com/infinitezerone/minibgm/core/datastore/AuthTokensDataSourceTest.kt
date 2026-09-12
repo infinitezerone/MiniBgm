@@ -160,4 +160,64 @@ class AuthTokensDataSourceTest {
             assertNull(dataSource.tokens.first())
             assertNull(dataSource.getAccessToken())
         }
+
+    // ---- 边界语义钉子 ----
+
+    @Test
+    fun setActiveUser_forMissingAccount_isNoOp() =
+        runTest {
+            val (dataSource, _) = createDataSource()
+            dataSource.saveTokens(42L, "access_1", "refresh_1")
+
+            dataSource.setActiveUser(999L)
+
+            assertEquals(42L, dataSource.activeUserId.first())
+            assertEquals("access_1", dataSource.getAccessToken())
+        }
+
+    @Test
+    fun removeTokens_lastAccount_clearsSessionCompletely() =
+        runTest {
+            val (dataSource, _) = createDataSource()
+            dataSource.saveTokens(42L, "access_1", "refresh_1")
+
+            dataSource.removeTokens(42L)
+
+            assertNull(dataSource.activeUserId.first())
+            assertNull(dataSource.tokens.first())
+            assertNull(dataSource.getAccessToken())
+        }
+
+    @Test
+    fun removeTokens_otherAccount_keepsActiveUserIntact() =
+        runTest {
+            val (dataSource, _) = createDataSource()
+            dataSource.saveTokens(42L, "access_1", "refresh_1")
+            dataSource.saveTokens(7L, "access_2", "refresh_2")
+
+            dataSource.removeTokens(7L)
+
+            assertEquals(42L, dataSource.activeUserId.first())
+            assertEquals("access_1", dataSource.getAccessToken())
+        }
+
+    @Test
+    fun legacyBlob_withZeroActiveUserId_tokensResolveButSessionStaysLoggedOut() =
+        runTest {
+            // 文档化现行为：legacy 顶层 accessToken 迁移到 accounts[activeUserId]，
+            // 当 activeUserId == 0（哨兵"无用户"）时 tokens 流可解析（客户端仍可带凭据请求），
+            // 但 activeUserId 流过滤 0 → 登录态为 null。若未来调整该语义，此钉子会提示同步
+            // 检查 AuthRepository.isLoggedIn 与 BgmSyncWorker 的登录判据
+            val legacyJson =
+                """{"activeUserId":0,"accounts":{},"accessToken":"legacy-access","refreshToken":"legacy-refresh"}"""
+            // 真实存储的 blob 是 Base64(JSON)（见 AuthBlobSerializer / encodeState）
+            val legacyBlob =
+                java.util.Base64
+                    .getEncoder()
+                    .encodeToString(legacyJson.encodeToByteArray())
+            val (dataSource, _) = createDataSource(initial = legacyBlob)
+
+            assertEquals("legacy-access" to "legacy-refresh", dataSource.tokens.first())
+            assertNull(dataSource.activeUserId.first())
+        }
 }
