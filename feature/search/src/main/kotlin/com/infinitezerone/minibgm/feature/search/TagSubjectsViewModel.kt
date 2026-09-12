@@ -73,6 +73,7 @@ class TagSubjectsViewModel(
                 selectedType = type,
                 subjects = emptyList(),
                 isLoading = true,
+                isLoadingMore = false,
                 errorMessage = null,
                 hasMore = true,
             )
@@ -87,6 +88,7 @@ class TagSubjectsViewModel(
                 selectedSort = sort,
                 subjects = emptyList(),
                 isLoading = true,
+                isLoadingMore = false,
                 errorMessage = null,
                 hasMore = true,
             )
@@ -188,7 +190,10 @@ class TagSubjectsViewModel(
     }
 
     private fun loadSubjects(isRefresh: Boolean = false) {
+        // 与 SearchViewModel.performSearch 对齐：类型/排序/刷新都会使在途的
+        // "加载更多"失效，必须一并取消，否则旧过滤条件的追加结果会混入新列表
         searchJob?.cancel()
+        loadMoreJob?.cancel()
         searchJob =
             viewModelScope.launch {
                 try {
