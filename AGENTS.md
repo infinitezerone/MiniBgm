@@ -31,6 +31,7 @@ Equally binding, but enforced by build config or code structure rather than the 
 ./gradlew :core:navigation:testDebugUnitTest  # Android-only module unit tests; substitute a touched Android module
 ./gradlew :app:assembleDebug                  # assemble debug APK — also the cross-module compile gate
 ./gradlew allTests testDebugUnitTest crapCheck # FULL test suite — only for cross-cutting changes (see rule 2)
+scripts/dual-screen-verify.sh                 # dynamic gate: dual window-size emulator smoke (needs a running device/emulator)
 ```
 
 **Rules for AI agents:**
@@ -40,6 +41,7 @@ Equally binding, but enforced by build config or code structure rather than the 
 3. **Declare dependencies in the catalog first**: add versions/libraries/plugins to `gradle/libs.versions.toml`, then reference them via type-safe accessors (`libs.xxx`).
 4. **Green ≠ tested**: a misnamed or empty test source set fails silently (the `androidUnitTest` → `androidHostTest` incident shipped a build where tests ran zero cases, all green). After any build-script or source-set change, verify the selected task's `build/test-results/<task>/*.xml` exists with `tests > 0` before claiming tests pass — BUILD SUCCESSFUL alone proves nothing.
 5. **Safe ADB screenshots**: never use bare `adb exec-out screencap -p > file.png` (emulator multi-display warnings corrupt PNG magic headers and break multimodal API calls). Always specify `-d 0` (`adb exec-out screencap -d 0 -p > ...`) or capture on-device first (`adb shell screencap -p /data/local/tmp/s.png && adb pull ...`), and verify with `file <file>.png` before passing to `view_file`.
+6. **Dynamic gate for layout/navigation/skeleton changes**: static checks cannot catch split-pane transitions, back-stack behaviour or frame jank — the incidents of 2026-09 (split-mode shared transition, detail-route stacking) were all "statically green, behaviourally broken". Changes touching `:app` navigation (`BgmNavHost`, `BgmAdaptiveScenes`, `BgmNavTransitions`), `:core:navigation`, or skeleton/loading UI must additionally run `scripts/dual-screen-verify.sh` on a booted emulator (it walks Compact + Expanded window profiles, asserts no crash + rendered UI, and saves evidence screenshots to `build/verification/`); a deeper interactive walkthrough (tap-through list → detail → back) via emulator tooling is expected when the change touches back-stack semantics — navigation invariants are otherwise covered by `BgmNavStatePropertyTest`.
 
 ## Canonical Precedents and New Decisions
 
