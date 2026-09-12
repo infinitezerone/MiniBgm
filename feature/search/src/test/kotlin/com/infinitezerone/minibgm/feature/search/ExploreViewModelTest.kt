@@ -332,6 +332,34 @@ class ExploreViewModelTest {
         }
 
     @Test
+    fun loadMore_usesServerCursorPageOffset_notListSize() =
+        runTest {
+            // 回归：去重会丢弃部分返回条目，若翻页 offset 用 subjects.size 而非服务端
+            // 游标 pageOffset，两者错位会导致下一次请求跳过或重复返回数据
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val initialSubjects = (1L..20L).map { sampleSubject.copy(id = it) }
+            searchRepository.advancedSearchResult = AppResult.Success(initialSubjects)
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            // 第二页：返回 20 条，其中 5 条与首页重复被去重（列表只增长 15）
+            val secondPage = (16L..35L).map { sampleSubject.copy(id = it) }
+            searchRepository.advancedSearchResult = AppResult.Success(secondPage)
+            viewModel.loadMore()
+            advanceUntilIdle()
+            assertEquals(35, viewModel.uiState.value.subjects.size)
+            assertEquals(40, viewModel.uiState.value.pageOffset)
+
+            // 第三页请求 offset 必须是 40（pageOffset），而非 subjects.size = 35
+            viewModel.loadMore()
+            advanceUntilIdle()
+            assertEquals(3, searchRepository.advancedSearchCallCount)
+            assertEquals(40, searchRepository.lastAdvancedOffset)
+        }
+
+    @Test
     fun onTagToggleAllowsMultiTagCombinationAndIntersection() =
         runTest {
             val searchRepository = FakeSearchRepository()
