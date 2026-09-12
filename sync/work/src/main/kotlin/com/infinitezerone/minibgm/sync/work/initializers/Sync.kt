@@ -136,7 +136,11 @@ object Sync {
 
         workManager.enqueueUniquePeriodicWork(
             BgmSyncWorker.PERIODIC_SYNC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+            // UPDATE 而非 CANCEL_AND_REENQUEUE：initialize 的偏好流 collect 首个值在每次
+            // app 启动都会触发 reconfigure，CANCEL_AND_REENQUEUE 会重置节拍（日常使用的
+            // 设备上周期同步几乎永远走不到触发点）并掐断正在运行的任务；UPDATE 保留原
+            // 节拍、仅按需更新约束，且不打断运行中的同步
+            ExistingPeriodicWorkPolicy.UPDATE,
             periodicSyncWork,
         )
     }

@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +44,8 @@ class EpisodeDetailViewModel(
     private val _uiState = MutableStateFlow(EpisodeDetailUiState())
     val uiState: StateFlow<EpisodeDetailUiState> = _uiState.asStateFlow()
 
+    private var refreshJob: Job? = null
+
     init {
         // 订阅本地分集流与收藏状态流
         viewModelScope.launch {
@@ -73,7 +76,10 @@ class EpisodeDetailViewModel(
 
     /** 刷新单集吐槽短评与分集元数据 */
     fun refresh(isUserPullToRefresh: Boolean = false) {
-        viewModelScope.launch {
+        // 取消在途刷新：连续下拉时避免旧请求的短评响应后到覆盖新数据
+        refreshJob?.cancel()
+        refreshJob =
+            viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isRefreshing = isUserPullToRefresh,
@@ -198,7 +204,20 @@ class EpisodeDetailViewModel(
                 }.map { it.id }
 
         _uiState.update { state ->
-            val updated = state.collection?.copy(epStatus = newEpStatus, type = targetType)
+            // 未收藏时与 toggleWatched 对齐：构造乐观收藏，避免"看到本集"点击后 UI 无反馈
+            val updated =
+                state.collection?.copy(epStatus = newEpStatus, type = targetType)
+                    ?: UserCollection(
+                        userId = 0L,
+                        subjectId = subjectId,
+                        subjectType = 2,
+                        rate = 0,
+                        type = targetType,
+                        comment = "",
+                        epStatus = newEpStatus,
+                        volStatus = 0,
+                        updatedAt = "",
+                    )
             state.copy(collection = updated, isWatched = true)
         }
 
