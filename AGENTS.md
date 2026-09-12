@@ -87,3 +87,10 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 
 - Conventional Commits with module scope: `feat(core:datastore): ...`, `fix(app): ...`, `build: ...`.
 - One commit = one purpose: don't mix unrelated reformatting or churn into a functional change.
+
+## Release Process
+
+- **Tag is the single source of truth for versions**: pushing a `vX.Y.Z` tag injects `versionName=X.Y.Z` and `versionCode=X*10000+Y*100+Z` into the build via `-Pminibgm.versionName/-Pminibgm.versionCode` (see `AndroidApplicationConventionPlugin`, which falls back to hardcoded defaults for local builds). Never bump versions by editing build-logic for a release — that reintroduced the "tag ≠ artifact version" and "versionCode not monotonic" incidents of v0.2.8.
+- **Release gates** (`release.yml`): tag-triggered releases re-run the full static gauntlet (spotless + allTests + testDebugUnitTest + crapCheck) before publishing, and **fail hard** if signing secrets are missing — a debug-signed release cannot upgrade real installs and must never be published (debug fallback is allowed only for `workflow_dispatch` build rehearsals). `mapping.txt` is attached to every release for crash de-obfuscation.
+- **Release-variant compilation is part of CI** (`assembleRelease` in `ci.yml`): R8/keep-rule breakage surfaces on every push, not only at tag time.
+- CI and release verify independently of local state: tags may point at any historical commit, so the release workflow re-verifies rather than trusting that CI ran on main.

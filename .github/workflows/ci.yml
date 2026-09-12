@@ -43,10 +43,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 单次调用合并四项检查：共享同一次配置阶段与 daemon
+      # 单次调用合并检查：共享同一次配置阶段与 daemon
       # （此前拆成多次 ./gradlew 调用，每次都付一遍配置开销）
       # AGP 9 迁移后：KMP 模块测试任务为 testAndroid，全量套件是 allTests（test 仅剩 app/designsystem 空壳）；
       # allTests 是 KMP 聚合任务，不覆盖 Android-only 模块（:app/:feature:*等），
       # 因此根级 testDebugUnitTest 必须同时声明，否则那些模块的单测在 CI 从不执行
+      # assembleRelease：release 变体启用 R8 混淆与资源收缩，必须在每次 CI 编译，
+      # 否则 proguard 缺 keep 规则等问题只在打 tag 时第一次暴露（CI 上无 keystore，回退 debug 签名）
       - name: Spotless + Tests + CRAP Check + Assemble
-        run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug --stacktrace
+        run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug assembleRelease --stacktrace
