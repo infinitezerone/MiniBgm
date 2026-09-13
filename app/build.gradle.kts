@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.ktor.client.cio)
 
     implementation(libs.koin.android)
+    implementation(libs.miniagent.harness.android)
     implementation(libs.koin.androidx.compose)
 
     testImplementation(libs.junit)

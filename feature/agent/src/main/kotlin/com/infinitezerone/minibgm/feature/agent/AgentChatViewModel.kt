@@ -1,20 +1,33 @@
 package com.infinitezerone.minibgm.feature.agent
 
+import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.config.AIAgentConfig
+import ai.koog.agents.core.agent.singleRunStrategy
+import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.features.eventHandler.feature.EventHandler
+import ai.koog.agents.snapshot.feature.Persistence
+import ai.koog.agents.snapshot.providers.PersistenceUtils
+import ai.koog.prompt.dsl.prompt
+import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
+import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
+import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
+import ai.koog.prompt.llm.LLMCapability
+import ai.koog.prompt.llm.LLMProvider
+import ai.koog.prompt.llm.LLModel
+import ai.koog.prompt.message.Message
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.data.repository.AgentConfig
 import com.infinitezerone.minibgm.core.data.repository.AgentConfigRepository
-import com.miniagent.agentloop.AgentEvent
-import com.miniagent.agentloop.AgentLoop
-import com.miniagent.agentloop.LlmProvider
-import com.miniagent.provider.cloud.CloudModelConfig
-import com.miniagent.provider.cloud.OpenAiCompatibleProvider
+import com.miniagent.harness.EncryptedCheckpointStorage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 enum class AgentBubbleRole {
     USER,
@@ -42,9 +55,15 @@ data class AgentChatUiState(
         get() = apiKey.isNotBlank() && model.isNotBlank() && baseUrl.isNotBlank()
 }
 
+/** 模型执行器工厂接缝：生产注入 Koog OpenAI 兼容客户端（可配置 baseUrl），测试注入 mock 执行器 */
+fun interface AgentExecutorFactory {
+    fun create(config: AgentConfig): ai.koog.prompt.executor.model.PromptExecutor
+}
+
 /**
- * Agent 聊天 ViewModel：把用户消息送入 [AgentLoop]（工具集 = [MiniBgmAgentTools]），
- * 循环事件映射为聊天气泡。
+ * Agent 聊天 ViewModel：引擎为 Koog [AIAgent]（官方 single-run 工具循环策略），
+ * 工具集 = [MiniBgmAgentTools] 经 [asKoogTools] 适配；提供 [checkpointStorage] 时
+ * 会话 checkpoint 加密落盘——进程被杀后新实例自动从断点恢复，聊天历史亦随之还原。
  *
  * 错误契约：除协程取消外的任何模型侧故障（连接失败、HTTP 错误、解析失败）
  * 都必须转成错误气泡，绝不向上抛出——v0.2.9/0.2.10 的两次崩溃皆源于此。
@@ -52,7 +71,18 @@ data class AgentChatUiState(
 class AgentChatViewModel(
     private val toolsFactory: MiniBgmAgentTools,
     private val configRepository: AgentConfigRepository,
-    private val providerFactory: (CloudModelConfig) -> LlmProvider = ::OpenAiCompatibleProvider,
+    /** 加密 checkpoint 存储；null = 关闭持久化（单元测试用） */
+    private val checkpointStorage: EncryptedCheckpointStorage? = null,
+    private val executorFactory: AgentExecutorFactory =
+        AgentExecutorFactory { config ->
+            MultiLLMPromptExecutor(
+                LLMProvider.OpenAI to
+                    OpenAILLMClient(
+                        apiKey = config.apiKey,
+                        settings = OpenAIClientSettings(baseUrl = config.baseUrl),
+                    ),
+            )
+        },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AgentChatUiState())
     val uiState: StateFlow<AgentChatUiState> = _uiState.asStateFlow()
@@ -65,6 +95,7 @@ class AgentChatViewModel(
                     it.copy(baseUrl = cfg.baseUrl.ifBlank { it.baseUrl }, apiKey = cfg.apiKey, model = cfg.model.ifBlank { it.model })
                 }
             }
+            restoreChatHistory()
         }
     }
 
@@ -91,25 +122,18 @@ class AgentChatViewModel(
             )
         }
 
-        val provider = providerFactory(CloudModelConfig(state.baseUrl, state.apiKey, state.model))
-        val loop = AgentLoop(provider = provider, tools = toolsFactory.create())
+        val config = AgentConfig(baseUrl = state.baseUrl, apiKey = state.apiKey, model = state.model)
         runJob?.cancel()
         runJob =
             viewModelScope.launch {
                 try {
-                    val result =
-                        loop.run(
-                            systemPrompt = SYSTEM_PROMPT,
-                            userMessage = trimmed,
-                            onEvent = ::onLoopEvent,
-                        )
-                    if (result.stopReason == com.miniagent.agentloop.AgentStopReason.MAX_STEPS) {
-                        _uiState.update { it.copy(isThinking = false) }
+                    val agent = buildAgent(config)
+                    val result = agent.run(trimmed, sessionId = AGENT_SESSION_ID)
+                    if (result.isNotBlank()) {
+                        appendBubble(AgentBubbleRole.AGENT, result)
                     }
                 } catch (ce: kotlinx.coroutines.CancellationException) {
                     throw ce
-                } catch (e: com.miniagent.provider.cloud.CloudProviderException) {
-                    showErrorBubble("调用模型失败：${e.message}")
                 } catch (e: Exception) {
                     showErrorBubble("出错了：${e.message ?: e::class.simpleName}")
                 } finally {
@@ -118,18 +142,66 @@ class AgentChatViewModel(
             }
     }
 
-    private suspend fun onLoopEvent(event: AgentEvent) {
-        when (event) {
-            is AgentEvent.ToolCalled ->
-                appendBubble(AgentBubbleRole.SYSTEM, "🔧 ${event.call.name}")
+    private fun buildAgent(config: AgentConfig): AIAgent<String, String> =
+        AIAgent(
+            promptExecutor = executorFactory.create(config),
+            strategy = singleRunStrategy(),
+            agentConfig =
+                AIAgentConfig(
+                    prompt =
+                        prompt("minibgm-agent") {
+                            system(SYSTEM_PROMPT)
+                        },
+                    model =
+                        LLModel(
+                            provider = LLMProvider.OpenAI,
+                            id = config.model,
+                            capabilities = listOf(LLMCapability.Tools, LLMCapability.Temperature),
+                            contextLength = 128_000L,
+                            maxOutputTokens = 8_192L,
+                        ),
+                    maxAgentIterations = 8,
+                ),
+            toolRegistry = ToolRegistry { toolsFactory.create().asKoogTools().forEach { tool(it) } },
+        ) {
+            checkpointStorage?.let { storage ->
+                install(Persistence) {
+                    this.storage = storage
+                    enableAutomaticPersistence = true
+                }
+            }
+            install(EventHandler) {
+                onToolCallStarting { ctx ->
+                    appendBubble(AgentBubbleRole.SYSTEM, "🔧 ${ctx.toolName}")
+                }
+                onToolCallCompleted { ctx ->
+                    val resultText =
+                        (ctx.toolResult as? JsonPrimitive)?.contentOrNull
+                            ?: ctx.toolResult.toString()
+                    appendBubble(AgentBubbleRole.SYSTEM, "↳ $resultText")
+                }
+            }
+        }
 
-            is AgentEvent.ToolFinished ->
-                appendBubble(AgentBubbleRole.SYSTEM, "↳ ${event.result.content}")
+    /** 从最近的非墓碑 checkpoint 还原聊天历史（进程死亡后重进可见此前对话） */
+    private suspend fun restoreChatHistory() {
+        val storage = checkpointStorage ?: return
+        val latest =
+            storage
+                .getCheckpoints(AGENT_SESSION_ID)
+                .filterNot { it.checkpointId.startsWith(PersistenceUtils.TOMBSTONE_CHECKPOINT_NAME) }
+                .maxByOrNull { it.createdAt }
+                ?: return
+        latest.messageHistory.forEach { message ->
+            when (message) {
+                is Message.User ->
+                    message.textContent().takeIf { it.isNotBlank() }?.let { appendBubble(AgentBubbleRole.USER, it) }
 
-            is AgentEvent.FinalAnswer ->
-                appendBubble(AgentBubbleRole.AGENT, event.content)
+                is Message.Assistant ->
+                    message.textContent().takeIf { it.isNotBlank() }?.let { appendBubble(AgentBubbleRole.AGENT, it) }
 
-            is AgentEvent.StepStarted -> Unit
+                else -> Unit
+            }
         }
     }
 
@@ -165,9 +237,14 @@ class AgentChatViewModel(
     fun clearSession() {
         runJob?.cancel()
         _uiState.update { it.copy(bubbles = emptyList(), isThinking = false) }
+        // 清空持久化会话，避免下次进入还原出已删除的对话
+        checkpointStorage?.let { storage ->
+            viewModelScope.launch { storage.clear(AGENT_SESSION_ID) }
+        }
     }
 
     private companion object {
+        const val AGENT_SESSION_ID = "minibgm-agent-chat"
         const val SYSTEM_PROMPT =
             "你是 MiniBgm 的内置助手，可以查询放送时刻表、搜索条目与即将开播。" +
                 "回答用简体中文，风格简洁。需要数据时优先调用工具，不要编造条目或时间。"

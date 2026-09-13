@@ -14,7 +14,11 @@ import com.infinitezerone.minibgm.feature.subject.di.subjectModule
 import com.infinitezerone.minibgm.feature.user.di.userModule
 import com.infinitezerone.minibgm.feature.widget.di.widgetModule
 import com.infinitezerone.minibgm.sync.work.di.syncWorkModule
+import com.miniagent.harness.AndroidKeystoreCipher
+import com.miniagent.harness.EncryptedCheckpointStorage
+import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
+import java.io.File
 
 fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
     module {
@@ -37,4 +41,11 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             widgetModule,
         )
         single { BgmDispatchers() }
+        // agent 会话 checkpoint 的加密落盘（AndroidKeyStore 密钥，私有目录，随卸载销毁）
+        single {
+            EncryptedCheckpointStorage(
+                root = File(androidContext().filesDir, "agent-checkpoints"),
+                cipher = AndroidKeystoreCipher(),
+            )
+        }
     }

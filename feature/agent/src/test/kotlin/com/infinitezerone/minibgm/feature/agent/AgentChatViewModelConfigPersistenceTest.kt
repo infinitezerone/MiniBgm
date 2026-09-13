@@ -46,7 +46,7 @@ class AgentChatViewModelConfigPersistenceTest {
         AgentChatViewModel(
             toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
             configRepository = configRepository,
-            providerFactory = { error("unused") },
+            executorFactory = AgentExecutorFactory { error("unused") },
         )
 
     @Test

@@ -1,15 +1,11 @@
 package com.infinitezerone.minibgm.feature.agent
 
+import ai.koog.serialization.kotlinx.KotlinxSerializer
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
-import com.miniagent.agentloop.ChatMessage
-import com.miniagent.agentloop.CompletionRequest
-import com.miniagent.agentloop.CompletionResponse
-import com.miniagent.agentloop.FinishReason
-import com.miniagent.agentloop.LlmProvider
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -47,11 +43,13 @@ class AgentChatViewModelBubbleKeyTest {
         override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) = Unit
     }
 
-    /** 立即给出相同答复的 Provider（制造重复内容的气泡） */
-    private class SameAnswerProvider : LlmProvider {
-        override suspend fun complete(request: CompletionRequest) =
-            CompletionResponse(ChatMessage.assistant("same answer"), finishReason = FinishReason.STOP)
-    }
+    /** 立即给出相同答复的执行器（制造重复内容的气泡） */
+    private fun sameAnswerExecutor() =
+        ai.koog.agents.testing.tools.MockPromptExecutor
+            .builder(KotlinxSerializer())
+            .mockLLMAnswer("same answer")
+            .asDefaultResponse()
+            .build()
 
     @Test
     fun repeatedIdenticalMessages_produceUniqueBubbleIds() =
@@ -60,7 +58,7 @@ class AgentChatViewModelBubbleKeyTest {
                 AgentChatViewModel(
                     toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
                     configRepository = FakeAgentConfigRepository(),
-                    providerFactory = { SameAnswerProvider() },
+                    executorFactory = AgentExecutorFactory { sameAnswerExecutor() },
                 )
             viewModel.updateConfig("https://x/v1", "k", "m")
 
