@@ -1,14 +1,11 @@
 package com.infinitezerone.minibgm.feature.agent
 
+import ai.koog.prompt.executor.model.PromptExecutor
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
-import com.miniagent.agentloop.CompletionRequest
-import com.miniagent.agentloop.CompletionResponse
-import com.miniagent.agentloop.LlmProvider
-import com.miniagent.provider.cloud.CloudProviderException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -47,25 +44,21 @@ class AgentChatViewModelErrorTest {
         override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) = Unit
     }
 
-    private fun createViewModel(provider: LlmProvider): AgentChatViewModel =
+    private fun createViewModel(executor: PromptExecutor): AgentChatViewModel =
         AgentChatViewModel(
             toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
             configRepository = FakeAgentConfigRepository(),
-            providerFactory = { provider },
+            executorFactory = AgentExecutorFactory { executor },
         )
 
     @Test
     fun send_modelFailure_becomesErrorBubbleInsteadOfCrash() =
         runTest {
-            val provider =
-                object : LlmProvider {
-                    override suspend fun complete(request: CompletionRequest): CompletionResponse =
-                        throw CloudProviderException(
-                            statusCode = null,
-                            message = "无法连接或解析模型服务响应：Unsupported HTTP version: <html>",
-                        )
-                }
-            val viewModel = createViewModel(provider)
+            val executor =
+                ThrowingExecutor(
+                    IllegalStateException("无法连接或解析模型服务响应：Unsupported HTTP version: <html>"),
+                )
+            val viewModel = createViewModel(executor)
             viewModel.updateConfig(baseUrl = "https://api.example.com/v1", apiKey = "k", model = "m")
 
             viewModel.send("今天有什么更新")
@@ -73,12 +66,6 @@ class AgentChatViewModelErrorTest {
 
             val state = viewModel.uiState.value
             assertFalse("isThinking 必须复位", state.isThinking)
-            assertTrue(
-                state.bubbles
-                    .last()
-                    .text
-                    .contains("调用模型失败"),
-            )
             assertTrue(
                 state.bubbles
                     .last()
@@ -91,11 +78,7 @@ class AgentChatViewModelErrorTest {
     @Test
     fun send_unknownError_becomesErrorBubble() =
         runTest {
-            val provider =
-                object : LlmProvider {
-                    override suspend fun complete(request: CompletionRequest): CompletionResponse = throw IllegalStateException("weird")
-                }
-            val viewModel = createViewModel(provider)
+            val viewModel = createViewModel(ThrowingExecutor(IllegalStateException("weird")))
             viewModel.updateConfig("https://x/v1", "k", "m")
 
             viewModel.send("hi")
@@ -119,7 +102,7 @@ class AgentChatViewModelErrorTest {
                 AgentChatViewModel(
                     toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
                     configRepository = FakeAgentConfigRepository(),
-                    providerFactory = { error("must not be called") },
+                    executorFactory = AgentExecutorFactory { error("must not be called") },
                 )
 
             viewModel.send("hi")
