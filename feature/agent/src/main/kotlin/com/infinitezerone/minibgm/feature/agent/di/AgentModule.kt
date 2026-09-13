@@ -12,6 +12,7 @@ val agentModule =
         viewModel {
             AgentChatViewModel(
                 toolsFactory = get(),
+                configRepository = get(),
                 providerFactory = ::OpenAiCompatibleProvider,
             )
         }

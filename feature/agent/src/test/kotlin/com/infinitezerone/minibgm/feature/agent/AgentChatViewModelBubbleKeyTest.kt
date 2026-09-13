@@ -59,6 +59,7 @@ class AgentChatViewModelBubbleKeyTest {
             val viewModel =
                 AgentChatViewModel(
                     toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
+                    configRepository = FakeAgentConfigRepository(),
                     providerFactory = { SameAnswerProvider() },
                 )
             viewModel.updateConfig("https://x/v1", "k", "m")

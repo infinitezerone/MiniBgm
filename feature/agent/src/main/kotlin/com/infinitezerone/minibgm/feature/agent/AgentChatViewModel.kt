@@ -2,6 +2,8 @@ package com.infinitezerone.minibgm.feature.agent
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.data.repository.AgentConfig
+import com.infinitezerone.minibgm.core.data.repository.AgentConfigRepository
 import com.miniagent.agentloop.AgentEvent
 import com.miniagent.agentloop.AgentLoop
 import com.miniagent.agentloop.LlmProvider
@@ -31,7 +33,7 @@ data class AgentChatUiState(
     val bubbles: List<AgentChatBubble> = emptyList(),
     val isThinking: Boolean = false,
     val input: String = "",
-    /** 模型配置：仅驻留内存，不持久化（凭据卫生：API key 不写入任何存储） */
+    /** 模型配置：加密持久化在 AgentConfigRepository（独立 DataStore，排除云备份），修改即落盘 */
     val baseUrl: String = "https://api.deepseek.com/v1",
     val apiKey: String = "",
     val model: String = "deepseek-chat",
@@ -49,10 +51,22 @@ data class AgentChatUiState(
  */
 class AgentChatViewModel(
     private val toolsFactory: MiniBgmAgentTools,
+    private val configRepository: AgentConfigRepository,
     private val providerFactory: (CloudModelConfig) -> LlmProvider = ::OpenAiCompatibleProvider,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AgentChatUiState())
     val uiState: StateFlow<AgentChatUiState> = _uiState.asStateFlow()
+
+    init {
+        // 进入屏幕时恢复上次配置；读取失败按未配置处理（存储层已兜底为 null）
+        viewModelScope.launch {
+            configRepository.current()?.let { cfg ->
+                _uiState.update {
+                    it.copy(baseUrl = cfg.baseUrl.ifBlank { it.baseUrl }, apiKey = cfg.apiKey, model = cfg.model.ifBlank { it.model })
+                }
+            }
+        }
+    }
 
     private var runJob: Job? = null
     private var nextBubbleId: Long = 1L
@@ -138,6 +152,10 @@ class AgentChatViewModel(
         model: String,
     ) {
         _uiState.update { it.copy(baseUrl = baseUrl, apiKey = apiKey, model = model) }
+        // 编辑即持久化：加密落盘，下次进入无需重填
+        viewModelScope.launch {
+            configRepository.save(AgentConfig(baseUrl = baseUrl.trim(), apiKey = apiKey.trim(), model = model.trim()))
+        }
     }
 
     fun updateInput(text: String) {

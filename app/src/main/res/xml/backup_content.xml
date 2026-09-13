@@ -8,4 +8,7 @@
     <exclude
         domain="file"
         path="datastore/auth_tokens.pb" />
+    <exclude
+        domain="file"
+        path="datastore/agent_model_config.json" />
 </full-backup-content>
