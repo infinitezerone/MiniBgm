@@ -50,6 +50,7 @@ class AgentChatViewModelErrorTest {
     private fun createViewModel(provider: LlmProvider): AgentChatViewModel =
         AgentChatViewModel(
             toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
+            configRepository = FakeAgentConfigRepository(),
             providerFactory = { provider },
         )
 
@@ -117,6 +118,7 @@ class AgentChatViewModelErrorTest {
             val viewModel =
                 AgentChatViewModel(
                     toolsFactory = MiniBgmAgentTools(StubScheduleRepository(), FakeSearchRepository(), FakeCollectionRepository()),
+                    configRepository = FakeAgentConfigRepository(),
                     providerFactory = { error("must not be called") },
                 )
 
