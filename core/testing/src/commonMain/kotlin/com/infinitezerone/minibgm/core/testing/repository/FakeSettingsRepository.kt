@@ -2,9 +2,11 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
+import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
 class FakeSettingsRepository(
     initialSettings: UserSettings = UserSettings(),
@@ -17,12 +19,16 @@ class FakeSettingsRepository(
         private set
     var setAiringReminderHourCallCount: Int = 0
         private set
+    var setAiConfigCallCount: Int = 0
+        private set
 
     fun setSettings(settings: UserSettings) {
         settingsState.value = settings
     }
 
     override val settings: Flow<UserSettings> = settingsState
+
+    override val aiConfig: Flow<AiConfig> = settingsState.map { it.aiConfig }
 
     override suspend fun setSyncInterval(interval: SyncInterval) {
         setSyncIntervalCallCount++
@@ -37,5 +43,10 @@ class FakeSettingsRepository(
     override suspend fun setAiringReminderHour(hour: Int) {
         setAiringReminderHourCallCount++
         settingsState.value = settingsState.value.copy(airingReminderHour = hour)
+    }
+
+    override suspend fun setAiConfig(config: AiConfig) {
+        setAiConfigCallCount++
+        settingsState.value = settingsState.value.copy(aiConfig = config)
     }
 }

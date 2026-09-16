@@ -133,4 +133,21 @@ class UserPreferencesDataSource(
             current.copy(searchHistory = emptyList())
         }
     }
+
+    /** 更新 AI 服务配置 */
+    suspend fun setAiConfig(
+        endpoint: String,
+        apiKey: String,
+        model: String,
+        provider: String,
+    ) {
+        dataStore.updateData { current ->
+            current.copy(
+                aiEndpoint = endpoint,
+                aiApiKey = apiKey,
+                aiModel = model,
+                aiProvider = provider,
+            )
+        }
+    }
 }

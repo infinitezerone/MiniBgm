@@ -19,3 +19,8 @@
     void setHideMotionSpec*(androidx.compose.animation.core.FiniteAnimationSpec);
     androidx.compose.animation.core.FiniteAnimationSpec getHideMotionSpec*();
 }
+
+# Ktor IntellijIdeaDebugDetector 引用了 Android 缺失的 JVM ManagementFactory
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+

@@ -73,3 +73,9 @@ data class TagSubjectsRoute(
     val tag: String,
     val initialType: Int = 0,
 ) : BgmRoute
+
+/**
+ * AI 追番助手交互界面路由。
+ */
+@Serializable
+data object AssistantRoute : BgmRoute

@@ -17,6 +17,7 @@ class FakeCollectionRepository : CollectionRepository {
     var updateCollectionResult: AppResult<Unit>? = null
     var updateCollectionCallCount: Int = 0
         private set
+    var updateEpisodeResult: AppResult<Unit>? = null
     var updateEpisodeCallCount: Int = 0
         private set
     var markEpisodesWatchedUpToCallCount: Int = 0
@@ -119,6 +120,7 @@ class FakeCollectionRepository : CollectionRepository {
         epNumber: Int,
     ): AppResult<Unit> {
         updateEpisodeCallCount++
+        updateEpisodeResult?.let { return it }
         return AppResult.Success(Unit)
     }
 

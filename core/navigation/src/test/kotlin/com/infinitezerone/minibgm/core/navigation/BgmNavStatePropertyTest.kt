@@ -91,6 +91,13 @@ class BgmNavStatePropertyTest {
         }
     }
 
+    private data object PushAssistant : Action {
+        override fun applyTo(state: BgmNavState): Boolean {
+            state.navigateTo(AssistantRoute)
+            return true
+        }
+    }
+
     private data class SwitchTab(
         val index: Int,
     ) : Action {
@@ -110,14 +117,15 @@ class BgmNavStatePropertyTest {
 
     private fun randomActions(rng: Random): List<Action> =
         List(rng.nextInt(10, 40)) {
-            when (rng.nextInt(8)) {
+            when (rng.nextInt(9)) {
                 0 -> PushDetail(rng.nextLong())
                 1 -> PushLinked(rng.nextLong())
                 2 -> PushEpisode(rng.nextLong())
                 3 -> PushTag(rng.nextInt())
                 4 -> PushSearch(rng.nextInt())
                 5 -> PushCollections(rng.nextLong())
-                6 -> SwitchTab(rng.nextInt())
+                6 -> PushAssistant
+                7 -> SwitchTab(rng.nextInt())
                 else -> GoBack
             }
         }
@@ -163,6 +171,11 @@ class BgmNavStatePropertyTest {
         assertTrue(
             "$context: 子栈中 UserCollectionsRoute 出现 $collectionsCount 次（同类二级页应替换而非堆叠）：$stack",
             collectionsCount <= 1,
+        )
+        val assistantCount = stack.count { it is AssistantRoute }
+        assertTrue(
+            "$context: 子栈中 AssistantRoute 出现 $assistantCount 次（同类二级页应替换而非堆叠）：$stack",
+            assistantCount <= 1,
         )
     }
 
@@ -280,6 +293,15 @@ class BgmNavStatePropertyTest {
             )
             assertTrue(
                 "seed=$seed: 进入收藏列表后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
+                state.currentSubStack.first() == state.currentTopLevelKey,
+            )
+            state.navigateTo(AssistantRoute)
+            assertTrue(
+                "seed=$seed: 进入助手页后详情层级应被清理，实际 ${state.currentSubStack.toList()}",
+                state.currentSubStack.none { it is SubjectDetailRoute },
+            )
+            assertTrue(
+                "seed=$seed: 进入助手页后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
                 state.currentSubStack.first() == state.currentTopLevelKey,
             )
         }

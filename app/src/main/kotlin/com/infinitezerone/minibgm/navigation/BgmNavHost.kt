@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
@@ -23,6 +24,7 @@ import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
+import com.infinitezerone.minibgm.feature.assistant.navigation.assistantEntry
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
 import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
 import com.infinitezerone.minibgm.feature.search.navigation.searchEntry
@@ -80,7 +82,14 @@ fun BgmNavHost(
                             scheduleEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
+                                onAssistantClick = { navState.navigateTo(AssistantRoute) },
                                 scrollToTop = scheduleScrollToTop,
+                                metadata = bgmListPane(detailPlaceholder),
+                            )
+
+                            assistantEntry(
+                                onSubjectClick = { route -> navState.navigateTo(route) },
+                                onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 

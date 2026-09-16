@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,11 +64,12 @@ fun ScheduleScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
+    onAssistantClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
+    viewModel: ScheduleViewModel = koinViewModel(),
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    val viewModel: ScheduleViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
@@ -133,6 +135,12 @@ fun ScheduleScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = onAssistantClick) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = "AI 追番助手",
+                        )
+                    }
                     IconButton(onClick = onSearchClick) {
                         Icon(
                             imageVector = Icons.Filled.Search,

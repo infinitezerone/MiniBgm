@@ -1,12 +1,14 @@
 package com.infinitezerone.minibgm.di
 
 import com.infinitezerone.minibgm.BuildConfig
+import com.infinitezerone.minibgm.core.ai.di.aiModule
 import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.data.di.dataModule
 import com.infinitezerone.minibgm.core.data.di.platformDataModule
 import com.infinitezerone.minibgm.core.database.di.databaseModule
 import com.infinitezerone.minibgm.core.datastore.di.datastoreModule
 import com.infinitezerone.minibgm.core.network.di.networkModule
+import com.infinitezerone.minibgm.feature.assistant.di.assistantModule
 import com.infinitezerone.minibgm.feature.schedule.di.scheduleModule
 import com.infinitezerone.minibgm.feature.search.di.searchModule
 import com.infinitezerone.minibgm.feature.subject.di.subjectModule
@@ -26,10 +28,12 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             datastoreModule,
             dataModule,
             platformDataModule,
+            aiModule,
             scheduleModule,
             userModule,
             subjectModule,
             searchModule,
+            assistantModule,
             syncWorkModule,
             imageLoaderModule,
             widgetModule,

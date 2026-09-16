@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfileAlt
@@ -30,17 +31,18 @@ class UserViewModelTest {
         authRepo: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = false),
         scheduleRepo: FakeScheduleRepository = FakeScheduleRepository(),
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
+        settingsRepo: FakeSettingsRepository = FakeSettingsRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
-    ): Pair<UserViewModel, FakeScheduleRepository> {
+    ): Triple<UserViewModel, FakeScheduleRepository, FakeSettingsRepository> {
         val viewModel =
             UserViewModel(
                 authRepository = authRepo,
                 scheduleRepository = scheduleRepo,
                 collectionRepository = collectionRepo,
-                settingsRepository = FakeSettingsRepository(),
+                settingsRepository = settingsRepo,
                 syncManager = syncManager,
             )
-        return viewModel to scheduleRepo
+        return Triple(viewModel, scheduleRepo, settingsRepo)
     }
 
     @Test
@@ -303,5 +305,34 @@ class UserViewModelTest {
 
             assertTrue(url.contains("bgm.tv/oauth/authorize"))
             assertEquals(1, authRepo.beginLoginCallCount)
+        }
+
+    @Test
+    fun initialState_emitsDefaultAiConfig() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first()
+            assertEquals(AiConfig(), state.aiConfig)
+        }
+
+    @Test
+    fun setAiConfig_updatesSettingsRepositoryAndState() =
+        runTest {
+            val (viewModel, _, settingsRepo) = createViewModel()
+
+            val customConfig =
+                AiConfig(
+                    provider = AiConfig.PROVIDER_GEMINI,
+                    endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/",
+                    apiKey = "gemini-test-key",
+                    model = "gemini-2.5-pro",
+                )
+
+            viewModel.setAiConfig(customConfig)
+
+            val state = viewModel.uiState.first { it.aiConfig == customConfig }
+            assertEquals(customConfig, state.aiConfig)
+            assertEquals(1, settingsRepo.setAiConfigCallCount)
         }
 }
