@@ -67,4 +67,21 @@ class TimeUtilsBroadcastRuleTest {
         val iso = TimeUtils.epochMillisOfIso("1996-01-08T00:00:00Z")
         assertTrue(iso != null)
     }
+
+    @Test
+    fun cstWeekBoundary_calculatesMondayToSundayCorrectly() {
+        // 2026-09-16T15:00:00 CST 是周三 (Wednesday)
+        val wednesdayMillis = TimeUtils.epochMillisOfIso("2026-09-16T07:00:00Z")!!
+        val startMillis = TimeUtils.cstWeekStartEpochMillis(wednesdayMillis)
+        val endMillis = TimeUtils.cstWeekEndEpochMillis(wednesdayMillis)
+
+        // 本周周一 00:00:00 CST 为 2026-09-14 00:00:00 CST = 2026-09-13T16:00:00Z
+        val expectedStart = TimeUtils.epochMillisOfIso("2026-09-13T16:00:00Z")!!
+        assertEquals(expectedStart, startMillis)
+        assertEquals(1, TimeUtils.cstWeekdayOfEpoch(startMillis))
+
+        // 本周周日 23:59:59 CST 为 2026-09-20 23:59:59 CST = 2026-09-20T15:59:59.999Z
+        assertEquals(startMillis + 7 * 24 * 60 * 60 * 1000L - 1, endMillis)
+        assertEquals(7, TimeUtils.cstWeekdayOfEpoch(endMillis))
+    }
 }

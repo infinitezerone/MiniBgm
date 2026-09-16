@@ -21,6 +21,8 @@ import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
+import com.infinitezerone.minibgm.core.network.BilibiliAiringEpisode
+import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.model.CalendarDayResponse
 import com.infinitezerone.minibgm.core.network.model.CalendarWeekday
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
@@ -119,16 +121,20 @@ class ScheduleRepositoryImplTest {
     private class FakeAniListService : AniListService {
         var schedules: Map<Long, List<AniListAiringEpisode>> = emptyMap()
         var requestedIds: List<Long> = emptyList()
-        var requestedWindow: Pair<Long?, Long?>? = null
 
-        override suspend fun getAiringSchedules(
-            anilistIds: List<Long>,
-            fromEpochSeconds: Long?,
-            toEpochSeconds: Long?,
-        ): Map<Long, List<AniListAiringEpisode>> {
+        override suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>> {
             requestedIds = anilistIds
-            requestedWindow = fromEpochSeconds to toEpochSeconds
             return schedules.filterKeys { it in anilistIds.toSet() }
+        }
+    }
+
+    private class FakeBilibiliService : BilibiliService {
+        var episodesBySiteId: Map<String, List<BilibiliAiringEpisode>> = emptyMap()
+        val requestedSiteIds: MutableList<String> = mutableListOf()
+
+        override suspend fun getAiringEpisodes(bilibiliSiteId: String): List<BilibiliAiringEpisode> {
+            requestedSiteIds += bilibiliSiteId
+            return episodesBySiteId[bilibiliSiteId].orEmpty()
         }
     }
 
@@ -223,6 +229,7 @@ class ScheduleRepositoryImplTest {
         scheduleDao: FakeAirScheduleDao,
         airEventDao: FakeAirEventDao,
         anilistService: FakeAniListService,
+        bilibiliService: FakeBilibiliService = FakeBilibiliService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource,
     ) = ScheduleRepositoryImpl(
         apiService = apiService,
@@ -230,6 +237,7 @@ class ScheduleRepositoryImplTest {
         scheduleDao = scheduleDao,
         airEventDao = airEventDao,
         anilistService = anilistService,
+        bilibiliService = bilibiliService,
         userPreferences = userPreferences,
     )
 
@@ -412,8 +420,9 @@ class ScheduleRepositoryImplTest {
             assertTrue(userPrefs.userPreferences.first().bangumiDataLastSyncTimestamp > 0L)
 
             val updated = dao.getAllSchedulesList().first { it.bgmId == 1001L }
+            assertEquals("无职转生", updated.titleCn)
             assertTrue(updated.sitesJson.contains("哔哩哔哩"))
-            assertEquals("23:00", updated.timeCst)
+            assertEquals("", updated.timeCst)
         }
 
     @Test
@@ -477,7 +486,7 @@ class ScheduleRepositoryImplTest {
             val item = stored.first()
             assertEquals(1001L, item.bgmId)
             assertTrue(item.sitesJson.contains("哔哩哔哩"))
-            assertEquals("23:00", item.timeCst)
+            assertEquals("", item.timeCst)
             assertEquals("W/\"etag-coldstart\"", userPrefs.userPreferences.first().bangumiDataEtag)
         }
 
@@ -616,7 +625,7 @@ class ScheduleRepositoryImplTest {
             // 周几由 broadcast 规则起点（与应用时间表一致采用 CST 放送时区）推导
             assertEquals(TimeUtils.cstWeekdayOfEpoch(beginMillis), webOnly.weekday)
             assertEquals(189046L, webOnly.anilistId)
-            assertTrue(webOnly.broadcastRule.contains("P7D"))
+            assertEquals("", webOnly.broadcastRule)
             assertEquals(AirScheduleEntity.SOURCE_BGM_DATA, webOnly.source)
             assertTrue(webOnly.sitesJson.contains("巴哈姆特"))
         }
@@ -760,12 +769,7 @@ class ScheduleRepositoryImplTest {
             val result = repo.syncBangumiData(force = true)
 
             assertIs<AppResult.Success<Unit>>(result)
-            // 窗口回归：AniList 查询必须带时间窗口（上游默认 perPage 仅 20，
-            // 无窗口时超过 20 话的在播条目取不到当前周期，nextEpisode 冻结在旧话数）；
-            // 锚点（开播时刻）必须落在回看窗内，否则偏移推导无法进行
-            val (fromEpoch, toEpoch) = anilist.requestedWindow!!
-            assertEquals(beginMillis / 1000 >= fromEpoch!!, true)
-            assertEquals(toEpoch!! >= TimeUtils.nowEpochMillis() / 1000, true)
+            assertEquals(listOf(189046L), anilist.requestedIds)
             // 逐话事件已按偏移换算成 bgm 话数（第 1/2 话）
             val storedEvents = airEventDao.getAllAirEvents()
             assertEquals(setOf(1, 2), storedEvents.map { it.episode }.toSet())
@@ -777,9 +781,9 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
-    fun syncAirEvents_marksUncoveredSubjectsAsPredicted() =
+    fun syncAirEvents_uncoveredSubjectsWithoutSources_haveNoAirEvents() =
         runTest {
-            // 无 anilist 映射的条目：由 broadcast 规则生成 predicted 事件
+            // 无 anilist 且无 bilibili 站点的条目：不生成任何机械推算或虚假事件
             val ruleStartIso = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis() - 3 * DAY_MILLIS)
             val dao =
                 FakeAirScheduleDao().apply {
@@ -817,41 +821,51 @@ class ScheduleRepositoryImplTest {
 
             assertIs<AppResult.Success<Unit>>(result)
             val storedEvents = airEventDao.getAllAirEvents()
-            assertTrue(storedEvents.isNotEmpty())
-            assertTrue(storedEvents.all { it.kind == AirEventKind.PREDICTED })
+            assertTrue(storedEvents.isEmpty())
             val updated = dao.getAllSchedulesList().single()
-            assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
-            assertTrue(updated.nextEpisode > 0)
+            assertEquals("", updated.nextEpisodeKind)
+            assertEquals(0, updated.nextEpisode)
         }
 
     @Test
-    fun syncAirEvents_retainsCurrentCycleAiredEpisode_andCapsAtTotalEpisodes() =
+    fun syncAirEvents_withBilibiliSite_fetchesAndReconcilesBilibiliEvents() =
         runTest {
-            // 场景类似《从后面来的神威先生》：条目首播于 10 周前的周五 00:00，总集数 12 话
-            // 当前时刻为周五 15:00（第 11 话已于 15 小时前开播，第 12 话在 6 天后）
-            val nowMillis = TimeUtils.nowEpochMillis()
-            val fifteenHoursAgo = nowMillis - 15 * 3600 * 1000L
-            val tenWeeksAgo = fifteenHoursAgo - 10 * 7 * DAY_MILLIS
-            val ruleStartIso = TimeUtils.isoUtcFromEpochMillis(tenWeeksAgo)
-
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val pastEpPubTime = nowSeconds - 8 * 86400 // 8 天前（上周已播）
+            val futureEpPubTime = nowSeconds + 2 * 86400 // 2 天后（本周待播）
+            val bilibiliService =
+                FakeBilibiliService().apply {
+                    episodesBySiteId =
+                        mapOf(
+                            "4315482" to
+                                listOf(
+                                    BilibiliAiringEpisode(
+                                        episode = 1,
+                                        airAtEpochSeconds = pastEpPubTime,
+                                    ),
+                                    BilibiliAiringEpisode(
+                                        episode = 2,
+                                        airAtEpochSeconds = futureEpPubTime,
+                                    ),
+                                ),
+                        )
+                }
             val dao =
                 FakeAirScheduleDao().apply {
                     insertSchedules(
                         listOf(
                             AirScheduleEntity(
-                                bgmId = 627136L,
-                                title = "うしろの正面カムイさん",
-                                titleCn = "从后面来的神威先生",
-                                coverUrl = "https://example.com/kamui.jpg",
-                                ratingScore = 6.0,
-                                airDate = ruleStartIso.substringBefore("T"),
-                                beginAtUtc = ruleStartIso,
-                                weekday = TimeUtils.cstWeekdayOfEpoch(fifteenHoursAgo),
-                                timeCst = "00:00",
-                                timeJst = "01:00",
-                                sitesJson = "[]",
-                                broadcastRule = "R/$ruleStartIso/P7D",
-                                totalEpisodes = 12,
+                                bgmId = 456789L,
+                                title = "凡人修仙传",
+                                titleCn = "凡人修仙传",
+                                coverUrl = "",
+                                ratingScore = 8.0,
+                                airDate = "2020-07-25",
+                                beginAtUtc = "2020-07-25T03:00:00Z",
+                                weekday = 6,
+                                timeCst = "11:00",
+                                timeJst = "12:00",
+                                sitesJson = """[{"site":"bilibili","id":"4315482"}]""",
                             ),
                         ),
                     )
@@ -863,6 +877,7 @@ class ScheduleRepositoryImplTest {
                     dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
+                    bilibiliService = bilibiliService,
                     anilistService = FakeAniListService(),
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
@@ -871,45 +886,57 @@ class ScheduleRepositoryImplTest {
 
             assertIs<AppResult.Success<Unit>>(result)
             val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
-            // 应当保留本周期内刚播出的第 11 话，以及下周预定的第 12 话，且受总集数 12 话限制不再生成第 13 话
-            assertEquals(listOf(11, 12), storedEvents.map { it.episode })
-            assertTrue(storedEvents.all { it.kind == AirEventKind.PREDICTED })
+            assertEquals(2, storedEvents.size)
+            assertEquals(listOf(1, 2), storedEvents.map { it.episode })
+            assertEquals(AirEventKind.ACTUAL, storedEvents[0].kind)
+            assertEquals(AirEventKind.SCHEDULED, storedEvents[1].kind)
 
-            // 仲裁回写：最近事件为 15 小时前播出的第 11 话（距离当前 15h 远小于下周第 12 话的 153h）
             val updated = dao.getAllSchedulesList().single()
-            assertEquals(11, updated.nextEpisode)
-            assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
-            // 下一话预期时刻应指向第 12 话时刻
-            val expectedNextAirIso = TimeUtils.isoUtcFromEpochMillis(fifteenHoursAgo + 7 * DAY_MILLIS)
-            assertEquals(expectedNextAirIso, updated.nextEpisodeAtUtc)
+            assertEquals(2, updated.nextEpisode)
+            assertEquals(AirEventKind.SCHEDULED, updated.nextEpisodeKind)
+            assertEquals(TimeUtils.isoUtcFromEpochMillis(futureEpPubTime * 1000), updated.nextEpisodeAtUtc)
         }
 
     @Test
-    fun syncAirEvents_withoutBroadcastRule_predictsWeeklyEpisodesInsteadOfDaily() =
+    fun syncAirEvents_whenEpisodeAiredEarlierThisWeek_reconcilesToAiredEpisodeOfThisWeek() =
         runTest {
-            // 无 broadcastRule 的普通季度番条目（如 9 周前开播，无 bangumi-data 规则映射）
-            // 应当按周播（7天）而非日播（1天）推算，当前第 10 话而非第 64 话
-            val nowMillis = TimeUtils.nowEpochMillis()
-            val nineWeeksAgo = nowMillis - 9 * 7 * DAY_MILLIS
-            val airDate = TimeUtils.formatEpochSecondsToDate(nineWeeksAgo / 1000)
-
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val airedEarlierThisWeek = nowSeconds - 10 * 3600 // 10 小时前（本周内已播）
+            val nextWeekAiring = nowSeconds + 6 * 86400 + 14 * 3600 // 下周待播
+            val anilist =
+                FakeAniListService().apply {
+                    schedules =
+                        mapOf(
+                            207809L to
+                                listOf(
+                                    AniListAiringEpisode(
+                                        episode = 11,
+                                        airAtEpochSeconds = airedEarlierThisWeek,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 12,
+                                        airAtEpochSeconds = nextWeekAiring,
+                                    ),
+                                ),
+                        )
+                }
             val dao =
                 FakeAirScheduleDao().apply {
                     insertSchedules(
                         listOf(
                             AirScheduleEntity(
-                                bgmId = 624691L,
-                                title = "喜羊羊与灰太狼之破界山海诀",
-                                titleCn = "喜羊羊与灰太狼之破界山海诀",
-                                coverUrl = "https://example.com/cover.jpg",
-                                ratingScore = 6.5,
-                                airDate = airDate,
-                                beginAtUtc = "${airDate}T00:00:00Z",
-                                weekday = TimeUtils.cstWeekdayOfEpoch(nineWeeksAgo),
-                                timeCst = "00:00",
-                                timeJst = "01:00",
+                                bgmId = 627648L,
+                                title = "天は赤い河のほとり",
+                                titleCn = "天是红河岸",
+                                coverUrl = "",
+                                ratingScore = 4.1,
+                                airDate = "2026-07-07",
+                                beginAtUtc = "2026-07-07T16:35:00Z",
+                                weekday = 3,
+                                timeCst = "00:35",
+                                timeJst = "01:35",
+                                anilistId = 207809L,
                                 sitesJson = "[]",
-                                broadcastRule = "", // 无规则
                             ),
                         ),
                     )
@@ -921,7 +948,7 @@ class ScheduleRepositoryImplTest {
                     dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
-                    anilistService = FakeAniListService(),
+                    anilistService = anilist,
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
@@ -929,8 +956,159 @@ class ScheduleRepositoryImplTest {
 
             assertIs<AppResult.Success<Unit>>(result)
             val updated = dao.getAllSchedulesList().single()
-            assertEquals(10, updated.nextEpisode)
-            assertEquals(AirEventKind.PREDICTED, updated.nextEpisodeKind)
+            // 本周该天已播话数（第 11 话），不能被下周话数（第 12 话）倒挂覆盖
+            assertEquals(11, updated.nextEpisode)
+            assertEquals(AirEventKind.ACTUAL, updated.nextEpisodeKind)
+        }
+
+    @Test
+    fun syncAirEvents_reconcilesAnilistWithLargeOffsetWithinTolerance_suchAsMagilumiere() =
+        runTest {
+            // 魔法光源股份有限公司第二季场景：
+            // bangumi-data beginAtUtc 是周三 01:09（BS 卫星台重播时间）
+            // airDate 官方首播日期是 2026-10-04（周六）
+            // AniList 首播记录为周六 23:55（时差约 73 小时）
+            // 在 7 天容差机制下，应成功对齐首话，且不被旧的 3 天容差判定超时抛弃
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val nowSeconds = nowMillis / 1000
+            val satAirEpoch = nowSeconds + 2 * 86400 // 2 天后的周六
+            val wedBeginIso = TimeUtils.isoUtcFromEpochMillis((satAirEpoch - 73 * 3600) * 1000)
+            val satAirDate = TimeUtils.formatEpochSecondsToDate(satAirEpoch)
+
+            val anilist =
+                FakeAniListService().apply {
+                    schedules =
+                        mapOf(
+                            176662L to
+                                listOf(
+                                    AniListAiringEpisode(
+                                        episode = 1,
+                                        airAtEpochSeconds = satAirEpoch,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 2,
+                                        airAtEpochSeconds = satAirEpoch + 7 * 86400,
+                                    ),
+                                ),
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 529723L,
+                                title = "株式会社マジルミエ 第2期",
+                                titleCn = "魔法光源股份有限公司 第二季",
+                                coverUrl = "",
+                                ratingScore = 7.5,
+                                airDate = satAirDate,
+                                beginAtUtc = wedBeginIso,
+                                weekday = 6,
+                                timeCst = "23:55",
+                                timeJst = "00:55",
+                                sitesJson = "[]",
+                                anilistId = 176662L,
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
+            assertEquals(listOf(1, 2), storedEvents.map { it.episode })
+            val updated = dao.getAllSchedulesList().single()
+            assertEquals(1, updated.nextEpisode)
+            assertEquals(AirEventKind.SCHEDULED, updated.nextEpisodeKind)
+            assertEquals(TimeUtils.isoUtcFromEpochMillis(satAirEpoch * 1000), updated.nextEpisodeAtUtc)
+        }
+
+    @Test
+    fun syncAirEvents_midSeasonEpisodesWithoutFirstEpisode_stillReconcilesTimeAndEpisode() =
+        runTest {
+            // 季中在播场景（例如 7 月开播，当前 9 月中旬查询 AniList 仅返回第 10、11 话）：
+            // 首播日 60 天前已过，AniList 窗口内不含第 1 话，但绝对开播时间必须直接驱动时刻与星期，绝不抛弃条目
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val nowSeconds = nowMillis / 1000
+            val futureAirEpoch = nowSeconds + 86400 // 明天开播
+            val pastAirEpoch = futureAirEpoch - 7 * 86400 // 上周开播
+            val ep1AirDate = TimeUtils.formatEpochSecondsToDate(futureAirEpoch - 10 * 7 * 86400)
+
+            val anilist =
+                FakeAniListService().apply {
+                    schedules =
+                        mapOf(
+                            159309L to
+                                listOf(
+                                    AniListAiringEpisode(
+                                        episode = 10,
+                                        airAtEpochSeconds = pastAirEpoch,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 11,
+                                        airAtEpochSeconds = futureAirEpoch,
+                                    ),
+                                ),
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 412144L,
+                                title = "乙女ゲー世界はモブに厳しい世界です2",
+                                titleCn = "恋爱游戏世界对路人角色很不友好 第二季",
+                                coverUrl = "",
+                                ratingScore = 7.2,
+                                airDate = ep1AirDate,
+                                beginAtUtc = null,
+                                weekday = 3,
+                                timeCst = "",
+                                timeJst = "",
+                                sitesJson = "[]",
+                                anilistId = 159309L,
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
+            assertEquals(listOf(10, 11), storedEvents.map { it.episode })
+            val updated = dao.getAllSchedulesList().single()
+            // 真实开播时间与星期由第 11 话时间戳驱动，绝非全天待定空字符串
+            assertTrue(updated.timeCst.isNotBlank())
+            assertTrue(updated.timeJst.isNotBlank())
+            assertEquals(11, updated.nextEpisode)
+            assertEquals(AirEventKind.SCHEDULED, updated.nextEpisodeKind)
+            assertEquals(TimeUtils.isoUtcFromEpochMillis(futureAirEpoch * 1000), updated.nextEpisodeAtUtc)
         }
 
     @Test

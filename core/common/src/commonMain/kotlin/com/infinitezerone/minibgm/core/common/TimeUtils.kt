@@ -41,6 +41,18 @@ object TimeUtils {
     /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
     fun cstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneCst)
 
+    /** 获取包含指定 epoch 毫秒的本周周一 00:00:00 CST 的 epoch 毫秒 */
+    fun cstWeekStartEpochMillis(nowMillis: Long = nowEpochMillis()): Long {
+        val instant = Instant.fromEpochMilliseconds(nowMillis)
+        val localDate = instant.toLocalDateTime(timeZoneCst).date
+        val dayOfWeekOrdinal = localDate.dayOfWeek.ordinal // 0=Monday ... 6=Sunday
+        val mondayDate = LocalDate.fromEpochDays(localDate.toEpochDays() - dayOfWeekOrdinal)
+        return mondayDate.atStartOfDayIn(timeZoneCst).toEpochMilliseconds()
+    }
+
+    /** 获取包含指定 epoch 毫秒的本周周日 23:59:59.999 CST 的 epoch 毫秒 */
+    fun cstWeekEndEpochMillis(nowMillis: Long = nowEpochMillis()): Long = cstWeekStartEpochMillis(nowMillis) + 7 * 24 * 60 * 60 * 1000L - 1
+
     private fun weekdayOfEpoch(
         millis: Long,
         timeZone: TimeZone,

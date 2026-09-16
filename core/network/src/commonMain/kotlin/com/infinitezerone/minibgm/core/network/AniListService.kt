@@ -23,19 +23,12 @@ data class AniListAiringEpisode(
 interface AniListService {
     /**
      * 批量查询条目的逐话播出时间表。
-     * @param fromEpochSeconds 窗口起点（秒级 UNIX，含）；null 表示不限制
-     * @param toEpochSeconds 窗口终点（秒级 UNIX，含）；null 表示不限制
+     * 单次请求按条目拉取上限 50 话的排期（`perPage: 50`）并合并 `nextAiringEpisode`，
+     * 覆盖当季全量单集并确保下一即将播出话次准确。
+     * @param anilistIds 需要查询的 AniList 媒体 ID 列表
      * @return anilistId → 逐话时间（按 episode 升序）；查询失败的条目不出现在结果中
-     *
-     * 必须传入窗口的原因：AniList 连接查询默认 perPage 仅 20（上限 50）且按播出时间升序，
-     * 无窗口时超过 20 话的在播条目只能取到最早的话数，当前周期永远缺失；
-     * 窗口同时约束了响应规模，使其不依赖上游分页默认值。
      */
-    suspend fun getAiringSchedules(
-        anilistIds: List<Long>,
-        fromEpochSeconds: Long? = null,
-        toEpochSeconds: Long? = null,
-    ): Map<Long, List<AniListAiringEpisode>>
+    suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>>
 }
 
 @Serializable
@@ -46,6 +39,7 @@ internal data class AniListGraphQLResponse(
 @Serializable
 internal data class AniListMediaAiring(
     val airingSchedule: AniListAiringSchedule? = null,
+    val nextAiringEpisode: AniListAiringNode? = null,
 )
 
 @Serializable
@@ -67,27 +61,17 @@ class AniListServiceImpl(
     private val client: HttpClient,
     private val chunkSize: Int = 40,
 ) : AniListService {
-    override suspend fun getAiringSchedules(
-        anilistIds: List<Long>,
-        fromEpochSeconds: Long?,
-        toEpochSeconds: Long?,
-    ): Map<Long, List<AniListAiringEpisode>> {
+    override suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>> {
         val result = mutableMapOf<Long, List<AniListAiringEpisode>>()
-        val windowArgs =
-            buildList {
-                fromEpochSeconds?.let { add("airingAt_greater: $it") }
-                toEpochSeconds?.let { add("airingAt_lesser: $it") }
-            }.joinToString(", ")
         anilistIds
             .distinct()
             .filter { it > 0 }
             .chunked(chunkSize)
             .forEach { chunk ->
                 runCatching {
-                    val scheduleArgs = if (windowArgs.isBlank()) "" else "($windowArgs)"
                     val aliases =
                         chunk.mapIndexed { index, id ->
-                            "s$index: Media(id: $id) { airingSchedule$scheduleArgs { nodes { episode airingAt } } }"
+                            "s$index: Media(id: $id) { airingSchedule(perPage: 50) { nodes { episode airingAt } } nextAiringEpisode { episode airingAt } }"
                         }
                     val response =
                         client
@@ -96,13 +80,20 @@ class AniListServiceImpl(
                                 setBody(mapOf("query" to "query { ${aliases.joinToString(" ")} }"))
                             }.body<AniListGraphQLResponse>()
                     chunk.forEachIndexed { index, id ->
-                        val nodes =
-                            response.data["s$index"]
-                                ?.airingSchedule
-                                ?.nodes
-                                .orEmpty()
-                        if (nodes.isNotEmpty()) {
-                            result[id] = nodes.map { AniListAiringEpisode(it.episode, it.airingAt) }
+                        val media = response.data["s$index"]
+                        val nodes = media?.airingSchedule?.nodes.orEmpty()
+                        val next = media?.nextAiringEpisode
+                        val combined =
+                            if (next != null && nodes.none { it.episode == next.episode }) {
+                                nodes + next
+                            } else {
+                                nodes
+                            }
+                        if (combined.isNotEmpty()) {
+                            result[id] =
+                                combined
+                                    .map { AniListAiringEpisode(it.episode, it.airingAt) }
+                                    .sortedBy { it.episode }
                         }
                     }
                 }

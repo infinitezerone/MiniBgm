@@ -64,7 +64,7 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 
 - `:app` — entry point: MainActivity, Koin init, OAuth deep-link handling. Navigation 3 (`androidx.navigation3`): `@Serializable` `NavKey` routes live in `:core:navigation` (`BgmRoutes.kt`), rendered by `NavDisplay` in `:app`; per-tab `NavBackStack`s live in `BgmNavState` (exit-through-home, survives process death). Route contracts are sealed under `BgmRoute` — `BgmNavState`'s stacking-semantics `when` is compiler-exhaustive, so a new route must declare its layer (detail replace / second-level same-class replace / drill-down push) or it won't compile; redline enforced by `ArchitectureRulesTest.navigation_routes_are_sealed_and_declared_only_in_bgm_routes`, and stacking/back invariants by `BgmNavStatePropertyTest`. Don't relocate route contracts or rewire the navigation stack without a deliberate decision.
 - `build-logic` — convention plugins (`minibgm.*` ids); all shared module config lives here.
-- `:core:*` — `model` (pure data classes), `common` (AppResult, BgmDispatchers, TimeUtils), `network` (Ktor dual-client, Bangumi REST v0, OAuth refresh loop, ETag cache), `database` (Room), `datastore` (UserPreferences + Keystore-encrypted AuthTokensDataSource), `data` (repositories, SyncManager), `testing` (fakes, TestData, ArchitectureRulesTest).
+- `:core:*` — `model` (pure data classes), `common` (AppResult, BgmDispatchers, TimeUtils), `network` (Ktor dual-client, Bangumi REST v0, AniList GraphQL `AniListService`, Bilibili Web API `BilibiliService`, OAuth refresh loop, ETag cache), `database` (Room), `datastore` (UserPreferences + Keystore-encrypted AuthTokensDataSource), `data` (repositories, SyncManager), `testing` (fakes, TestData, ArchitectureRulesTest).
 - `:sync:work` — WorkManager background sync (`BgmSyncWorker`).
 - `:feature:*` — `schedule`, `subject`, `user`, `search`, `widget`; scaffolded with the `minibgm.android.feature` plugin.
 - OAuth token-exchange proxy: maintained in a separate private Cloudflare Workers repo, not in this codebase.
@@ -75,6 +75,7 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 - Room DAO reads return `Flow<T>`; writes/upserts are `suspend` functions.
 - Reuse `BgmHttpClient.jsonConfig` (`ignoreUnknownKeys`, `isLenient`, `coerceInputValues`, ...) instead of hand-rolling `Json` instances; errors surface as typed `BgmNetworkException` subclasses mapped from HTTP status codes.
 - Business API calls go direct to `api.bgm.tv`; only token exchange/refresh goes through the Cloudflare Worker proxy. The Ktor auth plugin auto-refreshes on 401 and clears credentials on unrecoverable refresh failures (auto-logout).
+- **Air Schedule Ground Truth (No predicted episodes)**: Single-episode air events (`AirEventEntity`) and next-episode tracking (`nextEpisode`, `nextEpisodeAtUtc`, `nextEpisodeKind`, `timeCst`, `timeJst`, `weekday`) are driven exclusively by verified episode events from AniList (`actual`/`scheduled`) and Bilibili (`pub_time`). Arithmetic prediction (`P7D` loop / `broadcastRule`) is completely deprecated and eliminated; never generate fake episodes. `bangumi-data` serves strictly as metadata and cross-platform relation mappings (`anilistId`, Bilibili IDs, `sitesJson`, `titleCn`), and must never overwrite or pollute official broadcast dates/times. AniList broadcast times and split-cour offsets are derived deterministically from verified air events without heuristic tolerance dropouts.
 - Keep recomposition cheap: immutable state classes, `@Stable` where useful, stable lambdas; support edge-to-edge (`enableEdgeToEdge()` + proper `WindowInsets` padding).
 
 ## Build System (AGP 9)
@@ -87,6 +88,8 @@ Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention 
 
 - Conventional Commits with module scope: `feat(core:datastore): ...`, `fix(app): ...`, `build: ...`.
 - One commit = one purpose: don't mix unrelated reformatting or churn into a functional change.
+- **This repo is colocated with jj** (`.jj/` shares the same working copy; Git cannot see it, so never add `.jj` to `.gitignore`). Never run mutating Git commands here — `git commit`, `git rebase`, `git reset`, `git checkout` bypass jj's operation log and can leave the working-copy commit pointing at a stale parent, making changes look lost. Use `jj` for history (`jj commit -m`, `jj describe -m`, `jj bookmark set main -r @`, `jj undo`) and `git` only for clone / tags / CI.
+- **Content gates are unaffected by the VCS**: `spotlessCheck` / `crapCheck` / `:core:testing:testAndroid` / the per-module test tasks / `assembleDebug` all validate file content, not history. Keep running `./gradlew spotlessApply` before committing — CI runs them regardless of which client made the commit.
 
 ## Release Process
 

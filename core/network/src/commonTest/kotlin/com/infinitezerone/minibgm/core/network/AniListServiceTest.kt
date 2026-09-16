@@ -107,4 +107,22 @@ class AniListServiceTest {
 
             assertTrue(result.isEmpty())
         }
+
+    @Test
+    fun getAiringSchedules_includesNextAiringEpisode() =
+        runTest {
+            val client =
+                clientWith { _ ->
+                    HttpStatusCode.OK to
+                        """{"data": {"s0": {"airingSchedule": {"nodes": [{"episode": 1, "airingAt": 1700000000}]}, "nextAiringEpisode": {"episode": 2, "airingAt": 1700604800}}}}"""
+                }
+
+            val result = AniListServiceImpl(client).getAiringSchedules(listOf(189046L))
+
+            assertEquals(1, result.size)
+            val episodes = result[189046L].orEmpty()
+            assertEquals(2, episodes.size)
+            assertEquals(1, episodes[0].episode)
+            assertEquals(2, episodes[1].episode)
+        }
 }
