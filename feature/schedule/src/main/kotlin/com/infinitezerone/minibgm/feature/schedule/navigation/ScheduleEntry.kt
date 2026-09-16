@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 fun EntryProviderScope<NavKey>.scheduleEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
+    onAssistantClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -18,6 +19,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
         ScheduleScreen(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,
+            onAssistantClick = onAssistantClick,
             scrollToTop = scrollToTop,
         )
     }

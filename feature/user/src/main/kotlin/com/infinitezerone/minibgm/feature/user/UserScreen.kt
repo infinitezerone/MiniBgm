@@ -45,6 +45,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
+import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserAvatar
@@ -119,11 +120,12 @@ fun UserScreen(
                     if (success) {
                         snackbarHostState.showSnackbar("播放源已是最新状态 ✨")
                     } else {
-                        snackbarHostState.showSnackbar("播放源同步失败，请检查网络")
+                        snackbarHostState.showSnackbar("同步失败，请检查网络设置")
                     }
                 }
             }
         },
+        onSaveAiConfig = viewModel::setAiConfig,
         onToggleAiringReminder = toggleAiringReminder,
         airingReminderHour = uiState.airingReminderHour,
         onSelectReminderHour = viewModel::setAiringReminderHour,
@@ -148,6 +150,7 @@ fun UserScreenContent(
     onCollectionClick: (CollectionType) -> Unit,
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onSyncNow: () -> Unit,
+    onSaveAiConfig: (AiConfig) -> Unit = {},
     onToggleAiringReminder: (Boolean) -> Unit = {},
     airingReminderHour: Int = 8,
     onSelectReminderHour: (Int) -> Unit = {},
@@ -161,6 +164,7 @@ fun UserScreenContent(
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }
+    var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
 
@@ -310,6 +314,8 @@ fun UserScreenContent(
                                 airingReminderEnabled = uiState.airingReminderEnabled,
                                 onToggleAiringReminder = onToggleAiringReminder,
                                 airingReminderHour = airingReminderHour,
+                                aiConfig = uiState.aiConfig,
+                                onOpenAiSettingsDialog = { showAiSettingsDialog = true },
                                 onOpenReminderHourDialog = { showReminderHourDialog = true },
                                 onOpenSyncDialog = { showSyncIntervalDialog = true },
                                 onSyncNow = onSyncNow,
@@ -391,6 +397,8 @@ fun UserScreenContent(
                             airingReminderEnabled = uiState.airingReminderEnabled,
                             onToggleAiringReminder = onToggleAiringReminder,
                             airingReminderHour = airingReminderHour,
+                            aiConfig = uiState.aiConfig,
+                            onOpenAiSettingsDialog = { showAiSettingsDialog = true },
                             onOpenReminderHourDialog = { showReminderHourDialog = true },
                             onOpenSyncDialog = { showSyncIntervalDialog = true },
                             onSyncNow = onSyncNow,
@@ -403,6 +411,14 @@ fun UserScreenContent(
                 }
             }
         }
+    }
+
+    if (showAiSettingsDialog) {
+        AiSettingsDialog(
+            currentConfig = uiState.aiConfig,
+            onSaveConfig = onSaveAiConfig,
+            onDismiss = { showAiSettingsDialog = false },
+        )
     }
 
     if (showSyncIntervalDialog) {

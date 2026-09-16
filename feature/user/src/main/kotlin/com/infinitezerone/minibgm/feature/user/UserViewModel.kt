@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.SyncManager
+import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -37,6 +38,7 @@ data class UserUiState(
     val isCountsLoading: Boolean = false,
     val airingReminderEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
+    val aiConfig: AiConfig = AiConfig(),
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -145,6 +147,7 @@ class UserViewModel(
                 isCountsLoading = local.isCountsLoading,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
                 airingReminderHour = sync.settings.airingReminderHour,
+                aiConfig = sync.settings.aiConfig,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -223,6 +226,13 @@ class UserViewModel(
     fun setAiringReminderHour(hour: Int) {
         viewModelScope.launch {
             settingsRepository.setAiringReminderHour(hour)
+        }
+    }
+
+    /** 更新 AI 服务配置（服务商、端点、密钥与模型） */
+    fun setAiConfig(config: AiConfig) {
+        viewModelScope.launch {
+            settingsRepository.setAiConfig(config)
         }
     }
 

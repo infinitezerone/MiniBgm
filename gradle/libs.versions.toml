@@ -27,6 +27,7 @@ androidx-glance = "1.2.0"
 androidx-compose-material3-adaptive = "1.3.0"
 kover = "0.9.9"
 kermit = "2.1.0"
+koog = "1.2.0"
 
 [libraries]
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
@@ -91,6 +92,8 @@ androidx-work-testing = { group = "androidx.work", name = "work-testing", versio
 androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "androidx-glance" }
 androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "androidx-glance" }
 touchlab-kermit = { group = "co.touchlab", name = "kermit", version.ref = "kermit" }
+koog-agents = { group = "ai.koog", name = "koog-agents", version.ref = "koog" }
+koog-agents-core = { group = "ai.koog", name = "agents-core", version.ref = "koog" }
 
 # Gradle Plugin Artifacts for build-logic
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }

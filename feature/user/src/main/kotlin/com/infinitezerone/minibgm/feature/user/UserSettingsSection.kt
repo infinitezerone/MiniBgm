@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudQueue
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
 
@@ -70,6 +72,8 @@ internal fun SettingsSection(
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     airingReminderHour: Int,
+    aiConfig: AiConfig = AiConfig(),
+    onOpenAiSettingsDialog: () -> Unit = {},
     onOpenReminderHourDialog: () -> Unit,
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
@@ -208,6 +212,50 @@ internal fun SettingsSection(
                     title = "提醒时刻",
                     subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
                     onClick = onOpenReminderHourDialog,
+                )
+            }
+        }
+
+        // Group 1.8: AI 智能服务
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                Text(
+                    text = "AI 智能服务",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
+
+                val providerDisplay =
+                    when (aiConfig.provider) {
+                        AiConfig.PROVIDER_OLLAMA -> "Ollama / Local"
+                        AiConfig.PROVIDER_GEMINI -> "Gemini"
+                        else -> "Custom OpenAI"
+                    }
+                val modelDisplay =
+                    aiConfig.model.ifBlank {
+                        when (aiConfig.provider) {
+                            AiConfig.PROVIDER_OLLAMA -> "qwen2.5:7b"
+                            AiConfig.PROVIDER_GEMINI -> "gemini-2.5-flash"
+                            else -> "gpt-4o-mini"
+                        }
+                    }
+
+                SettingsItemRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "AI 服务配置",
+                    subtitle = "$providerDisplay · $modelDisplay",
+                    onClick = onOpenAiSettingsDialog,
                 )
             }
         }

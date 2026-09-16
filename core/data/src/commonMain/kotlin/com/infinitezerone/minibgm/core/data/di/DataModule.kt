@@ -26,6 +26,7 @@ import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmTokenService
+import com.infinitezerone.minibgm.core.network.BilibiliService
 import org.koin.dsl.module
 
 val dataModule =
@@ -44,6 +45,7 @@ val dataModule =
                 scheduleDao = get<AirScheduleDao>(),
                 airEventDao = get<AirEventDao>(),
                 anilistService = get<AniListService>(),
+                bilibiliService = get<BilibiliService>(),
                 userPreferences = get<UserPreferencesDataSource>(),
                 collectionRepository = getOrNull<CollectionRepository>(),
             )

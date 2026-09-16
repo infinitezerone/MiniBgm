@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.navigation
 
+import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
@@ -36,6 +37,7 @@ class BgmNavHostTest {
         assertFalse(isTopLevelRoute(SubjectDetailRoute(1001L)))
         assertFalse(isTopLevelRoute(SearchRoute("test")))
         assertFalse(isTopLevelRoute(UserCollectionsRoute(3)))
+        assertFalse(isTopLevelRoute(AssistantRoute))
         assertFalse(isTopLevelRoute(Pair("decorator_scope", SubjectDetailRoute(1001L))))
     }
 
