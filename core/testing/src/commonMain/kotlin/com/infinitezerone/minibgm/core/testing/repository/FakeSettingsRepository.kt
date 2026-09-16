@@ -49,4 +49,11 @@ class FakeSettingsRepository(
         setAiConfigCallCount++
         settingsState.value = settingsState.value.copy(aiConfig = config)
     }
+
+    private val airDelayOffsetMinutesState = MutableStateFlow(0)
+    override val airDelayOffsetMinutes: Flow<Int> = airDelayOffsetMinutesState
+
+    override suspend fun setAirDelayOffsetMinutes(minutes: Int) {
+        airDelayOffsetMinutesState.value = minutes
+    }
 }

@@ -39,6 +39,7 @@ data class UserUiState(
     val airingReminderEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
     val aiConfig: AiConfig = AiConfig(),
+    val airDelayOffsetMinutes: Int = 0,
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -53,6 +54,7 @@ private data class AuthSlice(
 private data class SyncSlice(
     val settings: UserSettings,
     val workSyncing: Boolean,
+    val airDelayOffsetMinutes: Int,
 )
 
 /** 本地 UI 域切片：手动同步、收藏统计与刷新标记 */
@@ -114,8 +116,9 @@ class UserViewModel(
         combine(
             settingsRepository.settings,
             syncManager.isSyncing,
-        ) { settings, workSyncing ->
-            SyncSlice(settings, workSyncing)
+            settingsRepository.airDelayOffsetMinutes,
+        ) { settings, workSyncing, delayMinutes ->
+            SyncSlice(settings, workSyncing, delayMinutes)
         }
 
     private val localSlice: Flow<LocalSlice> =
@@ -148,6 +151,7 @@ class UserViewModel(
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
                 airingReminderHour = sync.settings.airingReminderHour,
                 aiConfig = sync.settings.aiConfig,
+                airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -233,6 +237,12 @@ class UserViewModel(
     fun setAiConfig(config: AiConfig) {
         viewModelScope.launch {
             settingsRepository.setAiConfig(config)
+        }
+    }
+
+    fun setAirDelayOffsetMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAirDelayOffsetMinutes(minutes)
         }
     }
 
