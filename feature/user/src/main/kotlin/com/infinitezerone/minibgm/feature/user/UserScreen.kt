@@ -129,6 +129,8 @@ fun UserScreen(
         onToggleAiringReminder = toggleAiringReminder,
         airingReminderHour = uiState.airingReminderHour,
         onSelectReminderHour = viewModel::setAiringReminderHour,
+        airDelayOffsetMinutes = uiState.airDelayOffsetMinutes,
+        onSelectDelayOffsetMinutes = viewModel::setAirDelayOffsetMinutes,
         scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
@@ -154,6 +156,8 @@ fun UserScreenContent(
     onToggleAiringReminder: (Boolean) -> Unit = {},
     airingReminderHour: Int = 8,
     onSelectReminderHour: (Int) -> Unit = {},
+    airDelayOffsetMinutes: Int = 0,
+    onSelectDelayOffsetMinutes: (Int) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -164,6 +168,7 @@ fun UserScreenContent(
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }
+    var showDelayOffsetDialog by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
@@ -317,6 +322,8 @@ fun UserScreenContent(
                                 aiConfig = uiState.aiConfig,
                                 onOpenAiSettingsDialog = { showAiSettingsDialog = true },
                                 onOpenReminderHourDialog = { showReminderHourDialog = true },
+                                airDelayOffsetMinutes = airDelayOffsetMinutes,
+                                onOpenDelayOffsetDialog = { showDelayOffsetDialog = true },
                                 onOpenSyncDialog = { showSyncIntervalDialog = true },
                                 onSyncNow = onSyncNow,
                                 onOpenWebUrl = onOpenWebUrl,
@@ -400,6 +407,8 @@ fun UserScreenContent(
                             aiConfig = uiState.aiConfig,
                             onOpenAiSettingsDialog = { showAiSettingsDialog = true },
                             onOpenReminderHourDialog = { showReminderHourDialog = true },
+                            airDelayOffsetMinutes = airDelayOffsetMinutes,
+                            onOpenDelayOffsetDialog = { showDelayOffsetDialog = true },
                             onOpenSyncDialog = { showSyncIntervalDialog = true },
                             onSyncNow = onSyncNow,
                             onOpenWebUrl = onOpenWebUrl,
@@ -434,6 +443,14 @@ fun UserScreenContent(
             currentHour = airingReminderHour,
             onSelectHour = onSelectReminderHour,
             onDismiss = { showReminderHourDialog = false },
+        )
+    }
+
+    if (showDelayOffsetDialog) {
+        DelayOffsetDialog(
+            currentOffset = airDelayOffsetMinutes,
+            onSelectOffset = onSelectDelayOffsetMinutes,
+            onDismiss = { showDelayOffsetDialog = false },
         )
     }
 

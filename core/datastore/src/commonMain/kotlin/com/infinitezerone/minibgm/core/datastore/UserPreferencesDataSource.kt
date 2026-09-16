@@ -59,6 +59,12 @@ class UserPreferencesDataSource(
         }
     }
 
+    suspend fun setAirDelayOffsetMinutes(minutes: Int) {
+        dataStore.updateData { current ->
+            current.copy(airDelayOffsetMinutes = minutes)
+        }
+    }
+
     suspend fun setAiringReminderEnabled(enabled: Boolean) {
         dataStore.updateData { current ->
             current.copy(airingReminderEnabled = enabled)

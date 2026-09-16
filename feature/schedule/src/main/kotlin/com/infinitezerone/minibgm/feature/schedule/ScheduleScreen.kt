@@ -46,6 +46,7 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
+import com.infinitezerone.minibgm.feature.schedule.components.NextUpActionCard
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleCatchupSection
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
@@ -271,6 +272,7 @@ fun ScheduleScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     viewModel.markEpisodeWatched(subjectId, ep)
                                 },
+                                onDismissNextUpAction = viewModel::dismissNextUpAction,
                                 onShowSources = { selectedScheduleForSources = it },
                                 listState = listState,
                             )
@@ -300,6 +302,7 @@ private fun DayScheduleList(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWatching: (Long) -> Unit,
     onMarkEpisodeWatched: (Long, Int) -> Unit,
+    onDismissNextUpAction: () -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -317,6 +320,19 @@ private fun DayScheduleList(
             if (uiState.isOfflineCache) {
                 item(key = "offline_cache_banner") {
                     OfflineCacheBanner(onRetry = {})
+                }
+            }
+
+            if (isTodayPage && uiState.nextUpAction != null && !uiState.isActionDismissed) {
+                item(key = "next_up_action_card") {
+                    val context = LocalContext.current
+                    NextUpActionCard(
+                        action = uiState.nextUpAction,
+                        onPlayClick = { url -> context.launchWebUrl(url) },
+                        onMarkWatched = onMarkEpisodeWatched,
+                        onDismiss = onDismissNextUpAction,
+                        onClick = { onSubjectClick(SubjectDetailRoute(uiState.nextUpAction.subjectId)) },
+                    )
                 }
             }
 

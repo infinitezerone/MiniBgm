@@ -3,10 +3,12 @@ package com.infinitezerone.minibgm.feature.schedule
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.NextUpUrgency
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleAirScheduleList
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -32,10 +34,12 @@ class ScheduleViewModelTest {
     private fun createViewModel(
         repository: FakeScheduleRepository = FakeScheduleRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
+        settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
     ): ScheduleViewModel =
         ScheduleViewModel(
             scheduleRepository = repository,
             collectionRepository = collectionRepository,
+            settingsRepository = settingsRepository,
         )
 
     @Test
@@ -378,5 +382,55 @@ class ScheduleViewModelTest {
             assertEquals(1, collectionRepository.updateEpisodeCallCount)
             val message = viewModel.userMessage.first()
             assertEquals("已标记第 9 话已看过", message)
+        }
+
+    @Test
+    fun nextUpAction_resolvesCorrectlyAndRespectsDelay() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val settingsRepository =
+                com.infinitezerone.minibgm.core.testing.repository
+                    .FakeSettingsRepository()
+
+            val now = java.time.Instant.now()
+            val anime =
+                AirSchedule(
+                    bgmId = 999L,
+                    title = "Test Anime",
+                    titleCn = "Test Anime",
+                    weekday = today,
+                    timeCst = "20:00",
+                    nextEpisodeNumber = 12,
+                    nextEpisodeAtUtc = now.plusSeconds(600).toString(), // 10 minutes from now -> IMMINENT
+                )
+            repository.sendSchedules(weekday = today, schedules = listOf(anime))
+
+            collectionRepository.sendCollection(
+                UserCollection(
+                    subjectId = 999L,
+                    type = CollectionType.DOING.value,
+                    epStatus = 11,
+                ),
+            )
+
+            val viewModel = createViewModel(repository, collectionRepository, settingsRepository)
+
+            // Test 1: IMMINENT without delay
+            val state1 = viewModel.uiState.first { it.nextUpAction != null }
+            assertNotNull(state1.nextUpAction)
+            assertEquals(999L, state1.nextUpAction!!.subjectId)
+            assertEquals(NextUpUrgency.IMMINENT, state1.nextUpAction!!.urgency)
+
+            // Test 2: Apply delay offset, making it TODAY_UPCOMING
+            settingsRepository.setAirDelayOffsetMinutes(60) // Delay by 60 mins -> 70 mins away
+            val state2 = viewModel.uiState.first { it.nextUpAction?.urgency == NextUpUrgency.TODAY_UPCOMING }
+            assertNotNull(state2.nextUpAction)
+            assertEquals(NextUpUrgency.TODAY_UPCOMING, state2.nextUpAction!!.urgency)
+
+            // Test 3: Dismiss action
+            viewModel.dismissNextUpAction()
+            val state3 = viewModel.uiState.first { it.isActionDismissed }
+            assertTrue(state3.isActionDismissed)
         }
 }

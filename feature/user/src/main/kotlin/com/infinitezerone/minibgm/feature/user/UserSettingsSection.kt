@@ -75,6 +75,8 @@ internal fun SettingsSection(
     aiConfig: AiConfig = AiConfig(),
     onOpenAiSettingsDialog: () -> Unit = {},
     onOpenReminderHourDialog: () -> Unit,
+    airDelayOffsetMinutes: Int,
+    onOpenDelayOffsetDialog: () -> Unit,
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
@@ -212,6 +214,19 @@ internal fun SettingsSection(
                     title = "提醒时刻",
                     subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
                     onClick = onOpenReminderHourDialog,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.Schedule,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = "开播提醒延迟偏移",
+                    subtitle = if (airDelayOffsetMinutes == 0) "无延迟" else "延迟 $airDelayOffsetMinutes 分钟",
+                    onClick = onOpenDelayOffsetDialog,
                 )
             }
         }
@@ -466,6 +481,52 @@ internal fun ReminderHourDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "%02d:00".format(hour),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+    )
+}
+
+@Composable
+internal fun DelayOffsetDialog(
+    currentOffset: Int,
+    onSelectOffset: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("开播提醒延迟偏移") },
+        text = {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                listOf(0, 5, 10, 15, 30, 60).forEach { offset ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectOffset(offset)
+                                    onDismiss()
+                                }.padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = (offset == currentOffset),
+                            onClick = {
+                                onSelectOffset(offset)
+                                onDismiss()
+                            },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (offset == 0) "无延迟" else "延迟 $offset 分钟",
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }

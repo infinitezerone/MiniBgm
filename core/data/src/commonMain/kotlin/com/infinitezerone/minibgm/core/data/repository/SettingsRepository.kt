@@ -22,6 +22,7 @@ data class UserSettings(
 interface SettingsRepository {
     val settings: Flow<UserSettings>
     val aiConfig: Flow<AiConfig>
+    val airDelayOffsetMinutes: Flow<Int>
 
     suspend fun setSyncInterval(interval: SyncInterval)
 
@@ -33,6 +34,8 @@ interface SettingsRepository {
 
     /** 更新 AI 服务配置 */
     suspend fun setAiConfig(config: AiConfig)
+
+    suspend fun setAirDelayOffsetMinutes(minutes: Int)
 }
 
 class SettingsRepositoryImpl(
@@ -65,6 +68,9 @@ class SettingsRepositoryImpl(
             )
         }
 
+    override val airDelayOffsetMinutes: Flow<Int> =
+        userPreferences.userPreferences.map { it.airDelayOffsetMinutes }
+
     override suspend fun setSyncInterval(interval: SyncInterval) {
         userPreferences.setSyncInterval(interval)
     }
@@ -84,5 +90,9 @@ class SettingsRepositoryImpl(
             model = config.model,
             provider = config.provider,
         )
+    }
+
+    override suspend fun setAirDelayOffsetMinutes(minutes: Int) {
+        userPreferences.setAirDelayOffsetMinutes(minutes)
     }
 }

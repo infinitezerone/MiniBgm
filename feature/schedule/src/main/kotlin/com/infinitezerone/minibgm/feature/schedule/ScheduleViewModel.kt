@@ -9,6 +9,10 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.NextUpAction
+import com.infinitezerone.minibgm.core.model.NextUpUrgency
+import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -57,6 +61,8 @@ data class ScheduleUiState(
     val onlyWatching: Boolean = false,
     val catchupItems: List<CatchupScheduleItem> = emptyList(),
     val yesterdaySchedules: List<AirSchedule> = emptyList(),
+    val nextUpAction: NextUpAction? = null,
+    val isActionDismissed: Boolean = false,
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
@@ -152,6 +158,7 @@ data class ScheduleUiState(
 class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
+    private val settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository,
 ) : ViewModel() {
     private val selectedWeekday = MutableStateFlow(currentCstDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
@@ -194,6 +201,17 @@ class ScheduleViewModel(
                 (baseWatchingIds + optimisticWatchMap.filterValues { it }.keys) -
                     optimisticWatchMap.filterValues { !it }.keys
             val collectionMap = userCollections.associateBy { it.subjectId }.toMutableMap()
+            // 补全乐观追番时的默认收藏进度对象，确保本地未登录/即时追番时立即参与卡片计算
+            finalWatchingIds.forEach { subId ->
+                if (!collectionMap.containsKey(subId)) {
+                    collectionMap[subId] =
+                        UserCollection(
+                            subjectId = subId,
+                            type = CollectionType.DOING.value,
+                            epStatus = 0,
+                        )
+                }
+            }
             optimisticEpMap.forEach { (subId, ep) ->
                 val existing = collectionMap[subId]
                 if (existing != null) {
@@ -202,6 +220,8 @@ class ScheduleViewModel(
             }
             finalWatchingIds to collectionMap
         }.distinctUntilChanged()
+
+    private val isActionDismissed = MutableStateFlow(false)
 
     private val filterFlow =
         combine(selectedWeekday, onlyWatching) { weekday, onlyWatch ->
@@ -213,13 +233,19 @@ class ScheduleViewModel(
             refreshing to error
         }
 
+    private val extraStateFlow =
+        combine(settingsRepository.airDelayOffsetMinutes, isActionDismissed) { delayMinutes, dismissed ->
+            delayMinutes to dismissed
+        }
+
     val uiState: StateFlow<ScheduleUiState> =
         combine(
             weeklySchedulesFlow,
             collectionsStateFlow,
             filterFlow,
             statusFlow,
-        ) { weeklySchedules, (watchingIds, collectionMap), (weekday, onlyWatch), (refreshing, error) ->
+            extraStateFlow,
+        ) { weeklySchedules, (watchingIds, collectionMap), (weekday, onlyWatch), (refreshing, error), (delayMinutes, dismissed) ->
             val currentToday = currentCstDate()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
@@ -272,6 +298,112 @@ class ScheduleViewModel(
                         .thenBy { it.timeCst.ifBlank { it.timeJst } },
                 )
 
+            var computedNextUpAction: NextUpAction? = null
+            if (!dismissed) {
+                val todayRaw = weeklySchedules[currentWeekday].orEmpty()
+                val nowEpoch = System.currentTimeMillis()
+
+                var bestImminent: NextUpAction? = null
+                var bestAired: NextUpAction? = null
+                var bestUpcoming: NextUpAction? = null
+
+                for (item in todayRaw) {
+                    if (!watchingIds.contains(item.bgmId)) continue
+                    val col = collectionMap[item.bgmId] ?: continue
+
+                    val officialAirEpochMillis =
+                        if (item.nextEpisodeAtUtc.isNotBlank()) {
+                            try {
+                                java.time.Instant
+                                    .parse(item.nextEpisodeAtUtc)
+                                    .toEpochMilli()
+                            } catch (e: Exception) {
+                                0L
+                            }
+                        } else if (item.timeCst.isNotBlank() || item.timeJst.isNotBlank()) {
+                            try {
+                                val timeStr = item.timeCst.ifBlank { item.timeJst }
+                                val parts = timeStr.split(":")
+                                if (parts.size == 2) {
+                                    val h = parts[0].toIntOrNull() ?: 0
+                                    val m = parts[1].toIntOrNull() ?: 0
+                                    val zdt = currentToday.atTime(h, m).atZone(CST_ZONE_ID)
+                                    zdt.toInstant().toEpochMilli()
+                                } else {
+                                    0L
+                                }
+                            } catch (e: Exception) {
+                                0L
+                            }
+                        } else {
+                            // 针对全天/待定条目（无精确时分），默认按当天中午 12:00 CST 兜底，确保在追番在今日能展示行动卡片
+                            try {
+                                val zdt = currentToday.atTime(12, 0).atZone(CST_ZONE_ID)
+                                zdt.toInstant().toEpochMilli()
+                            } catch (e: Exception) {
+                                0L
+                            }
+                        }
+
+                    if (officialAirEpochMillis <= 0L) continue
+
+                    val effectiveAirEpoch = officialAirEpochMillis + delayMinutes * 60_000L
+                    val epNumber = if (item.nextEpisodeNumber > 0) item.nextEpisodeNumber else 1
+
+                    if (nowEpoch < effectiveAirEpoch) {
+                        val diff = effectiveAirEpoch - nowEpoch
+                        if (diff in 0..45 * 60_000L) {
+                            val mins = diff / 60_000L
+                            val action =
+                                NextUpAction(
+                                    subjectId = item.bgmId,
+                                    title = item.title,
+                                    titleCn = item.titleCn,
+                                    coverUrl = item.coverUrl,
+                                    episodeNumber = epNumber,
+                                    airTimeLabel = "还有 ${maxOf(1L, mins)} 分钟开播",
+                                    urgency = NextUpUrgency.IMMINENT,
+                                )
+                            if (bestImminent == null) bestImminent = action
+                        } else {
+                            val timeStr = item.timeCst.ifBlank { item.timeJst }
+                            val label = if (timeStr.isNotBlank()) "今日 $timeStr 准时放送" else "今日放送"
+                            val action =
+                                NextUpAction(
+                                    subjectId = item.bgmId,
+                                    title = item.title,
+                                    titleCn = item.titleCn,
+                                    coverUrl = item.coverUrl,
+                                    episodeNumber = epNumber,
+                                    airTimeLabel = label,
+                                    urgency = NextUpUrgency.TODAY_UPCOMING,
+                                )
+                            if (bestUpcoming == null) bestUpcoming = action
+                        }
+                    } else {
+                        if (col.epStatus < epNumber) {
+                            val sortedLinks = item.siteLinks.sortedBySitePriority()
+                            val action =
+                                NextUpAction(
+                                    subjectId = item.bgmId,
+                                    title = item.title,
+                                    titleCn = item.titleCn,
+                                    coverUrl = item.coverUrl,
+                                    episodeNumber = epNumber,
+                                    airTimeLabel = "今日已更新 · 第 $epNumber 话",
+                                    urgency = NextUpUrgency.TODAY_AIRED,
+                                    primaryPlayLink = sortedLinks.firstOrNull(),
+                                    allPlayLinks = sortedLinks,
+                                    canMarkWatched = true,
+                                )
+                            if (bestAired == null) bestAired = action
+                        }
+                    }
+                }
+
+                computedNextUpAction = bestImminent ?: bestAired ?: bestUpcoming
+            }
+
             ScheduleUiState(
                 isLoading = refreshing && weeklySchedules.values.all { it.isEmpty() },
                 isRefreshing = refreshing,
@@ -284,6 +416,8 @@ class ScheduleViewModel(
                 onlyWatching = onlyWatch,
                 catchupItems = catchupList,
                 yesterdaySchedules = yesterdayList,
+                nextUpAction = computedNextUpAction,
+                isActionDismissed = dismissed,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -321,6 +455,10 @@ class ScheduleViewModel(
         viewModelScope.launch {
             scheduleRepository.setScheduleDefaultOnlyWatching(next)
         }
+    }
+
+    fun dismissNextUpAction() {
+        isActionDismissed.value = true
     }
 
     /** 1-tap 快捷追番/移出追番（支持 0ms 本地即时乐观更新与失败自动回滚） */
