@@ -70,7 +70,6 @@ dependencies {
     implementation(project(":feature:subject"))
     implementation(project(":feature:search"))
     implementation(project(":feature:widget"))
-    implementation(project(":feature:agent"))
     implementation(project(":sync:work"))
 
     implementation(libs.koin.androidx.workmanager)
@@ -103,7 +102,6 @@ dependencies {
     implementation(libs.ktor.client.cio)
 
     implementation(libs.koin.android)
-    implementation(libs.miniagent.harness.android)
     implementation(libs.koin.androidx.compose)
 
     testImplementation(libs.junit)

@@ -12,8 +12,6 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-// MiniAgent 复合构建：agent-loop 与 provider-cloud 以 com.miniagent:* 坐标参与依赖解析
-includeBuild("../MiniAgent")
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
@@ -52,5 +50,4 @@ include(":feature:schedule")
 include(":feature:subject")
 include(":feature:search")
 include(":feature:widget")
-include(":feature:agent")
 include(":sync:work")
