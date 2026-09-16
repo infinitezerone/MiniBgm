@@ -4,7 +4,6 @@ import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
 import com.infinitezerone.minibgm.core.common.TokenProvider
-import com.infinitezerone.minibgm.core.datastore.AgentConfigDataSource
 import com.infinitezerone.minibgm.core.datastore.AndroidCryptoManager
 import com.infinitezerone.minibgm.core.datastore.AuthBlobSerializer
 import com.infinitezerone.minibgm.core.datastore.AuthTokensDataSource
@@ -39,17 +38,6 @@ val datastoreModule =
                     corruptionHandler = ReplaceFileCorruptionHandler(produceNewData = { "" }),
                 )
             AuthTokensDataSource(dataStore = authTokensDataStore, crypto = get())
-        }
-
-        // Agent 模型配置独立加密存储；损坏时按未配置处理
-        single<AgentConfigDataSource> {
-            val agentConfigDataStore =
-                DataStoreFactory.create(
-                    serializer = AuthBlobSerializer,
-                    produceFile = { androidContext().dataStoreFile("agent_model_config.json") },
-                    corruptionHandler = ReplaceFileCorruptionHandler(produceNewData = { "" }),
-                )
-            AgentConfigDataSource(dataStore = agentConfigDataStore, crypto = get())
         }
 
         single<TokenProvider> { KeystoreTokenProvider(get()) }
