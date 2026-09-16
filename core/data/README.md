@@ -11,3 +11,7 @@
 ## ⚠️ 架构红线与约束
 1. 作为唯一的领域数据门面（SSOT），所有对网络或数据库的读写必须收口于本层的 Repository。
 2. Repository 方法对外统一暴露 `Flow<T>` 响应式流或包装在 `AppResult<T>` 中的挂起函数。
+3. **排期与放送事件真值原则（Air Schedule SSOT）**：
+   - 时刻表单集事件（`AirEventEntity`）严格由真实排期源（日番走 AniList，国创/B站独播走 Bilibili）驱动；
+   - 彻底废除机械算术推算，不伪造任何虚拟预测事件；
+   - `bangumi-data` 仅作为关系映射（跨站 ID 转换与播放源跳转）与译名补充，禁止用其 `begin` 或 `broadcast` 反向污染官方放送时刻。

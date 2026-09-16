@@ -12,6 +12,8 @@ import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BgmTokenPair
 import com.infinitezerone.minibgm.core.network.BgmTokenService
+import com.infinitezerone.minibgm.core.network.BilibiliService
+import com.infinitezerone.minibgm.core.network.BilibiliServiceImpl
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -65,4 +67,5 @@ fun networkModule(
         single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }
+        single<BilibiliService> { BilibiliServiceImpl(get(named("unauthenticated"))) }
     }
