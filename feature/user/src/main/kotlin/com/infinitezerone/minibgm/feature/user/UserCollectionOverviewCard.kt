@@ -37,8 +37,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
-import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
+import com.infinitezerone.minibgm.core.designsystem.theme.StatusCollect
+import com.infinitezerone.minibgm.core.designsystem.theme.StatusDoing
+import com.infinitezerone.minibgm.core.designsystem.theme.StatusDropped
+import com.infinitezerone.minibgm.core.designsystem.theme.StatusOnHold
+import com.infinitezerone.minibgm.core.designsystem.theme.StatusWish
 import com.infinitezerone.minibgm.core.model.CollectionType
 
 @Composable
@@ -120,7 +123,7 @@ internal fun CollectionOverviewCard(
                     tag = "追番中",
                     count = formatCount(CollectionType.DOING),
                     icon = Icons.Filled.PlayCircleOutline,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = StatusDoing,
                     onClick = { onCollectionClick(CollectionType.DOING) },
                     modifier = Modifier.weight(1f),
                 )
@@ -129,7 +132,7 @@ internal fun CollectionOverviewCard(
                     tag = "愿望单",
                     count = formatCount(CollectionType.WISH),
                     icon = Icons.Filled.BookmarkBorder,
-                    tint = WishOrange,
+                    tint = StatusWish,
                     onClick = { onCollectionClick(CollectionType.WISH) },
                     modifier = Modifier.weight(1f),
                 )
@@ -138,7 +141,7 @@ internal fun CollectionOverviewCard(
                     tag = "已完成",
                     count = formatCount(CollectionType.COLLECT),
                     icon = Icons.Filled.CheckCircleOutline,
-                    tint = ActionCollect,
+                    tint = StatusCollect,
                     onClick = { onCollectionClick(CollectionType.COLLECT) },
                     modifier = Modifier.weight(1f),
                 )
@@ -156,7 +159,7 @@ internal fun CollectionOverviewCard(
                     tag = null,
                     count = formatCount(CollectionType.ON_HOLD),
                     icon = Icons.Filled.PauseCircleOutline,
-                    tint = MaterialTheme.colorScheme.outline,
+                    tint = StatusOnHold,
                     onClick = { onCollectionClick(CollectionType.ON_HOLD) },
                     modifier = Modifier.weight(1f),
                 )
@@ -165,7 +168,7 @@ internal fun CollectionOverviewCard(
                     tag = null,
                     count = formatCount(CollectionType.DROPPED),
                     icon = Icons.Filled.Cancel,
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                    tint = StatusDropped,
                     onClick = { onCollectionClick(CollectionType.DROPPED) },
                     modifier = Modifier.weight(1f),
                 )
