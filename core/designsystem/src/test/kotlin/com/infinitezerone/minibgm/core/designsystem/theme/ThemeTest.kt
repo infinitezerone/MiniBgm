@@ -14,6 +14,9 @@ class ThemeTest {
         // Layer 2: Streamer / ACG Dark Immersion surfaces
         assertEquals(Color(0xFF0E1015), dark.background)
         assertEquals(Color(0xFF12141B), dark.surface)
+        assertEquals(Color(0xFF232732), dark.surfaceVariant)
+        assertEquals(Color(0xFF0E1015), dark.surfaceDim)
+        assertEquals(Color(0xFF2A2F3C), dark.surfaceBright)
         assertEquals(Color(0xFF0E1015), dark.surfaceContainerLowest)
         assertEquals(Color(0xFF15181E), dark.surfaceContainerLow)
         assertEquals(Color(0xFF1C2028), dark.surfaceContainer)
@@ -38,18 +41,21 @@ class ThemeTest {
         val light = MiniBgmLightColors
 
         // Light Surfaces
-        assertEquals(Color(0xFFF8F9FA), light.background)
+        assertEquals(Color(0xFFF2F4F7), light.background)
         assertEquals(Color(0xFF191C1E), light.onBackground)
         assertEquals(Color(0xFFFFFFFF), light.surface)
+        assertEquals(Color(0xFFEBF0F5), light.surfaceVariant)
+        assertEquals(Color(0xFFD8D9DC), light.surfaceDim)
+        assertEquals(Color(0xFFFFFFFF), light.surfaceBright)
         assertEquals(Color(0xFF191C1E), light.onSurface)
         assertEquals(Color(0xFF524346), light.onSurfaceVariant)
         assertEquals(Color(0xFFFFFFFF), light.surfaceContainerLowest)
         assertEquals(Color(0xFFFFFFFF), light.surfaceContainerLow)
-        assertEquals(Color(0xFFF1F3F5), light.surfaceContainer)
+        assertEquals(Color(0xFFFFFFFF), light.surfaceContainer)
         assertEquals(Color(0xFFE9ECEF), light.surfaceContainerHigh)
         assertEquals(Color(0xFFDEE2E6), light.surfaceContainerHighest)
         assertEquals(Color(0xFF847376), light.outline)
-        assertEquals(Color(0x0F000000), light.outlineVariant)
+        assertEquals(Color(0x0D000000), light.outlineVariant)
 
         // Primary Brand (Sakura Pink Tone 40)
         assertEquals(PrimaryLight, light.primary)
