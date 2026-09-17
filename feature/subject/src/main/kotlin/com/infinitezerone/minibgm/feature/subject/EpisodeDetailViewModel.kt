@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
+import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -14,9 +15,11 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -30,6 +33,7 @@ data class EpisodeDetailUiState(
     val allEpisodes: List<Episode> = emptyList(),
     val comments: List<EpisodeComment> = emptyList(),
     val isCommentsLoading: Boolean = false,
+    val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
 )
 
@@ -40,9 +44,14 @@ class EpisodeDetailViewModel(
     private val subjectRepository: SubjectRepository,
     private val collectionRepository: CollectionRepository,
     private val communityRepository: CommunityRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EpisodeDetailUiState())
     val uiState: StateFlow<EpisodeDetailUiState> = _uiState.asStateFlow()
+
+    private val isLoggedIn =
+        authRepository.isLoggedIn
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var refreshJob: Job? = null
 
@@ -123,11 +132,16 @@ class EpisodeDetailViewModel(
             }
     }
 
-    /** 切换当前分集观看打卡状态 */
+    /** 切换当前分集观看打卡状态（未登录时拦截弹窗） */
     fun toggleWatched(
         episode: Episode,
         isWatched: Boolean,
     ) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
+
         val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
@@ -183,8 +197,13 @@ class EpisodeDetailViewModel(
         }
     }
 
-    /** 批量标记观看进度至目标话数（看到本集） */
+    /** 批量标记观看进度至目标话数（看到本集，未登录时拦截弹窗） */
     fun markWatchedUpTo(targetEpisode: Episode) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
+
         val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
@@ -232,5 +251,15 @@ class EpisodeDetailViewModel(
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
             }
         }
+    }
+
+    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL */
+    suspend fun beginLogin(): String {
+        _uiState.update { it.copy(showLoginPromptDialog = false) }
+        return authRepository.beginLogin()
+    }
+
+    fun dismissLoginPrompt() {
+        _uiState.update { it.copy(showLoginPromptDialog = false) }
     }
 }

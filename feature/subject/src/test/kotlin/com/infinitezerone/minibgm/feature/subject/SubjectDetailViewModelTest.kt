@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.testing.data.samplePersonList
 import com.infinitezerone.minibgm.core.testing.data.sampleRelationList
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
+import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
@@ -32,6 +33,20 @@ import org.junit.Test
 class SubjectDetailViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    private fun SubjectDetailViewModel(
+        subjectRepository: com.infinitezerone.minibgm.core.data.repository.SubjectRepository,
+        subjectId: Long,
+        collectionRepository: com.infinitezerone.minibgm.core.data.repository.CollectionRepository,
+        communityRepository: com.infinitezerone.minibgm.core.data.repository.CommunityRepository,
+    ): SubjectDetailViewModel =
+        SubjectDetailViewModel(
+            subjectRepository = subjectRepository,
+            subjectId = subjectId,
+            collectionRepository = collectionRepository,
+            communityRepository = communityRepository,
+            authRepository = FakeAuthRepository(initialLoggedIn = true),
+        )
 
     @Test
     fun fetchSuccess_subjectAndEpisodesEnterUiState() =
@@ -1135,5 +1150,107 @@ class SubjectDetailViewModelTest {
             assertNull(viewModel.uiState.value.activeCharacter)
             assertNull(viewModel.uiState.value.activePerson)
             assertNull(viewModel.uiState.value.selectedPersonDetail)
+        }
+
+    @Test
+    fun unauthenticated_updateCollectionStatus_showsLoginPromptDialog() =
+        runTest {
+            val repository = FakeSubjectRepository().apply { sendSubject(sampleSubject) }
+            val collectionRepo = FakeCollectionRepository()
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepo,
+                )
+
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+
+            viewModel.updateCollectionStatus(CollectionType.DOING)
+
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepo.updateCollectionCallCount)
+
+            viewModel.dismissLoginPrompt()
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+        }
+
+    @Test
+    fun unauthenticated_toggleWatching_showsLoginPromptDialog() =
+        runTest {
+            val repository = FakeSubjectRepository().apply { sendSubject(sampleSubject) }
+            val collectionRepo = FakeCollectionRepository()
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepo,
+                )
+
+            viewModel.toggleWatching()
+
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepo.updateCollectionCallCount)
+        }
+
+    @Test
+    fun unauthenticated_setCollectionSheetVisible_showsLoginPromptDialog() =
+        runTest {
+            val repository = FakeSubjectRepository().apply { sendSubject(sampleSubject) }
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepo,
+                )
+
+            viewModel.setCollectionSheetVisible(true)
+
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertFalse(viewModel.uiState.value.showCollectionSheet)
+
+            val url = viewModel.beginLogin()
+            assertTrue(url.isNotBlank())
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+        }
+
+    @Test
+    fun unauthenticated_toggleEpisodeWatched_and_markWatchedUpTo_showsLoginPromptDialog() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo = FakeCollectionRepository()
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepo,
+                )
+
+            viewModel.toggleEpisodeWatched(episodeId = sampleEpisodeList.first().id, isWatched = true)
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepo.updateEpisodeCallCount)
+
+            viewModel.dismissLoginPrompt()
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+
+            viewModel.markWatchedUpTo(sampleEpisodeList.first())
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepo.markEpisodesWatchedUpToCallCount)
         }
 }

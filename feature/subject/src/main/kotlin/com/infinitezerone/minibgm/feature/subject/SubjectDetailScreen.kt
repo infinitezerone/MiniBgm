@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -511,6 +512,51 @@ fun SubjectDetailScreen(
             dismissButton = {
                 TextButton(onClick = { appNotInstalledPrompt = null }) {
                     Text("取消")
+                }
+            },
+        )
+    }
+
+    if (uiState.showLoginPromptDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissLoginPrompt,
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    text = "请先登录 Bangumi 账号",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "追番、收藏与章节打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val authorizeUrl = viewModel.beginLogin()
+                            context.launchWebUrl(authorizeUrl, isAuth = true)
+                        }
+                    },
+                ) {
+                    Text("立即登录")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissLoginPrompt) {
+                    Text("稍后再说")
                 }
             },
         )

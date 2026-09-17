@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.testing.data.sampleEpisodeList
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
+import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
@@ -24,6 +25,22 @@ class EpisodeDetailViewModelTest {
     private val targetEpisode = sampleEpisodeList.first()
     private val subjectId = sampleSubject.id
     private val episodeId = targetEpisode.id
+
+    private fun EpisodeDetailViewModel(
+        subjectId: Long,
+        episodeId: Long,
+        subjectRepository: com.infinitezerone.minibgm.core.data.repository.SubjectRepository,
+        collectionRepository: com.infinitezerone.minibgm.core.data.repository.CollectionRepository,
+        communityRepository: com.infinitezerone.minibgm.core.data.repository.CommunityRepository,
+    ): EpisodeDetailViewModel =
+        EpisodeDetailViewModel(
+            subjectId = subjectId,
+            episodeId = episodeId,
+            subjectRepository = subjectRepository,
+            collectionRepository = collectionRepository,
+            communityRepository = communityRepository,
+            authRepository = FakeAuthRepository(initialLoggedIn = true),
+        )
 
     @Test
     fun initialState_loadsEpisodeFromRepositoryStream() =
@@ -168,5 +185,60 @@ class EpisodeDetailViewModelTest {
             val state = viewModel.uiState.value
             assertFalse(state.isRefreshing)
             assertNull(state.error)
+        }
+
+    @Test
+    fun unauthenticated_toggleWatched_showsLoginPromptDialog() =
+        runTest {
+            val subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository(initialLoggedIn = false)
+
+            val viewModel =
+                EpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepository,
+                )
+
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+
+            viewModel.toggleWatched(targetEpisode, true)
+
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepository.updateEpisodeCallCount)
+
+            viewModel.dismissLoginPrompt()
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+        }
+
+    @Test
+    fun unauthenticated_markWatchedUpTo_showsLoginPromptDialog() =
+        runTest {
+            val subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository(initialLoggedIn = false)
+
+            val viewModel =
+                EpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = authRepository,
+                )
+
+            viewModel.markWatchedUpTo(targetEpisode)
+
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            assertEquals(0, collectionRepository.markEpisodesWatchedUpToCallCount)
+
+            val url = viewModel.beginLogin()
+            assertTrue(url.isNotBlank())
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
         }
 }

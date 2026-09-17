@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
+import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -23,9 +24,11 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -48,6 +51,7 @@ data class SubjectDetailUiState(
     val activeCharacter: SubjectCharacter? = null,
     val activePerson: SubjectPerson? = null,
     val showCollectionSheet: Boolean = false,
+    val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
     val subject: Subject? = null,
     val episodes: List<Episode> = emptyList(),
@@ -76,9 +80,14 @@ class SubjectDetailViewModel(
     private val subjectId: Long,
     private val collectionRepository: CollectionRepository,
     private val communityRepository: CommunityRepository,
+    private val authRepository: AuthRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
+
+    private val isLoggedIn =
+        authRepository.isLoggedIn
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
         // 先订阅本地库/内存缓存流：如果仓库中已有缓存，立刻合成进入 UiState，秒开无白屏
@@ -196,8 +205,12 @@ class SubjectDetailViewModel(
         _uiState.update { it.copy(selectedEpisodeForDetail = null) }
     }
 
-    /** 控制收藏状态底栏显隐 */
+    /** 控制收藏状态底栏显隐（未登录时拦截弹窗） */
     fun setCollectionSheetVisible(visible: Boolean) {
+        if (visible && !isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
         _uiState.update { it.copy(showCollectionSheet = visible) }
     }
 
@@ -313,13 +326,18 @@ class SubjectDetailViewModel(
             }
     }
 
-    /** 更新条目收藏状态（想看/在看/看过等，支持 0ms 本地即时乐观更新与失败回滚） */
+    /** 更新条目收藏状态（想看/在看/看过等，支持 0ms 本地即时乐观更新与失败回滚，未登录时拦截弹窗） */
     fun updateCollectionStatus(
         type: CollectionType,
         rate: Int? = null,
         comment: String? = null,
         private: Boolean = false,
     ) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showCollectionSheet = false, showLoginPromptDialog = true) }
+            return
+        }
+
         val previousCollection = _uiState.value.collection
         val resolvedSubjectType = _uiState.value.subject?.type ?: previousCollection?.subjectType ?: 2
         // 1. 本地立即乐观更新 UI 状态中的 collection
@@ -359,19 +377,28 @@ class SubjectDetailViewModel(
         }
     }
 
-    /** 1-tap 快捷追番/移出在看（支持 0ms 本地即时乐观更新与失败回滚） */
+    /** 1-tap 快捷追番/移出在看（支持 0ms 本地即时乐观更新与失败回滚，未登录时拦截弹窗） */
     fun toggleWatching() {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
         val current = _uiState.value.collection
         val nextType = if (current?.type == CollectionType.DOING.value) CollectionType.DROPPED else CollectionType.DOING
         updateCollectionStatus(nextType)
     }
 
-    /** 单集观看状态打卡（支持即时乐观更新） */
+    /** 单集观看状态打卡（支持即时乐观更新，未登录时拦截弹窗） */
     fun toggleEpisodeWatched(
         episodeId: Long,
         isWatched: Boolean,
         epNumber: Int = 1,
     ) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
+
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
         // 乐观更新 UI 状态中的 collection.epStatus
@@ -424,10 +451,14 @@ class SubjectDetailViewModel(
     }
 
     /**
-     * 批量标记观看进度至目标话数（看到本集）。
+     * 批量标记观看进度至目标话数（看到本集，未登录时拦截弹窗）。
      * 将本集及之前的所有常规单集批量打卡，并更新条目观看进度与收藏状态。
      */
     fun markWatchedUpTo(targetEpisode: Episode) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            return
+        }
         val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
@@ -615,4 +646,14 @@ class SubjectDetailViewModel(
 
     /** 关闭角色或人物详情底栏并清空状态 */
     fun clearEntityDetail() = dismissEntityDetail()
+
+    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL */
+    suspend fun beginLogin(): String {
+        _uiState.update { it.copy(showLoginPromptDialog = false) }
+        return authRepository.beginLogin()
+    }
+
+    fun dismissLoginPrompt() {
+        _uiState.update { it.copy(showLoginPromptDialog = false) }
+    }
 }
