@@ -99,7 +99,6 @@ fun BgmNavHost(
                             exploreEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
-                                onSeasonalGuideClick = { navState.navigateTo(SeasonalGuideRoute()) },
                                 scrollToTop = exploreScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder),
                             )

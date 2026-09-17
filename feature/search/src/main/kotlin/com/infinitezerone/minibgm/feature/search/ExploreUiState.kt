@@ -11,13 +11,12 @@ data class SeasonOption(
     val id: String,
     val label: String,
     val airDateFilter: List<String>? = null,
-    val category: TimeCategory = TimeCategory.QUARTER,
+    val category: TimeCategory = TimeCategory.YEAR,
 )
 
 enum class TimeCategory(
     val label: String,
 ) {
-    QUARTER("按季度"),
     YEAR("按年份/年代"),
     ALL("全部时间"),
 }
@@ -50,8 +49,8 @@ enum class ExploreMood(
     val tags: List<String> = emptyList(),
     val sort: ExploreSort,
 ) {
-    TRENDING("🔥 当季爆款", emptyList(), ExploreSort.HEAT),
     MASTERPIECE("💎 封神必看", emptyList(), ExploreSort.RANK),
+    HOT("🔥 热门流行", emptyList(), ExploreSort.HEAT),
     HEALING("🌿 深夜解压", listOf("治愈", "日常"), ExploreSort.RANK),
     SHONEN("⚔️ 热血高燃", listOf("热血", "战斗"), ExploreSort.HEAT),
     SUSPENSE("🧠 烧脑悬疑", listOf("悬疑", "推理"), ExploreSort.RANK),
@@ -60,13 +59,6 @@ enum class ExploreMood(
     FANTASY("🔮 异界奇幻", listOf("奇幻", "冒险"), ExploreSort.HEAT),
     BLIND_BOX("🎲 随心盲盒", emptyList(), ExploreSort.RANK),
 }
-
-private data class SeasonMeta(
-    val name: String,
-    val startMonthDay: String,
-    val endYearOffset: Int,
-    val endMonthDay: String,
-)
 
 /** 标签维度分组 */
 @Immutable
@@ -157,52 +149,18 @@ val TAG_GROUPS =
         ),
     )
 
-/** 生成完整的季度与年代列表 */
+/** 生成完整的年代与年份列表 */
 fun generateFullTimeOptions(
     nowYear: Int,
-    nowMonth: Int,
+    nowMonth: Int = 1,
 ): List<SeasonOption> {
     val options = mutableListOf<SeasonOption>()
-    val currentQuarter = (nowMonth - 1) / 3 + 1 // 1..4
 
-    // 1. 季度维度：下季(+1)、当季(0)、过去8个季度
-    for (offset in 1 downTo -7) {
-        var q = currentQuarter + offset
-        var y = nowYear
-        while (q < 1) {
-            q += 4
-            y -= 1
-        }
-        while (q > 4) {
-            q -= 4
-            y += 1
-        }
-
-        val meta =
-            when (q) {
-                1 -> SeasonMeta("冬季 (1月)", "01-01", 0, "04-01")
-                2 -> SeasonMeta("春季 (4月)", "04-01", 0, "07-01")
-                3 -> SeasonMeta("夏季 (7月)", "07-01", 0, "10-01")
-                else -> SeasonMeta("秋季 (10月)", "10-01", 1, "01-01")
-            }
-
-        val isCurrent = (y == nowYear && q == currentQuarter)
-        val isNext = (offset == 1)
-        val prefix =
-            when {
-                isCurrent -> "🔥 本季 "
-                isNext -> "👀 下季 "
-                else -> ""
-            }
-        val label = "$prefix$y ${meta.name}"
-        val id = "$y-q$q"
-        val endYear = y + meta.endYearOffset
-        val airDates = listOf(">=$y-${meta.startMonthDay}", "<$endYear-${meta.endMonthDay}")
-        options.add(SeasonOption(id = id, label = label, airDateFilter = airDates, category = TimeCategory.QUARTER))
-    }
+    // 1. 全部时间 (默认)
+    options.add(SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL))
 
     // 2. 年份维度（近 6 年单年）
-    for (yearOffset in 0..6) {
+    for (yearOffset in 0..5) {
         val y = nowYear - yearOffset
         options.add(
             SeasonOption(
@@ -248,9 +206,6 @@ fun generateFullTimeOptions(
         ),
     )
 
-    // 4. 全部时间
-    options.add(SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL))
-
     return options
 }
 
@@ -265,20 +220,20 @@ fun getCurrentSeasonList(): List<SeasonOption> {
 }
 
 val DEFAULT_SEASONS = getCurrentSeasonList()
-val CURRENT_SEASON = DEFAULT_SEASONS.firstOrNull { it.label.contains("本季") } ?: DEFAULT_SEASONS.first()
 val ALL_TIME_SEASON =
     DEFAULT_SEASONS.firstOrNull { it.category == TimeCategory.ALL }
         ?: SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL)
+val CURRENT_SEASON = ALL_TIME_SEASON
 
 /** 探索发现界面的单一不可变 UI 状态 */
 @Immutable
 data class ExploreUiState(
-    val selectedSeason: SeasonOption = CURRENT_SEASON,
+    val selectedSeason: SeasonOption = ALL_TIME_SEASON,
     val selectedCategory: ExploreCategory = ExploreCategory.ANIME,
     val selectedTags: Set<String> = emptySet(),
     val customTagInput: String = "",
-    val selectedSort: ExploreSort = ExploreSort.HEAT,
-    val selectedMood: ExploreMood? = ExploreMood.TRENDING,
+    val selectedSort: ExploreSort = ExploreSort.RANK,
+    val selectedMood: ExploreMood? = ExploreMood.MASTERPIECE,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
