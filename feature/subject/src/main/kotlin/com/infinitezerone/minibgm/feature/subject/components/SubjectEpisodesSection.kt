@@ -195,6 +195,7 @@ fun EpisodeListItem(
                         MaterialTheme.colorScheme.surfaceContainerLow
                     },
             ),
+        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     ) {
         Row(
             modifier =

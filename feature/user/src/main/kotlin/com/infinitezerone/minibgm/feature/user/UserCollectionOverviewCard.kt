@@ -99,7 +99,7 @@ internal fun CollectionOverviewCard(
                 } else {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
                         Text(
                             text = "未登录",
@@ -204,7 +204,7 @@ private fun CollectionStatusItem(
     Surface(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),

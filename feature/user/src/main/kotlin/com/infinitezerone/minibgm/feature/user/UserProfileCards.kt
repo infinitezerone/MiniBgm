@@ -179,7 +179,7 @@ internal fun UserProfileHeaderCard(
             // 签名气泡
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
@@ -296,7 +296,7 @@ internal fun MultiAccountQuickCard(
                             if (isActive) {
                                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                             } else {
-                                MaterialTheme.colorScheme.surfaceContainerLow
+                                MaterialTheme.colorScheme.surfaceContainerHigh
                             },
                         border =
                             if (isActive) {
