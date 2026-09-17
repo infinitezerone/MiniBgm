@@ -1465,24 +1465,54 @@ def scan_validation(root: str, modules: list[dict]) -> dict:
         for t in r.get("tasks", []):
             t["module"] = module_of_task(t["name"])
 
-    # 每个模块最近一次被验证到的时间/结果
+    # 每个模块最近一次被验证到的时间/结果。
+    # 一次 Gradle 调用会打印上百个任务，其中大部分是编译流水线的内部任务；
+    # 「这个模块最近验证过吗」只应回答**用户请求的那类验证任务**，以及公认的验证任务名。
+    PRIORITY_TASKS = {
+        "testDebugUnitTest", "testAndroidHostTest", "testAndroid", "spotlessCheck",
+        "spotlessApply", "crapCheck", "assembleDebug", "assembleRelease", "lint", "lintDebug", "check",
+    }
     per_module: dict[str, dict] = {}
     globals_seen: dict[str, dict] = {}
     for r in records:
+        rts = _iso_to_unix(r.get("at"))
+        requested_shorts = {t.split(":")[-1] for t in (r.get("requested") or [])}
         for t in r.get("tasks", []):
+            short = t["name"].split(":")[-1]
+            score = 3 if short in requested_shorts else 2 if short in PRIORITY_TASKS else 1
             entry = {
-                "task": t["name"].split(":")[-1],
+                "task": short,
                 "full": t["name"],
                 "outcome": t["outcome"],
                 "at": r.get("at"),
                 "exitCode": r.get("exitCode"),
                 "head": (r.get("head") or "")[:7],
+                "requested": short in requested_shorts,
                 "evidence": r.get("logFile"),
+                "_rank": (score, rts),
             }
             if t["module"]:
-                per_module[t["module"]] = entry
-            else:
-                globals_seen[entry["task"]] = entry
+                slot = per_module.setdefault(t["module"], {"verified": None, "lastAny": None})
+                entry["_ts"] = rts
+                prev_any = slot["lastAny"]
+                if prev_any is None or rts >= prev_any["_ts"]:
+                    slot["lastAny"] = entry
+                if score >= 2:
+                    prev_v = slot["verified"]
+                    if prev_v is None or entry["_rank"] > prev_v["_rank"]:
+                        slot["verified"] = entry
+            elif score >= 2:
+                prev = globals_seen.get(short)
+                if prev is None or entry["_rank"] > prev["_rank"]:
+                    globals_seen[short] = entry
+    for slot in per_module.values():
+        for e in (slot["verified"], slot["lastAny"]):
+            if e:
+                e.pop("_rank", None)
+                e.pop("_ts", None)
+    for e in globals_seen.values():
+        e.pop("_rank", None)
+        e.pop("_ts", None)
 
     apks = []
     for dirpath, dirnames, filenames in os.walk(os.path.join(root, "app", "build", "outputs")):
@@ -1741,6 +1771,8 @@ def main() -> int:
     for c in changes:
         c["impact"] = compute_impact(c, modules, main_only, all_decls)
     validation = scan_validation(root, modules)
+    for c in changes:
+        c["coverage"] = annotate_coverage(c, validation)
     print(
         f"[scan] 变更集 {len(changes)} 个（工作区 "
         f"{'有改动' if changes and changes[0]['kind'] == 'worktree' else '干净'}）、"

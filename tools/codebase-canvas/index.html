@@ -38,6 +38,16 @@
   .results .r b{font-weight:600}
   .results .r .k{color:var(--muted);font-size:11px;margin-left:auto}
   .layers{display:flex;gap:4px;margin-left:auto}
+  .chgbtn{display:flex;align-items:center;gap:7px;height:30px;padding:0 11px;border:1px solid var(--line);
+    border-radius:7px;background:#fff;cursor:pointer;font:inherit;font-size:12px;color:var(--ink2);white-space:nowrap}
+  .chgbtn:hover{border-color:#c8d8f7;background:#f6f9ff}
+  .chgbtn.on{border-color:#f2c1bb;background:#fff3f1;color:#8f2318;font-weight:600}
+  .chgbtn .cdot{width:8px;height:8px;border-radius:50%;background:#d6dbe3}
+  .chgbtn.on .cdot{background:#d92d20}
+  .chgbtn .n{color:var(--muted);font-weight:450}
+  .badge.clkchip,.badge.clkdecl,.chip.clkchip,.chip.clkdecl{cursor:pointer}
+  #strip .tick.wt{background:#f0b429}
+  #strip .tick.wt.sel{background:#d92d20}
   .ltoggle{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer;font:inherit;color:var(--ink2)}
   .ltoggle .sw{width:9px;height:9px;border-radius:2px;background:#c9cfd8}
   .ltoggle[data-on="1"]{border-color:#c8d8f7;background:#f4f8ff;color:var(--ink)}
@@ -83,7 +93,7 @@
   .p{padding:14px 16px}
   .p + .p{border-top:1px solid var(--line2)}
   h2{margin:0 0 4px;font-size:15px;font-weight:660;letter-spacing:.1px}
-  h3{margin:0 0 8px;font-size:11.5px;font-weight:650;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+  h3{margin:0 0 8px;font-size:11.5px;font-weight:650;color:var(--muted);letter-spacing:.4px}
   .sub{color:var(--muted);font-size:12px}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px}
   .kv dt{color:var(--muted)}
@@ -147,6 +157,9 @@
       <input id="q" placeholder="搜索模块 / 类 / 函数" autocomplete="off" />
       <div id="results" class="results"></div>
     </div>
+    <button id="chgBtn" class="chgbtn" title="按变更集查看影响面：改动 → 影响 → 验证（快捷键 V / [ ]）">
+      <span class="cdot"></span><span id="chgLabel">变更影响</span>
+    </button>
     <div class="layers" id="layerBar"></div>
     <div class="meta" id="scanMeta"></div>
   </header>
@@ -436,7 +449,7 @@ function zoomAt(sx, sy, factor) {
 }
 
 // ======================= 状态 =======================
-const sel = { module: null, decl: null, commit: null, hover: null, activeLayers: new Set() };
+const sel = { module: null, decl: null, commit: null, changeIdx: -1, change: null, hover: null, activeLayers: new Set() };
 
 function moduleColor(m) { return COLOR[m.group] || COLOR.other; }
 function nodeAt(sx, sy) {
@@ -546,19 +559,31 @@ function drawModule(n, isSel, lvl) {
   const m = n.ref;
   const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
   const r = Math.min(10, 8 * cam.s);
+  // 变更集没触及任何模块时（例如只改了文档/工具），不做淡出 —— 把整张图压暗只会让人以为坏了
+  const tier = sel.change && sel.change.stats.modules > 0 ? tierOf(m.id) : null;
+  const ts = tier ? TIER[tier] : null;
+  if (ts) ctx.globalAlpha *= ts.alpha;
+
   ctx.shadowColor = "rgba(16,24,40,.08)"; ctx.shadowBlur = isSel ? 14 : 6; ctx.shadowOffsetY = 2;
-  ctx.fillStyle = "#fff";
+  ctx.fillStyle = ts ? ts.fill : "#fff";
   roundRect(x, y, w, h, r); ctx.fill();
   ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-  ctx.strokeStyle = isSel ? "#1f6feb" : "#e3e7ec";
-  ctx.lineWidth = isSel ? 2 : 1;
+  ctx.strokeStyle = isSel ? "#1f6feb" : (ts ? ts.stroke : "#e3e7ec");
+  ctx.lineWidth = isSel ? 2 : (ts ? ts.width : 1);
   roundRect(x, y, w, h, r); ctx.stroke();
   // 左侧色条
   ctx.save();
   roundRect(x, y, w, h, r); ctx.clip();
-  ctx.fillStyle = n.color;
+  ctx.fillStyle = ts ? ts.stroke : n.color;
   ctx.fillRect(x, y, Math.max(3, 4 * cam.s), h);
   ctx.restore();
+  // 受影响档位角标
+  if (ts && tier !== "none" && cam.s > 0.5) {
+    ctx.fillStyle = ts.stroke;
+    ctx.font = `700 ${clamp(9 + cam.s, 9, 11)}px -apple-system,"PingFang SC",sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillText(ts.label, x + w - 10, y + 13);
+  }
 
   if (cam.s < 0.42) { return; }
   ctx.fillStyle = "#131a22";
@@ -664,22 +689,40 @@ function drawModule(n, isSel, lvl) {
     }
   }
 
-  // 证据层：测试证据徽标（固定在底部右侧，与左侧规模文字同一行，互不遮盖）
+  // 证据层：底部右侧。选中变更集时优先显示「这个模块最近验证过吗」，否则显示测试用例数
   if (on.evidence && cam.s > 0.8) {
-    const tr = (m.testResults || []).filter((t) => !t.empty);
-    const cases = tr.reduce((a, b) => a + b.cases, 0);
-    const fails = tr.reduce((a, b) => a + b.failures + b.errors, 0);
     ctx.textAlign = "right";
     ctx.font = "10px ui-monospace,Menlo,monospace";
-    if (!m.testResults || !m.testResults.length) {
+    const slot = (D.validation && D.validation.perModule) ? D.validation.perModule[m.id] : null;
+    const vl = slot && slot.verified ? slot.verified : null;
+    if (sel.change && sel.change.stats.modules > 0) {
+      const cov = sel.change.coverage || { covered: {} };
+      const isChanged = (sel.change.impact && sel.change.impact.changedModules.includes(m.id));
+      if (isChanged && !cov.covered[m.id]) {
+        ctx.fillStyle = "#d92d20";
+        ctx.fillText("变更后未验证", x + w - 12, y + h - 8);
+      } else if (vl) {
+        ctx.fillStyle = vl.outcome === "FAILED" ? "#d92d20"
+          : vl.outcome === "EXECUTED" ? "#1a7f45" : "#6d7887";
+        ctx.fillText(`${vl.task} ${vl.outcome === "EXECUTED" ? "已执行" : vl.outcome}`, x + w - 12, y + h - 8);
+      } else {
+        ctx.fillStyle = "#8b95a3";
+        ctx.fillText("无验证记录", x + w - 12, y + h - 8);
+      }
+    } else if (!m.testResults || !m.testResults.length) {
       ctx.fillStyle = "#8b95a3";
       ctx.fillText("无执行证据", x + w - 12, y + h - 8);
-    } else if (cases === 0) {
-      ctx.fillStyle = "#d92d20";
-      ctx.fillText("0 用例", x + w - 12, y + h - 8);
     } else {
-      ctx.fillStyle = fails ? "#d92d20" : "#1a7f45";
-      ctx.fillText(`${cases} 用例通过`, x + w - 12, y + h - 8);
+      const tr = (m.testResults || []).filter((t) => !t.empty);
+      const cases = tr.reduce((a, b) => a + b.cases, 0);
+      const fails = tr.reduce((a, b) => a + b.failures + b.errors, 0);
+      if (cases === 0) {
+        ctx.fillStyle = "#d92d20";
+        ctx.fillText("0 用例", x + w - 12, y + h - 8);
+      } else {
+        ctx.fillStyle = fails ? "#d92d20" : "#1a7f45";
+        ctx.fillText(`${cases} 用例通过`, x + w - 12, y + h - 8);
+      }
     }
   }
 
@@ -758,6 +801,15 @@ function drawSide(n) {
 
 // ======================= 层级 / HUD =======================
 function levelInfo() {
+  if (sel.change) {
+    const c = sel.change;
+    const imp = c.impact || { counts: {} };
+    return {
+      n: "变更影响",
+      t: c.kind === "worktree" ? "工作区未提交" : c.hash,
+      d: `改动 ${imp.counts.changedModules || 0} 模块 · 直接受影响 ${imp.counts.direct || 0} · 受影响测试 ${imp.counts.impactedTests || 0}（推断）`,
+    };
+  }
   if (layout.mode === "project") {
     if (cam.s < 0.72) return { n: "L1", t: "项目全景", d: "系统边界、核心模块、整体依赖" };
     return { n: "L2", t: "模块与业务流程", d: "模块责任、依赖方向、层分布" };
@@ -777,9 +829,19 @@ function updateHud() {
 }
 function drawCrumbs() {
   const c = $("#crumbs");
+  if (sel.change) {
+    const ch = sel.change;
+    c.innerHTML = `<span class="cur">变更影响</span><span class="sep">›</span>` +
+      `<span class="mono" style="font-weight:600">${esc(ch.kind === "worktree" ? "工作区未提交" : ch.hash)}</span>` +
+      `<span class="sep">·</span><span class="sub">${esc(ch.range)}</span>` +
+      `<button id="cclear" style="margin-left:6px">退出</button>`;
+    const b = $("#cclear");
+    if (b) b.onclick = () => setChange(-1);
+    return;
+  }
   if (layout.mode === "project") {
     c.innerHTML = `<span class="cur">项目全景</span><span class="sep">·</span>` +
-      `<span class="sub">${MODULES.length} 个模块 · 点击模块下钻</span>`;
+      `<span class="sub">${MODULES.length} 个模块 · 点击模块下钻 · 点顶栏「变更影响」看改动链路</span>`;
   } else {
     c.innerHTML = `<button id="croot">项目全景</button><span class="sep">›</span>` +
       `<span class="cur">${esc(layout.focusModule.id)}</span>` +
@@ -799,6 +861,53 @@ const pctBar = (m) => {
     `<span class="chip" style="border-left:3px solid ${LAYER_COLOR[L]}">${L} ${counts[L]}</span>`).join("");
   return `<div class="pct">${seg}</div><div class="chips">${keys}</div>`;
 };
+
+function renderValidation(m) {
+  const V = D.validation || {};
+  const slot = (V.perModule || {})[m.id] || null;
+  const vl = slot && slot.verified ? slot.verified : null;
+  const any = slot && slot.lastAny ? slot.lastAny : null;
+  const cov = sel.change && sel.change.coverage ? sel.change.coverage : null;
+  const inChange = cov && sel.change.impact && sel.change.impact.changedModules.includes(m.id);
+  const lines = [];
+
+  if (!vl) {
+    lines.push(`<div class="empty"><b>没有这个模块的验证类任务记录</b>
+      画布只在 <span class="mono">tools/codebase-canvas/out/validation-log.jsonl</span> 里找得到记录时才敢说「验证过」。
+      跑一次 <span class="mono">./tools/codebase-canvas/verify.sh ${esc(m.id)}:testDebugUnitTest</span> 再来。</div>`);
+    if (any) {
+      lines.push(`<div class="rowline" style="margin-top:8px">
+        <span class="badge dash">仅构建流水线</span>
+        <span style="font-size:12px;flex:1">最近只有 <span class="mono">${esc(any.task)}</span> 这类任务跑过</span>
+        <span class="rt mono" style="font-size:10px">${esc((any.at || "").slice(5, 16).replace("T", " "))}</span>
+      </div>
+      <div class="hint">编译通过不等于验证过：这些是流水线内部任务，不是测试或静态检查。</div>`);
+    }
+  } else {
+    lines.push(`<div class="rowline">
+      <span class="badge mono">${esc(vl.task)}</span>
+      ${valOutcomeBadge(vl.outcome)}
+      ${vl.requested ? '<span class="badge">命令行请求</span>' : ""}
+      <span class="rt mono" style="font-size:10.5px">${esc((vl.at || "").slice(5, 16).replace("T", " "))} · HEAD ${esc(vl.head || "-")}</span>
+    </div>`);
+    if (OUTCOME_NOTE[vl.outcome]) {
+      lines.push(`<div class="ev">${esc(OUTCOME_NOTE[vl.outcome])}</div>`);
+    }
+    lines.push(`<div class="ev mono" style="font-size:10.5px;margin-top:4px">${esc(vl.evidence || "")}</div>`);
+    lines.push(`<div class="hint">${TAG.measured}来自 Gradle 在那一刻打印的任务状态；
+      <span class="mono">UP-TO-DATE</span> 意味着 Gradle 没有重跑、用的是上一次的结果 —— 「构建成功」不等于「这次跑过」。</div>`);
+  }
+
+  if (inChange) {
+    const covered = cov.covered[m.id];
+    lines.push(`<div class="rowline" style="margin-top:8px;border-top:1px solid var(--line2);padding-top:8px">
+      <span style="font-size:12px">当前选中的变更改了它：</span>
+      ${covered ? valOutcomeBadge(covered.outcome) : '<span class="badge warn">变更后未验证</span>'}
+      ${covered ? `<span class="badge mono">${esc(covered.task)}</span>` : ""}
+    </div>`);
+  }
+  return lines.join("");
+}
 
 function modulePanel(m, opts = {}) {
   const outs = MAIN_EDGES.filter((e) => e.from === m.id);
@@ -854,6 +963,11 @@ function modulePanel(m, opts = {}) {
         : '<li><span class="sub">没有模块依赖它</span></li>'}
       </ul>
     </div>
+  </div>
+
+  <div class="p">
+    <h3>验证层 · 最近一次 Gradle 验证</h3>
+    ${renderValidation(m)}
   </div>
 
   <div class="p">
@@ -1016,6 +1130,55 @@ function overviewPanel() {
   </div>
 
   <div class="p">
+    <h3>变更 → 影响 → 验证</h3>
+    ${CHANGES.length ? `<ul class="list">${CHANGES.map((c, i) => {
+      const imp = c.impact || { counts: {} };
+      const cov = c.coverage || {};
+      const gap = (cov.uncovered || []).length;
+      return `<li class="clk" data-change="${i}" style="${i === sel.changeIdx ? "background:#f2f6fd" : ""}">
+        <span class="badge ${c.kind === "worktree" ? "warn" : ""}">${c.kind === "worktree" ? "工作区" : "提交"}</span>
+        <span style="min-width:0;flex:1">
+          <span class="mono" style="font-size:11px">${esc(c.kind === "worktree" ? `${c.stats.files} 个未提交文件` : c.hash)}</span>
+          <span class="ev"> ${esc((c.subject || "").slice(0, 34))}</span>
+          <div class="ev" style="margin-top:2px">
+            改 ${imp.counts.changedModules || 0} 模块 ·
+            直接受影响 ${imp.counts.direct || 0} ·
+            受影响测试 ${imp.counts.impactedTests || 0}（推断）
+            ${gap ? ` · <span style="color:#a25c07">${gap} 个改动模块未验证</span>` : cov.verdict ? ` · <span style="color:#1a7f45">${esc(cov.verdict)}</span>` : ""}
+          </div>
+        </span>
+        <span class="rt mono" style="font-size:10px">${esc(c.date || "")}</span>
+      </li>`;
+    }).join("")}</ul>` : '<div class="empty">没有解析出变更集</div>'}
+    <div class="hint">点一行就切到那次变更的影响视图：图上按改动 / 直接受影响 / 传递受影响三档着色，
+      右侧给出「修改了什么 / 影响了什么 / 验证了什么」。也可以点底部时间轴，或按 V 键。</div>
+  </div>
+
+  <div class="p">
+    <h3>验证层 · Gradle</h3>
+    ${(D.validation && D.validation.records && D.validation.records.length) ? `
+      <div class="ev">共 ${D.validation.records.length} 次验证记录 · 数据源
+        <span class="mono">${esc(D.validation.logPath)}</span></div>
+      <ul class="list" style="margin-top:6px">
+        ${Object.entries(D.validation.perModule).filter(([k]) => BY_ID.get(k)).map(([k, slot]) => {
+          const v = slot.verified || slot.lastAny;
+          if (!v) return "";
+          return `<li>
+          <span class="nm clkchip" data-goto="${esc(k)}" style="cursor:pointer">${esc(BY_ID.get(k).name)}</span>
+          <span class="badge mono">${esc(v.task)}</span>
+          ${slot.verified ? valOutcomeBadge(v.outcome) : '<span class="badge dash">非验证任务</span>'}
+          <span class="rt mono" style="font-size:10px">${esc((v.at || "").slice(5, 16).replace("T", " "))}</span>
+        </li>`;
+        }).join("")}
+      </ul>
+      ${(D.validation.apks || []).length ? `<div class="hint">构建产物：${D.validation.apks.map((a) =>
+        `<span class="mono">${esc(a.path)}</span> ${esc(a.mtime)} · ${a.sizeMB}MB`).join("<br>")}</div>` : ""}
+    ` : `<div class="empty"><b>还没有 Gradle 验证记录</b>
+      跑 <span class="mono">./tools/codebase-canvas/verify.sh &lt;任务&gt;</span> 就会写进验证层，
+      之后每次刷新画布都能看到「谁在什么状态下跑了什么、结果如何」。</div>`}
+  </div>
+
+  <div class="p">
     <h3>五层当前状态</h3>
     ${layersStatus()}
   </div>
@@ -1033,10 +1196,15 @@ function overviewPanel() {
 
 function layersStatus() {
   const s = D.stats;
+  const V = D.validation || {};
   const rows = [
-    ["结构", `#4f9d69`, `${s.modules} 模块 · ${s.declarations} 声明 · ${s.edges} 条边`, "实测"],
-    ["过程", `#4f9d69`, `${D.git.recent.length} 个提交轨迹 · ${s.dirtyFiles} 个未提交文件`, "实测"],
+    ["结构", `#4f9d69`, `${s.modules} 模块 · ${s.declarations} 声明 · ${s.edges} 条边（含 ${s.conventionEdges} 条隐式）`, "实测"],
+    ["过程", `#4f9d69`, `${CHANGES.length} 个变更集 · ${s.dirtyFiles} 个未提交文件 · 每个改动都能落到 file:line`, "实测"],
     ["证据", `#4f9d69`, `${s.testCases} 用例 / ${s.modulesWithTestEvidence} 模块有 XML · ${s.findings} 条规则命中`, "实测"],
+    ["验证", V.records && V.records.length ? `#4f9d69` : `#c98a1d`,
+      V.records && V.records.length
+        ? `${V.records.length} 次 Gradle 验证记录 · 任务级结果区分已执行 / UP-TO-DATE`
+        : "还没有验证记录，跑 verify.sh 才会有", V.records && V.records.length ? "实测" : "未接入"],
     ["运行", `#c98a1d`, "只有「最近一次真实执行时间」，没有线程/请求/内存的运行时探针", "部分"],
     ["Agent", `#98a1b0`, "未接入：没有 agent 的 tool call / 计划 / 审批记录", "未接入"],
   ];
@@ -1187,8 +1355,12 @@ function bindPanel(m) {
     li.classList.add("clk");
     li.onclick = () => { const t = BY_ID.get(li.dataset.goto); if (t) { selectModule(t); centerOn(t.id); } };
   });
-  p.querySelectorAll("[data-decl]").forEach((li) => {
-    li.onclick = () => { const d = DECL_BY_IDX.get(+li.dataset.decl); if (d) selectDecl(d); };
+  p.querySelectorAll("[data-decl]").forEach((el) => {
+    el.onclick = () => { const d = DECL_BY_IDX.get(+el.dataset.decl); if (d) selectDecl(d); };
+  });
+  p.querySelectorAll("[data-change]").forEach((el) => {
+    el.classList.add("clk");
+    el.onclick = () => setChange(+el.dataset.change);
   });
   p.querySelectorAll("[data-finding]").forEach((li) => {
     li.onclick = () => { const t = BY_ID.get(li.dataset.finding); if (t) { selectModule(t); centerOn(t.id); } };
@@ -1250,10 +1422,21 @@ cv.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 window.addEventListener("keydown", (e) => {
+  if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) {
+    if (e.key === "Escape") { qEl.blur(); rEl.classList.remove("on"); }
+    return;
+  }
   if (e.key === "Escape") {
     if (sel.decl) { sel.decl = null; if (sel.module) selectModule(sel.module); else $("#panel").innerHTML = overviewPanel(); }
     else if (layout.mode === "detail") exitDetail();
+    else if (sel.change) setChange(-1);
   } else if (e.key === "0") { fit(layout.bounds, 70, 1.1); }
+  else if (e.key === "v" || e.key === "V") { $("#chgBtn").click(); }
+  else if (e.key === "[" || e.key === "]") {
+    if (!CHANGES.length) return;
+    const cur = sel.changeIdx < 0 ? -1 : sel.changeIdx;
+    setChange(clamp(cur + (e.key === "]" ? 1 : -1), -1, CHANGES.length - 1));
+  }
   else if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); $("#q").focus(); }
 });
 
@@ -1296,6 +1479,286 @@ qEl.addEventListener("keydown", (e) => {
 });
 document.addEventListener("click", (e) => { if (!e.target.closest(".search")) rEl.classList.remove("on"); });
 
+// ======================= 变更集（工作区 + 提交） =======================
+const CHANGES = D.changes || [];
+
+const TIER = {
+  changed: { stroke: "#d92d20", fill: "#fff2f0", width: 2.2, alpha: 1, label: "改动" },
+  direct: { stroke: "#d97706", fill: "#fffbf2", width: 1.8, alpha: 1, label: "直接依赖" },
+  transitive: { stroke: "#dcb75c", fill: "#fffdf6", width: 1.3, alpha: 0.92, label: "传递依赖" },
+  none: { stroke: "#e3e7ec", fill: "#ffffff", width: 1, alpha: 0.2, label: "" },
+};
+
+function tierOf(moduleId) {
+  const c = sel.change;
+  if (!c || !c.impact) return null;
+  const imp = c.impact;
+  if (imp.changedModules.includes(moduleId)) return "changed";
+  if (imp.direct.some((x) => x.module === moduleId)) return "direct";
+  if (imp.transitive.some((x) => x.module === moduleId)) return "transitive";
+  return "none";
+}
+
+function updateChgBtn() {
+  const b = $("#chgBtn");
+  if (!b) return;
+  if (!CHANGES.length) {
+    b.innerHTML = '<span class="cdot"></span><span>变更影响</span><span class="n">无变更集</span>';
+    b.classList.remove("on");
+    return;
+  }
+  if (sel.change) {
+    const c = sel.change;
+    b.classList.add("on");
+    b.innerHTML = `<span class="cdot"></span><span>${esc(c.kind === "worktree" ? "工作区未提交" : c.hash)}</span>` +
+      `<span class="n">改 ${c.impact ? c.impact.counts.changedModules : 0} · 影响 ${c.impact ? c.impact.counts.direct : 0}</span>` +
+      `<span class="n">✕</span>`;
+  } else {
+    const dirty = CHANGES.find((c) => c.kind === "worktree");
+    b.classList.remove("on");
+    b.innerHTML = `<span class="cdot"></span><span>变更影响</span>` +
+      `<span class="n">${dirty ? `工作区 ${dirty.stats.files} 个文件未提交` : `${CHANGES.length} 个变更集`}</span>`;
+  }
+}
+
+function updateStrip() {
+  const el = $("#strip");
+  if (!on.process) { el.classList.remove("on"); document.body.classList.remove("strip-on"); return; }
+  el.classList.add("on");
+  document.body.classList.add("strip-on");
+  if (!CHANGES.length) {
+    el.innerHTML = `<div class="cap">变更</div><div class="track"><div class="lbl" style="left:2%">没有可用的变更集</div></div>`;
+    return;
+  }
+  const n = CHANGES.length;
+  const ticks = CHANGES.map((c, i) => {
+    const left = 4 + (i / Math.max(1, n - 1)) * 84;
+    const cls = c.kind === "worktree" ? "wt" : "";
+    const title = c.kind === "worktree"
+      ? `工作区未提交 · ${c.stats.files} 个文件`
+      : `${c.hash} ${c.date} ${c.subject}`;
+    return `<div class="tick ${cls}" data-i="${i}" style="left:${left}%" title="${esc(title)}"></div>`;
+  }).join("");
+  el.innerHTML = `<div class="cap">变更</div><div class="track" style="width:calc(100% - 8px)">${ticks}
+    <div class="lbl" style="left:2%">最新</div>
+    <div class="lbl" style="left:72%">最旧 ${esc(CHANGES[n - 1].date || "")}</div></div>`;
+  el.querySelectorAll(".tick").forEach((t) => {
+    t.classList.toggle("sel", +t.dataset.i === sel.changeIdx);
+    t.onclick = () => setChange(+t.dataset.i === sel.changeIdx ? -1 : +t.dataset.i);
+  });
+}
+
+function setChange(i) {
+  sel.changeIdx = i;
+  sel.change = i >= 0 && CHANGES[i] ? CHANGES[i] : null;
+  if (layout.mode === "detail") exitDetail();
+  updateStrip();
+  updateChgBtn();
+  buildLegend();
+  updateHud();
+  draw();
+  if (sel.change) {
+    $("#panel").innerHTML = impactPanel(sel.change);
+    bindPanel(null);
+  } else {
+    $("#panel").innerHTML = sel.module ? modulePanel(sel.module) : overviewPanel();
+    bindPanel(sel.module);
+  }
+}
+
+// ======================= 证据强度标签 =======================
+const TAG = {
+  measured: '<span class="tag measured">实测</span>',
+  inferred: '<span class="tag inferred">推断</span>',
+  missing: '<span class="tag missing">未接入</span>',
+};
+
+function valOutcomeBadge(outcome) {
+  if (!outcome) return '<span class="badge dash">未验证</span>';
+  const map = {
+    FAILED: ["warn", "FAILED"],
+    EXECUTED: ["ok", "已执行"],
+    "UP-TO-DATE": ["", "UP-TO-DATE"],
+    "FROM-CACHE": ["", "FROM-CACHE"],
+    SKIPPED: ["", "SKIPPED"],
+    "NO-SOURCE": ["", "NO-SOURCE"],
+  };
+  const [cls, label] = map[outcome] || ["", outcome];
+  return `<span class="badge ${cls}">${esc(label)}</span>`;
+}
+const OUTCOME_NOTE = {
+  FAILED: "这次验证失败了",
+  EXECUTED: "真的重新跑了一遍",
+  "UP-TO-DATE": "没有重跑 —— Gradle 判定输入没变，用的是上一次的结果",
+  "FROM-CACHE": "从构建缓存取得的结果，没有重跑",
+  SKIPPED: "被跳过了",
+  "NO-SOURCE": "没有可处理的源文件，等于什么都没做",
+};
+
+// ======================= 变更影响面板 =======================
+function impactPanel(c) {
+  const imp = c.impact || { changedModules: [], direct: [], transitive: [], impactedTests: [], impactedProd: [], counts: {} };
+  const cov = c.coverage || { covered: {}, uncovered: [], globalChecks: [], verdict: "" };
+  const all = c.files.concat(c.untracked);
+  const wt = c.kind === "worktree";
+  const nameOf = (id) => (BY_ID.get(id) ? BY_ID.get(id).name : id);
+  const modChips = (list, tier) => list.map((x) =>
+    `<span class="chip clkchip" data-goto="${esc(x.module)}" style="border-left:3px solid ${TIER[tier].stroke}">${esc(nameOf(x.module))}</span>`).join("");
+
+  const testsByModule = new Map();
+  imp.impactedTests.forEach((t) => {
+    const k = t.module || "(未知)";
+    if (!testsByModule.has(k)) testsByModule.set(k, []);
+    testsByModule.get(k).push(t);
+  });
+
+  return `
+  <div class="p">
+    <h2>${wt ? "工作区未提交" : esc(c.hash)}</h2>
+    <div class="sub">${wt ? `${c.stats.files} 个文件未提交 · 基准 HEAD` : `${esc(c.date)} · ${esc(c.subject || "")}`}</div>
+    <div class="ev mono" style="margin-top:6px">${esc(c.range)}</div>
+    <div class="stat" style="margin-top:10px;grid-template-columns:repeat(3,1fr)">
+      <div class="c"><b>${c.stats.files}</b><span>改动文件</span></div>
+      <div class="c"><b><span style="color:#1a7f45">+${fmt(c.stats.added)}</span> / <span style="color:#d92d20">−${fmt(c.stats.removed)}</span></b><span>增删行</span></div>
+      <div class="c"><b>${c.stats.modules}</b><span>涉及模块</span></div>
+    </div>
+    <div class="hint">${TAG.measured}diff 与行数来自 <span class="mono">git diff --numstat</span>
+      ${c.stats.truncated ? "· 变更过大，hunk 列表已截断" : ""}</div>
+  </div>
+
+  <div class="p">
+    <h3>① 修改了什么</h3>
+    ${all.length === 0 ? '<div class="empty">这个变更集没有文件改动</div>' : ""}
+    <ul class="list">
+      ${all.slice(0, 40).map((f) => `<li>
+        <span class="badge ${f.status === "??" ? "dash" : ""}">${esc(f.status)}</span>
+        <span style="min-width:0;flex:1">
+          <span class="mono" style="font-size:11px;word-break:break-all">${esc(f.path)}</span>
+          ${f.module ? `<span class="badge" style="margin-left:5px">${esc(f.module)}</span>` : ""}
+          ${f.touchedDecls && f.touchedDecls.length
+            ? `<div class="ev" style="margin-top:3px">定位到 ${f.touchedDecls.length} 个声明：` +
+              f.touchedDecls.map((d) => `<span class="chip clkdecl" data-decl="${d.globalIdx}">${esc(d.name)}<span class="mono" style="color:#8b95a3">:${d.line}</span></span>`).join("") +
+              `</div>`
+            : ""}
+        </span>
+        <span class="rt mono" style="font-size:10.5px">${f.added != null ? `+${f.added} −${f.removed}` : ""}</span>
+      </li>`).join("")}
+    </ul>
+    ${all.length > 40 ? `<div class="hint">还有 ${all.length - 40} 个文件…</div>` : ""}
+    <div class="hint">${TAG.measured}被改行号来自 <span class="mono">git diff</span> 的 hunk 范围，
+      声明行号来自扫描结果，两者的交集就是这个变更碰到的声明 —— 不是按文件名猜的。</div>
+  </div>
+
+  <div class="p">
+    <h3>② 影响了什么</h3>
+    <div style="margin-bottom:10px">
+      <b style="font-size:12px">改动模块（${imp.changedModules.length}）</b>
+      <div class="chips" style="margin-top:5px">${modChips(imp.changedModules.map((m) => ({ module: m })), "changed")}</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <b style="font-size:12px">构建级直接受影响（${imp.direct.length}）</b> ${TAG.measured}
+      <div class="hint" style="margin:3px 0 5px">这些模块依赖被改动的模块，Gradle 会真的重跑它们的任务。依赖来自构建脚本，不是推断。</div>
+      <div class="chips">${modChips(imp.direct, "direct")}</div>
+      <ul class="list" style="margin-top:6px">
+        ${imp.direct.slice(0, 8).map((x) => `<li><span class="nm">${esc(x.module)}</span>
+          <span class="badge">${x.origin === "convention" ? "隐式注入" : esc(x.declaration)}</span>
+          <span class="rt mono" style="font-size:10px">${esc(x.evidence)}</span></li>`).join("")}
+      </ul>
+    </div>
+    ${imp.transitive.length ? `<div style="margin-bottom:10px">
+      <b style="font-size:12px">构建级传递受影响（${imp.transitive.length}）</b> ${TAG.inferred}
+      <div class="hint" style="margin:3px 0 5px"><span class="mono">implementation</span> 不传递到消费方的编译类路径，
+        所以这些模块不一定重编译，只能说可能受影响。</div>
+      <div class="chips">${modChips(imp.transitive, "transitive")}</div>
+    </div>` : ""}
+    ${imp.buildConfigTouched && imp.buildConfigTouched.length ? `<div class="empty" style="border-color:#f0d48a;background:#fffaf0">
+      <b>改到了构建配置</b>${esc(imp.buildConfigTouched.slice(0, 3).join("、"))}
+      <br>convention plugin 对所有模块生效，这次变更的影响面是全量的。</div>` : ""}
+
+    <div style="margin-top:12px">
+      <b style="font-size:12px">符号级受影响测试（${imp.impactedTests.length}）</b> ${TAG.inferred}
+      <div class="hint" style="margin:3px 0 6px">按符号名在函数体里解析出来的，不是执行证据。
+        度数 1 = 直接引用了被改的声明；度数 2 = 引用了「引用了被改声明」的声明。</div>
+      ${imp.impactedTests.length ? [...testsByModule.entries()].slice(0, 10).map(([mod, list]) => `
+        <div class="rowline" style="align-items:flex-start">
+          <span class="badge" style="margin-top:2px">${esc(mod)}</span>
+          <span style="flex:1;min-width:0">
+            ${list.slice(0, 6).map((t) => {
+              const dd = ALL_DECLS.find((d) => d.name === t.name && d.module === t.module);
+              return `<div style="margin:2px 0">
+              <span class="nm ${dd ? "clkdecl" : ""}" ${dd ? `data-decl="${dd.globalIdx}"` : ""}>${esc(t.name)}</span>
+              <span class="badge">${t.degree === 2 ? "间接" : "直接"}</span>
+              <span class="ev">${esc((t.targets || []).join(", "))}</span>
+              <span class="mono ev" style="font-size:10px"> · ${esc(t.file.split("/").pop())}:${t.line}</span>
+            </div>`;
+            }).join("")}
+            ${list.length > 6 ? `<div class="ev">还有 ${list.length - 6} 个…</div>` : ""}
+          </span>
+          <span class="rt">${list.length}</span>
+        </div>`).join("")
+        : '<div class="empty">没有解析出受影响的测试。这不代表没影响 —— 静态引用里看不到而已。</div>'}
+    </div>
+    ${imp.impactedProd.length ? `<div style="margin-top:12px">
+      <b style="font-size:12px">符号级受影响的生产声明（${imp.impactedProd.length}）</b> ${TAG.inferred}
+      <ul class="list">${imp.impactedProd.slice(0, 8).map((x) => {
+        const dd = ALL_DECLS.find((d) => d.name === x.name && d.module === x.module);
+        return `<li>
+        <span class="nm ${dd ? "clkdecl" : ""}" ${dd ? `data-decl="${dd.globalIdx}"` : ""}>${esc(x.name)}</span>
+        <span class="badge">${esc(x.module)}</span>
+        <span class="rt mono" style="font-size:10px">${esc(x.file.split("/").pop())}:${x.line}</span></li>`;
+      }).join("")}</ul>
+    </div>` : ""}
+  </div>
+
+  <div class="p">
+    <h3>③ 验证了什么</h3>
+    <div class="rowline" style="background:#fafbfd;border-radius:7px;padding:7px 9px;border:1px solid var(--line2)">
+      ${cov.coveredCount && !(cov.uncovered || []).length
+        ? '<span class="vt p3" style="background:#e6f4ec;color:#1a7f45">已覆盖</span>'
+        : '<span class="vt p2">有缺口</span>'}
+      <span style="font-size:12px">${esc(cov.verdict || "")}</span>
+    </div>
+    <div class="hint" style="margin-top:6px">${TAG.measured}判定规则只有一条：验证记录的时间戳 ≥ 变更的时间戳
+      （${esc(cov.changeTimestampHuman || "-")}），且这次验证里真的出现了受影响模块的任务。</div>
+
+    ${Object.keys(cov.covered || {}).length ? `
+      <div style="margin-top:10px"><b style="font-size:12px">变更之后验证过的模块</b>
+        <ul class="list">${Object.values(cov.covered).map((v) => `<li>
+          <span class="nm clkchip" data-goto="${esc(v.module)}" style="cursor:pointer">${esc(nameOf(v.module))}</span>
+          <span class="badge mono">${esc(v.task)}</span>
+          ${valOutcomeBadge(v.outcome)}
+          <span class="rt mono" style="font-size:10px">${esc((v.at || "").slice(5, 16).replace("T", " "))}</span>
+        </li>`).join("")}</ul>
+        ${Object.values(cov.covered).map((v) => (v.outcome && OUTCOME_NOTE[v.outcome])
+          ? `<div class="ev" style="margin:2px 0 0">· ${esc(v.task)}：${esc(OUTCOME_NOTE[v.outcome])}</div>` : "").join("")}
+      </div>` : ""}
+
+    ${(cov.uncovered || []).length ? `
+      <div style="margin-top:10px"><b style="font-size:12px">变更之后没有验证的模块（${cov.uncovered.length}）</b>
+        <div class="chips" style="margin-top:5px">${cov.uncovered.map((m) =>
+          `<span class="chip clkchip" data-goto="${esc(m)}" style="border-left:3px solid #d97706">${esc(nameOf(m))}</span>`).join("")}</div>
+        <div class="hint">这些模块的代码在变更里被改过，之后没有任何 Gradle 验证任务跑过它们。</div>
+      </div>` : ""}
+
+    ${(cov.globalChecks || []).length ? `
+      <div style="margin-top:10px"><b style="font-size:12px">全局检查</b>
+        <ul class="list">${cov.globalChecks.map((g) => `<li>
+          <span class="nm mono">${esc(g.task)}</span>${valOutcomeBadge(g.outcome)}
+          <span class="rt mono" style="font-size:10px">${esc((g.at || "").slice(5, 16).replace("T", " "))}</span></li>`).join("")}</ul>
+      </div>` : ""}
+
+    ${cov.lastRunAfterChange ? `
+      <div style="margin-top:10px"><b style="font-size:12px">变更后最近一次 Gradle 调用</b>
+        <div class="ev" style="margin-top:4px">${esc(cov.lastRunAfterChange.at)} ·
+          <span class="mono">${esc(cov.lastRunAfterChange.buildLine || "")}</span></div>
+        <div class="ev mono" style="font-size:10.5px">${esc(cov.lastRunAfterChange.logFile || "")}</div>
+      </div>` : `
+      <div class="empty" style="margin-top:10px"><b>这次变更之后没有任何 Gradle 验证记录</b>
+        用 <span class="mono">./tools/codebase-canvas/verify.sh &lt;任务&gt;</span> 跑一次，
+        结果会进验证层，再刷新画布就能对上。</div>`}
+  </div>`;
+}
+
 // ======================= 顶栏 / 底栏 =======================
 function buildToggles() {
   $("#layerBar").innerHTML = LAYERS.map((l) => `<button class="ltoggle" data-l="${l.id}" data-on="${on[l.id] ? 1 : 0}"
@@ -1312,55 +1775,6 @@ function buildToggles() {
     };
   });
 }
-function updateStrip() {
-  const el = $("#strip");
-  if (!on.process) { el.classList.remove("on"); document.body.classList.remove("strip-on"); return; }
-  el.classList.add("on");
-  document.body.classList.add("strip-on");
-  const rec = D.git.recent.slice().reverse();
-  const n = rec.length;
-  const ticks = rec.map((c, i) => {
-    const left = 6 + (i / n) * 86;
-    return `<div class="tick" data-i="${i}" style="left:${left}%" title="${esc(c.hash)} ${esc(c.date)} ${esc(c.subject)}"></div>`;
-  }).join("");
-  el.innerHTML = `<div class="cap">提交</div><div class="track" style="width:calc(100% - 8px)">${ticks}
-    <div class="lbl" style="left:6%">${esc(rec[0] ? rec[0].date : "")}</div>
-    <div class="lbl" style="left:88%">最新 ${esc(rec[n - 1] ? rec[n - 1].hash : "")}</div></div>`;
-  el.querySelectorAll(".tick").forEach((t) => {
-    t.onclick = () => pickCommit(+t.dataset.i);
-  });
-}
-function pickCommit(i) {
-  const c = D.git.recent.slice().reverse()[i];
-  if (!c) return;
-  const prev = sel.commit && sel.commit.hash === c.hash ? null : c;
-  sel.commit = prev;
-  $("#strip").querySelectorAll(".tick").forEach((t) => t.classList.toggle("sel", +t.dataset.i === i && !!prev));
-  if (!prev) { draw(); return; }
-  const mods = new Map();
-  (c.touched || []).forEach((p) => {
-    const key = [...BY_ID.keys()].filter((id) => p.startsWith(BY_ID.get(id).path + "/"));
-    key.forEach((k) => mods.set(k, (mods.get(k) || 0) + 1));
-  });
-  c._mods = [...mods.keys()];
-  $("#panel").innerHTML = `
-    <div class="p"><h2>${esc(c.hash)}</h2>
-      <div class="sub">${esc(c.date)} · ${esc(c.author)}</div>
-      <div style="margin-top:8px;font-size:13px">${esc(c.subject)}</div>
-      <div class="hint"><span class="tag measured">实测</span>git log --name-only，
-        这次提交动了 ${(c.touched || []).length} 个 .kt 文件</div>
-    </div>
-    <div class="p"><h3>过程层 · 影响到的模块</h3>
-      ${mods.size ? `<ul class="list">${[...mods.entries()].map(([id, n]) =>
-        `<li class="clk" data-goto="${esc(id)}"><span class="nm">${esc(id)}</span>
-         <span class="rt">${n} 个文件</span></li>`).join("")}</ul>`
-        : '<div class="empty">这次提交没有碰 .kt 文件（纯文档/资源改动）</div>'}
-      <div class="hint">切图上的其它格子可以看别的提交；再点同一格取消高亮。</div>
-    </div>`;
-  bindPanel(null);
-  draw();
-}
-
 // ======================= 图例 =======================
 function buildLegend() {
   const dot = (c) => `<svg width="9" height="9"><rect width="9" height="9" rx="2" fill="${c}"/></svg>`;
@@ -1374,7 +1788,13 @@ function buildLegend() {
     <div class="row" style="margin-top:5px">${ln("#9aa5b5")}生产依赖（显式）</div>
     <div class="row">${ln("#a8b3c4", "7 4")}生产依赖（convention 注入）</div>
     <div class="row">${ln("#cbd2dc", "4 3")}测试作用域依赖</div>
-    <div class="row" style="margin-top:5px;color:var(--muted)">节点大小 = 代码行数</div>`;
+    <div class="row" style="margin-top:5px;color:var(--muted)">节点大小 = 代码行数</div>
+    ${sel.change ? `
+    <div class="row" style="margin-top:6px;border-top:1px solid var(--line2);padding-top:6px">
+      <span style="width:9px;height:9px;border-radius:2px;background:#d92d20"></span>本次改动的模块</div>
+    <div class="row"><span style="width:9px;height:9px;border-radius:2px;background:#d97706"></span>构建级直接受影响（确定）</div>
+    <div class="row"><span style="width:9px;height:9px;border-radius:2px;background:#dcb75c"></span>构建级传递受影响（间接）</div>
+    <div class="row"><span style="width:9px;height:9px;border-radius:2px;background:#e3e7ec"></span>未受本次变更影响</div>` : ""}`;
 }
 
 // 可选：agent trace
@@ -1384,13 +1804,24 @@ fetch("out/agent-trace.json", { cache: "no-store" }).then((r) => (r.ok ? r.json(
 
 // ======================= 启动 =======================
 function boot() {
-  $("#projName").textContent = D.meta.project;  $("#scanMeta").innerHTML = `HEAD <span class="mono">${esc(D.meta.head)}</span> · ${D.stats.modules} 模块 ·
+  $("#projName").textContent = D.meta.project;
+  const V = D.validation || { records: [] };
+  const gaps = CHANGES.filter((c) => c.kind === "commit" && c.coverage && (c.coverage.uncovered || []).length).length;
+  $("#scanMeta").innerHTML = `HEAD <span class="mono">${esc(D.meta.head)}</span> · ${D.stats.modules} 模块 ·
     ${fmt(D.stats.loc)} 行 · ${D.stats.edges} 条依赖边<br>
-    <span style="color:${D.stats.dirtyFiles ? "#a25c07" : "#6d7887"}">工作区 ${D.stats.dirtyFiles ? D.stats.dirtyFiles + " 个文件未提交" : "干净"}</span>`;
+    <span style="color:${D.stats.dirtyFiles ? "#a25c07" : "#6d7887"}">工作区 ${D.stats.dirtyFiles ? D.stats.dirtyFiles + " 个文件未提交" : "干净"}</span>
+    · <span style="color:${V.records.length ? "#1a7f45" : "#8b95a3"}">Gradle 验证记录 ${V.records.length} 次</span>
+    ${gaps ? ` · <span style="color:#a25c07">${gaps} 个提交有未验证改动</span>` : ""}`;
   buildToggles();
   buildLegend();
   resize();
   computeProjectLayout();
+  $("#chgBtn").onclick = () => {
+    if (sel.change) { setChange(-1); return; }
+    const i = CHANGES.findIndex((c) => c.kind === "worktree");
+    setChange(i >= 0 ? i : 0);
+  };
+  updateChgBtn();
   $("#panel").innerHTML = overviewPanel();
   bindPanel(null);
   fit(layout.bounds, 80, 1.1);
@@ -1422,7 +1853,6 @@ function boot() {
       const r = cv.getBoundingClientRect();
       return { x: (n.x + n.w / 2) * cam.s + cam.x + r.left, y: (n.y + n.h / 2) * cam.s + cam.y + r.top };
     },
-    pickCommit: (i) => { pickCommit(i); return true; },
     selectModule: (id) => { const m = BY_ID.get(id); if (m) { selectModule(m); return true; } return false; },
     enterDetail: (id) => { const m = BY_ID.get(id); if (m) { enterDetail(m); return true; } return false; },
     selectDeclByName: (n) => {
@@ -1436,6 +1866,30 @@ function boot() {
     panelText: () => $("#panel").innerText,
     srcText: () => ($("#src") ? $("#src").innerText : ""),
     commitCount: () => D.git.recent.length,
+    // 变更影响链路的自省接口（给自动化验证用，只读 + 复用页面自身的点击路径）
+    changeCount: () => CHANGES.length,
+    changeList: () => CHANGES.map((c, i) => ({
+      i, kind: c.kind, range: c.range, hash: c.hash,
+      files: c.stats.files, modules: c.stats.modules,
+      changed: c.impact ? c.impact.counts.changedModules : 0,
+      direct: c.impact ? c.impact.counts.direct : 0,
+      transitive: c.impact ? c.impact.counts.transitive : 0,
+      tests: c.impact ? c.impact.counts.impactedTests : 0,
+      verdict: (c.coverage || {}).verdict,
+      uncovered: (c.coverage || {}).uncovered || [],
+    })),
+    setChange: (i) => { setChange(i); return sel.change ? sel.change.range : null; },
+    selectedChange: () => (sel.change ? sel.change.range : null),
+    tiers: () => {
+      if (!sel.change) return null;
+      const out = {};
+      layout.nodes.filter((n) => n.type === "module").forEach((n) => { out[n.ref.id] = tierOf(n.ref.id); });
+      return out;
+    },
+    validation: () => ({
+      records: ((D.validation || {}).records || []).length,
+      perModule: D.validation ? Object.keys(D.validation.perModule) : [],
+    }),
   };
 }
 window.addEventListener("resize", () => { resize(); });
