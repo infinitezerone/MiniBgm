@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,7 +73,6 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
     onAssistantClick: () -> Unit = {},
-    onSeasonalGuideClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
@@ -155,12 +153,6 @@ fun ScheduleScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onSeasonalGuideClick) {
-                        Icon(
-                            imageVector = Icons.Outlined.CalendarMonth,
-                            contentDescription = "新番导视",
-                        )
-                    }
                     IconButton(onClick = onAssistantClick) {
                         Icon(
                             imageVector = Icons.Filled.AutoAwesome,

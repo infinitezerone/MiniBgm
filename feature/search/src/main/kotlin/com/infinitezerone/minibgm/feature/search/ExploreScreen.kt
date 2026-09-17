@@ -71,7 +71,6 @@ fun ExploreScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
-    onSeasonalGuideClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     exploreViewModel: ExploreViewModel = koinViewModel(),
     seasonalGuideViewModel: SeasonalGuideViewModel = koinViewModel(),

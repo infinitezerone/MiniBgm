@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.Flow
 fun EntryProviderScope<NavKey>.exploreEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
-    onSeasonalGuideClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -19,7 +18,6 @@ fun EntryProviderScope<NavKey>.exploreEntry(
         ExploreScreen(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,
-            onSeasonalGuideClick = onSeasonalGuideClick,
             scrollToTop = scrollToTop,
         )
     }

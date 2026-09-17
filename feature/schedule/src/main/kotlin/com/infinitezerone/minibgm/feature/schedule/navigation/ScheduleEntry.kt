@@ -12,7 +12,6 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
     onAssistantClick: () -> Unit = {},
-    onSeasonalGuideClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -21,7 +20,6 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,
             onAssistantClick = onAssistantClick,
-            onSeasonalGuideClick = onSeasonalGuideClick,
             scrollToTop = scrollToTop,
         )
     }

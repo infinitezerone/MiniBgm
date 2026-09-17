@@ -21,7 +21,6 @@ import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
-import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
@@ -85,7 +84,6 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick = { navState.navigateTo(AssistantRoute) },
-                                onSeasonalGuideClick = { navState.navigateTo(SeasonalGuideRoute()) },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder),
                             )
