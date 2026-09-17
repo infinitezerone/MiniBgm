@@ -94,6 +94,7 @@ class AssistantViewModel(
                     }
                 }
                 is AppResult.Error -> {
+                    android.util.Log.e("BgmAi", "AI agent execution failed", result.throwable)
                     val errorMsg = result.throwable.message ?: "智能体执行失败"
                     val assistantMessage =
                         AssistantMessage(

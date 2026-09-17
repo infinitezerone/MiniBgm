@@ -40,31 +40,41 @@ class DefaultBgmAiAgentService(
                     )
                 }
                 config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) -> {
-                    val rawEndpoint = config.endpoint.ifBlank { "https://generativelanguage.googleapis.com/v1beta/openai/" }
-                    val normalizedEndpoint =
-                        rawEndpoint
+                    val rawEndpoint =
+                        config.endpoint
+                            .ifBlank { "https://generativelanguage.googleapis.com/v1beta/openai" }
                             .removeSuffix("/chat/completions")
                             .removeSuffix("/chat/completions/")
+                            .trimEnd('/')
                     OpenAILLMClient(
                         apiKey = config.apiKey,
                         settings =
                             OpenAIClientSettings(
-                                baseUrl = normalizedEndpoint,
+                                baseUrl = rawEndpoint,
+                                chatCompletionsPath = "chat/completions",
                             ),
                         httpClientFactory = KtorKoogHttpClient.Factory(),
                     )
                 }
                 else -> {
-                    val rawEndpoint = config.endpoint.ifBlank { "https://api.openai.com/v1" }
-                    val normalizedEndpoint =
-                        rawEndpoint
+                    val rawEndpoint =
+                        config.endpoint
+                            .ifBlank { "https://api.openai.com/v1" }
                             .removeSuffix("/chat/completions")
                             .removeSuffix("/chat/completions/")
+                            .trimEnd('/')
+                    val (baseUrl, chatCompletionsPath) =
+                        if (rawEndpoint.endsWith("/v1")) {
+                            rawEndpoint to "chat/completions"
+                        } else {
+                            rawEndpoint to "v1/chat/completions"
+                        }
                     OpenAILLMClient(
                         apiKey = config.apiKey,
                         settings =
                             OpenAIClientSettings(
-                                baseUrl = normalizedEndpoint,
+                                baseUrl = baseUrl,
+                                chatCompletionsPath = chatCompletionsPath,
                             ),
                         httpClientFactory = KtorKoogHttpClient.Factory(),
                     )

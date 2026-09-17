@@ -158,7 +158,6 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val service = DefaultBgmAiAgentService(fakeSettingsRepository)
             val result = service.execute("Hi")
             assertIs<AppResult.Error>(result)
-            // It should fail with connection error, NEVER with "Cannot determine proper LLM params"
             val msg = result.throwable.message.orEmpty()
             assertFalse(
                 msg.contains("Cannot determine proper LLM params"),
