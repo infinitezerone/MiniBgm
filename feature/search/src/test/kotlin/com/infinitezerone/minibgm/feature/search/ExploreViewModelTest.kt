@@ -43,10 +43,10 @@ class ExploreViewModelTest {
             assertNull(state.error)
             assertEquals(1, state.subjects.size)
             assertEquals("葬送的芙莉莲", state.subjects.first().nameCn)
-            assertEquals(ExploreMood.TRENDING, state.selectedMood)
-            assertEquals(CURRENT_SEASON, state.selectedSeason)
+            assertEquals(ExploreMood.MASTERPIECE, state.selectedMood)
+            assertEquals(ALL_TIME_SEASON, state.selectedSeason)
             assertEquals(ExploreCategory.ANIME, state.selectedCategory)
-            assertEquals(ExploreSort.HEAT, state.selectedSort)
+            assertEquals(ExploreSort.RANK, state.selectedSort)
             assertTrue(state.selectedTags.isEmpty())
             assertTrue(state.isLoggedIn)
         }
@@ -82,6 +82,8 @@ class ExploreViewModelTest {
             val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
             advanceUntilIdle()
 
+            viewModel.onMoodSelect(ExploreMood.HOT)
+            advanceUntilIdle()
             viewModel.onMoodSelect(ExploreMood.MASTERPIECE)
             advanceUntilIdle()
 
@@ -179,7 +181,7 @@ class ExploreViewModelTest {
             val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
             advanceUntilIdle()
 
-            val targetSeason = DEFAULT_SEASONS.first { it != CURRENT_SEASON }
+            val targetSeason = DEFAULT_SEASONS.first { it != ALL_TIME_SEASON }
             viewModel.onSeasonSelect(targetSeason)
             advanceUntilIdle()
 

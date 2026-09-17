@@ -60,12 +60,13 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonSt
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /**
- * 季度新番导视大盘界面
+ * 季度新番导视大盘界面（独立二级页容器）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,34 +81,6 @@ fun SeasonalGuideScreen(
             parameters = { parametersOf(initialYear, initialSeasonMonth) },
         ),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val gridState = rememberLazyGridState()
-
-    // 弹出 Snackbar 消息提示
-    LaunchedEffect(uiState.userMessage) {
-        uiState.userMessage?.let { msg ->
-            snackbarHostState.showSnackbar(msg)
-            viewModel.clearUserMessage()
-        }
-    }
-
-    // 触底无限加载监控
-    LaunchedEffect(gridState, uiState.hasMore, uiState.isLoadingMore) {
-        snapshotFlow {
-            val layoutInfo = gridState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems > 0 && lastVisible >= totalItems - 6
-        }.collect { shouldLoadMore ->
-            if (shouldLoadMore && uiState.hasMore && !uiState.isLoadingMore && !uiState.isLoading) {
-                viewModel.loadMore()
-            }
-        }
-    }
-
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -131,16 +104,67 @@ fun SeasonalGuideScreen(
                     ),
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
+        SeasonalGuideContent(
+            onSubjectClick = onSubjectClick,
+            modifier = Modifier.padding(innerPadding),
+            viewModel = viewModel,
+        )
+    }
+}
+
+/**
+ * 季度新番导视大盘可复用内容组件：
+ * 支持直接嵌入探索双 Tab 页面或作为独立二级页面主体。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SeasonalGuideContent(
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: SeasonalGuideViewModel = koinViewModel(),
+    scrollToTop: Flow<Unit>? = null,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(scrollToTop) {
+        scrollToTop?.collect {
+            gridState.animateScrollToItem(0)
+        }
+    }
+
+    // 弹出 Snackbar 消息提示
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearUserMessage()
+        }
+    }
+
+    // 触底无限加载监控
+    LaunchedEffect(gridState, uiState.hasMore, uiState.isLoadingMore) {
+        snapshotFlow {
+            val layoutInfo = gridState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisible >= totalItems - 6
+        }.collect { shouldLoadMore ->
+            if (shouldLoadMore && uiState.hasMore && !uiState.isLoadingMore && !uiState.isLoading) {
+                viewModel.loadMore()
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = viewModel::refresh,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+            modifier = Modifier.fillMaxSize(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // 1. 年份快捷切换横条
@@ -313,50 +337,55 @@ fun SeasonalGuideScreen(
                 }
             }
         }
-    }
 
-    // 未登录引导弹窗
-    if (uiState.showLoginPromptDialog) {
-        AlertDialog(
-            onDismissRequest = viewModel::dismissLoginPrompt,
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.AccountCircle,
-                    contentDescription = null,
-                    modifier = Modifier.size(36.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            },
-            title = {
-                Text(
-                    text = "登录开启快捷追番",
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            text = {
-                Text(
-                    text = "登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            val authUrl = viewModel.beginLogin()
-                            context.launchWebUrl(authUrl, isAuth = true)
-                        }
-                    },
-                ) {
-                    Text("立即登录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissLoginPrompt) {
-                    Text("稍后再说")
-                }
-            },
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
+
+        // 未登录引导弹窗
+        if (uiState.showLoginPromptDialog) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissLoginPrompt,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Outlined.AccountCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                title = {
+                    Text(
+                        text = "登录开启快捷追番",
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                text = {
+                    Text(
+                        text = "登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val authUrl = viewModel.beginLogin()
+                                context.launchWebUrl(authUrl, isAuth = true)
+                            }
+                        },
+                    ) {
+                        Text("立即登录")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = viewModel::dismissLoginPrompt) {
+                        Text("稍后再说")
+                    }
+                },
+            )
+        }
     }
 }
 

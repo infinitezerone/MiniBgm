@@ -22,7 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.feature.search.CURRENT_SEASON
+import com.infinitezerone.minibgm.feature.search.ALL_TIME_SEASON
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreMood
 import com.infinitezerone.minibgm.feature.search.ExploreSort
@@ -81,7 +81,7 @@ fun ActiveFilterPillRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier,
     ) {
-        if (selectedSeason != CURRENT_SEASON) {
+        if (selectedSeason != ALL_TIME_SEASON) {
             item {
                 ActiveFilterChip(
                     text = selectedSeason.label,

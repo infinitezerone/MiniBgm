@@ -79,16 +79,11 @@ class ExploreViewModel(
     fun onMoodSelect(mood: ExploreMood) {
         if (_uiState.value.selectedMood == mood) return
         _uiState.update {
-            val season =
-                when (mood) {
-                    ExploreMood.TRENDING -> CURRENT_SEASON
-                    else -> ALL_TIME_SEASON
-                }
             it.copy(
                 selectedMood = mood,
                 selectedTags = mood.tags.toSet(),
                 selectedSort = mood.sort,
-                selectedSeason = season,
+                selectedSeason = ALL_TIME_SEASON,
             )
         }
         loadDiscovery()
@@ -161,8 +156,7 @@ class ExploreViewModel(
                 } else {
                     it.selectedTags + tag
                 }
-            val season = if (newTags.isNotEmpty() && it.selectedSeason == CURRENT_SEASON) ALL_TIME_SEASON else it.selectedSeason
-            it.copy(selectedTags = newTags, selectedSeason = season, selectedMood = null)
+            it.copy(selectedTags = newTags, selectedMood = null)
         }
         loadDiscovery()
     }
@@ -178,8 +172,7 @@ class ExploreViewModel(
         if (trimmed.isBlank()) return
         _uiState.update {
             val newTags = it.selectedTags + trimmed
-            val season = if (it.selectedSeason == CURRENT_SEASON) ALL_TIME_SEASON else it.selectedSeason
-            it.copy(selectedTags = newTags, selectedSeason = season, selectedMood = null)
+            it.copy(selectedTags = newTags, selectedMood = null)
         }
         loadDiscovery()
     }
