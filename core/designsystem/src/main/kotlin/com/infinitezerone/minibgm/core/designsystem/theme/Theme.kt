@@ -113,6 +113,8 @@ fun MiniBgmTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = BgmTypography,
+        shapes = BgmShapes,
         content = content,
     )
 }

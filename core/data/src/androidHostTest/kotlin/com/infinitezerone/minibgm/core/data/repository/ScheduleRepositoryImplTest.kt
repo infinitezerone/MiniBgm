@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
+import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
@@ -16,7 +17,9 @@ import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
+import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
+import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
@@ -30,6 +33,7 @@ import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
 import com.infinitezerone.minibgm.core.network.model.UserCollectionPageResponse
 import com.infinitezerone.minibgm.core.testing.datastore.createTestUserPreferencesDataSource
+import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -72,6 +76,14 @@ class ScheduleRepositoryImplTest {
             schedulesFlow.value =
                 schedulesFlow.value.filter {
                     it.source != "bgm_data" || it.airDate >= date
+                }
+        }
+
+        override suspend fun deleteBgmDataSchedulesByIds(ids: List<Long>) {
+            val idSet = ids.toSet()
+            schedulesFlow.value =
+                schedulesFlow.value.filter {
+                    it.source != "bgm_data" || it.bgmId !in idSet
                 }
         }
 
@@ -120,11 +132,22 @@ class ScheduleRepositoryImplTest {
 
     private class FakeAniListService : AniListService {
         var schedules: Map<Long, List<AniListAiringEpisode>> = emptyMap()
+        var mediaSchedules: Map<Long, AniListMediaSchedule> = emptyMap()
         var requestedIds: List<Long> = emptyList()
+
+        override suspend fun getMediaSchedules(anilistIds: List<Long>): Map<Long, AniListMediaSchedule> {
+            requestedIds = anilistIds
+            val fromMedia = mediaSchedules.filterKeys { it in anilistIds.toSet() }
+            val fromLegacy =
+                schedules.filterKeys { it in anilistIds.toSet() }.mapValues {
+                    AniListMediaSchedule(episodes = it.value)
+                }
+            return fromLegacy + fromMedia
+        }
 
         override suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>> {
             requestedIds = anilistIds
-            return schedules.filterKeys { it in anilistIds.toSet() }
+            return getMediaSchedules(anilistIds).mapValues { it.value.episodes }
         }
     }
 
@@ -231,6 +254,7 @@ class ScheduleRepositoryImplTest {
         anilistService: FakeAniListService,
         bilibiliService: FakeBilibiliService = FakeBilibiliService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource,
+        collectionRepository: CollectionRepository? = null,
     ) = ScheduleRepositoryImpl(
         apiService = apiService,
         dataService = dataService,
@@ -239,6 +263,7 @@ class ScheduleRepositoryImplTest {
         anilistService = anilistService,
         bilibiliService = bilibiliService,
         userPreferences = userPreferences,
+        collectionRepository = collectionRepository,
     )
 
     @Test
@@ -1381,5 +1406,533 @@ class ScheduleRepositoryImplTest {
             assertEquals(7, results[0].episode)
             assertEquals("回退动画", results[0].titleCn)
             assertEquals(upcomingAirUtc, results[0].airAtUtc)
+        }
+
+    @Test
+    fun syncAirEvents_updatesBlankCoverFromAniList() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val futureAirEpoch = (nowMillis + 86400 * 1000) / 1000
+
+            val anilist =
+                FakeAniListService().apply {
+                    mediaSchedules =
+                        mapOf(
+                            99999L to
+                                AniListMediaSchedule(
+                                    episodes = listOf(AniListAiringEpisode(episode = 1, airAtEpochSeconds = futureAirEpoch)),
+                                    coverUrl = "https://s4.anilist.co/cover/large/bx99999.jpg",
+                                ),
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 5001L,
+                                title = "网播新作",
+                                titleCn = "网播新作",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = "2026-09-01",
+                                weekday = 1,
+                                timeCst = "12:00",
+                                timeJst = "13:00",
+                                sitesJson = "[]",
+                                anilistId = 99999L,
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                            ),
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val updated = dao.getAllSchedulesList().first { it.bgmId == 5001L }
+            assertEquals("https://s4.anilist.co/cover/large/bx99999.jpg", updated.coverUrl)
+        }
+
+    @Test
+    fun syncAirEvents_prunesZombieBgmDataSchedules_whenAllEventsEndedInPast() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val futureAirEpoch = (nowMillis + 86400 * 1000) / 1000
+            val pastAirEpoch4WeeksAgo = (nowMillis - 28 * DAY_MILLIS) / 1000
+
+            val anilist =
+                FakeAniListService().apply {
+                    mediaSchedules =
+                        mapOf(
+                            101L to
+                                AniListMediaSchedule(
+                                    episodes = listOf(AniListAiringEpisode(episode = 5, airAtEpochSeconds = futureAirEpoch)),
+                                ),
+                            102L to
+                                AniListMediaSchedule(
+                                    episodes = listOf(AniListAiringEpisode(episode = 1, airAtEpochSeconds = pastAirEpoch4WeeksAgo)),
+                                ),
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            // 活跃网播条目：明天有最新一集
+                            AirScheduleEntity(
+                                bgmId = 6001L,
+                                title = "活跃网播番",
+                                titleCn = "活跃网播番",
+                                coverUrl = "https://example.com/c1.jpg",
+                                ratingScore = 7.5,
+                                airDate = "2026-08-01",
+                                weekday = 3,
+                                timeCst = "20:00",
+                                timeJst = "21:00",
+                                sitesJson = "[]",
+                                anilistId = 101L,
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                            ),
+                            // 僵尸网播条目：四周前已播完单集，未来无任何排期
+                            AirScheduleEntity(
+                                bgmId = 6002L,
+                                title = "泡泡糖忍战 44",
+                                titleCn = "泡泡糖忍战 44",
+                                coverUrl = "https://example.com/c2.jpg",
+                                ratingScore = 6.0,
+                                airDate = "2026-08-01",
+                                weekday = 4,
+                                timeCst = "18:00",
+                                timeJst = "19:00",
+                                sitesJson = "[]",
+                                anilistId = 102L,
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                            ),
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val schedules = dao.getAllSchedulesList()
+            assertTrue(schedules.any { it.bgmId == 6001L }, "活跃网播条目应保留")
+            assertTrue(schedules.none { it.bgmId == 6002L }, "已完结的僵尸条目应被剔除")
+        }
+
+    @Test
+    fun refreshSchedules_mergeScheduleEntity_preservesExistingCover_whenCalendarHasBlankCover() =
+        runTest {
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
+                                items =
+                                    listOf(
+                                        Subject(
+                                            id = 7001L,
+                                            name = "官方番",
+                                            nameCn = "官方番",
+                                            images = null, // 官方刷新返回空图片
+                                        ),
+                                    ),
+                            ),
+                        )
+                }
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 7001L,
+                                title = "官方番",
+                                titleCn = "官方番",
+                                coverUrl = "https://example.com/existing_cover.jpg",
+                                ratingScore = 8.0,
+                                airDate = "2026-07-01",
+                                weekday = 7,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                            ),
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.refreshSchedules()
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val stored = dao.getAllSchedulesList().single { it.bgmId == 7001L }
+            assertEquals("https://example.com/existing_cover.jpg", stored.coverUrl)
+        }
+
+    @Test
+    fun syncBangumiData_enrichMissingMetadata_prioritizesBlankCoversAheadOfMissingEpisodes() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val beginIso = TimeUtils.isoUtcFromEpochMillis(nowMillis)
+
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
+                                items = (1L..5L).map { id -> Subject(id = id, name = "官方番$id", nameCn = "官方番$id") },
+                            ),
+                        )
+                    // API 只配置了缺失封面的第 6 个条目的元数据
+                    subjects =
+                        mapOf(
+                            6L to
+                                Subject(
+                                    id = 6L,
+                                    name = "无封面网播番",
+                                    nameCn = "无封面网播番",
+                                    images = SubjectImages(common = "https://lain.bgm.tv/pic/cover/c/sample_6.jpg"),
+                                    eps = 12,
+                                ),
+                        )
+                }
+
+            val dataService =
+                FakeBangumiDataService().apply {
+                    dataResult =
+                        BangumiDataResult.Success(
+                            items =
+                                listOf(
+                                    BangumiDataItem(
+                                        title = "无封面网播番",
+                                        titleTranslate = mapOf("zh-Hans" to listOf("无封面网播番")),
+                                        begin = beginIso,
+                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "6")),
+                                    ),
+                                ),
+                            etag = "W/\"etag-test\"",
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        // 插入 5 部已有封面但 totalEpisodes == 0 的官方条目
+                        (1L..5L).map { id ->
+                            AirScheduleEntity(
+                                bgmId = id,
+                                title = "官方番$id",
+                                titleCn = "官方番$id",
+                                coverUrl = "https://example.com/has_cover_$id.jpg",
+                                ratingScore = 8.0,
+                                airDate = "2026-07-01",
+                                weekday = 7,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                totalEpisodes = 0,
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                            )
+                        },
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val enriched = dao.getAllSchedulesList().first { it.bgmId == 6L }
+            // 确认条目 6 的封面成功被回补，未被前 5 个 totalEpisodes == 0 的官方条目饿死
+            assertEquals("https://lain.bgm.tv/r/400/pic/cover/l/sample_6.jpg", enriched.coverUrl)
+        }
+
+    @Test
+    fun getSchedulesByWeekday_filtersInactiveBgmData_andKeepsOfficial() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val futureAirUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis + 86400 * 1000)
+            val pastAirUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis - 30 * DAY_MILLIS)
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 8001L,
+                                title = "官方番",
+                                titleCn = "官方番",
+                                coverUrl = "",
+                                ratingScore = 8.0,
+                                airDate = "2026-07-01",
+                                weekday = 1,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 8002L,
+                                title = "活跃网播番",
+                                titleCn = "活跃网播番",
+                                coverUrl = "",
+                                ratingScore = 7.0,
+                                airDate = "2026-08-01",
+                                weekday = 1,
+                                timeCst = "12:00",
+                                timeJst = "13:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisodeAtUtc = futureAirUtc,
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 8003L,
+                                title = "陈旧网播番",
+                                titleCn = "陈旧网播番",
+                                coverUrl = "",
+                                ratingScore = 6.0,
+                                airDate = "2026-06-01",
+                                weekday = 1,
+                                timeCst = "14:00",
+                                timeJst = "15:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisodeAtUtc = pastAirUtc,
+                            ),
+                            // 连载中网播番：3周前开播，共12集，当前暂无未来话次真值但处于正常连载期
+                            AirScheduleEntity(
+                                bgmId = 8004L,
+                                title = "连载中网播番",
+                                titleCn = "连载中网播番",
+                                coverUrl = "",
+                                ratingScore = 7.5,
+                                airDate = TimeUtils.isoUtcFromEpochMillis(nowMillis - 21 * DAY_MILLIS).substringBefore("T"),
+                                beginAtUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis - 21 * DAY_MILLIS),
+                                totalEpisodes = 12,
+                                weekday = 1,
+                                timeCst = "16:00",
+                                timeJst = "17:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisodeAtUtc = "",
+                            ),
+                            // 已播完全部12集的网播番：最后一话在过去播出，应判定为已完结不展示
+                            AirScheduleEntity(
+                                bgmId = 8005L,
+                                title = "已完结12集网播番",
+                                titleCn = "已完结12集网播番",
+                                coverUrl = "",
+                                ratingScore = 7.0,
+                                airDate = "2026-06-01",
+                                totalEpisodes = 12,
+                                nextEpisode = 12,
+                                weekday = 1,
+                                timeCst = "18:00",
+                                timeJst = "19:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisodeAtUtc = pastAirUtc,
+                            ),
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val weekdaySchedules = repo.getSchedulesByWeekday(1).first()
+            val allSchedules = repo.getAllSchedulesStream().first()
+
+            assertEquals(3, weekdaySchedules.size)
+            assertTrue(weekdaySchedules.any { it.bgmId == 8001L }, "官方条目始终展示")
+            assertTrue(weekdaySchedules.any { it.bgmId == 8002L }, "活跃网播条目展示")
+            assertTrue(weekdaySchedules.none { it.bgmId == 8003L }, "已完结网播条目不展示")
+            assertTrue(weekdaySchedules.any { it.bgmId == 8004L }, "连载中且处于季播周期内的网播条目应展示")
+            assertTrue(weekdaySchedules.none { it.bgmId == 8005L }, "播完全部12集的网播条目不展示")
+
+            assertEquals(3, allSchedules.size)
+        }
+
+    @Test
+    fun syncAirEvents_doesNotPurgeOngoingMultiEpisodeAnime_whenFutureEpisodesPendingOnAniList() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val pastAirEpoch1 = (nowMillis - 14 * DAY_MILLIS) / 1000
+            val pastAirEpoch2 = (nowMillis - 7 * DAY_MILLIS) / 1000
+
+            val anilist =
+                FakeAniListService().apply {
+                    mediaSchedules =
+                        mapOf(
+                            201L to
+                                AniListMediaSchedule(
+                                    episodes =
+                                        listOf(
+                                            AniListAiringEpisode(episode = 1, airAtEpochSeconds = pastAirEpoch1),
+                                            AniListAiringEpisode(episode = 2, airAtEpochSeconds = pastAirEpoch2),
+                                        ),
+                                ),
+                        )
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            // 连载中12集网播番：虽然 AniList 目前只有前 2 集历史排期（第 3 集可能因停播周未即时定档），但总集数为 12 集，绝不能被误判为僵尸条目剔除
+                            AirScheduleEntity(
+                                bgmId = 9001L,
+                                title = "连载季番",
+                                titleCn = "连载季番",
+                                coverUrl = "https://example.com/c1.jpg",
+                                ratingScore = 8.0,
+                                airDate = TimeUtils.isoUtcFromEpochMillis(nowMillis - 14 * DAY_MILLIS).substringBefore("T"),
+                                beginAtUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis - 14 * DAY_MILLIS),
+                                totalEpisodes = 12,
+                                weekday = 1,
+                                timeCst = "20:00",
+                                timeJst = "21:00",
+                                sitesJson = "[]",
+                                anilistId = 201L,
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                            ),
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val schedules = dao.getAllSchedulesList()
+            assertTrue(schedules.any { it.bgmId == 9001L }, "连载中、未播满总集数的网播条目绝不能被剔除")
+        }
+
+    @Test
+    fun syncAirEvents_includesBgmDataAnimeInTargets_whenUserHasDoingCollections() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val anilist = FakeAniListService()
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 9101L,
+                                title = "正在追的官方番",
+                                titleCn = "正在追的官方番",
+                                coverUrl = "https://example.com/cover1.jpg",
+                                ratingScore = 8.0,
+                                airDate = "2026-08-01",
+                                weekday = 1,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                                anilistId = 301L,
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 9102L,
+                                title = "未在追但已同步过封面的网播番",
+                                titleCn = "未在追但已同步过封面的网播番",
+                                coverUrl = "https://example.com/cover2.jpg",
+                                ratingScore = 7.5,
+                                airDate = "2026-08-01",
+                                weekday = 1,
+                                timeCst = "12:00",
+                                timeJst = "13:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                anilistId = 302L,
+                            ),
+                        ),
+                    )
+                }
+
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(
+                        UserCollection(
+                            subjectId = 9101L,
+                            type = CollectionType.DOING.value,
+                        ),
+                    )
+                }
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                    collectionRepository = collectionRepo,
+                )
+
+            val result = repo.syncBangumiData(force = true)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 验证未在追但属于 SOURCE_BGM_DATA 的条目依然包含在 targets 中请求 AniList，不会因已有封面且不在追而发生排期饿死与事件不同步
+            assertTrue(anilist.requestedIds.contains(302L), "网播条目必须始终被纳入 AniList 逐话排期校验 targets")
         }
 }

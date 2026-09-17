@@ -223,9 +223,12 @@ fun FilterAndMetaBar(
                     )
                 },
                 shape = RoundedCornerShape(12.dp),
+                border = null,
                 colors =
                     FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
             )
@@ -241,9 +244,12 @@ fun FilterAndMetaBar(
                     )
                 },
                 shape = RoundedCornerShape(12.dp),
+                border = null,
                 colors =
                     FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     ),
             )

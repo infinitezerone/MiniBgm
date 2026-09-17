@@ -35,6 +35,10 @@ interface AirScheduleDao {
     @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND airDate < :date")
     suspend fun deleteStaleBgmDataSchedules(date: String)
 
+    /** 删除指定的 bgm-data 条目（用于清理已播完或无未来排期的网播僵尸条目） */
+    @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND bgmId IN (:ids)")
+    suspend fun deleteBgmDataSchedulesByIds(ids: List<Long>)
+
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
 }

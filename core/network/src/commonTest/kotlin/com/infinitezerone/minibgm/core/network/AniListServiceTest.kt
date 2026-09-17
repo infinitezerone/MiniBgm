@@ -125,4 +125,35 @@ class AniListServiceTest {
             assertEquals(1, episodes[0].episode)
             assertEquals(2, episodes[1].episode)
         }
+
+    @Test
+    fun getMediaSchedules_parsesCoverImageAndEpisodes() =
+        runTest {
+            val client =
+                clientWith { _ ->
+                    HttpStatusCode.OK to
+                        """{"data": {"s0": {"coverImage": {"large": "https://s4.anilist.co/cover/large/bx189046.jpg"}, "airingSchedule": {"nodes": [{"episode": 1, "airingAt": 1700000000}]}}}}"""
+                }
+
+            val result = AniListServiceImpl(client).getMediaSchedules(listOf(189046L))
+
+            assertEquals(1, result.size)
+            val media = result[189046L]
+            assertEquals("https://s4.anilist.co/cover/large/bx189046.jpg", media?.coverUrl)
+            assertEquals(1, media?.episodes?.size)
+            assertEquals(1, media?.episodes?.first()?.episode)
+        }
+
+    @Test
+    fun getMediaSchedules_handlesNullData_whenGraphQLErrorReturned() =
+        runTest {
+            val client =
+                clientWith { _ ->
+                    HttpStatusCode.OK to """{"data": null, "errors": [{"message": "Too Many Requests"}]}"""
+                }
+
+            val result = AniListServiceImpl(client).getMediaSchedules(listOf(189046L))
+
+            assertTrue(result.isEmpty())
+        }
 }

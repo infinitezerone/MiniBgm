@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +48,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDoingContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDroppedContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusOnHoldContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusWishContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDroppedContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusOnHoldContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusWishContainerColor
 import com.infinitezerone.minibgm.core.model.CollectionCount
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Rating
@@ -77,7 +86,6 @@ fun SubjectHeaderCard(
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -188,7 +196,6 @@ fun SubjectHeaderCard(
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = RatingGold.copy(alpha = 0.15f),
-                                border = BorderStroke(0.6.dp, RatingGold.copy(alpha = 0.5f)),
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -521,32 +528,32 @@ private fun CollectionStatsSection(
             CollectionStatusBadge(
                 label = "想看",
                 count = collection.wish,
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                containerColor = statusWishContainerColor(),
+                contentColor = onStatusWishContainerColor(),
             )
             CollectionStatusBadge(
                 label = "在看",
                 count = collection.doing,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                containerColor = statusDoingContainerColor(),
+                contentColor = onStatusDoingContainerColor(),
             )
             CollectionStatusBadge(
                 label = "看过",
                 count = collection.collect,
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                containerColor = statusCollectContainerColor(),
+                contentColor = onStatusCollectContainerColor(),
             )
             CollectionStatusBadge(
                 label = "搁置",
                 count = collection.onHold,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                containerColor = statusOnHoldContainerColor(),
+                contentColor = onStatusOnHoldContainerColor(),
             )
             CollectionStatusBadge(
                 label = "抛弃",
                 count = collection.dropped,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.outline,
+                containerColor = statusDroppedContainerColor(),
+                contentColor = onStatusDroppedContainerColor(),
             )
         }
     }
@@ -707,7 +714,6 @@ fun SubjectPersonalProgressCard(
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Column(
             modifier =

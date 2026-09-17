@@ -491,12 +491,18 @@ fun QuickCapsuleButton(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(6.dp),
-        color = if (isActive) activeColor.copy(alpha = 0.18f) else Color.Transparent,
+        color =
+            if (isActive) {
+                activeColor.copy(alpha = 0.18f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
         border =
-            BorderStroke(
-                0.8.dp,
-                if (isActive) activeColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-            ),
+            if (isActive) {
+                BorderStroke(0.8.dp, activeColor)
+            } else {
+                null
+            },
         modifier = modifier,
     ) {
         Row(

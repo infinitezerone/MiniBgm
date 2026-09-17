@@ -83,12 +83,18 @@ class ScheduleRepositoryImpl(
 ) : ScheduleRepository {
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> =
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
-            entities.map { it.toModel(json) }
+            val nowMillis = TimeUtils.nowEpochMillis()
+            entities
+                .filter { it.isActiveForSchedule(nowMillis) }
+                .map { it.toModel(json) }
         }
 
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> =
         scheduleDao.getAllSchedules().map { entities ->
-            entities.map { it.toModel(json) }
+            val nowMillis = TimeUtils.nowEpochMillis()
+            entities
+                .filter { it.isActiveForSchedule(nowMillis) }
+                .map { it.toModel(json) }
         }
 
     override suspend fun getUpcomingAiringForSubjects(
@@ -296,11 +302,14 @@ class ScheduleRepositoryImpl(
     ): List<AirScheduleEntity> {
         val windowStart = now - ROSTER_LOOKBACK_DAYS * DAY_MILLIS
         val windowEnd = now + ROSTER_AHEAD_DAYS * DAY_MILLIS
+        val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(now)
         return itemsWithId.mapNotNull { item ->
             val bgmId = item.bgmSubjectId!!
             if (existingIds.contains(bgmId)) return@mapNotNull null
             val beginMillis = TimeUtils.epochMillisOfIso(item.begin) ?: return@mapNotNull null
             if (beginMillis < windowStart || beginMillis > windowEnd) return@mapNotNull null
+            val endMillis = TimeUtils.epochMillisOfIso(item.end)
+            if (endMillis != null && endMillis < weekStartMillis) return@mapNotNull null
             val normalizedBegin = TimeUtils.normalizeIsoUtc(item.begin)
             val timeCst = TimeUtils.formatToCstTime(item.begin)
             AirScheduleEntity(
@@ -332,9 +341,9 @@ class ScheduleRepositoryImpl(
 
     /**
      * 同步全量条目的播出事件并仲裁时刻表：
-     * 1) 从 AniList 获取逐话真值（日番主流，精确到秒级）；
+     * 1) 从 AniList 获取逐话真值与高清封面（日番主流，精确到秒级）；
      * 2) AniList 未覆盖但存在 B站源的条目由 BilibiliService 获取逐话真值（国创/B站独播）；
-     * 3) 仲裁回写条目的 next* 字段与 weekday。
+     * 3) 仲裁回写条目的 next* 字段与 weekday，自动回补 AniList 高清封面，并剔除已完结僵尸条目。
      */
     private suspend fun syncAirEvents() {
         val entities = scheduleDao.getAllSchedulesList()
@@ -350,7 +359,7 @@ class ScheduleRepositoryImpl(
         val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
         scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
 
-        // 用户在看收藏过滤：有在看数据时仅对在看条目发起精准排期校验（削减 95% 请求量）
+        // 用户在看收藏过滤：有在看数据时仅对在看条目与缺少封面的条目发起精准排期校验
         val trackingSubjectIds =
             collectionRepository
                 ?.getCollectionsByTypeStream(CollectionType.DOING)
@@ -360,13 +369,17 @@ class ScheduleRepositoryImpl(
 
         val targets =
             if (!trackingSubjectIds.isNullOrEmpty()) {
-                entities.filter { it.bgmId in trackingSubjectIds }
+                entities.filter {
+                    it.bgmId in trackingSubjectIds ||
+                        it.source == AirScheduleEntity.SOURCE_BGM_DATA ||
+                        it.coverUrl.isBlank()
+                }
             } else {
                 entities
             }
 
-        // 1. AniList 逐话真值（在追条目精准校准）
-        val (anilistEvents, coveredSubjects) = fetchAnilistAirEvents(targets, nowMillis)
+        // 1. AniList 逐话真值与高清封面同步
+        val (anilistEvents, coveredSubjects, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis)
         if (anilistEvents.isNotEmpty()) {
             airEventDao.insertAirEvents(anilistEvents)
         }
@@ -378,29 +391,58 @@ class ScheduleRepositoryImpl(
             airEventDao.insertAirEvents(bilibiliEvents)
         }
 
-        // 3. 仲裁回写：next* 字段取未来最近一话（或刚播出的上一话）
+        // 3. 仲裁回写：next* 字段取未来最近一话（或刚播出的上一话），回补 AniList 高清封面，并剔除已完结僵尸条目
         val allEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
-        val reconciled = reconcileScheduleEntities(entities, allEvents, nowMillis)
+        val entitiesWithCovers =
+            if (anilistCovers.isNotEmpty()) {
+                entities.map { entity ->
+                    val anilistCover = anilistCovers[entity.bgmId]
+                    if (entity.coverUrl.isBlank() && !anilistCover.isNullOrBlank()) {
+                        entity.copy(coverUrl = anilistCover)
+                    } else {
+                        entity
+                    }
+                }
+            } else {
+                entities
+            }
+
+        // 剔除已完结或在未来无任何播出事件的 bgm_data 僵尸条目
+        val (activeEntities, zombieEntities) =
+            entitiesWithCovers.partition { entity ->
+                !isZombieBgmDataSchedule(entity, allEvents[entity.bgmId].orEmpty(), nowMillis)
+            }
+        if (zombieEntities.isNotEmpty()) {
+            scheduleDao.deleteBgmDataSchedulesByIds(zombieEntities.map { it.bgmId })
+        }
+
+        val reconciled = reconcileScheduleEntities(activeEntities, allEvents, nowMillis)
         scheduleDao.insertSchedules(reconciled)
     }
 
     private suspend fun fetchAnilistAirEvents(
         entities: List<AirScheduleEntity>,
         nowMillis: Long,
-    ): Pair<List<AirEventEntity>, Set<Long>> {
+    ): Triple<List<AirEventEntity>, Set<Long>, Map<Long, String>> {
         val withAnilistId = entities.filter { it.anilistId != null }
         val schedulesByAnilistId =
             runCatching {
-                anilistService.getAiringSchedules(
+                anilistService.getMediaSchedules(
                     anilistIds = withAnilistId.mapNotNull { it.anilistId },
                 )
             }.getOrElse { emptyMap() }
         val anilistEvents = mutableListOf<AirEventEntity>()
         val coveredSubjects = mutableSetOf<Long>()
+        val coversBySubjectId = mutableMapOf<Long, String>()
 
         for (entity in withAnilistId) {
             val anilistId = entity.anilistId ?: continue
-            val episodes = schedulesByAnilistId[anilistId].orEmpty()
+            val mediaSchedule = schedulesByAnilistId[anilistId] ?: continue
+            val coverUrl = mediaSchedule.coverUrl
+            if (!coverUrl.isNullOrBlank()) {
+                coversBySubjectId[entity.bgmId] = BgmImageUtils.toSecureUrl(coverUrl)
+            }
+            val episodes = mediaSchedule.episodes
             if (episodes.isEmpty()) continue
 
             // 拆季偏移推导：
@@ -449,7 +491,7 @@ class ScheduleRepositoryImpl(
             }
             coveredSubjects += entity.bgmId
         }
-        return anilistEvents to coveredSubjects
+        return Triple(anilistEvents, coveredSubjects, coversBySubjectId)
     }
 
     private suspend fun fetchBilibiliAirEvents(
@@ -623,7 +665,10 @@ class ScheduleRepositoryImpl(
         officialWeekday: Int,
         existing: AirScheduleEntity,
     ): AirScheduleEntity {
-        val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
+        val coverUrl =
+            BgmImageUtils
+                .toSecureUrl(subject.images?.bestImage.orEmpty())
+                .ifBlank { existing.coverUrl }
         val titleCn = subject.nameCn.ifBlank { existing.titleCn }
         val airDate = existing.airDate.ifBlank { subject.airDate }
         val totalEpisodes =
@@ -693,10 +738,14 @@ class ScheduleRepositoryImpl(
 
     /**
      * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
-     * 仅对 coverUrl 为空或尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
+     * 优先对 coverUrl 为空（避免被缺集数的官方条目饿死）及尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
      */
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
-        val missing = schedules.filter { it.coverUrl.isBlank() || it.totalEpisodes == 0 }.take(5)
+        val missing =
+            schedules
+                .filter { it.coverUrl.isBlank() || it.totalEpisodes == 0 }
+                .sortedWith(compareBy({ !it.coverUrl.isBlank() }, { it.totalEpisodes != 0 }))
+                .take(5)
         if (missing.isEmpty()) return schedules
 
         val metadataByBgmId =
@@ -720,6 +769,74 @@ class ScheduleRepositoryImpl(
                 titleCn = entity.titleCn.ifBlank { subject.nameCn },
             )
         }
+    }
+
+    private fun isZombieBgmDataSchedule(
+        entity: AirScheduleEntity,
+        events: List<AirEventEntity>,
+        nowMillis: Long,
+    ): Boolean {
+        if (entity.source != AirScheduleEntity.SOURCE_BGM_DATA) return false
+        val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
+        if (events.isNotEmpty()) {
+            val hasActiveOrFutureEvent =
+                events.any { event ->
+                    val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: 0L
+                    millis >= weekStartMillis
+                }
+            if (hasActiveOrFutureEvent) return false
+
+            // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为僵尸条目
+            if (entity.totalEpisodes == 1) return true
+            if (entity.totalEpisodes > 1) {
+                if (events.size >= entity.totalEpisodes) return true
+                val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
+                if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
+                    return true
+                }
+                return false
+            }
+            // totalEpisodes <= 0
+            val latestEventMillis = events.maxOfOrNull { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L } ?: 0L
+            return latestEventMillis < weekStartMillis - 14 * DAY_MILLIS
+        }
+
+        // events 为空
+        if (entity.totalEpisodes == 1) {
+            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return true
+            return beginMillis < weekStartMillis
+        }
+        if (entity.totalEpisodes > 1) {
+            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
+            if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
+                return true
+            }
+            return false
+        }
+        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return false
+        return beginMillis < weekStartMillis - 14 * DAY_MILLIS
+    }
+
+    private fun AirScheduleEntity.isActiveForSchedule(nowMillis: Long): Boolean {
+        if (source != AirScheduleEntity.SOURCE_BGM_DATA) return true
+        val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
+        val nextMillis = TimeUtils.epochMillisOfIso(nextEpisodeAtUtc)
+        if (nextMillis != null && nextMillis >= weekStartMillis) {
+            return true
+        }
+
+        val beginMillis = TimeUtils.epochMillisOfIso(beginUtc)
+        if (totalEpisodes == 1) {
+            return beginMillis != null && beginMillis >= weekStartMillis
+        }
+        if (totalEpisodes > 1) {
+            if (nextEpisode >= totalEpisodes && nextMillis != null && nextMillis < weekStartMillis) {
+                return false
+            }
+            return beginMillis != null && beginMillis + totalEpisodes * WEEK_MILLIS >= weekStartMillis
+        }
+        // totalEpisodes <= 0
+        return beginMillis != null && beginMillis >= weekStartMillis - 14 * DAY_MILLIS
     }
 
     private companion object {

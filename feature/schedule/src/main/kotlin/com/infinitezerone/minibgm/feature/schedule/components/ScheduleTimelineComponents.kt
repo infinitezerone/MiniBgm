@@ -482,12 +482,7 @@ fun BookmarkChip(
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             },
-        border =
-            if (isWatching) {
-                null
-            } else {
-                BorderStroke(0.6.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
-            },
+        border = null,
         modifier = modifier,
     ) {
         Row(
@@ -539,7 +534,6 @@ fun SiteLinksRow(
                 onClick = { onOpenUrl(topLink.playUrl) },
                 shape = RoundedCornerShape(6.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -599,7 +593,6 @@ fun ScheduleCatchupSection(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
             ),
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -657,7 +650,6 @@ fun ScheduleCatchupSection(
                         },
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
@@ -760,7 +752,6 @@ fun ScheduleUntimedSection(
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {

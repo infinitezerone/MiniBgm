@@ -51,9 +51,12 @@ fun MoodFilterRow(
                         fontWeight = if (selectedMood == mood) FontWeight.Bold else FontWeight.Normal,
                     )
                 },
+                border = null,
                 colors =
                     FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
             )

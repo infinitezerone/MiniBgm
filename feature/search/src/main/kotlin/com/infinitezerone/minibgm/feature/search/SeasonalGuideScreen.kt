@@ -183,9 +183,12 @@ fun SeasonalGuideContent(
                                     fontWeight = if (uiState.selectedYear == year) FontWeight.Bold else FontWeight.Normal,
                                 )
                             },
+                            border = null,
                             colors =
                                 FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                 ),
                         )
@@ -251,9 +254,12 @@ fun SeasonalGuideContent(
                                     style = MaterialTheme.typography.labelMedium,
                                 )
                             },
+                            border = null,
                             colors =
                                 FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                 ),
                         )

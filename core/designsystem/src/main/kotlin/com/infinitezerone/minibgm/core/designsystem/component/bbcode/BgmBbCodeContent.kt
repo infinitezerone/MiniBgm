@@ -137,7 +137,6 @@ private fun BgmBbCodeQuote(
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
         modifier = modifier.fillMaxWidth().padding(vertical = 2.dp),
     ) {
         Column(
@@ -236,7 +235,6 @@ private fun BgmBbCodeImage(
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
         onClick = {
             if (isRevealed) {
                 onUrlClick?.invoke(image.url)

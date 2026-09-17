@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -175,9 +174,12 @@ fun RelatedWorksSection(
                         selected = selectedRoleFilter == null,
                         onClick = { selectedRoleFilter = null },
                         label = { Text("全部 (${aggregatedWorks.size})", style = MaterialTheme.typography.labelSmall) },
+                        border = null,
                         colors =
                             FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             ),
                     )
@@ -190,9 +192,12 @@ fun RelatedWorksSection(
                             if (!isGridView) isGridView = true
                         },
                         label = { Text("$role ($count)", style = MaterialTheme.typography.labelSmall) },
+                        border = null,
                         colors =
                             FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             ),
                     )
@@ -233,7 +238,6 @@ fun RelatedWorksSection(
                                     .height(178.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                            border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                         ) {
                             Column(
                                 modifier =
@@ -341,7 +345,6 @@ private fun RelatedWorkCard(
         modifier = modifier,
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     ) {
         Column(modifier = Modifier.padding(6.dp)) {
             Box {
