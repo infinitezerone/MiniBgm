@@ -15,6 +15,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -141,5 +142,27 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val service = DefaultBgmAiAgentService(fakeSettingsRepository)
             val result = service.execute("Recommend an anime")
             assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun execute_with_custom_openai_model_configures_capabilities() =
+        runTest {
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "http://127.0.0.1:9999/v1",
+                    apiKey = "sk-test",
+                    model = "DeepSeek-V4-Flash-Vision-Exp",
+                    provider = "custom",
+                ),
+            )
+            val service = DefaultBgmAiAgentService(fakeSettingsRepository)
+            val result = service.execute("Hi")
+            assertIs<AppResult.Error>(result)
+            // It should fail with connection error, NEVER with "Cannot determine proper LLM params"
+            val msg = result.throwable.message.orEmpty()
+            assertFalse(
+                msg.contains("Cannot determine proper LLM params"),
+                "Custom OpenAI model must have OpenAIEndpoint.Completions capability: $msg",
+            )
         }
 }
