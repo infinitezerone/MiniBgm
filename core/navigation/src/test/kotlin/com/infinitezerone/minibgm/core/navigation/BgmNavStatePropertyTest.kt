@@ -98,6 +98,16 @@ class BgmNavStatePropertyTest {
         }
     }
 
+    private data class PushSeasonalGuide(
+        val year: Int,
+        val month: Int,
+    ) : Action {
+        override fun applyTo(state: BgmNavState): Boolean {
+            state.navigateTo(SeasonalGuideRoute(initialYear = year, initialSeasonMonth = month))
+            return true
+        }
+    }
+
     private data class SwitchTab(
         val index: Int,
     ) : Action {
@@ -117,7 +127,7 @@ class BgmNavStatePropertyTest {
 
     private fun randomActions(rng: Random): List<Action> =
         List(rng.nextInt(10, 40)) {
-            when (rng.nextInt(9)) {
+            when (rng.nextInt(10)) {
                 0 -> PushDetail(rng.nextLong())
                 1 -> PushLinked(rng.nextLong())
                 2 -> PushEpisode(rng.nextLong())
@@ -125,7 +135,8 @@ class BgmNavStatePropertyTest {
                 4 -> PushSearch(rng.nextInt())
                 5 -> PushCollections(rng.nextLong())
                 6 -> PushAssistant
-                7 -> SwitchTab(rng.nextInt())
+                7 -> PushSeasonalGuide(rng.nextInt(2020, 2030), rng.nextInt(1, 13))
+                8 -> SwitchTab(rng.nextInt())
                 else -> GoBack
             }
         }
@@ -176,6 +187,11 @@ class BgmNavStatePropertyTest {
         assertTrue(
             "$context: 子栈中 AssistantRoute 出现 $assistantCount 次（同类二级页应替换而非堆叠）：$stack",
             assistantCount <= 1,
+        )
+        val seasonalGuideCount = stack.count { it is SeasonalGuideRoute }
+        assertTrue(
+            "$context: 子栈中 SeasonalGuideRoute 出现 $seasonalGuideCount 次（同类二级页应替换而非堆叠）：$stack",
+            seasonalGuideCount <= 1,
         )
     }
 
@@ -302,6 +318,15 @@ class BgmNavStatePropertyTest {
             )
             assertTrue(
                 "seed=$seed: 进入助手页后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
+                state.currentSubStack.first() == state.currentTopLevelKey,
+            )
+            state.navigateTo(SeasonalGuideRoute())
+            assertTrue(
+                "seed=$seed: 进入新番导视大盘后详情层级应被清理，实际 ${state.currentSubStack.toList()}",
+                state.currentSubStack.none { it is SubjectDetailRoute },
+            )
+            assertTrue(
+                "seed=$seed: 进入新番导视大盘后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
                 state.currentSubStack.first() == state.currentTopLevelKey,
             )
         }

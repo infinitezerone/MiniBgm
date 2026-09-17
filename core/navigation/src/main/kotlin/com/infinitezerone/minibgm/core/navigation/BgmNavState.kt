@@ -129,9 +129,9 @@ class BgmNavState(
                             it is TagSubjectsRoute
                     }
                 }
-                is SearchRoute, is UserCollectionsRoute, is AssistantRoute -> {
+                is SearchRoute, is UserCollectionsRoute, is AssistantRoute, is SeasonalGuideRoute -> {
                     // 进入新的列表/功能二级页面时，清理先前残留的详情层级；
-                    // 同类二级页（不同 query/type 的搜索、收藏、助手）按层级语义替换而非堆叠，
+                    // 同类二级页（不同 query/type 的搜索、收藏、助手、导视大盘）按层级语义替换而非堆叠，
                     // 避免返回时倒退经过过期的旧页面
                     removeAll {
                         it is SubjectDetailRoute ||

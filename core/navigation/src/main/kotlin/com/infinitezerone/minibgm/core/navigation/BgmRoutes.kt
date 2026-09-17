@@ -79,3 +79,13 @@ data class TagSubjectsRoute(
  */
 @Serializable
 data object AssistantRoute : BgmRoute
+
+/**
+ * 季度新番导视大盘交互界面路由。
+ * [initialYear] 与 [initialSeasonMonth] 为 0 时默认定位到当期年份与季度。
+ */
+@Serializable
+data class SeasonalGuideRoute(
+    val initialYear: Int = 0,
+    val initialSeasonMonth: Int = 0,
+) : BgmRoute

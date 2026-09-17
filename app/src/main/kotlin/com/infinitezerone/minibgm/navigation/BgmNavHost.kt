@@ -21,6 +21,7 @@ import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
+import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
@@ -28,6 +29,7 @@ import com.infinitezerone.minibgm.feature.assistant.navigation.assistantEntry
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
 import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
 import com.infinitezerone.minibgm.feature.search.navigation.searchEntry
+import com.infinitezerone.minibgm.feature.search.navigation.seasonalGuideEntry
 import com.infinitezerone.minibgm.feature.search.navigation.tagSubjectsEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.episodeDetailEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
@@ -83,6 +85,7 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick = { navState.navigateTo(AssistantRoute) },
+                                onSeasonalGuideClick = { navState.navigateTo(SeasonalGuideRoute()) },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder),
                             )
@@ -96,7 +99,14 @@ fun BgmNavHost(
                             exploreEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
+                                onSeasonalGuideClick = { navState.navigateTo(SeasonalGuideRoute()) },
                                 scrollToTop = exploreScrollToTop,
+                                metadata = bgmListPane(detailPlaceholder),
+                            )
+
+                            seasonalGuideEntry(
+                                onSubjectClick = { route -> navState.navigateTo(route) },
+                                onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
