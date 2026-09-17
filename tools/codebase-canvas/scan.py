@@ -218,18 +218,25 @@ def extract_edges(text: str, build_rel: str, coord: str) -> list[dict]:
             m = EDGE_RE.match(line)
             if m:
                 decl = m.group("decl")
-                ctx = " ".join(frames)
+                # 源集名要沿着块头栈往外找，不能只看当前行：
+                # 依赖语句本身通常是裸的 implementation(project(...))，源集写在几层之外的块头上
                 ss_name = ""
-                m_ss_prefix = re.match(r"\s*([A-Za-z_]\w*)\.dependencies", line)
-                if m_ss_prefix:
-                    ss_name = m_ss_prefix.group(1)
+                for fr in reversed(frames):
+                    ms = SS_OPEN_RE.match(fr)
+                    if ms:
+                        ss_name = ms.group(1)
+                        break
+                    mq = re.search(r'it\.name\s*==\s*"([A-Za-z_]\w*)"', fr)
+                    if mq:
+                        ss_name = mq.group(1)
+                        break
                 if ss_name:
                     scope = "test" if ss_name.lower().endswith("test") else "main"
-                elif TEST_CTX_RE.search(ctx):
+                elif TEST_CTX_RE.search(" ".join(frames)):
                     scope = "test"
                 else:
                     scope = "test" if "test" in decl.lower() else "main"
-                if scope == "main" and "test" in decl.lower():
+                if "test" in decl.lower():
                     scope = "test"
                 edges.append(
                     {
@@ -478,14 +485,21 @@ def layer_of(kind: str) -> str:
 
 
 def scan_kotlin(root: str, mod_dir: str) -> dict:
-    """扫描单个模块的 Kotlin 源码，返回声明/统计。"""
+    """扫描单个模块的 Kotlin 源码，返回声明/统计。
+
+    每个文件只读一次：声明抽取、行数统计、声明体（供引用图用）都复用同一份 lines。
+    重复读盘在普通机器上只是浪费，在文件访问被代理/远程挂载的环境里会直接翻倍耗时。
+    """
     src_root = os.path.join(mod_dir, "src")
     files: list[dict] = []
     decls: list[dict] = []
     sets: dict[str, Counter] = defaultdict(Counter)
+    texts: dict[str, str] = {}
+    lines_by_file: dict[str, list[str]] = {}
 
     if not os.path.isdir(src_root):
-        return {"files": [], "declarations": [], "loc": 0, "sourceSets": [], "counts": {}}
+        return {"files": [], "declarations": [], "bodies": {}, "texts": {},
+                "loc": 0, "sourceSets": [], "counts": {}}
 
     for dirpath, dirnames, filenames in os.walk(src_root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
@@ -503,7 +517,9 @@ def scan_kotlin(root: str, mod_dir: str) -> dict:
                 if si + 1 < len(parts):
                     srcset = parts[si + 1]
             text = read_text(abs_p)
+            texts[rp] = text
             lines = text.splitlines()
+            lines_by_file[rp] = lines
             pkg = ""
             imports: list[str] = []
             for line in lines[:80]:
@@ -592,24 +608,23 @@ def scan_kotlin(root: str, mod_dir: str) -> dict:
         d["loc"] = max(1, per_file_loc.get(d["file"], 0) // n)
 
     # 声明体文本：从本声明行到同文件下一个声明行，用于静态引用解析。
-    # 只在本进程内使用，不写入 JSON（体积太大）。
+    # 只在本进程内使用，不写入 JSON（体积太大）。复用上面读到的 lines，不再读盘。
     bodies: dict[str, str] = {}
     by_file: dict[str, list[dict]] = defaultdict(list)
     for d in decls:
         by_file[d["file"]].append(d)
     for path, ds in by_file.items():
         ds.sort(key=lambda x: x["line"])
-        text = read_text(os.path.join(root, path))
-        lines = text.splitlines()
+        lines = lines_by_file.get(path, [])
         for i, d in enumerate(ds):
             end = ds[i + 1]["line"] - 1 if i + 1 < len(ds) else len(lines)
             bodies[d["id"]] = "\n".join(lines[d["line"] - 1 : end])
-        # 文件尾部没有声明的代码也算进最后一个声明，避免漏掉底部调用
 
     return {
         "files": files,
         "declarations": decls,
         "bodies": bodies,
+        "texts": texts,
         "loc": sum(f["loc"] for f in files),
         "sourceSets": [
             {"name": k, "files": v["files"], "loc": v["loc"]} for k, v in sorted(sets.items())
@@ -719,6 +734,13 @@ def check_rules(root: str, modules: list[dict], mod_src: dict[str, dict]) -> lis
     feature_ids = {m["id"] for m in modules if m["group"] == "feature"}
     app_ids = {m["id"] for m in modules if m["group"] == "app"}
 
+    def lines_of(mod_id: str, path: str) -> list[str]:
+        """规则检查复用扫描阶段已经读到的内容，避免把每个文件再读一遍。"""
+        text = mod_src.get(mod_id, {}).get("texts", {}).get(path)
+        if text is None:
+            text = read_text(os.path.join(root, path))
+        return text.splitlines()
+
     def add(rule, severity, title, detail, evidence, module=None, snippet=None):
         findings.append(
             {
@@ -820,8 +842,7 @@ def check_rules(root: str, modules: list[dict], mod_src: dict[str, dict]) -> lis
         for d in src["declarations"]:
             if d["kind"] != "viewmodel":
                 continue
-            text = read_text(os.path.join(root, d["file"]))
-            for i, line in enumerate(text.splitlines(), 1):
+            for i, line in enumerate(lines_of(d["module"], d["file"]), 1):
                 if "MutableStateFlow" not in line or "private" in line:
                     continue
                 if not re.match(r"^\s{4,}(val|var)\s", line):
@@ -843,8 +864,7 @@ def check_rules(root: str, modules: list[dict], mod_src: dict[str, dict]) -> lis
         for f in mod_src[m["id"]]["files"]:
             if f["isTest"]:
                 continue
-            text = read_text(os.path.join(root, f["path"]))
-            for i, line in enumerate(text.splitlines(), 1):
+            for i, line in enumerate(lines_of(m["id"], f["path"]), 1):
                 if re.search(r"Color\(0x", line) and not line.strip().startswith("//"):
                     add(
                         "R5",
@@ -867,8 +887,7 @@ def check_rules(root: str, modules: list[dict], mod_src: dict[str, dict]) -> lis
         for f in mod_src[m["id"]]["files"]:
             if f["isTest"]:
                 continue
-            text = read_text(os.path.join(root, f["path"]))
-            for i, line in enumerate(text.splitlines(), 1):
+            for i, line in enumerate(lines_of(m["id"], f["path"]), 1):
                 if raw_io.search(line) and not line.strip().startswith("//"):
                     add(
                         "R6",
@@ -1086,8 +1105,479 @@ def parse_git(root: str, modules: list[dict]) -> dict:
 
 
 # --------------------------------------------------------------------------
-# 8. 汇总
+# 7.5 变更集：git diff → 文件 → hunk 行号 → 声明
 # --------------------------------------------------------------------------
+
+HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+DIFF_FILE_RE = re.compile(r"^diff --git a/(.+) b/(.+)$")
+
+# 不属于任何 Gradle 模块、但对影响面有确定意义的路径
+SPECIAL_PATHS = [
+    ("build-logic/", "build-logic", "convention plugin 与构建约定"),
+    ("gradle/", "gradle", "版本目录与 wrapper"),
+]
+GLOBAL_BUILD_PATHS = ("build-logic/", "gradle/", "settings.gradle.kts", "build.gradle.kts",
+                      "gradle.properties", "gradlew", "gradle/wrapper/")
+
+
+def module_of_path(path: str, modules: list[dict]) -> tuple[str | None, str]:
+    """路径 → 模块 id。取最长匹配的模块目录，避免 core/data 抢占 core/database。"""
+    best = None
+    for m in modules:
+        p = m["path"]
+        if path == p or path.startswith(p + "/"):
+            if best is None or len(p) > len(best["path"]):
+                best = m
+    if best:
+        return best["id"], "module"
+    for prefix, label, _desc in SPECIAL_PATHS:
+        if path.startswith(prefix):
+            return label, "build-config"
+    if path.endswith((".md", ".txt", ".png", ".jpg")):
+        return "docs", "docs"
+    return None, "other"
+
+
+def parse_hunks(text: str) -> dict[str, list[dict]]:
+    """从 unified diff 里取每个文件的新侧 hunk 行范围。"""
+    out: dict[str, list[dict]] = defaultdict(list)
+    cur = None
+    for line in text.splitlines():
+        m = DIFF_FILE_RE.match(line)
+        if m:
+            cur = m.group(2)
+            continue
+        m = HUNK_RE.match(line)
+        if m and cur:
+            new_start = int(m.group(3))
+            new_count = int(m.group(4) or "1")
+            old_start = int(m.group(1))
+            old_count = int(m.group(2) or "1")
+            out[cur].append(
+                {
+                    "newStart": new_start,
+                    "newCount": new_count,
+                    "oldStart": old_start,
+                    "oldCount": old_count,
+                }
+            )
+    return out
+
+
+def build_decl_index(modules: list[dict]) -> dict[str, list[dict]]:
+    """文件 → 按行排序的声明列表，用于把 diff 行号定位到声明。"""
+    idx: dict[str, list[dict]] = defaultdict(list)
+    for m in modules:
+        for d in m["declarations"]:
+            idx[d["file"]].append(d)
+    for k in idx:
+        idx[k].sort(key=lambda x: x["line"])
+    return idx
+
+
+def locate_decls(hunks: list[dict], decls: list[dict], limit: int = 12) -> list[dict]:
+    """把 hunk 的新侧行范围落到具体声明上。
+
+    声明的作用范围 = 它自己这一行到同文件下一个声明的行（与引用图用的 body 口径一致）。
+    这是**确定**的：行号来自 git，声明行号来自扫描结果，不涉及猜测。
+    """
+    if not decls:
+        return []
+    hit: list[dict] = []
+    seen = set()
+    for h in hunks:
+        lo = h["newStart"]
+        hi = h["newStart"] + max(h["newCount"], 1) - 1
+        for i, d in enumerate(decls):
+            start = d["line"]
+            end = decls[i + 1]["line"] - 1 if i + 1 < len(decls) else 10 ** 9
+            if end < lo or start > hi:
+                continue
+            if d["id"] in seen:
+                continue
+            seen.add(d["id"])
+            hit.append(
+                {
+                    "id": d["id"],
+                    "name": d["name"],
+                    "kind": d["kind"],
+                    "line": d["line"],
+                    "layer": d["layer"],
+                    "isTest": d["isTest"],
+                    "globalIdx": d["globalIdx"],
+                }
+            )
+            if len(hit) >= limit:
+                return hit
+    return hit
+
+
+def parse_changes(root: str, modules: list[dict], decl_idx: dict) -> list[dict]:
+    """生成变更集列表：工作区（未提交）+ 最近若干提交。
+
+    两者都要有：只支持工作区的话，一旦提交掉了就再也看不到「这次提交影响了什么」。
+    """
+    sets: list[dict] = []
+
+    def collect(label: str, base: str, target: str | None, kind: str) -> dict | None:
+        rng = [base] if target is None else [f"{base}..{target}"]
+        numstat = sh(["git", "diff", "--numstat", *rng], root)
+        namestat = sh(["git", "diff", "--name-status", *rng], root)
+        if not numstat.strip() and not namestat.strip():
+            return None
+        status = {}
+        for line in namestat.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                status[parts[-1]] = parts[0][:1]
+        hunks_by_file = parse_hunks(sh(["git", "diff", "--unified=0", "--no-color", *rng], root))
+
+        files: list[dict] = []
+        for line in numstat.splitlines():
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            a, d, path = parts
+            path = path.split(" => ")[-1] if " => " in path else path
+            mid, mkind = module_of_path(path, modules)
+            hunks = hunks_by_file.get(path, [])
+            files.append(
+                {
+                    "path": path,
+                    "status": status.get(path, "M"),
+                    "added": 0 if a == "-" else int(a),
+                    "removed": 0 if d == "-" else int(d),
+                    "module": mid,
+                    "moduleKind": mkind,
+                    "hunks": hunks[:60],
+                    "hunkCount": len(hunks),
+                    "touchedDecls": locate_decls(hunks, decl_idx.get(path, [])),
+                    "evidence": f'git diff {base}{".." + target if target else ""} -- {path}',
+                }
+            )
+
+        untracked: list[dict] = []
+        if target is None:
+            for p in sh(["git", "ls-files", "--others", "--exclude-standard"], root).splitlines():
+                p = p.strip()
+                if not p:
+                    continue
+                mid, mkind = module_of_path(p, modules)
+                # 未跟踪文件整份都是新增：它的所有声明都算被改动
+                decls = decl_idx.get(p, [])
+                untracked.append(
+                    {
+                        "path": p,
+                        "status": "??",
+                        "module": mid,
+                        "moduleKind": mkind,
+                        "declCount": len(decls),
+                        "touchedDecls": [
+                            {"id": x["id"], "name": x["name"], "kind": x["kind"], "line": x["line"],
+                             "layer": x["layer"], "isTest": x["isTest"], "globalIdx": x["globalIdx"]}
+                            for x in decls[:12]
+                        ],
+                        "evidence": f"git ls-files --others -- {p}",
+                    }
+                )
+
+        by_module: dict[str, dict] = {}
+        for f in files + [dict(u, added=0, removed=0, hunks=[], hunkCount=0) for u in untracked]:
+            key = f["module"] or "(未归类)"
+            e = by_module.setdefault(
+                key, {"module": f["module"], "kind": f["moduleKind"], "files": 0,
+                      "added": 0, "removed": 0, "decls": 0, "fileList": []}
+            )
+            e["files"] += 1
+            e["added"] += f["added"]
+            e["removed"] += f["removed"]
+            e["decls"] += len(f["touchedDecls"])
+            e["fileList"].append(f["path"])
+
+        return {
+            "kind": kind,  # worktree | commit
+            "label": label,
+            "base": base,
+            "target": target,
+            "range": f'{base}{".." + target if target else " + 工作区"}',
+            "files": files,
+            "untracked": untracked,
+            "modules": sorted(by_module.values(), key=lambda x: -x["files"]),
+            "stats": {
+                "files": len(files) + len(untracked),
+                "added": sum(f["added"] for f in files),
+                "removed": sum(f["removed"] for f in files),
+                "modules": len(by_module),
+                "touchedDecls": sum(len(f["touchedDecls"]) for f in files) + sum(len(u["touchedDecls"]) for u in untracked),
+                "truncated": any(f["hunkCount"] > 60 for f in files),
+            },
+        }
+
+    wt = collect("工作区未提交", "HEAD", None, "worktree")
+    if wt:
+        sets.append(wt)
+
+    log_raw = sh(
+        ["git", "log", "-n", "6", "--pretty=format:%h%x1f%ad%x1f%s", "--date=short"], root
+    )
+    for line in log_raw.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 3:
+            continue
+        h, date, subject = parts
+        c = collect(f"{h} {subject[:60]}", f"{h}~1", h, "commit")
+        if c:
+            c["hash"] = h
+            c["date"] = date
+            c["subject"] = subject
+            sets.append(c)
+    return sets
+
+
+# --------------------------------------------------------------------------
+# 7.6 验证结果：Gradle 真跑过的证据
+# --------------------------------------------------------------------------
+
+
+def scan_validation(root: str, modules: list[dict]) -> dict:
+    """验证层。
+
+    两组证据：
+      1. out/validation-log.jsonl —— verify.py 每次跑 Gradle 落一行，含任务级结果、退出码、
+         当时的 HEAD 与脏状态。这是「谁在什么时候跑了什么、结果如何」的唯一可信来源。
+      2. 磁盘产物 —— test-results XML、APK、reports。即便没跑过 verify.py 也能看到痕迹。
+    """
+    mod_ids = {m["id"]: m for m in modules}
+
+    def module_of_task(task: str) -> str | None:
+        # :core:data:testAndroidHostTest → :core:data
+        parts = task.split(":")
+        for i in range(len(parts) - 1, 1, -1):
+            cand = ":".join(parts[:i])
+            if cand in mod_ids:
+                return cand
+        return None
+
+    log_path = os.path.join(root, "tools", "codebase-canvas", "out", "validation-log.jsonl")
+    records: list[dict] = []
+    if os.path.isfile(log_path):
+        for line in read_text(log_path).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    records = records[-40:]
+
+    for r in records:
+        for t in r.get("tasks", []):
+            t["module"] = module_of_task(t["name"])
+
+    # 每个模块最近一次被验证到的时间/结果
+    per_module: dict[str, dict] = {}
+    globals_seen: dict[str, dict] = {}
+    for r in records:
+        for t in r.get("tasks", []):
+            entry = {
+                "task": t["name"].split(":")[-1],
+                "full": t["name"],
+                "outcome": t["outcome"],
+                "at": r.get("at"),
+                "exitCode": r.get("exitCode"),
+                "head": (r.get("head") or "")[:7],
+                "evidence": r.get("logFile"),
+            }
+            if t["module"]:
+                per_module[t["module"]] = entry
+            else:
+                globals_seen[entry["task"]] = entry
+
+    apks = []
+    for dirpath, dirnames, filenames in os.walk(os.path.join(root, "app", "build", "outputs")):
+        for fn in filenames:
+            if fn.endswith(".apk"):
+                fp = os.path.join(dirpath, fn)
+                apks.append(
+                    {
+                        "path": rel(root, fp),
+                        "mtime": datetime.fromtimestamp(os.path.getmtime(fp))
+                        .astimezone()
+                        .strftime("%Y-%m-%d %H:%M"),
+                        "sizeMB": round(os.path.getsize(fp) / 1048576, 1),
+                    }
+                )
+    apks.sort(key=lambda x: x["mtime"])
+
+    reports = []
+    for m in modules:
+        rdir = os.path.join(root, m["path"], "build", "reports")
+        if not os.path.isdir(rdir):
+            continue
+        for sub in sorted(os.listdir(rdir))[:4]:
+            reports.append({"module": m["id"], "report": sub, "path": f'{m["path"]}/build/reports/{sub}'})
+
+    return {
+        "records": records,
+        "hasLog": bool(records),
+        "lastRun": records[-1] if records else None,
+        "perModule": per_module,
+        "globalTasks": globals_seen,
+        "apks": apks,
+        "reports": reports,
+        "logPath": "tools/codebase-canvas/out/validation-log.jsonl",
+    }
+
+
+# --------------------------------------------------------------------------
+# 7.7 影响面：构建级（确定）+ 符号级（推断）
+# --------------------------------------------------------------------------
+
+
+def compute_impact(change: dict | None, modules: list[dict], main_edges: list[dict],
+                   all_decls: list[dict]) -> dict | None:
+    """一次变更的影响面。
+
+    刻意分成三档，因为它们的可信度完全不同：
+      构建级直接依赖者 —— 确定。Gradle 会真的重跑这些模块的任务，依赖关系来自构建脚本。
+      构建级传递依赖者 —— 间接。`implementation` 不传递到消费方的编译类路径，
+                            所以「下游一定重编译」不成立，只能说可能受影响。
+      符号级受影响测试 —— 推断。来自静态引用图（符号名匹配），不是执行证据。
+    """
+    if not change:
+        return None
+
+    changed_ids: list[str] = []
+    build_config_touched: list[str] = []
+    for f in change["files"]:
+        if f["moduleKind"] == "build-config":
+            build_config_touched.append(f["path"])
+        elif f["module"] and f["module"].startswith(":"):
+            if f["module"] not in changed_ids:
+                changed_ids.append(f["module"])
+    for u in change["untracked"]:
+        if u["module"] and u["module"].startswith(":") and u["module"] not in changed_ids:
+            changed_ids.append(u["module"])
+
+    reverse: dict[str, list[dict]] = defaultdict(list)
+    for e in main_edges:
+        reverse[e["to"]].append(e)
+
+    # 反向 BFS 带跳数：1 跳 = 直接依赖者（必然重编译，确定），
+    # ≥2 跳 = 传递依赖者（implementation 不传递到消费方编译类路径，只能说可能受影响）
+    dist: dict[str, int] = {}
+    first_edge: dict[str, dict] = {}
+    queue: list[tuple[str, int]] = [(c, 0) for c in changed_ids]
+    while queue:
+        cur, d = queue.pop(0)
+        for e in reverse.get(cur, []):
+            nxt = e["from"]
+            if nxt in changed_ids or nxt in dist:
+                continue
+            dist[nxt] = d + 1
+            first_edge[nxt] = e
+            queue.append((nxt, d + 1))
+
+    def entry(node: str) -> dict:
+        e = first_edge[node]
+        return {
+            "module": node,
+            "hops": dist[node],
+            "via": e["to"],
+            "declaration": e["declaration"],
+            "origin": e["origin"],
+            "evidence": e["evidence"],
+        }
+
+    direct = {n: entry(n) for n, d in dist.items() if d == 1}
+    transitive = {n: entry(n) for n, d in dist.items() if d >= 2}
+
+    # build-logic 改动 = 所有应用了 convention plugin 的模块都受影响（确定）
+    global_impact = False
+    if build_config_touched:
+        global_impact = True
+
+    # 符号级：被改动声明 → 谁静态引用了它
+    touched_idx = set()
+    for f in change["files"]:
+        for d in f["touchedDecls"]:
+            touched_idx.add(d["globalIdx"])
+    for u in change["untracked"]:
+        for d in u["touchedDecls"]:
+            touched_idx.add(d["globalIdx"])
+
+    by_idx = {d["globalIdx"]: d for d in all_decls}
+    impacted_tests: list[dict] = []
+    impacted_prod: list[dict] = []
+
+    def collect(degree: int, targets: set[int]) -> tuple[list[dict], list[dict], set[int]]:
+        """degree=1：直接引用被改动声明；degree=2：引用了「引用了被改动声明」的声明。
+
+        两跳已经足够覆盖「测试 → UseCase/Repository → 被改的实体」这条常见链路；
+        再往下扩会把半个仓库都算成受影响，噪声大于信息。
+        """
+        tests: list[dict] = []
+        prod: list[dict] = []
+        newly: set[int] = set()
+        for d in all_decls:
+            hit = [t for t in (d["callees"] or []) if t in targets]
+            if not hit:
+                continue
+            if d["globalIdx"] in touched_idx:
+                continue  # 自己就是被改动的声明，不算被影响
+            entry = {
+                "name": d["name"],
+                "module": d["module"],
+                "file": d["file"],
+                "line": d["line"],
+                "isTest": d["isTest"],
+                "degree": degree,
+                "targets": [by_idx[t]["name"] for t in hit if t in by_idx][:4],
+                "evidence": f'{d["file"]}:{d["line"]}',
+            }
+            (tests if d["isTest"] else prod).append(entry)
+            if not d["isTest"]:
+                newly.add(d["globalIdx"])
+        return tests, prod, newly
+
+    t1, p1, hop2 = collect(1, touched_idx)
+    t2, p2, _ = collect(2, hop2)
+    impacted_tests = t1 + t2
+    impacted_prod = p1 + p2
+
+    # 改动本身发生在测试文件里，也要算进受影响测试
+    for f in change["files"]:
+        for d in f["touchedDecls"]:
+            if d["isTest"]:
+                impacted_tests.append(
+                    {
+                        "name": d["name"], "module": f["module"], "file": f["path"], "line": d["line"],
+                        "isTest": True, "degree": 0, "targets": ["（自身被修改）"],
+                        "evidence": f'{f["path"]}:{d["line"]}',
+                    }
+                )
+
+    test_modules = sorted({t["module"] for t in impacted_tests if t["module"]})
+    return {
+        "changedModules": changed_ids,
+        "buildConfigTouched": build_config_touched,
+        "globalImpact": global_impact,
+        "direct": sorted(direct.values(), key=lambda x: x["module"]),
+        "transitive": sorted(transitive.values(), key=lambda x: x["module"]),
+        "impactedTests": impacted_tests[:80],
+        "impactedProd": impacted_prod[:60],
+        "testModules": test_modules,
+        "counts": {
+            "changedModules": len(changed_ids),
+            "direct": len(direct),
+            "transitive": len(transitive),
+            "impactedTests": len(impacted_tests),
+            "impactedTestsDirect": len([t for t in impacted_tests if t.get("degree") == 1]),
+            "impactedProd": len(impacted_prod),
+        },
+    }
+
 
 
 def main() -> int:
@@ -1154,6 +1644,20 @@ def main() -> int:
 
     git = parse_git(root, modules)
 
+    # 变更集 / 验证结果 / 影响面：把「结构+证据」接到「开发过程」上
+    decl_idx = build_decl_index(modules)
+    changes = parse_changes(root, modules, decl_idx)
+    main_only = [e for e in edges if e.get("scope") == "main"]
+    for c in changes:
+        c["impact"] = compute_impact(c, modules, main_only, all_decls)
+    validation = scan_validation(root, modules)
+    print(
+        f"[scan] 变更集 {len(changes)} 个（工作区 "
+        f"{'有改动' if changes and changes[0]['kind'] == 'worktree' else '干净'}）、"
+        f"Gradle 验证记录 {len(validation['records'])} 条",
+        file=sys.stderr,
+    )
+
     # 上下游关系（含隐式边），供画布做影响面高亮
     incoming: dict[str, list[dict]] = defaultdict(list)
     outgoing: dict[str, list[dict]] = defaultdict(list)
@@ -1201,12 +1705,16 @@ def main() -> int:
             "findingsP1": len([f for f in findings if f["severity"] == "P1"]),
             "dirtyFiles": git["dirtyCount"],
             "referenceEdges": sum(d["calleeCount"] for d in all_decls),
+            "changeSets": len(changes),
+            "validationRuns": len(validation["records"]),
         },
         "modules": modules,
         "edges": edges,
         "findings": findings,
         "git": git,
         "referenceGraph": ref_stats,
+        "changes": changes,
+        "validation": validation,
         "conventionPlugins": {
             k: {
                 "id": v["id"],
