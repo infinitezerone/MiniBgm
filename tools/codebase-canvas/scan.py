@@ -1339,6 +1339,96 @@ def parse_changes(root: str, modules: list[dict], decl_idx: dict) -> list[dict]:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# 7.8 验证覆盖：这次变更之后，到底验证过没有
+# --------------------------------------------------------------------------
+
+GLOBAL_CHECK_TASKS = {"spotlessCheck", "crapCheck", "assembleDebug", "lint", "check", "testAndroid"}
+
+
+def _iso_to_unix(s: str | None) -> float:
+    if not s:
+        return 0.0
+    try:
+        return datetime.fromisoformat(s).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def annotate_coverage(change: dict, validation: dict) -> dict:
+    """回答「这次变更之后验证过没有」。
+
+    规则只有一条，且只用实测数据：验证记录的时间戳 >= 变更的时间戳
+      · 工作区变更的时间戳 = 被改动文件里最新的 mtime（文件真的被写过）
+      · 提交的时间戳 = git 的 committer time
+    并且这次验证里确实出现了受影响模块的任务（或一次全局检查）。
+    时间对不上就是「没验证过」，不拿「代码能编译」当验证。
+    """
+    impact = change.get("impact") or {}
+    changed_mods = set(impact.get("changedModules") or [])
+    if impact.get("globalImpact"):
+        changed_mods |= {m["module"] for m in (impact.get("direct") or []) if m.get("module")}
+    ts = change.get("timestamp") or 0.0
+
+    records = validation.get("records") or []
+    covered_mods: dict[str, dict] = {}
+    global_checks: list[dict] = []
+    last_any: dict | None = None
+
+    for r in records:
+        rts = _iso_to_unix(r.get("at"))
+        if rts < ts:
+            continue
+        if last_any is None or rts > _iso_to_unix(last_any.get("at")):
+            last_any = r
+        requested_shorts = {t.split(":")[-1] for t in (r.get("requested") or [])}
+        for t in r.get("tasks", []):
+            short = t["name"].split(":")[-1]
+            score = 3 if short in requested_shorts else 2 if short in GLOBAL_CHECK_TASKS else 1
+            if t.get("module") in changed_mods:
+                prev = covered_mods.get(t["module"])
+                if prev is None or score >= prev["_score"]:
+                    covered_mods[t["module"]] = {
+                        "module": t["module"], "task": short, "outcome": t["outcome"],
+                        "at": r.get("at"), "ok": r.get("ok"), "head": r.get("head"),
+                        "requested": short in requested_shorts,
+                        "evidence": r.get("logFile"), "_score": score,
+                    }
+            elif not t.get("module") and short in GLOBAL_CHECK_TASKS:
+                global_checks.append(
+                    {"task": short, "outcome": t["outcome"], "at": r.get("at"),
+                     "ok": r.get("ok"), "evidence": r.get("logFile")}
+                )
+    for v in covered_mods.values():
+        v.pop("_score", None)
+
+    seen: dict[str, dict] = {}
+    for g in global_checks:
+        seen[g["task"]] = g
+    global_checks = list(seen.values())
+
+    uncovered = sorted(changed_mods - set(covered_mods))
+    return {
+        "changeTimestamp": ts,
+        "changeTimestampHuman": datetime.fromtimestamp(ts).astimezone().strftime("%Y-%m-%d %H:%M")
+        if ts else None,
+        "covered": covered_mods,
+        "coveredCount": len(covered_mods),
+        "uncovered": uncovered,
+        "globalChecks": global_checks,
+        "lastRunAfterChange": None if not last_any else {
+            "at": last_any.get("at"), "ok": last_any.get("ok"),
+            "buildLine": last_any.get("buildLine"), "logFile": last_any.get("logFile"),
+        },
+        "verdict": (
+            "无验证记录" if not records else
+            "全部改动模块在变更后验证过" if changed_mods and not uncovered else
+            f"{len(uncovered)} 个改动模块在变更后没有验证"
+            if changed_mods else "本次变更没有触及任何 Gradle 模块"
+        ),
+    }
+
+
 def scan_validation(root: str, modules: list[dict]) -> dict:
     """验证层。
 
