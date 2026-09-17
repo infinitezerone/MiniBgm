@@ -14,6 +14,7 @@ val subjectModule =
                 subjectId = subjectId,
                 collectionRepository = get(),
                 communityRepository = get(),
+                authRepository = get(),
             )
         }
 
@@ -24,6 +25,7 @@ val subjectModule =
                 subjectRepository = get(),
                 collectionRepository = get(),
                 communityRepository = get(),
+                authRepository = get(),
             )
         }
     }

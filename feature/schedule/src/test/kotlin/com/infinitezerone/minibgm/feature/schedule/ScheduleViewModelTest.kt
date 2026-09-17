@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.NextUpUrgency
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleAirScheduleList
+import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
@@ -35,11 +36,13 @@ class ScheduleViewModelTest {
         repository: FakeScheduleRepository = FakeScheduleRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
+        authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
     ): ScheduleViewModel =
         ScheduleViewModel(
             scheduleRepository = repository,
             collectionRepository = collectionRepository,
             settingsRepository = settingsRepository,
+            authRepository = authRepository,
         )
 
     @Test
@@ -510,5 +513,46 @@ class ScheduleViewModelTest {
             assertTrue(currentDayIds.contains(101L))
             assertTrue(currentDayIds.contains(102L))
             assertFalse(currentDayIds.contains(103L))
+        }
+
+    @Test
+    fun unauthenticated_toggleWatching_showsLoginPromptDialog() =
+        runTest {
+            val authRepository = FakeAuthRepository(initialLoggedIn = false)
+            val collectionRepository = FakeCollectionRepository()
+            val viewModel = createViewModel(collectionRepository = collectionRepository, authRepository = authRepository)
+
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+
+            viewModel.toggleWatching(101L)
+
+            val state = viewModel.uiState.first { it.showLoginPromptDialog }
+            assertTrue(state.showLoginPromptDialog)
+            assertEquals(0, collectionRepository.updateCollectionCallCount)
+
+            viewModel.dismissLoginPrompt()
+            val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
+            assertFalse(dismissedState.showLoginPromptDialog)
+        }
+
+    @Test
+    fun unauthenticated_markEpisodeWatched_showsLoginPromptDialog() =
+        runTest {
+            val authRepository = FakeAuthRepository(initialLoggedIn = false)
+            val collectionRepository = FakeCollectionRepository()
+            val viewModel = createViewModel(collectionRepository = collectionRepository, authRepository = authRepository)
+
+            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+
+            viewModel.markEpisodeWatched(101L, 1)
+
+            val state = viewModel.uiState.first { it.showLoginPromptDialog }
+            assertTrue(state.showLoginPromptDialog)
+            assertEquals(0, collectionRepository.updateEpisodeCallCount)
+
+            val url = viewModel.beginLogin()
+            assertTrue(url.isNotBlank())
+            val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
+            assertFalse(dismissedState.showLoginPromptDialog)
         }
 }

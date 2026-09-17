@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,6 +63,7 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -90,6 +93,7 @@ fun EpisodeDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
     var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val episode = uiState.episode
@@ -519,6 +523,51 @@ fun EpisodeDetailScreen(
             dismissButton = {
                 TextButton(onClick = { appNotInstalledPrompt = null }) {
                     Text("取消")
+                }
+            },
+        )
+    }
+
+    if (uiState.showLoginPromptDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissLoginPrompt,
+            icon = {
+                Icon(
+                    imageVector = Icons.Outlined.AccountCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = {
+                Text(
+                    text = "请先登录 Bangumi 账号",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "分集打卡需要同步至您的 Bangumi 账号，登录后即可随手打卡并同步进度。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val authorizeUrl = viewModel.beginLogin()
+                            context.launchWebUrl(authorizeUrl, isAuth = true)
+                        }
+                    },
+                ) {
+                    Text("立即登录")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissLoginPrompt) {
+                    Text("稍后再说")
                 }
             },
         )

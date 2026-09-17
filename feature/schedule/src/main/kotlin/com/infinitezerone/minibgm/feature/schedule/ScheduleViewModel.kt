@@ -63,6 +63,7 @@ data class ScheduleUiState(
     val yesterdaySchedules: List<AirSchedule> = emptyList(),
     val nextUpAction: NextUpAction? = null,
     val isActionDismissed: Boolean = false,
+    val showLoginPromptDialog: Boolean = false,
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
@@ -159,11 +160,17 @@ class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
     private val settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository,
+    private val authRepository: com.infinitezerone.minibgm.core.data.repository.AuthRepository,
 ) : ViewModel() {
     private val selectedWeekday = MutableStateFlow(currentCstDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val showLoginPromptDialog = MutableStateFlow(false)
+
+    private val isLoggedIn =
+        authRepository.isLoggedIn
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _userMessage = Channel<String>(Channel.BUFFERED)
     val userMessage: Flow<String> = _userMessage.receiveAsFlow()
@@ -237,8 +244,8 @@ class ScheduleViewModel(
         }
 
     private val extraStateFlow =
-        combine(settingsRepository.airDelayOffsetMinutes, isActionDismissed) { delayMinutes, dismissed ->
-            delayMinutes to dismissed
+        combine(settingsRepository.airDelayOffsetMinutes, isActionDismissed, showLoginPromptDialog) { delayMinutes, dismissed, showLogin ->
+            Triple(delayMinutes, dismissed, showLogin)
         }
 
     val uiState: StateFlow<ScheduleUiState> =
@@ -248,7 +255,13 @@ class ScheduleViewModel(
             filterFlow,
             statusFlow,
             extraStateFlow,
-        ) { weeklySchedules, (watchingIds, collectionMap), (weekday, onlyWatch), (refreshing, error), (delayMinutes, dismissed) ->
+        ) {
+            weeklySchedules,
+            (watchingIds, collectionMap),
+            (weekday, onlyWatch),
+            (refreshing, error),
+            (delayMinutes, dismissed, showLogin),
+            ->
             val currentToday = currentCstDate()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
@@ -421,6 +434,7 @@ class ScheduleViewModel(
                 yesterdaySchedules = yesterdayList,
                 nextUpAction = computedNextUpAction,
                 isActionDismissed = dismissed,
+                showLoginPromptDialog = showLogin,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -464,8 +478,13 @@ class ScheduleViewModel(
         isActionDismissed.value = true
     }
 
-    /** 1-tap 快捷追番/移出追番（支持 0ms 本地即时乐观更新与失败自动回滚） */
+    /** 1-tap 快捷追番/移出追番（支持 0ms 本地即时乐观更新与失败自动回滚，未登录时拦截弹窗） */
     fun toggleWatching(subjectId: Long) {
+        if (!isLoggedIn.value) {
+            showLoginPromptDialog.value = true
+            return
+        }
+
         val isWatching = uiState.value.watchingSubjectIds.contains(subjectId)
         val nextIsWatching = !isWatching
         val targetType = if (nextIsWatching) CollectionType.DOING else CollectionType.DROPPED
@@ -489,11 +508,16 @@ class ScheduleViewModel(
         }
     }
 
-    /** 1-tap 快捷标记某话为看过（供待补清单一键打卡，支持即时乐观更新） */
+    /** 1-tap 快捷标记某话为看过（供待补清单一键打卡，支持即时乐观更新，未登录时拦截弹窗） */
     fun markEpisodeWatched(
         subjectId: Long,
         epNumber: Int,
     ) {
+        if (!isLoggedIn.value) {
+            showLoginPromptDialog.value = true
+            return
+        }
+
         // 本地立即乐观更新打卡进度
         optimisticEpStatus.update { it + (subjectId to epNumber) }
 
@@ -513,6 +537,16 @@ class ScheduleViewModel(
                     _userMessage.send(message.ifBlank { "标记失败，请确认是否已登录账号" })
                 }
         }
+    }
+
+    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开） */
+    suspend fun beginLogin(): String {
+        showLoginPromptDialog.value = false
+        return authRepository.beginLogin()
+    }
+
+    fun dismissLoginPrompt() {
+        showLoginPromptDialog.value = false
     }
 
     fun refresh() {
