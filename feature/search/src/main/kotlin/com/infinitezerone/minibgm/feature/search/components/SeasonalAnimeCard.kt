@@ -145,7 +145,7 @@ fun SeasonalAnimeCard(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onToggleCollection(
                                 subject.id,
-                                if (isDoing) CollectionType.DOING else CollectionType.WISH,
+                                if (isWished) CollectionType.DOING else CollectionType.WISH,
                             )
                         },
                         modifier = Modifier.size(32.dp),
@@ -225,7 +225,7 @@ fun SeasonalAnimeCard(
                 FilledTonalButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        val targetType = if (isDoing) CollectionType.DOING else CollectionType.DOING
+                        val targetType = if (isDoing) CollectionType.WISH else CollectionType.DOING
                         onToggleCollection(subject.id, targetType)
                     },
                     modifier =
