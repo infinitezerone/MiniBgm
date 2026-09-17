@@ -1181,13 +1181,15 @@ class CollectionRepositoryImplTest {
             harness.api.episodesToReturn =
                 listOf(
                     com.infinitezerone.minibgm.core.model
-                        .Episode(id = 101L, sort = 1f, ep = 1f, name = "Ep 1"),
+                        .Episode(id = 101L, type = 0, sort = 1f, ep = 1f, name = "Ep 1"),
                     com.infinitezerone.minibgm.core.model
-                        .Episode(id = 102L, sort = 2f, ep = 2f, name = "Ep 2"),
+                        .Episode(id = 999L, type = 1, sort = 1f, ep = 1f, name = "SP 1"),
                     com.infinitezerone.minibgm.core.model
-                        .Episode(id = 103L, sort = 3f, ep = 3f, name = "Ep 3"),
+                        .Episode(id = 102L, type = 0, sort = 2f, ep = 2f, name = "Ep 2"),
                     com.infinitezerone.minibgm.core.model
-                        .Episode(id = 104L, sort = 4f, ep = 4f, name = "Ep 4"),
+                        .Episode(id = 103L, type = 0, sort = 3f, ep = 3f, name = "Ep 3"),
+                    com.infinitezerone.minibgm.core.model
+                        .Episode(id = 104L, type = 0, sort = 4f, ep = 4f, name = "Ep 4"),
                 )
 
             val result =
@@ -1267,5 +1269,128 @@ class CollectionRepositoryImplTest {
                 harness.dao.stored.value
                     .filter { it.subjectId == 100L },
             )
+        }
+
+    @Test
+    fun revertEpisodesWatched_whenNotLoggedIn_returnsError() =
+        runTest {
+            val harness = Harness()
+            val result =
+                harness.repository.revertEpisodesWatched(
+                    subjectId = 100L,
+                    targetEpStatus = 1,
+                    targetType = CollectionType.DOING,
+                )
+            assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun revertEpisodesWatched_revertsEpisodesStatusAndCollection() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            // 先预置当前进度为 5
+            harness.dao.insertCollection(
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 5,
+                    updatedAt = "2026-09-01T00:00:00Z",
+                ),
+            )
+
+            val result =
+                harness.repository.revertEpisodesWatched(
+                    subjectId = 100L,
+                    targetEpStatus = 2,
+                    targetType = CollectionType.DOING,
+                    undoneEpisodeIds = listOf(103L, 104L, 105L),
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // 校验远端调用：章节重置为 type=0
+            assertEquals(1, harness.api.updateEpisodesCalls.size)
+            assertEquals(0, harness.api.updateEpisodesCalls[0].type)
+            assertEquals(listOf(103L, 104L, 105L), harness.api.updateEpisodesCalls[0].episodeIds)
+
+            // 校验远端收藏更新：epStatus 回退至 2
+            assertEquals(1, harness.api.updateCollectionCalls.size)
+            assertEquals(2, harness.api.updateCollectionCalls[0].epStatus)
+
+            // 校验本地 Room：已对齐回退进度
+            val stored =
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+            assertEquals(2, stored.epStatus)
+        }
+
+    @Test
+    fun revertEpisodesWatched_whenNetworkFails_rollsBackRoom() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val initialSnapshot =
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 5,
+                    updatedAt = "2026-09-01T00:00:00Z",
+                )
+            harness.dao.insertCollection(initialSnapshot)
+            harness.api.shouldThrowOnUpdateEpisodes = true
+
+            val result =
+                harness.repository.revertEpisodesWatched(
+                    subjectId = 100L,
+                    targetEpStatus = 2,
+                    targetType = CollectionType.DOING,
+                    undoneEpisodeIds = listOf(103L, 104L, 105L),
+                )
+
+            assertIs<AppResult.Error>(result)
+            // 回滚至原快照状态 (epStatus = 5)
+            val stored =
+                harness.dao.stored.value
+                    .first { it.subjectId == 100L }
+            assertEquals(5, stored.epStatus)
+        }
+
+    @Test
+    fun revertEpisodesWatched_whenTargetTypeIsUncollected_deletesFromRoom() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            harness.dao.insertCollection(
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 2,
+                    updatedAt = "2026-09-01T00:00:00Z",
+                ),
+            )
+
+            val result =
+                harness.repository.revertEpisodesWatched(
+                    subjectId = 100L,
+                    targetEpStatus = 0,
+                    targetType = null, // uncollected
+                    undoneEpisodeIds = listOf(101L, 102L),
+                )
+
+            assertIs<AppResult.Success<Unit>>(result)
+            // Room 中该记录应已被删除
+            val stored =
+                harness.dao.stored.value
+                    .firstOrNull { it.subjectId == 100L }
+            assertEquals(null, stored)
         }
 }

@@ -213,28 +213,11 @@ fun FilterAndMetaBar(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = !onlyWatching,
-                onClick = { if (onlyWatching) onToggleOnlyWatching() },
-                label = {
-                    Text(
-                        text = "全部 ($totalCount)",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                },
-                shape = RoundedCornerShape(12.dp),
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-            )
-
-            FilterChip(
                 selected = onlyWatching,
                 onClick = { if (!onlyWatching) onToggleOnlyWatching() },
                 label = {
                     Text(
-                        text = "⭐ 我追的 ($watchingCount)",
+                        text = "⭐ 我的追番 ($watchingCount)",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
                     )
@@ -244,6 +227,24 @@ fun FilterAndMetaBar(
                     FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+            )
+
+            FilterChip(
+                selected = !onlyWatching,
+                onClick = { if (onlyWatching) onToggleOnlyWatching() },
+                label = {
+                    Text(
+                        text = "全网开播 ($totalCount)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
+                    )
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors =
+                    FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     ),
             )
         }

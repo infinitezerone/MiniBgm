@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,9 +37,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -51,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
@@ -68,19 +74,23 @@ import org.koin.core.parameter.parametersOf
 fun EpisodeDetailScreen(
     subjectId: Long,
     episodeId: Long,
-    onBackClick: () -> Unit,
-    modifier: Modifier = Modifier,
     initialEpNumberText: String = "",
     initialEpisodeTitle: String = "",
-    onSubjectClick: (Long) -> Unit = {},
-    onEpisodeClick: (Long) -> Unit = {},
-    onCharacterClick: (Long) -> Unit = {},
-    onPersonClick: (Long) -> Unit = {},
-    viewModel: EpisodeDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId, episodeId) }),
+    onBackClick: () -> Unit,
+    onSubjectClick: (Long) -> Unit,
+    onEpisodeClick: (Long) -> Unit,
+    onCharacterClick: (Long) -> Unit,
+    onPersonClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: EpisodeDetailViewModel =
+        koinViewModel(
+            parameters = { parametersOf(subjectId, episodeId) },
+        ),
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val episode = uiState.episode
     val group = episode?.let { EpisodeGroup.fromType(it.type) } ?: EpisodeGroup.MAIN
@@ -100,7 +110,14 @@ fun EpisodeDetailScreen(
             is BgmLink.Person -> onPersonClick(link.personId)
             is BgmLink.Topic -> context.launchWebUrl(url)
             is BgmLink.User -> context.launchWebUrl(url)
-            is BgmLink.External -> context.launchWebUrl(url)
+            is BgmLink.External -> {
+                context.launchStreamingUrl(
+                    url = url,
+                    onAppNotInstalled = { appName, webUrl ->
+                        appNotInstalledPrompt = appName to webUrl
+                    },
+                )
+            }
         }
     }
 
@@ -482,5 +499,28 @@ fun EpisodeDetailScreen(
                 }
             }
         }
+    }
+
+    appNotInstalledPrompt?.let { (appName, webUrl) ->
+        AlertDialog(
+            onDismissRequest = { appNotInstalledPrompt = null },
+            title = { Text("未安装 $appName 客户端") },
+            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        appNotInstalledPrompt = null
+                        context.launchWebUrl(webUrl)
+                    },
+                ) {
+                    Text("浏览器打开")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appNotInstalledPrompt = null }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
