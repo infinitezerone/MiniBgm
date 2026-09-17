@@ -2,14 +2,14 @@
  "meta": {
   "project": "MiniBgm",
   "root": "/Users/geton/Projects/infinitezerone/BgmPlus",
-  "generatedAt": "2026-09-17T15:32:36+08:00",
+  "generatedAt": "2026-09-17T15:55:56+08:00",
   "scanner": "tools/codebase-canvas/scan.py",
-  "head": "1fd55c8",
+  "head": "6ed4efa",
   "branch": "(detached HEAD)"
  },
  "stats": {
   "modules": 18,
-  "loc": 45100,
+  "loc": 45101,
   "files": 268,
   "declarations": 713,
   "edges": 82,
@@ -19,11 +19,11 @@
   "testEdges": 10,
   "testFiles": 61,
   "testCases": 505,
-  "testFailures": 8,
+  "testFailures": 0,
   "modulesWithTestEvidence": 18,
   "findings": 0,
   "findingsP1": 0,
-  "dirtyFiles": 8,
+  "dirtyFiles": 1,
   "referenceEdges": 2207,
   "changeSets": 7,
   "validationRuns": 2
@@ -993,10 +993,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -1091,10 +1091,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -1346,19 +1346,19 @@
      "suites": 2,
      "evidence": "app/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:13"
+     "ranAt": "2026-09-17 15:53"
     }
    ],
    "git": {
-    "commits": 60,
+    "commits": 61,
     "last": {
-     "hash": "c53c161",
+     "hash": "e9ee623",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(ux): implement v0.3.0 remediation for batch marking, deep links, and schedule filter"
+     "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
     },
     "dirty": [],
-    "commits90d": 60
+    "commits90d": 61
    },
    "fanIn": 0,
    "fanOut": 16
@@ -12148,10 +12148,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "1fd55c8",
+      "hash": "1813b2c",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(core:designsystem): implement unified 3-layer M3 HCT palette and dark immersion system"
+      "subject": "fix(core:designsystem): align light theme hierarchy with grey background and white cards"
      }
     },
     {
@@ -12190,10 +12190,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -12481,10 +12481,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "1fd55c8",
+      "hash": "1813b2c",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(core:designsystem): implement unified 3-layer M3 HCT palette and dark immersion system"
+      "subject": "fix(core:designsystem): align light theme hierarchy with grey background and white cards"
      }
     },
     {
@@ -12577,28 +12577,19 @@
      "suites": 4,
      "evidence": "core/designsystem/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:31"
+     "ranAt": "2026-09-17 15:51"
     }
    ],
    "git": {
-    "commits": 19,
+    "commits": 21,
     "last": {
-     "hash": "1fd55c8",
+     "hash": "72bc8be",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(core:designsystem): implement unified 3-layer M3 HCT palette and dark immersion system"
+     "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
     },
-    "dirty": [
-     {
-      "code": "M",
-      "path": "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt"
-     },
-     {
-      "code": "M",
-      "path": "core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt"
-     }
-    ],
-    "commits90d": 19
+    "dirty": [],
+    "commits90d": 21
    },
    "fanIn": 7,
    "fanOut": 1
@@ -14653,7 +14644,7 @@
      "suites": 2,
      "evidence": "core/testing/build/test-results/testAndroidHostTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:32"
+     "ranAt": "2026-09-17 15:53"
     }
    ],
    "git": {
@@ -15298,13 +15289,13 @@
      "calleeCount": 7
     },
     {
-     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:610",
+     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:611",
      "name": "EmptyCollectionsView",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:user",
      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
-     "line": 610,
+     "line": 611,
      "layer": "Other",
      "annotations": [
       "@Composable"
@@ -15317,13 +15308,13 @@
      "calleeCount": 0
     },
     {
-     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:643",
+     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:644",
      "name": "ErrorCollectionsView",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:user",
      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
-     "line": 643,
+     "line": 644,
      "layer": "Other",
      "annotations": [
       "@Composable"
@@ -15336,13 +15327,13 @@
      "calleeCount": 0
     },
     {
-     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:683",
+     "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:684",
      "name": "getSubjectTypeName",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:user",
      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
-     "line": 683,
+     "line": 684,
      "layer": "Other",
      "annotations": [],
      "composable": false,
@@ -16217,10 +16208,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -16278,17 +16269,17 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "1fd55c8",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(core:designsystem): implement unified 3-layer M3 HCT palette and dark immersion system"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
      "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
      "srcSet": "main",
      "package": "com.infinitezerone.minibgm.feature.user",
-     "loc": 653,
+     "loc": 654,
      "declCount": 11,
      "imports": [
       "androidx.compose.foundation.BorderStroke",
@@ -16366,10 +16357,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -16462,10 +16453,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -16606,10 +16597,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -16707,7 +16698,7 @@
     {
      "name": "main",
      "files": 12,
-     "loc": 3844
+     "loc": 3845
     },
     {
      "name": "test",
@@ -16715,7 +16706,7 @@
      "loc": 540
     }
    ],
-   "loc": 4384,
+   "loc": 4385,
    "testResults": [
     {
      "task": "testDebugUnitTest",
@@ -16726,19 +16717,19 @@
      "suites": 2,
      "evidence": "feature/user/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:10"
+     "ranAt": "2026-09-17 15:53"
     }
    ],
    "git": {
-    "commits": 44,
+    "commits": 46,
     "last": {
-     "hash": "1fd55c8",
+     "hash": "72bc8be",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(core:designsystem): implement unified 3-layer M3 HCT palette and dark immersion system"
+     "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
     },
     "dirty": [],
-    "commits90d": 44
+    "commits90d": 46
    },
    "fanIn": 1,
    "fanOut": 5
@@ -18013,10 +18004,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "c53c161",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(ux): implement v0.3.0 remediation for batch marking, deep links, and schedule filter"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -18087,19 +18078,19 @@
      "suites": 1,
      "evidence": "feature/schedule/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:28"
+     "ranAt": "2026-09-17 15:52"
     }
    ],
    "git": {
-    "commits": 29,
+    "commits": 30,
     "last": {
-     "hash": "c53c161",
+     "hash": "72bc8be",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(ux): implement v0.3.0 remediation for batch marking, deep links, and schedule filter"
+     "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
     },
     "dirty": [],
-    "commits90d": 29
+    "commits90d": 30
    },
    "fanIn": 1,
    "fanOut": 5
@@ -19324,13 +19315,13 @@
      "calleeCount": 4
     },
     {
-     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:327",
+     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:328",
      "name": "EpisodeGrid",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:subject",
      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
-     "line": 327,
+     "line": 328,
      "layer": "Other",
      "annotations": [
       "@OptIn",
@@ -19349,13 +19340,13 @@
      "calleeCount": 4
     },
     {
-     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:436",
+     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:437",
      "name": "isEpisodeWatched",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:subject",
      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
-     "line": 436,
+     "line": 437,
      "layer": "Other",
      "annotations": [],
      "composable": false,
@@ -19368,13 +19359,13 @@
      "calleeCount": 1
     },
     {
-     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:446",
+     "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:447",
      "name": "toEpisodeLabel",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:subject",
      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
-     "line": 446,
+     "line": 447,
      "layer": "Other",
      "annotations": [],
      "composable": false,
@@ -20322,10 +20313,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -20516,7 +20507,7 @@
      "path": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
      "srcSet": "main",
      "package": "com.infinitezerone.minibgm.feature.subject.components",
-     "loc": 434,
+     "loc": 435,
      "declCount": 7,
      "imports": [
       "androidx.compose.foundation.BorderStroke",
@@ -20571,10 +20562,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "c53c161",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(ux): implement v0.3.0 remediation for batch marking, deep links, and schedule filter"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -20648,10 +20639,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     }
    ],
@@ -20659,7 +20650,7 @@
     {
      "name": "main",
      "files": 17,
-     "loc": 6590
+     "loc": 6591
     },
     {
      "name": "test",
@@ -20667,7 +20658,7 @@
      "loc": 1130
     }
    ],
-   "loc": 7720,
+   "loc": 7721,
    "testResults": [
     {
      "task": "testDebugUnitTest",
@@ -20678,19 +20669,19 @@
      "suites": 3,
      "evidence": "feature/subject/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:10"
+     "ranAt": "2026-09-17 15:51"
     }
    ],
    "git": {
-    "commits": 46,
+    "commits": 48,
     "last": {
-     "hash": "c53c161",
+     "hash": "72bc8be",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(ux): implement v0.3.0 remediation for batch marking, deep links, and schedule filter"
+     "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
     },
     "dirty": [],
-    "commits90d": 46
+    "commits90d": 48
    },
    "fanIn": 1,
    "fanOut": 5
@@ -22948,10 +22939,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -23103,10 +23094,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "e9ee623",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
      }
     },
     {
@@ -23564,19 +23555,19 @@
      "suites": 3,
      "evidence": "feature/search/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:10"
+     "ranAt": "2026-09-17 15:42"
     }
    ],
    "git": {
-    "commits": 37,
+    "commits": 38,
     "last": {
-     "hash": "bb5a470",
+     "hash": "e9ee623",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+     "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app"
     },
     "dirty": [],
-    "commits90d": 37
+    "commits90d": 38
    },
    "fanIn": 1,
    "fanOut": 5
@@ -23721,7 +23712,7 @@
      "annotations": [],
      "composable": false,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 642,
      "callees": [],
      "calleeCount": 0
@@ -23740,7 +23731,7 @@
      ],
      "composable": true,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 643,
      "callees": [
       644,
@@ -23765,7 +23756,7 @@
      ],
      "composable": true,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 644,
      "callees": [
       23,
@@ -23780,20 +23771,20 @@
      "calleeCount": 8
     },
     {
-     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:317",
+     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:319",
      "name": "EmptyAssistantGuide",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:assistant",
      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
-     "line": 317,
+     "line": 319,
      "layer": "Other",
      "annotations": [
       "@Composable"
      ],
      "composable": true,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 645,
      "callees": [
       642
@@ -23801,20 +23792,20 @@
      "calleeCount": 1
     },
     {
-     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:393",
+     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:395",
      "name": "ChatMessageItem",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:assistant",
      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
-     "line": 393,
+     "line": 395,
      "layer": "Other",
      "annotations": [
       "@Composable"
      ],
      "composable": true,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 646,
      "callees": [
       651,
@@ -23824,20 +23815,20 @@
      "calleeCount": 3
     },
     {
-     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:460",
+     "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:462",
      "name": "AssistantLoadingBubble",
      "kind": "function",
      "raw": "fun",
      "module": ":feature:assistant",
      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
-     "line": 460,
+     "line": 462,
      "layer": "Other",
      "annotations": [
       "@Composable"
      ],
      "composable": true,
      "isTest": false,
-     "loc": 75,
+     "loc": 76,
      "globalIdx": 647,
      "callees": [],
      "calleeCount": 0
@@ -23965,7 +23956,7 @@
      "annotations": [],
      "composable": false,
      "isTest": false,
-     "loc": 226,
+     "loc": 223,
      "globalIdx": 654,
      "callees": [
       649,
@@ -24240,7 +24231,7 @@
      "path": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
      "srcSet": "main",
      "package": "com.infinitezerone.minibgm.feature.assistant",
-     "loc": 454,
+     "loc": 456,
      "declCount": 6,
      "imports": [
       "androidx.compose.foundation.background",
@@ -24310,10 +24301,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "bb5a470",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "refactor(ui): declutter NextUpActionCard and refine PendingActionCard"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -24340,7 +24331,7 @@
      "path": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt",
      "srcSet": "main",
      "package": "com.infinitezerone.minibgm.feature.assistant",
-     "loc": 226,
+     "loc": 223,
      "declCount": 1,
      "imports": [
       "androidx.lifecycle.ViewModel",
@@ -24364,10 +24355,10 @@
      "hasExpect": false,
      "hasActual": false,
      "lastCommit": {
-      "hash": "6dffef4",
+      "hash": "72bc8be",
       "date": "2026-09-17",
       "author": "Infinite Zerone",
-      "subject": "feat(feature:assistant): add Logcat trace logs for AI prompt execution"
+      "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
      }
     },
     {
@@ -24530,7 +24521,7 @@
     {
      "name": "main",
      "files": 7,
-     "loc": 1289
+     "loc": 1288
     },
     {
      "name": "test",
@@ -24538,30 +24529,30 @@
      "loc": 393
     }
    ],
-   "loc": 1682,
+   "loc": 1681,
    "testResults": [
     {
      "task": "testDebugUnitTest",
      "cases": 11,
-     "failures": 8,
+     "failures": 0,
      "errors": 0,
      "skipped": 0,
      "suites": 1,
      "evidence": "feature/assistant/build/test-results/testDebugUnitTest",
      "empty": false,
-     "ranAt": "2026-09-17 15:23"
+     "ranAt": "2026-09-17 15:53"
     }
    ],
    "git": {
-    "commits": 5,
+    "commits": 6,
     "last": {
-     "hash": "6dffef4",
+     "hash": "72bc8be",
      "date": "2026-09-17",
      "author": "Infinite Zerone",
-     "subject": "feat(feature:assistant): add Logcat trace logs for AI prompt execution"
+     "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls"
     },
     "dirty": [],
-    "commits90d": 5
+    "commits90d": 6
    },
    "fanIn": 1,
    "fanOut": 6
@@ -27288,9 +27279,61 @@
  ],
  "findings": [],
  "git": {
-  "head": "1fd55c8",
+  "head": "6ed4efa",
   "branch": "(detached HEAD)",
   "recent": [
+   {
+    "hash": "6ed4efa",
+    "date": "2026-09-17",
+    "author": "Infinite Zerone",
+    "subject": "tools(canvas): add validation coverage annotation to scan.py",
+    "touched": []
+   },
+   {
+    "hash": "72bc8be",
+    "date": "2026-09-17",
+    "author": "Infinite Zerone",
+    "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls",
+    "touched": [
+     "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmBottomSheet.kt",
+     "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
+     "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt",
+     "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleTimelineComponents.kt",
+     "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt"
+    ]
+   },
+   {
+    "hash": "e9ee623",
+    "date": "2026-09-17",
+    "author": "Infinite Zerone",
+    "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app",
+    "touched": [
+     "app/src/main/kotlin/com/infinitezerone/minibgm/ui/OAuthProcessingDialog.kt",
+     "app/src/main/kotlin/com/infinitezerone/minibgm/ui/component/BgmFloatingNavigationBar.kt",
+     "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt",
+     "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreSpotlightCard.kt",
+     "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt",
+     "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderSection.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAuthCard.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt",
+     "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserSettingsSection.kt"
+    ]
+   },
+   {
+    "hash": "1813b2c",
+    "date": "2026-09-17",
+    "author": "Infinite Zerone",
+    "subject": "fix(core:designsystem): align light theme hierarchy with grey background and white cards",
+    "touched": [
+     "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt",
+     "core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt"
+    ]
+   },
    {
     "hash": "1fd55c8",
     "date": "2026-09-17",
@@ -27761,85 +27804,15 @@
     "touched": [
      "core/datastore/src/androidHostTest/kotlin/com/infinitezerone/minibgm/core/datastore/AuthTokensDataSourceTest.kt"
     ]
-   },
-   {
-    "hash": "122d542",
-    "date": "2026-09-12",
-    "author": "Infinite Zerone",
-    "subject": "fix(feature:search): advance search pagination by server cursor, not deduped list size",
-    "touched": [
-     "core/testing/src/commonMain/kotlin/com/infinitezerone/minibgm/core/testing/repository/FakeSearchRepository.kt",
-     "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/SearchViewModel.kt",
-     "feature/search/src/test/kotlin/com/infinitezerone/minibgm/feature/search/SearchViewModelTest.kt"
-    ]
-   },
-   {
-    "hash": "47aa472",
-    "date": "2026-09-12",
-    "author": "Infinite Zerone",
-    "subject": "test(core:common): pin BgmUrlParser domain-recognition security edges",
-    "touched": [
-     "core/common/src/commonTest/kotlin/com/infinitezerone/minibgm/core/common/BgmUrlParserTest.kt"
-    ]
-   },
-   {
-    "hash": "de5ad25",
-    "date": "2026-09-12",
-    "author": "Infinite Zerone",
-    "subject": "fix(feature:search): paginate explore list by server cursor pageOffset",
-    "touched": [
-     "core/testing/src/commonMain/kotlin/com/infinitezerone/minibgm/core/testing/repository/FakeSearchRepository.kt",
-     "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModel.kt",
-     "feature/search/src/test/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModelTest.kt"
-    ]
-   },
-   {
-    "hash": "f5022a5",
-    "date": "2026-09-12",
-    "author": "Infinite Zerone",
-    "subject": "fix(core:designsystem): support nested quotes and nested inline BBCode styles",
-    "touched": [
-     "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/bbcode/BgmBbCodeContent.kt",
-     "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/bbcode/BgmBbCodeParser.kt",
-     "core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/component/bbcode/BgmBbCodeParserTest.kt"
-    ]
    }
   ],
   "dirty": [
    {
     "code": "M",
-    "path": "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt"
-   },
-   {
-    "code": "M",
-    "path": "core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt"
-   },
-   {
-    "code": "M",
-    "path": "tools/codebase-canvas/out/canvas-data.js"
-   },
-   {
-    "code": "M",
-    "path": "tools/codebase-canvas/out/canvas-data.json"
-   },
-   {
-    "code": "M",
     "path": "tools/codebase-canvas/scan.py"
-   },
-   {
-    "code": "A",
-    "path": "tools/codebase-canvas/test_scan.py"
-   },
-   {
-    "code": "A",
-    "path": "tools/codebase-canvas/verify.py"
-   },
-   {
-    "code": "A",
-    "path": "tools/codebase-canvas/verify.sh"
    }
   ],
-  "dirtyCount": 8
+  "dirtyCount": 1
  },
  "referenceGraph": {
   "resolved": 463,
@@ -27852,6 +27825,1716 @@
    "base": "HEAD",
    "target": null,
    "range": "HEAD + 工作区",
+   "files": [
+    {
+     "path": "tools/codebase-canvas/scan.py",
+     "status": "M",
+     "added": 37,
+     "removed": 5,
+     "module": null,
+     "moduleKind": "other",
+     "hunks": [
+      {
+       "newStart": 1468,
+       "newCount": 7,
+       "oldStart": 1468,
+       "oldCount": 1
+      },
+      {
+       "newStart": 1478,
+       "newCount": 2,
+       "oldStart": 1471,
+       "oldCount": 0
+      },
+      {
+       "newStart": 1481,
+       "newCount": 2,
+       "oldStart": 1472,
+       "oldCount": 0
+      },
+      {
+       "newStart": 1484,
+       "newCount": 1,
+       "oldStart": 1474,
+       "oldCount": 1
+      },
+      {
+       "newStart": 1490,
+       "newCount": 1,
+       "oldStart": 1479,
+       "oldCount": 0
+      },
+      {
+       "newStart": 1492,
+       "newCount": 1,
+       "oldStart": 1480,
+       "oldCount": 0
+      },
+      {
+       "newStart": 1495,
+       "newCount": 21,
+       "oldStart": 1483,
+       "oldCount": 3
+      },
+      {
+       "newStart": 1774,
+       "newCount": 2,
+       "oldStart": 1743,
+       "oldCount": 0
+      }
+     ],
+     "hunkCount": 8,
+     "touchedDecls": [],
+     "evidence": "git diff HEAD -- tools/codebase-canvas/scan.py"
+    }
+   ],
+   "untracked": [],
+   "modules": [
+    {
+     "module": null,
+     "kind": "other",
+     "files": 1,
+     "added": 37,
+     "removed": 5,
+     "decls": 0,
+     "fileList": [
+      "tools/codebase-canvas/scan.py"
+     ]
+    }
+   ],
+   "stats": {
+    "files": 1,
+    "added": 37,
+    "removed": 5,
+    "modules": 1,
+    "touchedDecls": 0,
+    "truncated": false
+   },
+   "impact": {
+    "changedModules": [],
+    "buildConfigTouched": [],
+    "globalImpact": false,
+    "direct": [],
+    "transitive": [],
+    "impactedTests": [],
+    "impactedProd": [],
+    "testModules": [],
+    "counts": {
+     "changedModules": 0,
+     "direct": 0,
+     "transitive": 0,
+     "impactedTests": 0,
+     "impactedTestsDirect": 0,
+     "impactedProd": 0
+    }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {},
+    "coveredCount": 0,
+    "uncovered": [],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "本次变更没有触及任何 Gradle 模块"
+   }
+  },
+  {
+   "kind": "commit",
+   "label": "6ed4efa tools(canvas): add validation coverage annotation to scan.py",
+   "base": "6ed4efa~1",
+   "target": "6ed4efa",
+   "range": "6ed4efa~1..6ed4efa",
+   "files": [
+    {
+     "path": "tools/codebase-canvas/scan.py",
+     "status": "M",
+     "added": 90,
+     "removed": 0,
+     "module": null,
+     "moduleKind": "other",
+     "hunks": [
+      {
+       "newStart": 1342,
+       "newCount": 90,
+       "oldStart": 1341,
+       "oldCount": 0
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [],
+     "evidence": "git diff 6ed4efa~1..6ed4efa -- tools/codebase-canvas/scan.py"
+    }
+   ],
+   "untracked": [],
+   "modules": [
+    {
+     "module": null,
+     "kind": "other",
+     "files": 1,
+     "added": 90,
+     "removed": 0,
+     "decls": 0,
+     "fileList": [
+      "tools/codebase-canvas/scan.py"
+     ]
+    }
+   ],
+   "stats": {
+    "files": 1,
+    "added": 90,
+    "removed": 0,
+    "modules": 1,
+    "touchedDecls": 0,
+    "truncated": false
+   },
+   "hash": "6ed4efa",
+   "date": "2026-09-17",
+   "subject": "tools(canvas): add validation coverage annotation to scan.py",
+   "impact": {
+    "changedModules": [],
+    "buildConfigTouched": [],
+    "globalImpact": false,
+    "direct": [],
+    "transitive": [],
+    "impactedTests": [],
+    "impactedProd": [],
+    "testModules": [],
+    "counts": {
+     "changedModules": 0,
+     "direct": 0,
+     "transitive": 0,
+     "impactedTests": 0,
+     "impactedTestsDirect": 0,
+     "impactedProd": 0
+    }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {},
+    "coveredCount": 0,
+    "uncovered": [],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "本次变更没有触及任何 Gradle 模块"
+   }
+  },
+  {
+   "kind": "commit",
+   "label": "72bc8be fix(ui): eliminate white-on-white nested surfaces, pink tint",
+   "base": "72bc8be~1",
+   "target": "72bc8be",
+   "range": "72bc8be~1..72bc8be",
+   "files": [
+    {
+     "path": "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmBottomSheet.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":core:designsystem",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 169,
+       "newCount": 1,
+       "oldStart": 169,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmBottomSheet.kt:160",
+       "name": "BgmModalBottomSheet",
+       "kind": "function",
+       "line": 160,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 241
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmBottomSheet.kt"
+    },
+    {
+     "path": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
+     "status": "M",
+     "added": 3,
+     "removed": 1,
+     "module": ":feature:assistant",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 258,
+       "newCount": 3,
+       "oldStart": 258,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:116",
+       "name": "AssistantScreenContent",
+       "kind": "function",
+       "line": 116,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 644
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
+    },
+    {
+     "path": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt",
+     "status": "M",
+     "added": 0,
+     "removed": 3,
+     "module": ":feature:assistant",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 61,
+       "newCount": 0,
+       "oldStart": 62,
+       "oldCount": 1
+      },
+      {
+       "newStart": 63,
+       "newCount": 0,
+       "oldStart": 65,
+       "oldCount": 1
+      },
+      {
+       "newStart": 96,
+       "newCount": 0,
+       "oldStart": 99,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 3,
+     "touchedDecls": [
+      {
+       "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt:20",
+       "name": "AssistantViewModel",
+       "kind": "viewmodel",
+       "line": 20,
+       "layer": "UI",
+       "isTest": false,
+       "globalIdx": 654
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt"
+    },
+    {
+     "path": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleTimelineComponents.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:schedule",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 762,
+       "newCount": 1,
+       "oldStart": 762,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleTimelineComponents.kt:749",
+       "name": "ScheduleUntimedSection",
+       "kind": "function",
+       "line": 749,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 512
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleTimelineComponents.kt"
+    },
+    {
+     "path": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 0,
+     "module": ":feature:subject",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 198,
+       "newCount": 1,
+       "oldStart": 197,
+       "oldCount": 0
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:172",
+       "name": "EpisodeListItem",
+       "kind": "function",
+       "line": 172,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 561
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+     "status": "M",
+     "added": 2,
+     "removed": 2,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 102,
+       "newCount": 1,
+       "oldStart": 102,
+       "oldCount": 1
+      },
+      {
+       "newStart": 207,
+       "newCount": 1,
+       "oldStart": 207,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 2,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt:48",
+       "name": "CollectionOverviewCard",
+       "kind": "function",
+       "line": 48,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 444
+      },
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt:195",
+       "name": "CollectionStatusItem",
+       "kind": "function",
+       "line": 195,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 445
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 581,
+       "newCount": 1,
+       "oldStart": 581,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:430",
+       "name": "UserCollectionCard",
+       "kind": "function",
+       "line": 430,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 453
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt",
+     "status": "M",
+     "added": 2,
+     "removed": 2,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 182,
+       "newCount": 1,
+       "oldStart": 182,
+       "oldCount": 1
+      },
+      {
+       "newStart": 299,
+       "newCount": 1,
+       "oldStart": 299,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 2,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt:48",
+       "name": "UserProfileHeaderCard",
+       "kind": "function",
+       "line": 48,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 460
+      },
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt:233",
+       "name": "MultiAccountQuickCard",
+       "kind": "function",
+       "line": 233,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 461
+      }
+     ],
+     "evidence": "git diff 72bc8be~1..72bc8be -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt"
+    }
+   ],
+   "untracked": [],
+   "modules": [
+    {
+     "module": ":feature:user",
+     "kind": "module",
+     "files": 3,
+     "added": 5,
+     "removed": 5,
+     "decls": 5,
+     "fileList": [
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt"
+     ]
+    },
+    {
+     "module": ":feature:assistant",
+     "kind": "module",
+     "files": 2,
+     "added": 3,
+     "removed": 4,
+     "decls": 2,
+     "fileList": [
+      "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
+      "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt"
+     ]
+    },
+    {
+     "module": ":core:designsystem",
+     "kind": "module",
+     "files": 1,
+     "added": 1,
+     "removed": 1,
+     "decls": 1,
+     "fileList": [
+      "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmBottomSheet.kt"
+     ]
+    },
+    {
+     "module": ":feature:schedule",
+     "kind": "module",
+     "files": 1,
+     "added": 1,
+     "removed": 1,
+     "decls": 1,
+     "fileList": [
+      "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleTimelineComponents.kt"
+     ]
+    },
+    {
+     "module": ":feature:subject",
+     "kind": "module",
+     "files": 1,
+     "added": 1,
+     "removed": 0,
+     "decls": 1,
+     "fileList": [
+      "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt"
+     ]
+    }
+   ],
+   "stats": {
+    "files": 8,
+    "added": 11,
+    "removed": 11,
+    "modules": 5,
+    "touchedDecls": 10,
+    "truncated": false
+   },
+   "hash": "72bc8be",
+   "date": "2026-09-17",
+   "subject": "fix(ui): eliminate white-on-white nested surfaces, pink tints, and unmocked Log calls",
+   "impact": {
+    "changedModules": [
+     ":core:designsystem",
+     ":feature:assistant",
+     ":feature:schedule",
+     ":feature:subject",
+     ":feature:user"
+    ],
+    "buildConfigTouched": [],
+    "globalImpact": false,
+    "direct": [
+     {
+      "module": ":app",
+      "hops": 1,
+      "via": ":core:designsystem",
+      "declaration": "implementation",
+      "origin": "explicit",
+      "evidence": "app/build.gradle.kts:67"
+     },
+     {
+      "module": ":feature:search",
+      "hops": 1,
+      "via": ":core:designsystem",
+      "declaration": "implementation",
+      "origin": "convention",
+      "evidence": "build-logic/convention/src/main/kotlin/com/infinitezerone/minibgm/AndroidFeatureConventionPlugin.kt:18"
+     },
+     {
+      "module": ":feature:widget",
+      "hops": 1,
+      "via": ":core:designsystem",
+      "declaration": "implementation",
+      "origin": "convention",
+      "evidence": "build-logic/convention/src/main/kotlin/com/infinitezerone/minibgm/AndroidFeatureConventionPlugin.kt:18"
+     }
+    ],
+    "transitive": [],
+    "impactedTests": [
+     {
+      "name": "AssistantViewModelTest",
+      "module": ":feature:assistant",
+      "file": "feature/assistant/src/test/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModelTest.kt",
+      "line": 27,
+      "isTest": true,
+      "degree": 1,
+      "targets": [
+       "AssistantViewModel"
+      ],
+      "evidence": "feature/assistant/src/test/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModelTest.kt:27"
+     }
+    ],
+    "impactedProd": [
+     {
+      "name": "AccountManagementBottomSheet",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAccountSheet.kt",
+      "line": 51,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAccountSheet.kt:51"
+     },
+     {
+      "name": "UserCollectionsContent",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "line": 112,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "UserCollectionCard"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:112"
+     },
+     {
+      "name": "UserScreenContent",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 142,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "CollectionOverviewCard",
+       "MultiAccountQuickCard",
+       "UserProfileHeaderCard"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:142"
+     },
+     {
+      "name": "DayScheduleList",
+      "module": ":feature:schedule",
+      "file": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ScheduleScreen.kt",
+      "line": 334,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "ScheduleUntimedSection"
+      ],
+      "evidence": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ScheduleScreen.kt:334"
+     },
+     {
+      "name": "ScheduleSourcesBottomSheet",
+      "module": ":feature:schedule",
+      "file": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleSourcesBottomSheet.kt",
+      "line": 47,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/components/ScheduleSourcesBottomSheet.kt:47"
+     },
+     {
+      "name": "SubjectDetailContent",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt",
+      "line": 579,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "EpisodeListItem"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt:579"
+     },
+     {
+      "name": "CharacterDetailBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CharacterDetailBottomSheet.kt",
+      "line": 57,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CharacterDetailBottomSheet.kt:57"
+     },
+     {
+      "name": "CollectionStatusBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CollectionStatusBottomSheet.kt",
+      "line": 47,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CollectionStatusBottomSheet.kt:47"
+     },
+     {
+      "name": "EpisodeDetailBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt",
+      "line": 53,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt:53"
+     },
+     {
+      "name": "PersonDetailBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/PersonDetailBottomSheet.kt",
+      "line": 55,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/PersonDetailBottomSheet.kt:55"
+     },
+     {
+      "name": "ExploreFilterBottomSheet",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt",
+      "line": 61,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmModalBottomSheet"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt:61"
+     },
+     {
+      "name": "AssistantScreen",
+      "module": ":feature:assistant",
+      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
+      "line": 75,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "AssistantScreenContent",
+       "AssistantViewModel"
+      ],
+      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:75"
+     },
+     {
+      "name": "assistantModule",
+      "module": ":feature:assistant",
+      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/di/AssistantModule.kt",
+      "line": 7,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "AssistantViewModel"
+      ],
+      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/di/AssistantModule.kt:7"
+     },
+     {
+      "name": "appModule",
+      "module": ":app",
+      "file": "app/src/main/kotlin/com/infinitezerone/minibgm/di/AppModule.kt",
+      "line": 20,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "assistantModule"
+      ],
+      "evidence": "app/src/main/kotlin/com/infinitezerone/minibgm/di/AppModule.kt:20"
+     },
+     {
+      "name": "UserCollectionsScreen",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "line": 75,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserCollectionsContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:75"
+     },
+     {
+      "name": "UserScreen",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 59,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:59"
+     },
+     {
+      "name": "UserScreenContent",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 142,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "AccountManagementBottomSheet"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:142"
+     },
+     {
+      "name": "UserScreenUnauthenticatedPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 629,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:629"
+     },
+     {
+      "name": "UserScreenSingleAccountPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 651,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:651"
+     },
+     {
+      "name": "UserScreenMultiAccountPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 686,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:686"
+     },
+     {
+      "name": "ScheduleScreen",
+      "module": ":feature:schedule",
+      "file": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ScheduleScreen.kt",
+      "line": 67,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "DayScheduleList",
+       "ScheduleSourcesBottomSheet"
+      ],
+      "evidence": "feature/schedule/src/main/kotlin/com/infinitezerone/minibgm/feature/schedule/ScheduleScreen.kt:67"
+     },
+     {
+      "name": "SubjectDetailScreen",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt",
+      "line": 118,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "CharacterDetailBottomSheet",
+       "CollectionStatusBottomSheet",
+       "PersonDetailBottomSheet",
+       "SubjectDetailContent"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt:118"
+     },
+     {
+      "name": "ExploreScreen",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt",
+      "line": 67,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "ExploreFilterBottomSheet"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt:67"
+     },
+     {
+      "name": "assistantEntry",
+      "module": ":feature:assistant",
+      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/navigation/AssistantEntry.kt",
+      "line": 12,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "AssistantScreen"
+      ],
+      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/navigation/AssistantEntry.kt:12"
+     }
+    ],
+    "testModules": [
+     ":feature:assistant"
+    ],
+    "counts": {
+     "changedModules": 5,
+     "direct": 3,
+     "transitive": 0,
+     "impactedTests": 1,
+     "impactedTestsDirect": 1,
+     "impactedProd": 24
+    }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {
+     ":core:designsystem": {
+      "module": ":core:designsystem",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     },
+     ":feature:user": {
+      "module": ":feature:user",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     },
+     ":feature:assistant": {
+      "module": ":feature:assistant",
+      "task": "testDebugUnitTest",
+      "outcome": "FAILED",
+      "at": "2026-09-17T15:23:41+08:00",
+      "ok": false,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+     }
+    },
+    "coveredCount": 3,
+    "uncovered": [
+     ":feature:schedule",
+     ":feature:subject"
+    ],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "2 个改动模块在变更后没有验证"
+   }
+  },
+  {
+   "kind": "commit",
+   "label": "e9ee623 fix(ui): apply global soft-grey background and crisp white c",
+   "base": "e9ee623~1",
+   "target": "e9ee623",
+   "range": "e9ee623~1..e9ee623",
+   "files": [
+    {
+     "path": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/OAuthProcessingDialog.kt",
+     "status": "M",
+     "added": 2,
+     "removed": 2,
+     "module": ":app",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 40,
+       "newCount": 2,
+       "oldStart": 40,
+       "oldCount": 2
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/OAuthProcessingDialog.kt:29",
+       "name": "OAuthProcessingDialog",
+       "kind": "function",
+       "line": 29,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 5
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- app/src/main/kotlin/com/infinitezerone/minibgm/ui/OAuthProcessingDialog.kt"
+    },
+    {
+     "path": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/component/BgmFloatingNavigationBar.kt",
+     "status": "M",
+     "added": 3,
+     "removed": 3,
+     "module": ":app",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 58,
+       "newCount": 2,
+       "oldStart": 58,
+       "oldCount": 2
+      },
+      {
+       "newStart": 64,
+       "newCount": 1,
+       "oldStart": 64,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 2,
+     "touchedDecls": [
+      {
+       "id": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/component/BgmFloatingNavigationBar.kt:50",
+       "name": "BgmFloatingNavigationBar",
+       "kind": "function",
+       "line": 50,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 7
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- app/src/main/kotlin/com/infinitezerone/minibgm/ui/component/BgmFloatingNavigationBar.kt"
+    },
+    {
+     "path": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:search",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 83,
+       "newCount": 1,
+       "oldStart": 83,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt:61",
+       "name": "ExploreFilterBottomSheet",
+       "kind": "function",
+       "line": 61,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 606
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt"
+    },
+    {
+     "path": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreSpotlightCard.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:search",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 100,
+       "newCount": 1,
+       "oldStart": 100,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreSpotlightCard.kt:59",
+       "name": "ExploreSpotlightCard",
+       "kind": "function",
+       "line": 59,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 612
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreSpotlightCard.kt"
+    },
+    {
+     "path": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:subject",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 235,
+       "newCount": 1,
+       "oldStart": 235,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt:61",
+       "name": "RelatedWorksSection",
+       "kind": "function",
+       "line": 61,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 542
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt"
+    },
+    {
+     "path": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderSection.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:subject",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 708,
+       "newCount": 1,
+       "oldStart": 708,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderSection.kt:671",
+       "name": "SubjectPersonalProgressCard",
+       "kind": "function",
+       "line": 671,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 573
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderSection.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAuthCard.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 53,
+       "newCount": 1,
+       "oldStart": 53,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAuthCard.kt:43",
+       "name": "UnauthenticatedCard",
+       "kind": "function",
+       "line": 43,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 442
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAuthCard.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+     "status": "M",
+     "added": 1,
+     "removed": 1,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 70,
+       "newCount": 1,
+       "oldStart": 70,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 1,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt:48",
+       "name": "CollectionOverviewCard",
+       "kind": "function",
+       "line": 48,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 444
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+     "status": "M",
+     "added": 2,
+     "removed": 1,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 463,
+       "newCount": 1,
+       "oldStart": 463,
+       "oldCount": 1
+      },
+      {
+       "newStart": 465,
+       "newCount": 1,
+       "oldStart": 464,
+       "oldCount": 0
+      }
+     ],
+     "hunkCount": 2,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:430",
+       "name": "UserCollectionCard",
+       "kind": "function",
+       "line": 430,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 453
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt",
+     "status": "M",
+     "added": 2,
+     "removed": 2,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 62,
+       "newCount": 1,
+       "oldStart": 62,
+       "oldCount": 1
+      },
+      {
+       "newStart": 246,
+       "newCount": 1,
+       "oldStart": 246,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 2,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt:48",
+       "name": "UserProfileHeaderCard",
+       "kind": "function",
+       "line": 48,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 460
+      },
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt:233",
+       "name": "MultiAccountQuickCard",
+       "kind": "function",
+       "line": 233,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 461
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt"
+    },
+    {
+     "path": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserSettingsSection.kt",
+     "status": "M",
+     "added": 5,
+     "removed": 5,
+     "module": ":feature:user",
+     "moduleKind": "module",
+     "hunks": [
+      {
+       "newStart": 114,
+       "newCount": 1,
+       "oldStart": 114,
+       "oldCount": 1
+      },
+      {
+       "newStart": 180,
+       "newCount": 1,
+       "oldStart": 180,
+       "oldCount": 1
+      },
+      {
+       "newStart": 240,
+       "newCount": 1,
+       "oldStart": 240,
+       "oldCount": 1
+      },
+      {
+       "newStart": 284,
+       "newCount": 1,
+       "oldStart": 284,
+       "oldCount": 1
+      },
+      {
+       "newStart": 364,
+       "newCount": 1,
+       "oldStart": 364,
+       "oldCount": 1
+      }
+     ],
+     "hunkCount": 5,
+     "touchedDecls": [
+      {
+       "id": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserSettingsSection.kt:65",
+       "name": "SettingsSection",
+       "kind": "function",
+       "line": 65,
+       "layer": "Other",
+       "isTest": false,
+       "globalIdx": 472
+      }
+     ],
+     "evidence": "git diff e9ee623~1..e9ee623 -- feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserSettingsSection.kt"
+    }
+   ],
+   "untracked": [],
+   "modules": [
+    {
+     "module": ":feature:user",
+     "kind": "module",
+     "files": 5,
+     "added": 11,
+     "removed": 10,
+     "decls": 6,
+     "fileList": [
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserAuthCard.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionOverviewCard.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserProfileCards.kt",
+      "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserSettingsSection.kt"
+     ]
+    },
+    {
+     "module": ":app",
+     "kind": "module",
+     "files": 2,
+     "added": 5,
+     "removed": 5,
+     "decls": 2,
+     "fileList": [
+      "app/src/main/kotlin/com/infinitezerone/minibgm/ui/OAuthProcessingDialog.kt",
+      "app/src/main/kotlin/com/infinitezerone/minibgm/ui/component/BgmFloatingNavigationBar.kt"
+     ]
+    },
+    {
+     "module": ":feature:search",
+     "kind": "module",
+     "files": 2,
+     "added": 2,
+     "removed": 2,
+     "decls": 2,
+     "fileList": [
+      "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt",
+      "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreSpotlightCard.kt"
+     ]
+    },
+    {
+     "module": ":feature:subject",
+     "kind": "module",
+     "files": 2,
+     "added": 2,
+     "removed": 2,
+     "decls": 2,
+     "fileList": [
+      "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt",
+      "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderSection.kt"
+     ]
+    }
+   ],
+   "stats": {
+    "files": 11,
+    "added": 20,
+    "removed": 19,
+    "modules": 4,
+    "touchedDecls": 12,
+    "truncated": false
+   },
+   "hash": "e9ee623",
+   "date": "2026-09-17",
+   "subject": "fix(ui): apply global soft-grey background and crisp white cards design across app",
+   "impact": {
+    "changedModules": [
+     ":app",
+     ":feature:search",
+     ":feature:subject",
+     ":feature:user"
+    ],
+    "buildConfigTouched": [],
+    "globalImpact": false,
+    "direct": [],
+    "transitive": [],
+    "impactedTests": [
+     {
+      "name": "ExploreViewModelTest",
+      "module": ":feature:search",
+      "file": "feature/search/src/test/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModelTest.kt",
+      "line": 24,
+      "isTest": true,
+      "degree": 2,
+      "targets": [
+       "ExploreViewModel"
+      ],
+      "evidence": "feature/search/src/test/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModelTest.kt:24"
+     }
+    ],
+    "impactedProd": [
+     {
+      "name": "BgmApp",
+      "module": ":app",
+      "file": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt",
+      "line": 46,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "BgmFloatingNavigationBar",
+       "OAuthProcessingDialog"
+      ],
+      "evidence": "app/src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt:46"
+     },
+     {
+      "name": "UserCollectionsContent",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "line": 112,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "UserCollectionCard"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:112"
+     },
+     {
+      "name": "UserScreenContent",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 142,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "CollectionOverviewCard",
+       "MultiAccountQuickCard",
+       "SettingsSection",
+       "UnauthenticatedCard"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:142"
+     },
+     {
+      "name": "CharacterDetailBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CharacterDetailBottomSheet.kt",
+      "line": 57,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "RelatedWorksSection"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CharacterDetailBottomSheet.kt:57"
+     },
+     {
+      "name": "PersonDetailBottomSheet",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/PersonDetailBottomSheet.kt",
+      "line": 55,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "RelatedWorksSection"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/PersonDetailBottomSheet.kt:55"
+     },
+     {
+      "name": "ExploreScreen",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt",
+      "line": 67,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "ExploreFilterBottomSheet"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt:67"
+     },
+     {
+      "name": "ExploreViewModel",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModel.kt",
+      "line": 36,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "ExploreSpotlightCard"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreViewModel.kt:36"
+     },
+     {
+      "name": "WaterfallGridList",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreGridList.kt",
+      "line": 33,
+      "isTest": false,
+      "degree": 1,
+      "targets": [
+       "ExploreSpotlightCard"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreGridList.kt:33"
+     },
+     {
+      "name": "MainActivity",
+      "module": ":app",
+      "file": "app/src/main/kotlin/com/infinitezerone/minibgm/MainActivity.kt",
+      "line": 25,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "BgmApp"
+      ],
+      "evidence": "app/src/main/kotlin/com/infinitezerone/minibgm/MainActivity.kt:25"
+     },
+     {
+      "name": "UserCollectionsScreen",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt",
+      "line": 75,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserCollectionsContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserCollectionsScreen.kt:75"
+     },
+     {
+      "name": "UserScreen",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 59,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:59"
+     },
+     {
+      "name": "UserScreenUnauthenticatedPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 629,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:629"
+     },
+     {
+      "name": "UserScreenSingleAccountPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 651,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:651"
+     },
+     {
+      "name": "UserScreenMultiAccountPreview",
+      "module": ":feature:user",
+      "file": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt",
+      "line": 686,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "UserScreenContent"
+      ],
+      "evidence": "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/UserScreen.kt:686"
+     },
+     {
+      "name": "SubjectDetailScreen",
+      "module": ":feature:subject",
+      "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt",
+      "line": 118,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "CharacterDetailBottomSheet",
+       "PersonDetailBottomSheet"
+      ],
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt:118"
+     },
+     {
+      "name": "ExploreScreen",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt",
+      "line": 67,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "ExploreViewModel",
+       "WaterfallGridList"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/ExploreScreen.kt:67"
+     },
+     {
+      "name": "searchModule",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/di/SearchModule.kt",
+      "line": 10,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "ExploreViewModel"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/di/SearchModule.kt:10"
+     },
+     {
+      "name": "exploreEntry",
+      "module": ":feature:search",
+      "file": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/navigation/ExploreEntry.kt",
+      "line": 11,
+      "isTest": false,
+      "degree": 2,
+      "targets": [
+       "ExploreScreen"
+      ],
+      "evidence": "feature/search/src/main/kotlin/com/infinitezerone/minibgm/feature/search/navigation/ExploreEntry.kt:11"
+     }
+    ],
+    "testModules": [
+     ":feature:search"
+    ],
+    "counts": {
+     "changedModules": 4,
+     "direct": 0,
+     "transitive": 0,
+     "impactedTests": 1,
+     "impactedTestsDirect": 0,
+     "impactedProd": 18
+    }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {
+     ":feature:user": {
+      "module": ":feature:user",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     }
+    },
+    "coveredCount": 1,
+    "uncovered": [
+     ":app",
+     ":feature:search",
+     ":feature:subject"
+    ],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "3 个改动模块在变更后没有验证"
+   }
+  },
+  {
+   "kind": "commit",
+   "label": "1813b2c fix(core:designsystem): align light theme hierarchy with gre",
+   "base": "1813b2c~1",
+   "target": "1813b2c",
+   "range": "1813b2c~1..1813b2c",
    "files": [
     {
      "path": "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt",
@@ -27940,7 +29623,7 @@
        "globalIdx": 299
       }
      ],
-     "evidence": "git diff HEAD -- core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt"
+     "evidence": "git diff 1813b2c~1..1813b2c -- core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Color.kt"
     },
     {
      "path": "core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt",
@@ -27993,7 +29676,7 @@
        "globalIdx": 231
       }
      ],
-     "evidence": "git diff HEAD -- core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt"
+     "evidence": "git diff 1813b2c~1..1813b2c -- core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/ThemeTest.kt"
     },
     {
      "path": "tools/codebase-canvas/out/canvas-data.js",
@@ -28012,12 +29695,12 @@
      ],
      "hunkCount": 1,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/out/canvas-data.js"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/out/canvas-data.js"
     },
     {
      "path": "tools/codebase-canvas/out/canvas-data.json",
      "status": "M",
-     "added": 19798,
+     "added": 19888,
      "removed": 11646,
      "module": null,
      "moduleKind": "other",
@@ -28385,7 +30068,7 @@
      ],
      "hunkCount": 2098,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/out/canvas-data.json"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/out/canvas-data.json"
     },
     {
      "path": "tools/codebase-canvas/scan.py",
@@ -28530,7 +30213,7 @@
      ],
      "hunkCount": 22,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/scan.py"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/scan.py"
     },
     {
      "path": "tools/codebase-canvas/test_scan.py",
@@ -28549,7 +30232,7 @@
      ],
      "hunkCount": 1,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/test_scan.py"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/test_scan.py"
     },
     {
      "path": "tools/codebase-canvas/verify.py",
@@ -28568,7 +30251,7 @@
      ],
      "hunkCount": 1,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/verify.py"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/verify.py"
     },
     {
      "path": "tools/codebase-canvas/verify.sh",
@@ -28587,7 +30270,7 @@
      ],
      "hunkCount": 1,
      "touchedDecls": [],
-     "evidence": "git diff HEAD -- tools/codebase-canvas/verify.sh"
+     "evidence": "git diff 1813b2c~1..1813b2c -- tools/codebase-canvas/verify.sh"
     }
    ],
    "untracked": [],
@@ -28596,7 +30279,7 @@
      "module": null,
      "kind": "other",
      "files": 6,
-     "added": 21011,
+     "added": 21101,
      "removed": 11666,
      "decls": 0,
      "fileList": [
@@ -28623,12 +30306,15 @@
    ],
    "stats": {
     "files": 8,
-    "added": 21025,
+    "added": 21115,
     "removed": 11674,
     "modules": 2,
     "touchedDecls": 6,
     "truncated": true
    },
+   "hash": "1813b2c",
+   "date": "2026-09-17",
+   "subject": "fix(core:designsystem): align light theme hierarchy with grey background and white cards",
    "impact": {
     "changedModules": [
      ":core:designsystem"
@@ -28757,6 +30443,32 @@
      "impactedTestsDirect": 0,
      "impactedProd": 3
     }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {
+     ":core:designsystem": {
+      "module": ":core:designsystem",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     }
+    },
+    "coveredCount": 1,
+    "uncovered": [],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "全部改动模块在变更后验证过"
    }
   },
   {
@@ -29595,13 +31307,13 @@
       "name": "EpisodeGrid",
       "module": ":feature:subject",
       "file": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt",
-      "line": 327,
+      "line": 328,
       "isTest": false,
       "degree": 1,
       "targets": [
        "WishOrange"
       ],
-      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:327"
+      "evidence": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:328"
      },
      {
       "name": "SubjectHeaderCard",
@@ -29891,6 +31603,42 @@
      "impactedTestsDirect": 1,
      "impactedProd": 37
     }
+   },
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {
+     ":core:designsystem": {
+      "module": ":core:designsystem",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     },
+     ":feature:user": {
+      "module": ":feature:user",
+      "task": "testDebugUnitTest",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+     }
+    },
+    "coveredCount": 2,
+    "uncovered": [],
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "全部改动模块在变更后验证过"
    }
   },
   {
@@ -30937,19 +32685,19 @@
        "globalIdx": 561
       },
       {
-       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:327",
+       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:328",
        "name": "EpisodeGrid",
        "kind": "function",
-       "line": 327,
+       "line": 328,
        "layer": "Other",
        "isTest": false,
        "globalIdx": 562
       },
       {
-       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:436",
+       "id": "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesSection.kt:437",
        "name": "isEpisodeWatched",
        "kind": "function",
-       "line": 436,
+       "line": 437,
        "layer": "Other",
        "isTest": false,
        "globalIdx": 563
@@ -32200,483 +33948,66 @@
      "impactedTestsDirect": 12,
      "impactedProd": 41
     }
-   }
-  },
-  {
-   "kind": "commit",
-   "label": "c49e695 docs(ux): create UX_REMEDIATION.md detailing experience debt",
-   "base": "c49e695~1",
-   "target": "c49e695",
-   "range": "c49e695~1..c49e695",
-   "files": [
-    {
-     "path": "README.md",
-     "status": "M",
-     "added": 1,
-     "removed": 1,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 37,
-       "newCount": 1,
-       "oldStart": 37,
-       "oldCount": 1
-      }
-     ],
-     "hunkCount": 1,
-     "touchedDecls": [],
-     "evidence": "git diff c49e695~1..c49e695 -- README.md"
-    },
-    {
-     "path": "ROADMAP.md",
-     "status": "M",
-     "added": 2,
-     "removed": 1,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 4,
-       "newCount": 2,
-       "oldStart": 4,
-       "oldCount": 1
-      }
-     ],
-     "hunkCount": 1,
-     "touchedDecls": [],
-     "evidence": "git diff c49e695~1..c49e695 -- ROADMAP.md"
-    },
-    {
-     "path": "UX_REMEDIATION.md",
-     "status": "A",
-     "added": 181,
-     "removed": 0,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 1,
-       "newCount": 181,
-       "oldStart": 0,
-       "oldCount": 0
-      }
-     ],
-     "hunkCount": 1,
-     "touchedDecls": [],
-     "evidence": "git diff c49e695~1..c49e695 -- UX_REMEDIATION.md"
-    }
-   ],
-   "untracked": [],
-   "modules": [
-    {
-     "module": "docs",
-     "kind": "docs",
-     "files": 3,
-     "added": 184,
-     "removed": 2,
-     "decls": 0,
-     "fileList": [
-      "README.md",
-      "ROADMAP.md",
-      "UX_REMEDIATION.md"
-     ]
-    }
-   ],
-   "stats": {
-    "files": 3,
-    "added": 184,
-    "removed": 2,
-    "modules": 1,
-    "touchedDecls": 0,
-    "truncated": false
    },
-   "hash": "c49e695",
-   "date": "2026-09-17",
-   "subject": "docs(ux): create UX_REMEDIATION.md detailing experience debt and remediation plan",
-   "impact": {
-    "changedModules": [],
-    "buildConfigTouched": [],
-    "globalImpact": false,
-    "direct": [],
-    "transitive": [],
-    "impactedTests": [],
-    "impactedProd": [],
-    "testModules": [],
-    "counts": {
-     "changedModules": 0,
-     "direct": 0,
-     "transitive": 0,
-     "impactedTests": 0,
-     "impactedTestsDirect": 0,
-     "impactedProd": 0
-    }
-   }
-  },
-  {
-   "kind": "commit",
-   "label": "ef2d061 docs(roadmap): add UI/UX design system and motion specificat",
-   "base": "ef2d061~1",
-   "target": "ef2d061",
-   "range": "ef2d061~1..ef2d061",
-   "files": [
-    {
-     "path": "ROADMAP.md",
-     "status": "M",
-     "added": 37,
-     "removed": 14,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 3,
-       "newCount": 2,
-       "oldStart": 3,
-       "oldCount": 2
-      },
-      {
-       "newStart": 8,
-       "newCount": 1,
-       "oldStart": 8,
-       "oldCount": 1
-      },
-      {
-       "newStart": 13,
-       "newCount": 1,
-       "oldStart": 13,
-       "oldCount": 1
-      },
-      {
-       "newStart": 15,
-       "newCount": 1,
-       "oldStart": 15,
-       "oldCount": 1
-      },
-      {
-       "newStart": 17,
-       "newCount": 3,
-       "oldStart": 17,
-       "oldCount": 1
-      },
-      {
-       "newStart": 90,
-       "newCount": 22,
-       "oldStart": 88,
-       "oldCount": 1
-      },
-      {
-       "newStart": 130,
-       "newCount": 3,
-       "oldStart": 107,
-       "oldCount": 3
-      },
-      {
-       "newStart": 137,
-       "newCount": 4,
-       "oldStart": 114,
-       "oldCount": 4
-      }
-     ],
-     "hunkCount": 8,
-     "touchedDecls": [],
-     "evidence": "git diff ef2d061~1..ef2d061 -- ROADMAP.md"
-    }
-   ],
-   "untracked": [],
-   "modules": [
-    {
-     "module": "docs",
-     "kind": "docs",
-     "files": 1,
-     "added": 37,
-     "removed": 14,
-     "decls": 0,
-     "fileList": [
-      "ROADMAP.md"
-     ]
-    }
-   ],
-   "stats": {
-    "files": 1,
-    "added": 37,
-    "removed": 14,
-    "modules": 1,
-    "touchedDecls": 0,
-    "truncated": false
-   },
-   "hash": "ef2d061",
-   "date": "2026-09-17",
-   "subject": "docs(roadmap): add UI/UX design system and motion specifications",
-   "impact": {
-    "changedModules": [],
-    "buildConfigTouched": [],
-    "globalImpact": false,
-    "direct": [],
-    "transitive": [],
-    "impactedTests": [],
-    "impactedProd": [],
-    "testModules": [],
-    "counts": {
-     "changedModules": 0,
-     "direct": 0,
-     "transitive": 0,
-     "impactedTests": 0,
-     "impactedTestsDirect": 0,
-     "impactedProd": 0
-    }
-   }
-  },
-  {
-   "kind": "commit",
-   "label": "ba1d45a docs: add comprehensive product and technical roadmap for tr",
-   "base": "ba1d45a~1",
-   "target": "ba1d45a",
-   "range": "ba1d45a~1..ba1d45a",
-   "files": [
-    {
-     "path": "README.md",
-     "status": "M",
-     "added": 2,
-     "removed": 0,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 37,
-       "newCount": 2,
-       "oldStart": 36,
-       "oldCount": 0
-      }
-     ],
-     "hunkCount": 1,
-     "touchedDecls": [],
-     "evidence": "git diff ba1d45a~1..ba1d45a -- README.md"
-    },
-    {
-     "path": "ROADMAP.md",
-     "status": "A",
-     "added": 117,
-     "removed": 0,
-     "module": "docs",
-     "moduleKind": "docs",
-     "hunks": [
-      {
-       "newStart": 1,
-       "newCount": 117,
-       "oldStart": 0,
-       "oldCount": 0
-      }
-     ],
-     "hunkCount": 1,
-     "touchedDecls": [],
-     "evidence": "git diff ba1d45a~1..ba1d45a -- ROADMAP.md"
-    }
-   ],
-   "untracked": [],
-   "modules": [
-    {
-     "module": "docs",
-     "kind": "docs",
-     "files": 2,
-     "added": 119,
-     "removed": 0,
-     "decls": 0,
-     "fileList": [
-      "README.md",
-      "ROADMAP.md"
-     ]
-    }
-   ],
-   "stats": {
-    "files": 2,
-    "added": 119,
-    "removed": 0,
-    "modules": 1,
-    "touchedDecls": 0,
-    "truncated": false
-   },
-   "hash": "ba1d45a",
-   "date": "2026-09-17",
-   "subject": "docs: add comprehensive product and technical roadmap for tracking, discovery, and community",
-   "impact": {
-    "changedModules": [],
-    "buildConfigTouched": [],
-    "globalImpact": false,
-    "direct": [],
-    "transitive": [],
-    "impactedTests": [],
-    "impactedProd": [],
-    "testModules": [],
-    "counts": {
-     "changedModules": 0,
-     "direct": 0,
-     "transitive": 0,
-     "impactedTests": 0,
-     "impactedTestsDirect": 0,
-     "impactedProd": 0
-    }
-   }
-  },
-  {
-   "kind": "commit",
-   "label": "6dffef4 feat(feature:assistant): add Logcat trace logs for AI prompt",
-   "base": "6dffef4~1",
-   "target": "6dffef4",
-   "range": "6dffef4~1..6dffef4",
-   "files": [
-    {
-     "path": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt",
-     "status": "M",
-     "added": 2,
-     "removed": 0,
-     "module": ":feature:assistant",
-     "moduleKind": "module",
-     "hunks": [
-      {
-       "newStart": 62,
-       "newCount": 1,
-       "oldStart": 61,
-       "oldCount": 0
-      },
-      {
-       "newStart": 65,
-       "newCount": 1,
-       "oldStart": 63,
-       "oldCount": 0
-      }
-     ],
-     "hunkCount": 2,
-     "touchedDecls": [
-      {
-       "id": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt:20",
-       "name": "AssistantViewModel",
-       "kind": "viewmodel",
-       "line": 20,
-       "layer": "UI",
-       "isTest": false,
-       "globalIdx": 654
-      }
-     ],
-     "evidence": "git diff 6dffef4~1..6dffef4 -- feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt"
-    }
-   ],
-   "untracked": [],
-   "modules": [
-    {
-     "module": ":feature:assistant",
-     "kind": "module",
-     "files": 1,
-     "added": 2,
-     "removed": 0,
-     "decls": 1,
-     "fileList": [
-      "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModel.kt"
-     ]
-    }
-   ],
-   "stats": {
-    "files": 1,
-    "added": 2,
-    "removed": 0,
-    "modules": 1,
-    "touchedDecls": 1,
-    "truncated": false
-   },
-   "hash": "6dffef4",
-   "date": "2026-09-17",
-   "subject": "feat(feature:assistant): add Logcat trace logs for AI prompt execution",
-   "impact": {
-    "changedModules": [
-     ":feature:assistant"
-    ],
-    "buildConfigTouched": [],
-    "globalImpact": false,
-    "direct": [
-     {
-      "module": ":app",
-      "hops": 1,
-      "via": ":feature:assistant",
-      "declaration": "implementation",
-      "origin": "explicit",
-      "evidence": "app/build.gradle.kts:73"
-     }
-    ],
-    "transitive": [],
-    "impactedTests": [
-     {
-      "name": "AssistantViewModelTest",
-      "module": ":feature:assistant",
-      "file": "feature/assistant/src/test/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModelTest.kt",
-      "line": 27,
-      "isTest": true,
-      "degree": 1,
-      "targets": [
-       "AssistantViewModel"
-      ],
-      "evidence": "feature/assistant/src/test/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantViewModelTest.kt:27"
-     }
-    ],
-    "impactedProd": [
-     {
-      "name": "AssistantScreen",
-      "module": ":feature:assistant",
-      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt",
-      "line": 75,
-      "isTest": false,
-      "degree": 1,
-      "targets": [
-       "AssistantViewModel"
-      ],
-      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt:75"
+   "coverage": {
+    "changeTimestamp": 0.0,
+    "changeTimestampHuman": null,
+    "covered": {
+     ":core:common": {
+      "module": ":core:common",
+      "task": "processAndroidMainJavaRes",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:23:41+08:00",
+      "ok": false,
+      "head": "1fd55c8",
+      "requested": false,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
      },
-     {
-      "name": "assistantModule",
-      "module": ":feature:assistant",
-      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/di/AssistantModule.kt",
-      "line": 7,
-      "isTest": false,
-      "degree": 1,
-      "targets": [
-       "AssistantViewModel"
-      ],
-      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/di/AssistantModule.kt:7"
+     ":core:data": {
+      "module": ":core:data",
+      "task": "bundleAndroidMainClassesToRuntimeJar",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:23:41+08:00",
+      "ok": false,
+      "head": "1fd55c8",
+      "requested": false,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
      },
-     {
-      "name": "appModule",
-      "module": ":app",
-      "file": "app/src/main/kotlin/com/infinitezerone/minibgm/di/AppModule.kt",
-      "line": 20,
-      "isTest": false,
-      "degree": 2,
-      "targets": [
-       "assistantModule"
-      ],
-      "evidence": "app/src/main/kotlin/com/infinitezerone/minibgm/di/AppModule.kt:20"
+     ":core:navigation": {
+      "module": ":core:navigation",
+      "task": "processDebugJavaRes",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:23:41+08:00",
+      "ok": false,
+      "head": "1fd55c8",
+      "requested": false,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
      },
-     {
-      "name": "assistantEntry",
-      "module": ":feature:assistant",
-      "file": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/navigation/AssistantEntry.kt",
-      "line": 12,
-      "isTest": false,
-      "degree": 2,
-      "targets": [
-       "AssistantScreen"
-      ],
-      "evidence": "feature/assistant/src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/navigation/AssistantEntry.kt:12"
+     ":core:testing": {
+      "module": ":core:testing",
+      "task": "testAndroid",
+      "outcome": "UP-TO-DATE",
+      "at": "2026-09-17T15:22:03+08:00",
+      "ok": true,
+      "head": "1fd55c8",
+      "requested": true,
+      "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
      }
+    },
+    "coveredCount": 4,
+    "uncovered": [
+     ":app",
+     ":feature:schedule",
+     ":feature:subject"
     ],
-    "testModules": [
-     ":feature:assistant"
-    ],
-    "counts": {
-     "changedModules": 1,
-     "direct": 1,
-     "transitive": 0,
-     "impactedTests": 1,
-     "impactedTestsDirect": 1,
-     "impactedProd": 4
-    }
+    "globalChecks": [],
+    "lastRunAfterChange": {
+     "at": "2026-09-17T15:23:41+08:00",
+     "ok": false,
+     "buildLine": "BUILD FAILED in 11s",
+     "logFile": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "verdict": "3 个改动模块在变更后没有验证"
    }
   }
  ],
@@ -34582,179 +35913,199 @@
   },
   "perModule": {
    ":core:common": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:common:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:common:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:designsystem": {
-    "task": "bundleLibCompileToJarDebug",
-    "full": ":core:designsystem:bundleLibCompileToJarDebug",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": {
+     "task": "testDebugUnitTest",
+     "full": ":core:designsystem:testDebugUnitTest",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:22:03+08:00",
+     "exitCode": 0,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+    },
+    "lastAny": {
+     "task": "bundleLibCompileToJarDebug",
+     "full": ":core:designsystem:bundleLibCompileToJarDebug",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:datastore": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:datastore:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:datastore:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:data": {
-    "task": "bundleAndroidMainClassesToRuntimeJar",
-    "full": ":core:data:bundleAndroidMainClassesToRuntimeJar",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "bundleAndroidMainClassesToRuntimeJar",
+     "full": ":core:data:bundleAndroidMainClassesToRuntimeJar",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:model": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:model:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:model:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:database": {
-    "task": "bundleAndroidMainClassesToRuntimeJar",
-    "full": ":core:database:bundleAndroidMainClassesToRuntimeJar",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "bundleAndroidMainClassesToRuntimeJar",
+     "full": ":core:database:bundleAndroidMainClassesToRuntimeJar",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:network": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:network:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:network:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:navigation": {
-    "task": "processDebugJavaRes",
-    "full": ":core:navigation:processDebugJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processDebugJavaRes",
+     "full": ":core:navigation:processDebugJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":feature:user": {
-    "task": "testDebugUnitTest",
-    "full": ":feature:user:testDebugUnitTest",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:22:03+08:00",
-    "exitCode": 0,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+    "verified": {
+     "task": "testDebugUnitTest",
+     "full": ":feature:user:testDebugUnitTest",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:22:03+08:00",
+     "exitCode": 0,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+    },
+    "lastAny": {
+     "task": "testDebugUnitTest",
+     "full": ":feature:user:testDebugUnitTest",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:22:03+08:00",
+     "exitCode": 0,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+    }
    },
    ":core:testing": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:testing:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": {
+     "task": "testAndroid",
+     "full": ":core:testing:testAndroid",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:22:03+08:00",
+     "exitCode": 0,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152158.log"
+    },
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:testing:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":core:ai": {
-    "task": "processAndroidMainJavaRes",
-    "full": ":core:ai:processAndroidMainJavaRes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": null,
+    "lastAny": {
+     "task": "processAndroidMainJavaRes",
+     "full": ":core:ai:processAndroidMainJavaRes",
+     "outcome": "UP-TO-DATE",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": false,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    },
    ":feature:assistant": {
-    "task": "testDebugUnitTest",
-    "full": ":feature:assistant:testDebugUnitTest",
-    "outcome": "FAILED",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    "verified": {
+     "task": "testDebugUnitTest",
+     "full": ":feature:assistant:testDebugUnitTest",
+     "outcome": "FAILED",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    },
+    "lastAny": {
+     "task": "testDebugUnitTest",
+     "full": ":feature:assistant:testDebugUnitTest",
+     "outcome": "FAILED",
+     "at": "2026-09-17T15:23:41+08:00",
+     "exitCode": 1,
+     "head": "1fd55c8",
+     "requested": true,
+     "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
+    }
    }
   },
-  "globalTasks": {
-   "checkKotlinGradlePluginConfigurationErrors": {
-    "task": "checkKotlinGradlePluginConfigurationErrors",
-    "full": ":build-logic:convention:checkKotlinGradlePluginConfigurationErrors",
-    "outcome": "SKIPPED",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "compileKotlin": {
-    "task": "compileKotlin",
-    "full": ":build-logic:convention:compileKotlin",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "compileJava": {
-    "task": "compileJava",
-    "full": ":build-logic:convention:compileJava",
-    "outcome": "NO-SOURCE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "pluginDescriptors": {
-    "task": "pluginDescriptors",
-    "full": ":build-logic:convention:pluginDescriptors",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "processResources": {
-    "task": "processResources",
-    "full": ":build-logic:convention:processResources",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "classes": {
-    "task": "classes",
-    "full": ":build-logic:convention:classes",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   },
-   "jar": {
-    "task": "jar",
-    "full": ":build-logic:convention:jar",
-    "outcome": "UP-TO-DATE",
-    "at": "2026-09-17T15:23:41+08:00",
-    "exitCode": 1,
-    "head": "1fd55c8",
-    "evidence": "tools/codebase-canvas/out/validation/20260917-152329.log"
-   }
-  },
+  "globalTasks": {},
   "apks": [
    {
     "path": "app/build/outputs/apk/release/app-release.apk",
@@ -34763,8 +36114,8 @@
    },
    {
     "path": "app/build/outputs/apk/debug/app-debug.apk",
-    "mtime": "2026-09-17 15:28",
-    "sizeMB": 99.0
+    "mtime": "2026-09-17 15:53",
+    "sizeMB": 99.7
    }
   ],
   "reports": [
