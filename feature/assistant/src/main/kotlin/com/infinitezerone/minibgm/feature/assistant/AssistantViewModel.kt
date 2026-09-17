@@ -59,10 +59,8 @@ class AssistantViewModel(
         }
 
         viewModelScope.launch {
-            android.util.Log.d("BgmAi", "Executing AI prompt: $trimmed")
             when (val result = agentService.execute(trimmed)) {
                 is AppResult.Success -> {
-                    android.util.Log.d("BgmAi", "AI prompt succeeded: ${result.data}")
                     val rawContent = result.data
                     val storeActions = agentService.pendingActionStore?.popAll().orEmpty()
                     val parsedActions = PendingActionParser.extractPendingActions(rawContent)
@@ -96,7 +94,6 @@ class AssistantViewModel(
                     }
                 }
                 is AppResult.Error -> {
-                    android.util.Log.e("BgmAi", "AI agent execution failed", result.throwable)
                     val errorMsg = result.throwable.message ?: "智能体执行失败"
                     val assistantMessage =
                         AssistantMessage(

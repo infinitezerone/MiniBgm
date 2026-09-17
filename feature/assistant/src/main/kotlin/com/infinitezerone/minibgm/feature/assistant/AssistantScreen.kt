@@ -255,7 +255,9 @@ fun AssistantScreenContent(
 
             // 底部输入框与发送按钮
             Surface(
-                tonalElevation = 2.dp,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 4.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
