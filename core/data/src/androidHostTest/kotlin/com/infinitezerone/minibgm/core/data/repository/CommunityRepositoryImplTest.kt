@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.SubjectTopicPage
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicReply
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
+import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,7 +76,7 @@ class CommunityRepositoryImplTest {
 
         override suspend fun getSubjectTopicDetail(topicId: Long): TopicDetail {
             if (shouldThrow) throw RuntimeException("Network error")
-            if (subjectTopicThrows) throw RuntimeException("Subject topic error")
+            if (subjectTopicThrows) throw BgmNetworkException.NotFound("Subject topic not found")
             return TopicDetail(
                 id = topicId,
                 title = "条目讨论帖详情",
@@ -89,7 +90,7 @@ class CommunityRepositoryImplTest {
 
         override suspend fun getGroupTopicDetail(topicId: Long): TopicDetail {
             if (shouldThrow) throw RuntimeException("Network error")
-            if (groupTopicThrows) throw RuntimeException("Group topic error")
+            if (groupTopicThrows) throw BgmNetworkException.NotFound("Group topic not found")
             return TopicDetail(
                 id = topicId,
                 title = "小组讨论帖详情",

@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
+import com.infinitezerone.minibgm.core.network.BgmNetworkException
 
 /**
  * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版、讨论帖详情）
@@ -29,7 +30,7 @@ interface CommunityRepository {
         offset: Int = 0,
     ): AppResult<List<SubjectTopic>>
 
-    /** 获取讨论帖详情（支持条目讨论与小组讨论自动探测与回退） */
+    /** 获取讨论帖详情（包含主楼正文、关联条目与楼层回复） */
     suspend fun getTopicDetail(
         topicId: Long,
         type: String = "subject",
@@ -68,11 +69,17 @@ class CommunityRepositoryImpl(
     ): AppResult<TopicDetail> =
         asAppResult(errorMessage = { it.message ?: "获取讨论帖详情失败" }) {
             if (type == "group") {
-                runCatching { communityService.getGroupTopicDetail(topicId) }
-                    .getOrElse { communityService.getSubjectTopicDetail(topicId) }
+                try {
+                    communityService.getGroupTopicDetail(topicId)
+                } catch (_: BgmNetworkException.NotFound) {
+                    communityService.getSubjectTopicDetail(topicId)
+                }
             } else {
-                runCatching { communityService.getSubjectTopicDetail(topicId) }
-                    .getOrElse { communityService.getGroupTopicDetail(topicId) }
+                try {
+                    communityService.getSubjectTopicDetail(topicId)
+                } catch (_: BgmNetworkException.NotFound) {
+                    communityService.getGroupTopicDetail(topicId)
+                }
             }
         }
 }

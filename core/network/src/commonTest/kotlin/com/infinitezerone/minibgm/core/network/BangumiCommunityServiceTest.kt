@@ -195,4 +195,91 @@ class BangumiCommunityServiceTest {
             assertEquals(29, topic.replyCount)
             assertEquals("楼主", topic.creator?.displayName)
         }
+
+    @Test
+    fun getSubjectTopicDetail_withRealPayload_parsesCorrectly() =
+        runTest {
+            val responseJson =
+                """
+                {
+                    "id": 40498,
+                    "title": "谁懂这撑伞",
+                    "creatorID": 734183,
+                    "parentID": 637124,
+                    "replyCount": 1,
+                    "createdAt": 1784787912,
+                    "updatedAt": 1784787912,
+                    "state": 0,
+                    "display": 1,
+                    "subject": {
+                        "id": 637124,
+                        "name": "花ざかりの君たちへ 第2期",
+                        "nameCN": "花样少年少女 第二季",
+                        "type": 2,
+                        "info": "13话",
+                        "metaTags": ["校园", "TV"],
+                        "rating": {
+                            "rank": 0,
+                            "count": [1, 0, 2, 3, 11, 27, 11, 1, 1, 1],
+                            "score": 5.86,
+                            "total": 58
+                        },
+                        "locked": false,
+                        "nsfw": false,
+                        "images": {
+                            "large": "https://lain.bgm.tv/pic/cover/l/20/0f/637124_6DDda.jpg",
+                            "common": "https://lain.bgm.tv/r/400/pic/cover/l/20/0f/637124_6DDda.jpg",
+                            "medium": "https://lain.bgm.tv/r/200/pic/cover/l/20/0f/637124_6DDda.jpg",
+                            "small": "https://lain.bgm.tv/r/100/pic/cover/l/20/0f/637124_6DDda.jpg",
+                            "grid": "https://lain.bgm.tv/r/100x100/pic/cover/l/20/0f/637124_6DDda.jpg"
+                        }
+                    },
+                    "replies": [
+                        {
+                            "id": 406011,
+                            "creatorID": 734183,
+                            "createdAt": 1784787912,
+                            "content": "楼主主贴内容",
+                            "state": 0,
+                            "replies": [],
+                            "creator": {
+                                "id": 734183,
+                                "username": "sawarin",
+                                "nickname": "Sawarin"
+                            },
+                            "reactions": []
+                        }
+                    ],
+                    "creator": {
+                        "id": 734183,
+                        "username": "sawarin",
+                        "nickname": "Sawarin"
+                    }
+                }
+                """.trimIndent()
+
+            val engine =
+                MockEngine { request ->
+                    assertEquals("/p1/subjects/-/topics/40498", request.url.encodedPath)
+                    respond(
+                        content = responseJson,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) { json(this@BangumiCommunityServiceTest.json) }
+                }
+
+            val service = BangumiCommunityServiceImpl(client, baseUrl = "https://next.bgm.tv")
+            val detail = service.getSubjectTopicDetail(40498)
+
+            assertEquals(40498, detail.id)
+            assertEquals("谁懂这撑伞", detail.title)
+            assertEquals("花样少年少女 第二季", detail.subject?.displayName)
+            assertEquals(5.86, detail.subject?.rating?.score)
+            assertEquals("楼主主贴内容", detail.mainPost?.content)
+        }
 }
