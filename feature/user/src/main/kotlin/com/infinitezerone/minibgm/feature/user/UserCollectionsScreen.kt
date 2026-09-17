@@ -460,8 +460,9 @@ private fun UserCollectionCard(
         shape = RoundedCornerShape(16.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

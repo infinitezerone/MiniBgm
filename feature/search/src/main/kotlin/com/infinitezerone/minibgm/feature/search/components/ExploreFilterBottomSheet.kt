@@ -80,7 +80,7 @@ fun ExploreFilterBottomSheet(
     BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier,
     ) {
         Column(
