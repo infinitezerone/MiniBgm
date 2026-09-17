@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.search.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,8 +101,7 @@ fun SearchIdleView(
                         searchHistory.forEach { historyQuery ->
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

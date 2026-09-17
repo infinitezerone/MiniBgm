@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.search.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -249,13 +248,7 @@ fun SearchSortFilterBar(
                         if (isSelected) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
-                            MaterialTheme.colorScheme.surfaceContainerLow
-                        },
-                    border =
-                        if (isSelected) {
-                            null
-                        } else {
-                            BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            MaterialTheme.colorScheme.surfaceContainerHigh
                         },
                 ) {
                     Text(

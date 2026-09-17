@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.user
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,11 +36,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.core.designsystem.theme.StatusCollect
-import com.infinitezerone.minibgm.core.designsystem.theme.StatusDoing
-import com.infinitezerone.minibgm.core.designsystem.theme.StatusDropped
-import com.infinitezerone.minibgm.core.designsystem.theme.StatusOnHold
-import com.infinitezerone.minibgm.core.designsystem.theme.StatusWish
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDoingContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDroppedContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusOnHoldContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusWishContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDroppedContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusOnHoldContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusWishContainerColor
 import com.infinitezerone.minibgm.core.model.CollectionType
 
 @Composable
@@ -64,12 +68,11 @@ internal fun CollectionOverviewCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Row(
@@ -111,8 +114,6 @@ internal fun CollectionOverviewCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
             // 第一排：三大活跃追番状态（在看、想看、看过）
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -123,7 +124,8 @@ internal fun CollectionOverviewCard(
                     tag = "追番中",
                     count = formatCount(CollectionType.DOING),
                     icon = Icons.Filled.PlayCircleOutline,
-                    tint = StatusDoing,
+                    containerColor = statusDoingContainerColor(),
+                    contentColor = onStatusDoingContainerColor(),
                     onClick = { onCollectionClick(CollectionType.DOING) },
                     modifier = Modifier.weight(1f),
                 )
@@ -132,7 +134,8 @@ internal fun CollectionOverviewCard(
                     tag = "愿望单",
                     count = formatCount(CollectionType.WISH),
                     icon = Icons.Filled.BookmarkBorder,
-                    tint = StatusWish,
+                    containerColor = statusWishContainerColor(),
+                    contentColor = onStatusWishContainerColor(),
                     onClick = { onCollectionClick(CollectionType.WISH) },
                     modifier = Modifier.weight(1f),
                 )
@@ -141,7 +144,8 @@ internal fun CollectionOverviewCard(
                     tag = "已完成",
                     count = formatCount(CollectionType.COLLECT),
                     icon = Icons.Filled.CheckCircleOutline,
-                    tint = StatusCollect,
+                    containerColor = statusCollectContainerColor(),
+                    contentColor = onStatusCollectContainerColor(),
                     onClick = { onCollectionClick(CollectionType.COLLECT) },
                     modifier = Modifier.weight(1f),
                 )
@@ -159,7 +163,8 @@ internal fun CollectionOverviewCard(
                     tag = null,
                     count = formatCount(CollectionType.ON_HOLD),
                     icon = Icons.Filled.PauseCircleOutline,
-                    tint = StatusOnHold,
+                    containerColor = statusOnHoldContainerColor(),
+                    contentColor = onStatusOnHoldContainerColor(),
                     onClick = { onCollectionClick(CollectionType.ON_HOLD) },
                     modifier = Modifier.weight(1f),
                 )
@@ -168,7 +173,8 @@ internal fun CollectionOverviewCard(
                     tag = null,
                     count = formatCount(CollectionType.DROPPED),
                     icon = Icons.Filled.Cancel,
-                    tint = StatusDropped,
+                    containerColor = statusDroppedContainerColor(),
+                    contentColor = onStatusDroppedContainerColor(),
                     onClick = { onCollectionClick(CollectionType.DROPPED) },
                     modifier = Modifier.weight(1f),
                 )
@@ -197,13 +203,14 @@ private fun CollectionStatusItem(
     tag: String?,
     count: String,
     icon: ImageVector,
-    tint: Color,
+    containerColor: Color,
+    contentColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
         modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
@@ -212,14 +219,14 @@ private fun CollectionStatusItem(
         ) {
             Surface(
                 shape = CircleShape,
-                color = tint.copy(alpha = 0.12f),
+                color = containerColor,
                 modifier = Modifier.size(34.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = tint,
+                        tint = contentColor,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -246,7 +253,7 @@ private fun CollectionStatusItem(
                     Text(
                         text = "· $tag",
                         style = MaterialTheme.typography.labelSmall,
-                        color = tint,
+                        color = contentColor,
                     )
                 }
             }

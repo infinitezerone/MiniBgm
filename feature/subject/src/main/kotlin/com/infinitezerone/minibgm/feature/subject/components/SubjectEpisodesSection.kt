@@ -1,9 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -149,6 +148,15 @@ fun EpisodeGroupFilterChips(
                 selected = isSelected,
                 onClick = { onGroupSelected(group) },
                 label = { Text("${group.label} ($count)") },
+                border = null,
+                colors =
+                    FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
                 leadingIcon =
                     if (isSelected) {
                         {
@@ -195,7 +203,6 @@ fun EpisodeListItem(
                         MaterialTheme.colorScheme.surfaceContainerLow
                     },
             ),
-        border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
     ) {
         Row(
             modifier =
@@ -369,16 +376,7 @@ fun EpisodeGrid(
                                     if (isWatched) {
                                         MaterialTheme.colorScheme.primaryContainer
                                     } else {
-                                        MaterialTheme.colorScheme.surfaceContainerLow
-                                    },
-                                ).then(
-                                    if (isWatched) {
-                                        Modifier
-                                    } else {
-                                        Modifier.border(
-                                            BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                            cellShape,
-                                        )
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
                                     },
                                 ).combinedClickable(
                                     onClick = { onToggleWatched(episode, !isWatched) },

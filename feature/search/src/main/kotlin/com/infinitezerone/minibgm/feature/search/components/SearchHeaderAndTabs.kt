@@ -3,9 +3,7 @@ package com.infinitezerone.minibgm.feature.search.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,10 +66,7 @@ fun SearchTopHeader(
                         .height(36.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .border(
-                            BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                            RoundedCornerShape(18.dp),
-                        ).padding(horizontal = 10.dp),
+                        .padding(horizontal = 10.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
@@ -186,13 +181,7 @@ fun SearchCategoryTabs(
                     if (isSelected) {
                         MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-                border =
-                    if (isSelected) {
-                        null
-                    } else {
-                        BorderStroke(0.6.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        MaterialTheme.colorScheme.surfaceContainerHigh
                     },
             ) {
                 Row(

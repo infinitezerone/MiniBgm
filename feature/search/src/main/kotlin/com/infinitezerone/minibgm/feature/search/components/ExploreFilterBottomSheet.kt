@@ -137,6 +137,15 @@ fun ExploreFilterBottomSheet(
                                 selected = selectedSort == sort,
                                 onClick = { onSortSelect(sort) },
                                 label = { Text(text = sort.label, style = MaterialTheme.typography.labelSmall) },
+                                border = null,
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ),
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Sort,
@@ -160,6 +169,14 @@ fun ExploreFilterBottomSheet(
                                 selected = selectedCategory == category,
                                 onClick = { onCategorySelect(category) },
                                 label = { Text(text = category.label, style = MaterialTheme.typography.labelSmall) },
+                                border = null,
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ),
                             )
                         }
                     }
@@ -185,9 +202,12 @@ fun ExploreFilterBottomSheet(
                                         }
                                     },
                                     label = { Text(text = cat.label, style = MaterialTheme.typography.labelSmall) },
+                                    border = null,
                                     colors =
                                         FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                         ),
                                 )
@@ -206,6 +226,14 @@ fun ExploreFilterBottomSheet(
                                     selected = selectedSeason.id == season.id,
                                     onClick = { onSeasonSelect(season) },
                                     label = { Text(text = season.label, style = MaterialTheme.typography.labelSmall) },
+                                    border = null,
+                                    colors =
+                                        FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        ),
                                 )
                             }
                         }
@@ -271,9 +299,12 @@ fun ExploreFilterBottomSheet(
                                     selected = isSelected,
                                     onClick = { onTagToggle(tag) },
                                     label = { Text(text = tag, style = MaterialTheme.typography.labelSmall) },
+                                    border = null,
                                     colors =
                                         FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                         ),
                                 )
