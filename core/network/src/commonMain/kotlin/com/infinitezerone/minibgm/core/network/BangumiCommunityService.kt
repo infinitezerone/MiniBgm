@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.network
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopicPage
+import com.infinitezerone.minibgm.core.model.TopicDetail
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -28,6 +29,12 @@ interface BangumiCommunityService {
         limit: Int = 10,
         offset: Int = 0,
     ): SubjectTopicPage
+
+    /** 获取条目讨论版帖子详情（包含主楼正文与楼层楼中楼回帖） */
+    suspend fun getSubjectTopicDetail(topicId: Long): TopicDetail
+
+    /** 获取小组讨论帖子详情（包含主楼正文与楼层楼中楼回帖） */
+    suspend fun getGroupTopicDetail(topicId: Long): TopicDetail
 }
 
 class BangumiCommunityServiceImpl(
@@ -58,4 +65,8 @@ class BangumiCommunityServiceImpl(
                 parameter("limit", limit)
                 parameter("offset", offset)
             }.body()
+
+    override suspend fun getSubjectTopicDetail(topicId: Long): TopicDetail = client.get("$baseUrl/p1/subjects/-/topics/$topicId").body()
+
+    override suspend fun getGroupTopicDetail(topicId: Long): TopicDetail = client.get("$baseUrl/p1/groups/-/topics/$topicId").body()
 }

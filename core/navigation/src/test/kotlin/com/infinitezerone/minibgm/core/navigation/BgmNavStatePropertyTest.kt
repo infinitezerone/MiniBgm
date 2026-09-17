@@ -108,6 +108,15 @@ class BgmNavStatePropertyTest {
         }
     }
 
+    private data class PushTopic(
+        val topicId: Long,
+    ) : Action {
+        override fun applyTo(state: BgmNavState): Boolean {
+            state.navigateTo(TopicDetailRoute(topicId = topicId))
+            return true
+        }
+    }
+
     private data class SwitchTab(
         val index: Int,
     ) : Action {
@@ -127,7 +136,7 @@ class BgmNavStatePropertyTest {
 
     private fun randomActions(rng: Random): List<Action> =
         List(rng.nextInt(10, 40)) {
-            when (rng.nextInt(10)) {
+            when (rng.nextInt(11)) {
                 0 -> PushDetail(rng.nextLong())
                 1 -> PushLinked(rng.nextLong())
                 2 -> PushEpisode(rng.nextLong())
@@ -136,7 +145,8 @@ class BgmNavStatePropertyTest {
                 5 -> PushCollections(rng.nextLong())
                 6 -> PushAssistant
                 7 -> PushSeasonalGuide(rng.nextInt(2020, 2030), rng.nextInt(1, 13))
-                8 -> SwitchTab(rng.nextInt())
+                8 -> PushTopic(rng.nextLong())
+                9 -> SwitchTab(rng.nextInt())
                 else -> GoBack
             }
         }

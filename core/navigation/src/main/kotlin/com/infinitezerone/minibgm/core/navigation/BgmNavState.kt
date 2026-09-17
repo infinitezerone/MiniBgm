@@ -126,7 +126,8 @@ class BgmNavState(
                         it is SubjectDetailRoute ||
                             it is LinkedSubjectRoute ||
                             it is EpisodeDetailRoute ||
-                            it is TagSubjectsRoute
+                            it is TagSubjectsRoute ||
+                            it is TopicDetailRoute
                     }
                 }
                 is SearchRoute, is UserCollectionsRoute, is AssistantRoute, is SeasonalGuideRoute -> {
@@ -137,12 +138,13 @@ class BgmNavState(
                         it is SubjectDetailRoute ||
                             it is LinkedSubjectRoute ||
                             it is EpisodeDetailRoute ||
-                            it is TagSubjectsRoute
+                            it is TagSubjectsRoute ||
+                            it is TopicDetailRoute
                     }
                     removeAll { it::class == key::class }
                 }
-                // 钻取链层级：关联条目、分集讨论、标签专题允许逐层压栈（single-top 去重相同 key）
-                is LinkedSubjectRoute, is EpisodeDetailRoute, is TagSubjectsRoute -> remove(key)
+                // 钻取链层级：关联条目、分集讨论、标签专题、帖子详情允许逐层压栈（single-top 去重相同 key）
+                is LinkedSubjectRoute, is EpisodeDetailRoute, is TagSubjectsRoute, is TopicDetailRoute -> remove(key)
                 // 顶层 Tab 根永远是子栈首元素，不允许作为子页入栈（走 navigateTo 的顶层分支）
                 is ScheduleRoute, is ExploreRoute, is UserRoute ->
                     error("Top-level route cannot be pushed onto a sub stack: $key")

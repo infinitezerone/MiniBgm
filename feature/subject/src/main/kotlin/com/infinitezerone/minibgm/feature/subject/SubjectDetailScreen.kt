@@ -127,6 +127,7 @@ fun SubjectDetailScreen(
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
     onTagClick: (String) -> Unit = {},
+    onTopicClick: (Long, String) -> Unit = { _, _ -> },
     onCharacterClick: ((Long) -> Unit)? = null,
     onPersonClick: ((Long) -> Unit)? = null,
     viewModel: SubjectDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId) }),
@@ -242,7 +243,7 @@ fun SubjectDetailScreen(
                     )
                 }
             }
-            is BgmLink.Topic -> context.launchWebUrl(url)
+            is BgmLink.Topic -> onTopicClick(link.topicId, "")
             is BgmLink.User -> context.launchWebUrl(url)
             is BgmLink.External -> {
                 context.launchStreamingUrl(
@@ -432,6 +433,7 @@ fun SubjectDetailScreen(
                                 onPersonClick = handlePersonClick,
                                 onPreviewCharacter = { previewCharacter = it },
                                 onLinkClick = handleLinkClick,
+                                onTopicClick = onTopicClick,
                                 onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                 isTransitionStabilizing = isTransitionStabilizing,
                                 onBatchMarkEpisode = { batchMarkTargetEpisode = it },
@@ -648,6 +650,7 @@ private fun SubjectDetailContent(
     onPersonClick: (Long) -> Unit,
     onPreviewCharacter: (SubjectCharacter) -> Unit,
     onLinkClick: (String) -> Unit,
+    onTopicClick: (Long, String) -> Unit,
     onLoadMoreComments: () -> Unit,
     isTransitionStabilizing: Boolean,
     onBatchMarkEpisode: (Episode) -> Unit,
@@ -922,6 +925,7 @@ private fun SubjectDetailContent(
                             onLoadMoreComments = onLoadMoreComments,
                             topics = uiState.subjectTopics,
                             onUrlClick = onLinkClick,
+                            onTopicClick = onTopicClick,
                             isLoading = uiState.isCommunityLoading,
                         )
                     }

@@ -12,6 +12,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
     onTagClick: (String) -> Unit = {},
+    onTopicClick: (Long, String) -> Unit = { _, _ -> },
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SubjectDetailRoute>(metadata = metadata) { route ->
@@ -25,6 +26,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
             onSubjectClick = onSubjectClick,
             onEpisodeClick = onEpisodeClick,
             onTagClick = onTagClick,
+            onTopicClick = onTopicClick,
         )
     }
 }
@@ -35,6 +37,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
     onTagClick: (String) -> Unit = {},
+    onTopicClick: (Long, String) -> Unit = { _, _ -> },
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute>(metadata = metadata) { route ->
@@ -48,6 +51,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
             onSubjectClick = onSubjectClick,
             onEpisodeClick = onEpisodeClick,
             onTagClick = onTagClick,
+            onTopicClick = onTopicClick,
         )
     }
 }

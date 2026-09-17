@@ -84,6 +84,7 @@ fun EpisodeDetailScreen(
     onEpisodeClick: (Long) -> Unit,
     onCharacterClick: (Long) -> Unit,
     onPersonClick: (Long) -> Unit,
+    onTopicClick: (Long, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     viewModel: EpisodeDetailViewModel =
         koinViewModel(
@@ -112,7 +113,7 @@ fun EpisodeDetailScreen(
             is BgmLink.Episode -> onEpisodeClick(link.episodeId)
             is BgmLink.Character -> onCharacterClick(link.characterId)
             is BgmLink.Person -> onPersonClick(link.personId)
-            is BgmLink.Topic -> context.launchWebUrl(url)
+            is BgmLink.Topic -> onTopicClick(link.topicId, "")
             is BgmLink.User -> context.launchWebUrl(url)
             is BgmLink.External -> {
                 context.launchStreamingUrl(
