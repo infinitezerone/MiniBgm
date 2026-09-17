@@ -55,13 +55,13 @@ fun BgmFloatingNavigationBar(
 ) {
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f),
-        tonalElevation = 6.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 0.dp,
         shadowElevation = 8.dp,
         border =
             BorderStroke(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
             ),
         modifier =
             modifier

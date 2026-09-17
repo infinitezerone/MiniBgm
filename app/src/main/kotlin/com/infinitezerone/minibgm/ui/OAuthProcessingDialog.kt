@@ -37,8 +37,8 @@ fun OAuthProcessingDialog(modifier: Modifier = Modifier) {
     ) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            tonalElevation = 0.dp,
             modifier = modifier.widthIn(min = 280.dp, max = 340.dp),
         ) {
             Column(
