@@ -149,7 +149,7 @@ fun SeasonalGuideScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    items(uiState.availableYears) { year ->
+                    items(uiState.availableYears, key = { it }) { year ->
                         FilterChip(
                             selected = uiState.selectedYear == year,
                             onClick = { viewModel.selectYear(year) },
@@ -344,7 +344,7 @@ fun SeasonalGuideScreen(
                     onClick = {
                         coroutineScope.launch {
                             val authUrl = viewModel.beginLogin()
-                            context.launchWebUrl(authUrl)
+                            context.launchWebUrl(authUrl, isAuth = true)
                         }
                     },
                 ) {

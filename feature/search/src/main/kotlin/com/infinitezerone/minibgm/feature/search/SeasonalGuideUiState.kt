@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.search
 
 import androidx.compose.runtime.Immutable
 import com.infinitezerone.minibgm.core.model.Subject
+import java.util.Locale
 
 /**
  * 季节季度划分：1月冬、4月春、7月夏、10月秋
@@ -18,13 +19,13 @@ enum class SeasonQuarter(
     ;
 
     fun getAirDateRange(year: Int): Pair<String, String> {
-        val start = "%04d-%02d-01".format(year, month)
+        val start = String.format(Locale.US, "%04d-%02d-01", year, month)
         val end =
             when (this) {
-                WINTER -> "%04d-03-31".format(year)
-                SPRING -> "%04d-06-30".format(year)
-                SUMMER -> "%04d-09-30".format(year)
-                AUTUMN -> "%04d-12-31".format(year)
+                WINTER -> String.format(Locale.US, "%04d-03-31", year)
+                SPRING -> String.format(Locale.US, "%04d-06-30", year)
+                SUMMER -> String.format(Locale.US, "%04d-09-30", year)
+                AUTUMN -> String.format(Locale.US, "%04d-12-31", year)
             }
         return start to end
     }
@@ -52,6 +53,8 @@ enum class SeasonCategoryFilter(
     MOVIE_OVA("剧场版 / OVA"),
 }
 
+private val WEB_WORD_REGEX = Regex("""\bWEB\b""")
+
 /**
  * 判断条目是否符合给定的放送类型筛选条件
  */
@@ -63,18 +66,25 @@ fun matchesCategory(
     val tagNames = subject.tags.map { it.name.trim().uppercase() }
     val title = (subject.name + " " + subject.nameCn).uppercase()
 
-    val isWeb =
-        tagNames.any { it in listOf("WEB", "网络动画", "WEB动画", "网络独播") } ||
-            title.contains("WEB")
     val isMovieOva =
         tagNames.any { it in listOf("剧场版", "OVA", "OAD", "电影", "MOVIE") } ||
-            title.contains("剧场版") || title.contains("OVA") || title.contains("OAD")
+            title.contains("剧场版") ||
+            title.contains("OVA") ||
+            title.contains("OAD")
+
+    val isWeb =
+        tagNames.any { it in listOf("WEB", "网络动画", "WEB动画", "网络独播") } ||
+            title.contains("WEB动画") ||
+            title.contains("网络动画") ||
+            title.contains("网络独播") ||
+            WEB_WORD_REGEX.containsMatchIn(title)
+
     val isTv = tagNames.any { it in listOf("TV", "TV动画", "电视动画") } || (!isWeb && !isMovieOva)
 
     return when (category) {
         SeasonCategoryFilter.ALL -> true
         SeasonCategoryFilter.TV -> isTv && !isWeb && !isMovieOva
-        SeasonCategoryFilter.WEB -> isWeb
+        SeasonCategoryFilter.WEB -> isWeb && !isMovieOva
         SeasonCategoryFilter.MOVIE_OVA -> isMovieOva
     }
 }

@@ -2,7 +2,9 @@ package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.Tag
+import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
@@ -245,4 +247,105 @@ class SeasonalGuideViewModelTest {
             assertEquals(60, viewModel.uiState.value.subjects.size)
             assertFalse(viewModel.uiState.value.hasMore)
         }
+
+    @Test
+    fun toggleCollection_whenSwitchingFromDoingToWish_andErrorOccurs_restoresDoingState() =
+        runTest {
+            val collectionRepository = FakeCollectionRepository()
+            collectionRepository.sendCollection(UserCollection(subjectId = 100L, type = CollectionType.DOING.value))
+            collectionRepository.updateCollectionResult = AppResult.Error(Exception("Network error"), "网络异常")
+            val viewModel = createViewModel(collectionRepository = collectionRepository)
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.doingSubjectIds
+                    .contains(100L),
+            )
+            assertFalse(
+                viewModel.uiState.value.wishedSubjectIds
+                    .contains(100L),
+            )
+
+            viewModel.toggleCollection(100L, CollectionType.WISH)
+            advanceUntilIdle()
+
+            // On error, 100L must be restored back into doingSubjectIds and removed from wishedSubjectIds
+            assertTrue(
+                viewModel.uiState.value.doingSubjectIds
+                    .contains(100L),
+            )
+            assertFalse(
+                viewModel.uiState.value.wishedSubjectIds
+                    .contains(100L),
+            )
+            assertEquals("网络异常", viewModel.uiState.value.userMessage)
+        }
+
+    @Test
+    fun toggleCollection_whenSwitchingFromWishToDoing_andErrorOccurs_restoresWishState() =
+        runTest {
+            val collectionRepository = FakeCollectionRepository()
+            collectionRepository.sendCollection(UserCollection(subjectId = 200L, type = CollectionType.WISH.value))
+            collectionRepository.updateCollectionResult = AppResult.Error(Exception("Server error"), "服务器开小差了")
+            val viewModel = createViewModel(collectionRepository = collectionRepository)
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.wishedSubjectIds
+                    .contains(200L),
+            )
+            assertFalse(
+                viewModel.uiState.value.doingSubjectIds
+                    .contains(200L),
+            )
+
+            viewModel.toggleCollection(200L, CollectionType.DOING)
+            advanceUntilIdle()
+
+            // On error, 200L must be restored back into wishedSubjectIds and removed from doingSubjectIds
+            assertTrue(
+                viewModel.uiState.value.wishedSubjectIds
+                    .contains(200L),
+            )
+            assertFalse(
+                viewModel.uiState.value.doingSubjectIds
+                    .contains(200L),
+            )
+            assertEquals("服务器开小差了", viewModel.uiState.value.userMessage)
+        }
+
+    @Test
+    fun toggleCollection_whenAlreadyInTargetCollection_emitsPromptWithoutCallingRepository() =
+        runTest {
+            val collectionRepository = FakeCollectionRepository()
+            collectionRepository.sendCollection(UserCollection(subjectId = 300L, type = CollectionType.DOING.value))
+            val viewModel = createViewModel(collectionRepository = collectionRepository)
+            advanceUntilIdle()
+
+            viewModel.toggleCollection(300L, CollectionType.DOING)
+            advanceUntilIdle()
+
+            assertEquals(0, collectionRepository.updateCollectionCallCount)
+            assertEquals("已在您的「在看」列表中", viewModel.uiState.value.userMessage)
+        }
+
+    @Test
+    fun matchesCategory_handlesEdgeCasesCorrectly() {
+        val taglessSubject = Subject(id = 1, name = "Original Title", tags = emptyList())
+        assertTrue(matchesCategory(taglessSubject, SeasonCategoryFilter.TV))
+        assertFalse(matchesCategory(taglessSubject, SeasonCategoryFilter.WEB))
+        assertFalse(matchesCategory(taglessSubject, SeasonCategoryFilter.MOVIE_OVA))
+
+        val webTagSubject = Subject(id = 2, name = "Web Series", tags = listOf(Tag("网络动画", 10)))
+        assertTrue(matchesCategory(webTagSubject, SeasonCategoryFilter.WEB))
+        assertFalse(matchesCategory(webTagSubject, SeasonCategoryFilter.TV))
+
+        val wordBoundarySubject = Subject(id = 3, name = "Spider Webster", tags = emptyList())
+        assertTrue(matchesCategory(wordBoundarySubject, SeasonCategoryFilter.TV))
+        assertFalse(matchesCategory(wordBoundarySubject, SeasonCategoryFilter.WEB))
+
+        val movieSubject = Subject(id = 4, name = "Movie Title", nameCn = "剧场版 某作品", tags = emptyList())
+        assertTrue(matchesCategory(movieSubject, SeasonCategoryFilter.MOVIE_OVA))
+        assertFalse(matchesCategory(movieSubject, SeasonCategoryFilter.TV))
+    }
 }

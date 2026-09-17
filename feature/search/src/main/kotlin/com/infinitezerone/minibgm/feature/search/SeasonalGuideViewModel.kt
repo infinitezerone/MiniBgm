@@ -10,12 +10,14 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 private const val PAGE_SIZE = 50
@@ -148,23 +150,27 @@ class SeasonalGuideViewModel(
                 }
             }
 
-            when (val result = collectionRepository.updateCollectionStatus(subjectId, targetType)) {
-                is AppResult.Success -> Unit
-                is AppResult.Error -> {
-                    _uiState.update {
-                        var updated = it
-                        if (!wasDoing) {
-                            updated = updated.copy(doingSubjectIds = updated.doingSubjectIds - subjectId)
-                        }
-                        if (wasWished) {
-                            updated = updated.copy(wishedSubjectIds = updated.wishedSubjectIds + subjectId)
-                        } else {
-                            updated = updated.copy(wishedSubjectIds = updated.wishedSubjectIds - subjectId)
-                        }
-                        updated.copy(userMessage = result.message.ifBlank { "操作失败，请重试" })
-                    }
+            val result =
+                withContext(NonCancellable) {
+                    collectionRepository.updateCollectionStatus(
+                        subjectId = subjectId,
+                        type = targetType,
+                        subjectType = 2,
+                    )
                 }
-                is AppResult.Loading -> Unit
+
+            if (result is AppResult.Error) {
+                _uiState.update { current ->
+                    val restoredDoing =
+                        if (wasDoing) current.doingSubjectIds + subjectId else current.doingSubjectIds - subjectId
+                    val restoredWished =
+                        if (wasWished) current.wishedSubjectIds + subjectId else current.wishedSubjectIds - subjectId
+                    current.copy(
+                        doingSubjectIds = restoredDoing,
+                        wishedSubjectIds = restoredWished,
+                        userMessage = result.message.ifBlank { "操作失败，请重试" },
+                    )
+                }
             }
         }
     }
