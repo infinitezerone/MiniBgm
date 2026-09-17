@@ -167,6 +167,7 @@ fun EpisodeGroupFilterChips(
 }
 
 /** 分集列表项（列表模式） */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EpisodeListItem(
     episode: Episode,
@@ -174,10 +175,17 @@ fun EpisodeListItem(
     onClick: () -> Unit,
     onToggleWatched: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(CardDefaults.shape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                ),
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -424,11 +432,12 @@ fun EpisodeGrid(
     }
 }
 
-/** 辅助方法：判断分集是否已看过 */
+/** 辅助方法：判断分集是否已看过（非正篇 SP/OP/ED 不受条目全局正篇观看数 epStatus 判定） */
 fun isEpisodeWatched(
     episode: Episode,
     watchedCount: Int,
 ): Boolean {
+    if (episode.type != 0) return false
     val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
     return watchedCount >= epNumber && epNumber > 0
 }

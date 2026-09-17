@@ -418,19 +418,97 @@ class ScheduleViewModelTest {
 
             // Test 1: IMMINENT without delay
             val state1 = viewModel.uiState.first { it.nextUpAction != null }
-            assertNotNull(state1.nextUpAction)
-            assertEquals(999L, state1.nextUpAction!!.subjectId)
-            assertEquals(NextUpUrgency.IMMINENT, state1.nextUpAction!!.urgency)
+            val action1 = state1.nextUpAction
+            assertNotNull(action1)
+            assertEquals(999L, action1?.subjectId)
+            assertEquals(NextUpUrgency.IMMINENT, action1?.urgency)
 
             // Test 2: Apply delay offset, making it TODAY_UPCOMING
             settingsRepository.setAirDelayOffsetMinutes(60) // Delay by 60 mins -> 70 mins away
             val state2 = viewModel.uiState.first { it.nextUpAction?.urgency == NextUpUrgency.TODAY_UPCOMING }
-            assertNotNull(state2.nextUpAction)
-            assertEquals(NextUpUrgency.TODAY_UPCOMING, state2.nextUpAction!!.urgency)
+            val action2 = state2.nextUpAction
+            assertNotNull(action2)
+            assertEquals(NextUpUrgency.TODAY_UPCOMING, action2?.urgency)
 
             // Test 3: Dismiss action
             viewModel.dismissNextUpAction()
             val state3 = viewModel.uiState.first { it.isActionDismissed }
             assertTrue(state3.isActionDismissed)
+        }
+
+    @Test
+    fun watchingSubjectIds_includesBothDoingAndWishCollections() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+
+            val doingAnime =
+                AirSchedule(
+                    bgmId = 101L,
+                    title = "在看番",
+                    titleCn = "在看番",
+                    weekday = today,
+                    timeCst = "18:00",
+                )
+            val wishAnime =
+                AirSchedule(
+                    bgmId = 102L,
+                    title = "想看番",
+                    titleCn = "想看番",
+                    weekday = today,
+                    timeCst = "20:00",
+                )
+            val droppedAnime =
+                AirSchedule(
+                    bgmId = 103L,
+                    title = "搁置番",
+                    titleCn = "搁置番",
+                    weekday = today,
+                    timeCst = "22:00",
+                )
+
+            repository.sendSchedules(weekday = today, schedules = listOf(doingAnime, wishAnime, droppedAnime))
+
+            collectionRepository.sendCollection(
+                UserCollection(
+                    subjectId = 101L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                ),
+            )
+            collectionRepository.sendCollection(
+                UserCollection(
+                    subjectId = 102L,
+                    subjectType = 2,
+                    type = CollectionType.WISH.value,
+                ),
+            )
+            collectionRepository.sendCollection(
+                UserCollection(
+                    subjectId = 103L,
+                    subjectType = 2,
+                    type = CollectionType.DROPPED.value,
+                ),
+            )
+
+            val viewModel = createViewModel(repository, collectionRepository)
+
+            val state =
+                viewModel.uiState.first {
+                    it.watchingSubjectIds.contains(101L) && it.watchingSubjectIds.contains(102L)
+                }
+
+            assertTrue("DOING collection should be in watchingSubjectIds", state.watchingSubjectIds.contains(101L))
+            assertTrue("WISH collection should be in watchingSubjectIds", state.watchingSubjectIds.contains(102L))
+            assertFalse("DROPPED collection should NOT be in watchingSubjectIds", state.watchingSubjectIds.contains(103L))
+            assertEquals(2, state.getWatchingCountForWeekday(today))
+            assertEquals(3, state.getTotalCountForWeekday(today))
+
+            viewModel.toggleOnlyWatching()
+            val filteredState = viewModel.uiState.first { it.onlyWatching }
+            val currentDayIds = filteredState.currentDaySchedules.map { it.bgmId }
+            assertTrue(currentDayIds.contains(101L))
+            assertTrue(currentDayIds.contains(102L))
+            assertFalse(currentDayIds.contains(103L))
         }
 }

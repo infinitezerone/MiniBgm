@@ -460,8 +460,7 @@ class SubjectDetailViewModel(
         val targetEpisodeIds =
             _uiState.value.episodes
                 .filter { ep ->
-                    val num = if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()
-                    num in 1..targetEpNumber
+                    ep.type == 0 && (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in 1..targetEpNumber
                 }.map { it.id }
 
         viewModelScope.launch {
@@ -474,6 +473,37 @@ class SubjectDetailViewModel(
             result.onError { _, message ->
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
             }
+        }
+    }
+
+    /**
+     * 撤销批量打卡操作，立即乐观回滚本地状态并异步同步至云端。
+     */
+    fun undoMarkWatchedUpTo(
+        previousEpStatus: Int,
+        previousType: Int,
+        undoneEpisodeIds: List<Long>,
+    ) {
+        val currentCollection = _uiState.value.collection
+        val revertedCollection =
+            if (previousType <= 0 && previousEpStatus <= 0) {
+                null
+            } else {
+                currentCollection?.copy(
+                    epStatus = previousEpStatus,
+                    type = if (previousType > 0) previousType else currentCollection.type,
+                )
+            }
+        _uiState.update { it.copy(collection = revertedCollection) }
+
+        viewModelScope.launch {
+            val targetType = if (previousType > 0) CollectionType.fromValue(previousType) else null
+            collectionRepository.revertEpisodesWatched(
+                subjectId = subjectId,
+                targetEpStatus = previousEpStatus,
+                targetType = targetType,
+                undoneEpisodeIds = undoneEpisodeIds,
+            )
         }
     }
 

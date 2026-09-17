@@ -1,0 +1,1447 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Codebase State Canvas</title>
+<style>
+  :root{
+    --bg:#eef0f3; --stage:#f8f9fb; --panel:#ffffff; --ink:#131a22; --ink2:#3d4753;
+    --muted:#6d7887; --line:#e0e4ea; --line2:#eef1f5; --accent:#1f6feb;
+    --app:#5b53d6; --core:#2f6fd0; --feature:#b5670a; --sync:#0f8a78; --other:#6b7280;
+    --p1:#d92d20; --p2:#d97706; --p3:#7c8595;
+    --ui:#7c4dff; --domain:#0e8577; --data:#2f6fd0; --model:#b5670a; --di:#a02f6d;
+    --bg-layer:#5a6473; --test:#6d7887; --other-layer:#98a1b0;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 14px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC","Helvetica Neue",Arial,sans-serif;
+    background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  code,.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+  #app{display:grid;grid-template-rows:52px 1fr;height:100%}
+
+  /* ---------- topbar ---------- */
+  #topbar{display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);z-index:20}
+  .brand{display:flex;align-items:baseline;gap:8px;font-weight:650;letter-spacing:.2px;white-space:nowrap}
+  .brand .dot{width:8px;height:8px;border-radius:2px;background:var(--accent);display:inline-block;transform:translateY(-1px)}
+  .brand .sub{font-weight:450;color:var(--muted);font-size:12px}
+  .search{position:relative;width:280px}
+  .search input{width:100%;height:30px;border:1px solid var(--line);border-radius:7px;padding:0 10px;font:inherit;background:#fbfcfd;outline:none}
+  .search input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px rgba(31,111,235,.10)}
+  .results{position:absolute;top:34px;left:0;right:0;max-height:340px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);display:none}
+  .results.on{display:block}
+  .results .r{padding:6px 10px;cursor:pointer;display:flex;gap:8px;align-items:baseline}
+  .results .r:hover,.results .r.act{background:#f2f6fd}
+  .results .r b{font-weight:600}
+  .results .r .k{color:var(--muted);font-size:11px;margin-left:auto}
+  .layers{display:flex;gap:4px;margin-left:auto}
+  .ltoggle{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border:1px solid var(--line);border-radius:7px;background:#fff;cursor:pointer;font:inherit;color:var(--ink2)}
+  .ltoggle .sw{width:9px;height:9px;border-radius:2px;background:#c9cfd8}
+  .ltoggle[data-on="1"]{border-color:#c8d8f7;background:#f4f8ff;color:var(--ink)}
+  .ltoggle[data-on="1"] .sw{background:var(--accent)}
+  .ltoggle .n{font-size:12px}
+  .meta{color:var(--muted);font-size:11.5px;white-space:nowrap;padding-left:12px;border-left:1px solid var(--line);line-height:1.35;text-align:right}
+
+  /* ---------- layout ---------- */
+  main{display:grid;grid-template-columns:1fr 428px;min-height:0}
+  #stage{position:relative;overflow:hidden;background:var(--stage);min-width:0}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  canvas.drag{cursor:grabbing}
+  .overlay{position:absolute;z-index:5}
+  #crumbs{top:12px;left:12px;display:flex;gap:6px;align-items:center;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:5px 9px;box-shadow:var(--shadow);backdrop-filter:blur(6px)}
+  #crumbs button{all:unset;cursor:pointer;color:var(--accent);font-weight:600}
+  #crumbs button:hover{text-decoration:underline}
+  #crumbs .sep{color:#c4cad3}
+  #crumbs .cur{color:var(--ink);font-weight:600}
+  #hud{bottom:12px;left:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:9px;padding:8px 11px;box-shadow:var(--shadow);min-width:190px;transition:bottom .18s ease}
+  body.strip-on #hud{bottom:80px}
+  #hud .lv{font-weight:650;font-size:12.5px}
+  #hud .lvd{color:var(--muted);font-size:11.5px;margin-top:1px}
+  #hud .zp{margin-top:6px;display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}
+  #hud .zbar{width:80px;height:4px;border-radius:3px;background:#e4e8ee;overflow:hidden}
+  #hud .zbar i{display:block;height:100%;background:var(--accent)}
+  #legend{top:12px;right:12px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:9px;padding:8px 10px;box-shadow:var(--shadow);font-size:11.5px;color:var(--ink2);max-width:230px}
+  #legend .row{display:flex;align-items:center;gap:7px;margin:2px 0}
+  #legend svg{flex:none}
+  #strip{left:12px;right:12px;bottom:12px;height:56px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);display:none;align-items:center;gap:0;padding:0 42px 0 12px;overflow:hidden}
+  #strip.on{display:flex}
+  #strip .cap{writing-mode:vertical-rl;font-size:10.5px;color:var(--muted);padding-right:8px;letter-spacing:1px;flex:none}
+  #strip .track{position:relative;flex:1;height:40px;overflow:hidden}
+  #strip .tick{position:absolute;top:11px;width:9px;height:18px;border-radius:2px;background:#d6dbe3;cursor:pointer;border:1px solid transparent}
+  #strip .tick:hover{background:#b9c4d4}
+  #strip .tick.sel{background:var(--accent)}
+  #strip .tick.dirty{box-shadow:inset 0 -4px 0 #f0b429}
+  #strip .lbl{position:absolute;bottom:0;font-size:10px;color:var(--muted);white-space:nowrap}
+  #warn{top:52px;left:50%;transform:translateX(-50%);background:#fff8e6;border:1px solid #f0d48a;color:#6b4d06;border-radius:8px;padding:7px 12px;font-size:12px;box-shadow:var(--shadow)}
+  #warn.hidden{display:none}
+
+  /* ---------- side panel ---------- */
+  #panel{background:var(--panel);border-left:1px solid var(--line);overflow:auto;min-width:0}
+  .p{padding:14px 16px}
+  .p + .p{border-top:1px solid var(--line2)}
+  h2{margin:0 0 4px;font-size:15px;font-weight:660;letter-spacing:.1px}
+  h3{margin:0 0 8px;font-size:11.5px;font-weight:650;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+  .sub{color:var(--muted);font-size:12px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{font-size:11px;padding:2px 7px;border-radius:5px;background:#f1f3f7;color:var(--ink2);white-space:nowrap}
+  .chip.k{background:#eef4ff;color:#1b4fbc}
+  .pct{height:7px;border-radius:4px;overflow:hidden;display:flex;background:#eef1f5;margin:6px 0 7px}
+  .pct i{display:block;height:100%}
+  .stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat .c{background:#f8fafc;border:1px solid var(--line2);border-radius:8px;padding:7px 9px}
+  .stat .c b{display:block;font-size:16px;font-weight:660;font-variant-numeric:tabular-nums;line-height:1.25}
+  .stat .c span{font-size:10.5px;color:var(--muted)}
+  .ev{font-size:11.5px;color:var(--muted)}
+  .ev .tag{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:4px;margin-right:5px;letter-spacing:.3px;vertical-align:1px}
+  .tag.measured{background:#e6f4ec;color:#1a7f45}
+  .tag.inferred{background:#fdf0e3;color:#a25c07}
+  .tag.missing{background:#f1f3f7;color:#6d7887}
+  .list{list-style:none;margin:0;padding:0}
+  .list li{padding:6px 0;border-bottom:1px solid var(--line2);font-size:12px;display:flex;gap:8px;align-items:baseline}
+  .list li:last-child{border-bottom:0}
+  .list li .nm{font-weight:560;cursor:pointer;color:var(--ink)}
+  .list li .nm:hover{color:var(--accent);text-decoration:underline}
+  .list li .rt{margin-left:auto;color:var(--muted);font-size:11px;text-align:right;white-space:nowrap}
+  .list li.clk{cursor:pointer}
+  .list li.clk:hover{background:#f7f9fc}
+  .badge{font-size:10px;padding:1px 5px;border-radius:4px;background:#eef1f5;color:var(--ink2);white-space:nowrap}
+  .badge.warn{background:#fdecea;color:#b3261e}
+  .badge.ok{background:#e6f4ec;color:#1a7f45}
+  .badge.dash{background:#fff;border:1px dashed #c3c9d4;color:var(--muted)}
+  pre.src{margin:0;background:#fbfcfe;border:1px solid var(--line2);border-radius:8px;max-height:340px;overflow:auto;font:11.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre.src .l{display:flex}
+  pre.src .l>i{flex:none;width:44px;text-align:right;padding-right:9px;color:#aab2bf;user-select:none;background:#f5f7fa;position:sticky;left:0}
+  pre.src .l>span{padding-left:9px;white-space:pre;flex:1}
+  pre.src .l.hit{background:#fff7e0}
+  pre.src .l.hit>i{background:#f7e9c8;color:#8a6d1f}
+  .k{color:#7c4dff}.s{color:#a3301e}.c{color:#77855f;font-style:italic}.a{color:#a02f6d}.n{color:#0e8577}.kw{color:#1b4fbc;font-weight:600}
+  .rowline{display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line2);font-size:12px}
+  .rowline:last-child{border-bottom:0}
+  .rowline .vt{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:4px;flex:none}
+  .vt.p1{background:#fdecea;color:#b3261e}
+  .vt.p2{background:#fff4e5;color:#a25c07}
+  .vt.p3{background:#f1f3f7;color:#6d7887}
+  .btnbar{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+  button.b{font:inherit;font-size:12px;height:28px;padding:0 10px;border:1px solid var(--line);background:#fff;border-radius:7px;cursor:pointer;color:var(--ink2)}
+  button.b:hover{border-color:#c8d8f7;background:#f6f9ff;color:var(--ink)}
+  button.b.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.b.pri:hover{background:#1a63d4}
+  .empty{border:1px dashed #d5dae2;border-radius:8px;padding:10px 12px;background:#fafbfd;font-size:12px;color:var(--ink2)}
+  .empty b{display:block;margin-bottom:3px;color:var(--ink)}
+  .foot{font-size:11px;color:var(--muted);line-height:1.6}
+  a{color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="dot"></span>Codebase State Canvas<span class="sub" id="projName"></span></div>
+    <div class="search">
+      <input id="q" placeholder="搜索模块 / 类 / 函数" autocomplete="off" />
+      <div id="results" class="results"></div>
+    </div>
+    <div class="layers" id="layerBar"></div>
+    <div class="meta" id="scanMeta"></div>
+  </header>
+  <main>
+    <section id="stage">
+      <canvas id="cv"></canvas>
+      <div id="crumbs" class="overlay"></div>
+      <div id="hud" class="overlay"></div>
+      <div id="legend" class="overlay"></div>
+      <div id="strip" class="overlay"></div>
+      <div id="warn" class="overlay hidden"></div>
+    </section>
+    <aside id="panel"></aside>
+  </main>
+</div>
+
+<script src="out/canvas-data.js"></script>
+<script>
+(() => {
+"use strict";
+const D = window.CANVAS_DATA;
+if (!D) {
+  document.body.innerHTML = '<div style="padding:40px;font:14px/1.7 system-ui">' +
+    '<b>没有找到扫描数据</b><br>先在仓库根目录执行：<br>' +
+    '<code style="background:#f1f3f7;padding:2px 6px;border-radius:4px">python3 tools/codebase-canvas/scan.py .</code>' +
+    '<br>然后用本地 HTTP 服务打开本页（源码查看需要 HTTP）：<br>' +
+    '<code style="background:#f1f3f7;padding:2px 6px;border-radius:4px">python3 -m http.server 8765</code> → ' +
+    '<code>http://localhost:8765/tools/codebase-canvas/index.html</code></div>';
+  return;
+}
+
+// ======================= 基础 =======================
+const $ = (s) => document.querySelector(s);
+const clamp = (a, b, c) => Math.max(b, Math.min(c, a));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => (n ?? 0).toLocaleString("en-US");
+
+const MODULES = D.modules;
+const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
+const EDGES = D.edges.filter((e) => BY_ID.has(e.from) && BY_ID.has(e.to));
+const MAIN_EDGES = EDGES.filter((e) => e.scope === "main");
+const TEST_EDGES = EDGES.filter((e) => e.scope === "test");
+
+const ALL_DECLS = [];
+MODULES.forEach((m) => m.declarations.forEach((d) => ALL_DECLS.push(d)));
+ALL_DECLS.sort((a, b) => a.globalIdx - b.globalIdx);
+const DECL_BY_IDX = new Map(ALL_DECLS.map((d) => [d.globalIdx, d]));
+const FILE_BY_PATH = new Map();
+MODULES.forEach((m) => m.files.forEach((f) => { f.module = m.id; FILE_BY_PATH.set(f.path, f); }));
+
+const GROUP_COLOR = { app: "var(--app)", core: "var(--core)", feature: "var(--feature)", sync: "var(--sync)" };
+const COLOR = { app: "#5b53d6", core: "#2f6fd0", feature: "#b5670a", sync: "#0f8a78", other: "#6b7280" };
+const LAYER_COLOR = {
+  UI: "#7c4dff", Domain: "#0e8577", Data: "#2f6fd0", Model: "#b5670a",
+  DI: "#a02f6d", Background: "#5a6473", Test: "#6d7887", Other: "#98a1b0",
+};
+const LAYER_ORDER = ["UI", "Domain", "Data", "Model", "DI", "Background", "Test", "Other"];
+
+const LAYERS = [
+  { id: "structure", name: "结构", desc: "模块 / 包 / 类 / 依赖" },
+  { id: "process", name: "过程", desc: "提交 / 变更 / 工作区" },
+  { id: "evidence", name: "证据", desc: "源码行 / 测试 XML" },
+  { id: "runtime", name: "运行", desc: "真实执行过的痕迹" },
+  { id: "agent", name: "Agent", desc: "AI 工作过程" },
+];
+const on = { structure: 1, process: 1, evidence: 1, runtime: 0, agent: 0 };
+
+// ======================= 布局 =======================
+const layout = { mode: "project", focusModule: null, nodes: [], edges: [], bounds: {} };
+
+function computeProjectLayout() {
+  const deps = new Map(MODULES.map((m) => [m.id, []]));
+  MAIN_EDGES.forEach((e) => { if (deps.has(e.from)) deps.get(e.from).push(e.to); });
+  const memo = new Map();
+  const rankOf = (id) => {
+    if (memo.has(id)) return memo.get(id);
+    memo.set(id, 0); // 环保护
+    let r = 0;
+    (deps.get(id) || []).forEach((t) => { r = Math.max(r, rankOf(t) + 1); });
+    memo.set(id, r);
+    return r;
+  };
+  const ranks = new Map();
+  MODULES.forEach((m) => ranks.set(m.id, rankOf(m.id)));
+  const maxRank = Math.max(...ranks.values());
+
+  const byRank = new Map();
+  MODULES.forEach((m) => {
+    const r = ranks.get(m.id);
+    if (!byRank.has(r)) byRank.set(r, []);
+    byRank.get(r).push(m);
+  });
+
+  const order = { app: 0, feature: 1, sync: 2, core: 3, other: 4 };
+  const orderIdx = new Map();
+
+  // 逐层排序：先用分组+规模定最底层，再自下而上用「依赖在该层的平均位次」做重心排序，
+  // 把交叉边压下去。不做这一步时 6 个 feature 同时指向 5 个 core，连线会糊成一团。
+  for (let r = 0; r <= maxRank; r++) {
+    const list = byRank.get(r) || [];
+    if (r === 0) {
+      list.sort((a, b) => (order[a.group] - order[b.group]) || (b.loc - a.loc));
+    } else {
+      const bary = (m) => {
+        const ds = (deps.get(m.id) || []).filter((t) => orderIdx.has(t));
+        if (!ds.length) return 1e6 + (order[m.group] * 1000 - m.loc);
+        return ds.reduce((s, t) => s + orderIdx.get(t), 0) / ds.length;
+      };
+      list.sort((a, b) => (bary(a) - bary(b)) || (b.loc - a.loc));
+    }
+    list.forEach((m, i) => orderIdx.set(m.id, i));
+  }
+
+  const nodes = [];
+  const nW = (m) => clamp(92 + Math.sqrt(m.loc || 100) * 2.3, 112, 258);
+  const nH = (m) => 62 + Math.min(20, (m.counts.files || 0) * 0.5);
+  for (let r = maxRank; r >= 0; r--) {
+    const list = byRank.get(r) || [];
+    const gapX = 26, gapY = 210;
+    const widths = list.map(nW);
+    const total = widths.reduce((a, b) => a + b, 0) + gapX * Math.max(0, list.length - 1);
+    let x = -total / 2;
+    list.forEach((m, i) => {
+      const w = widths[i], h = nH(m);
+      // rank 越高（依赖越浅）越靠上：:app 在顶，最底层的 :core:model 在下，箭头由上往下指
+      nodes.push({
+        type: "module", ref: m, x, y: -r * gapY - h / 2, w, h,
+        color: COLOR[m.group] || COLOR.other,
+      });
+      x += w + gapX;
+    });
+  }
+
+  const minX = Math.min(...nodes.map((n) => n.x)), maxX = Math.max(...nodes.map((n) => n.x + n.w));
+  const minY = Math.min(...nodes.map((n) => n.y)), maxY = Math.max(...nodes.map((n) => n.y + n.h));
+  const byId = new Map(nodes.map((n) => [n.ref.id, n]));
+  const edges = MAIN_EDGES.concat(TEST_EDGES)
+    .map((e) => ({ ref: e, a: byId.get(e.from), b: byId.get(e.to) }))
+    .filter((e) => e.a && e.b);
+
+  layout.mode = "project";
+  layout.focusModule = null;
+  layout.nodes = nodes;
+  layout.edges = edges;
+  layout.bounds = { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+function computeDetailLayout(mod) {
+  const byLayer = new Map();
+  mod.declarations.forEach((d) => {
+    if (!byLayer.has(d.layer)) byLayer.set(d.layer, []);
+    byLayer.get(d.layer).push(d);
+  });
+  const layers = LAYER_ORDER.filter((l) => byLayer.has(l));
+
+  const nodes = [];
+  const colW = 232, colGap = 18, rowGap = 54;
+  const perRow = Math.min(4, Math.max(1, layers.length));
+  const chunks = [];
+  for (let i = 0; i < layers.length; i += perRow) chunks.push(layers.slice(i, i + perRow));
+
+  let rowTop = 104;
+  chunks.forEach((chunk) => {
+    const rowWidth = chunk.length * colW + (chunk.length - 1) * colGap;
+    const x0 = -rowWidth / 2;
+    let rowHeight = 0;
+    chunk.forEach((L, ci) => {
+      const x = x0 + ci * (colW + colGap);
+      let y = 0;
+      nodes.push({ type: "layerhead", x, y: rowTop + y, w: colW, h: 20, layer: L, count: byLayer.get(L).length });
+      y += 28;
+      const groups = new Map();
+      byLayer.get(L).forEach((d) => {
+        if (!groups.has(d.file)) groups.set(d.file, []);
+        groups.get(d.file).push(d);
+      });
+      [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([file, ds]) => {
+        nodes.push({ type: "file", x, y: rowTop + y, w: colW, h: 20, file, label: file.split("/").pop() });
+        y += 24;
+        ds.sort((a, b) => a.line - b.line).forEach((d) => {
+          nodes.push({ type: "decl", x, y: rowTop + y, w: colW, h: 25, ref: d });
+          y += 29;
+        });
+        y += 8;
+      });
+      rowHeight = Math.max(rowHeight, y);
+    });
+    rowTop += rowHeight + rowGap;
+  });
+
+  // 焦点模块卡
+  const card = { type: "module", ref: mod, x: -170, y: -58, w: 340, h: 56, color: COLOR[mod.group] || COLOR.other };
+  nodes.push(card);
+
+  // 上下游模块分列两侧，避免与焦点卡重叠
+  const outs = MAIN_EDGES.filter((e) => e.from === mod.id);
+  const ins = MAIN_EDGES.filter((e) => e.to === mod.id);
+  const sideW = 200;
+  const place = (list, dir) => {
+    const listH = list.length * 76;
+    let y = -listH / 2;
+    const x = dir < 0 ? -170 - 130 - sideW : 170 + 130;
+    return list.map((e) => {
+      const other = BY_ID.get(dir < 0 ? e.to : e.from);
+      const n = {
+        type: "side", ref: other, x, y, w: sideW, h: 48,
+        color: COLOR[other.group] || COLOR.other, scope: e.scope, evidence: e.evidence, origin: e.origin,
+      };
+      y += 76;
+      return n;
+    });
+  };
+  const sideNodes = place(outs, -1).concat(place(ins, 1));
+  sideNodes.forEach((n) => nodes.push(n));
+
+  const minX = Math.min(...nodes.map((n) => n.x)), maxX = Math.max(...nodes.map((n) => n.x + n.w));
+  const minY = Math.min(...nodes.map((n) => n.y)), maxY = Math.max(...nodes.map((n) => n.y + n.h));
+
+  const edges = MAIN_EDGES.concat(TEST_EDGES).map((e) => {
+    const from = e.from === mod.id ? card : sideNodes.find((n) => n.ref.id === e.from);
+    const to = e.to === mod.id ? card : sideNodes.find((n) => n.ref.id === e.to);
+    return { ref: e, a: from, b: to };
+  }).filter((e) => e.a && e.b);
+
+  layout.mode = "detail";
+  layout.focusModule = mod;
+  layout.nodes = nodes;
+  layout.edges = edges;
+  layout.bounds = { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+// 变更热度用相对最大值归一，避免「所有模块都热」的噪声
+const MAX_C90 = Math.max(1, ...MODULES.map((m) => (m.git ? m.git.commits90d : 0)));
+
+// ======================= 相机 =======================
+const cam = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0, anim: 0 };
+const cv = $("#cv"), ctx = cv.getContext("2d");
+let dpr = 1, vw = 0, vh = 0;
+
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  vw = r.width; vh = r.height;
+  cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+}
+function fit(b, pad = 70, maxS = 1.1) {
+  if (!b || !vw) return;
+  // 底部时间轴打开时会盖住画布下沿，适应窗口必须把它算进可视高度，否则内容被压在栏下
+  const bottomPad = on.process ? 68 : 0;
+  const sx = (vw - pad * 2) / b.w, sy = (vh - pad * 2 - bottomPad) / b.h;
+  const s = clamp(Math.min(sx, sy), 0.2, maxS);
+  cam.ts = s;
+  cam.tx = vw / 2 - (b.minX + b.w / 2) * s;
+  cam.ty = (vh - bottomPad) / 2 - (b.minY + b.h / 2) * s;
+  cam.anim = 1;
+}
+const S = (wx) => wx * cam.s + cam.x;
+const T = (wy) => wy * cam.s + cam.y;
+const W = (sx) => (sx - cam.x) / cam.s;
+const WT = (sy) => (sy - cam.y) / cam.s;
+
+function tick() {
+  cam.s += (cam.ts - cam.s) * 0.16;
+  cam.x += (cam.tx - cam.x) * 0.16;
+  cam.y += (cam.ty - cam.y) * 0.16;
+  if (Math.abs(cam.ts - cam.s) < 1e-4) { cam.s = cam.ts; cam.x = cam.tx; cam.y = cam.ty; cam.anim = 0; }
+  else cam.anim = 1;
+  // HUD 显示当前缩放与语义层级，动画过程中也要跟着走，否则数字会停在旧值
+  if (Math.abs(cam.s - lastHudScale) > 0.008 || levelInfo().n !== lastHudLevel) {
+    lastHudScale = cam.s;
+    lastHudLevel = levelInfo().n;
+    updateHud();
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+let lastHudScale = -1, lastHudLevel = "";
+
+function zoomAt(sx, sy, factor) {
+  const ns = clamp(cam.ts * factor, 0.18, 3.2);
+  const wx = (sx - cam.tx) / cam.ts, wy = (sy - cam.ty) / cam.ts;
+  cam.ts = ns;
+  cam.tx = sx - wx * ns; cam.ty = sy - wy * ns;
+  cam.anim = 1;
+  updateHud();
+}
+
+// ======================= 状态 =======================
+const sel = { module: null, decl: null, commit: null, hover: null, activeLayers: new Set() };
+
+function moduleColor(m) { return COLOR[m.group] || COLOR.other; }
+function nodeAt(sx, sy) {
+  const wx = W(sx), wy = WT(sy);
+  for (let i = layout.nodes.length - 1; i >= 0; i--) {
+    const n = layout.nodes[i];
+    if (wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + n.h) return n;
+  }
+  return null;
+}
+
+// ======================= 绘制 =======================
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+const trunc = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, vw, vh);
+  ctx.fillStyle = "#f8f9fb";
+  ctx.fillRect(0, 0, vw, vh);
+
+  // 网格
+  if (cam.s > 0.34) {
+    const step = 40;
+    ctx.strokeStyle = "#e7eaef"; ctx.lineWidth = 1;
+    const x0 = Math.floor(W(0) / step) * step, x1 = W(vw);
+    const y0 = Math.floor(WT(0) / step) * step, y1 = WT(vh);
+    ctx.beginPath();
+    for (let x = x0; x < x1; x += step) { ctx.moveTo(Math.round(S(x)) + .5, 0); ctx.lineTo(Math.round(S(x)) + .5, vh); }
+    for (let y = y0; y < y1; y += step) { ctx.moveTo(0, Math.round(T(y)) + .5); ctx.lineTo(vw, Math.round(T(y)) + .5); }
+    ctx.stroke();
+  }
+
+  const selId = sel.module ? sel.module.id : null;
+  const hotCommit = sel.commit;
+
+  // 边
+  layout.edges.forEach((e) => {
+    const test = e.ref.scope === "test";
+    const conv = e.ref.origin === "convention";
+    const related = selId && (e.ref.from === selId || e.ref.to === selId);
+    if (!on.structure && !related) return;
+    const ax = S(e.a.x + e.a.w / 2), ay = T(e.a.y + e.a.h / 2);
+    const bx = S(e.b.x + e.b.w / 2), by = T(e.b.y + e.b.h / 2);
+    const vertical = Math.abs(e.a.y - e.b.y) > 40;
+    ctx.save();
+    if (test) { ctx.setLineDash([4, 3]); ctx.lineWidth = 1; }
+    else if (conv) { ctx.setLineDash([7, 4]); ctx.lineWidth = 1.4; }
+    else ctx.lineWidth = 1.6;
+    ctx.strokeStyle = related ? "rgba(31,111,235,.75)" : test ? "#cbd2dc" : conv ? "#a8b3c4" : "#9aa5b5";
+    if (!on.structure) ctx.strokeStyle = "rgba(200,206,215,.4)";
+    ctx.beginPath();
+    if (vertical) {
+      const my = (ay + by) / 2;
+      ctx.moveTo(ax, ay); ctx.bezierCurveTo(ax, my, bx, my, bx, by);
+    } else {
+      const mx = (ax + bx) / 2;
+      ctx.moveTo(ax, ay); ctx.bezierCurveTo(mx, ay, mx, by, bx, by);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 箭头
+    const ang = vertical ? (by < ay ? -Math.PI / 2 : Math.PI / 2) : (bx < ax ? Math.PI : 0);
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx - 7 * Math.cos(ang - 0.42), by - 7 * Math.sin(ang - 0.42));
+    ctx.lineTo(bx - 7 * Math.cos(ang + 0.42), by - 7 * Math.sin(ang + 0.42));
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    if (on.structure && cam.s > 0.95 && !test) {
+      ctx.fillStyle = "#8b95a3";
+      ctx.font = "10px ui-monospace,Menlo,monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(conv ? "convention" : e.ref.declaration.replace("Implementation", "Impl"),
+        (ax + bx) / 2, (ay + by) / 2 - 3);
+    }
+  });
+
+  const lvl = levelInfo();
+  layout.nodes.forEach((n) => {
+    const isSel = (n.ref && (n.ref.id === selId || n.ref === sel.decl)) ||
+      (n.type === "decl" && sel.decl && n.ref === sel.decl);
+    const dim = (selId && n.ref && n.ref.id && n.ref.id !== selId && n.type === "module") ||
+      (hotCommit && n.ref && n.ref.id && !(hotCommit._mods || []).includes(n.ref.id) && n.type === "module");
+    ctx.save();
+    ctx.globalAlpha = dim ? 0.28 : 1;
+    if (n.type === "module") drawModule(n, isSel, lvl);
+    else if (n.type === "decl") drawDeclChip(n, isSel);
+    else if (n.type === "file") drawFileChip(n);
+    else if (n.type === "side") drawSide(n);
+    else if (n.type === "layerhead") drawLayerHead(n);
+    ctx.restore();
+  });
+}
+
+function drawModule(n, isSel, lvl) {
+  const m = n.ref;
+  const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
+  const r = Math.min(10, 8 * cam.s);
+  ctx.shadowColor = "rgba(16,24,40,.08)"; ctx.shadowBlur = isSel ? 14 : 6; ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#fff";
+  roundRect(x, y, w, h, r); ctx.fill();
+  ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = isSel ? "#1f6feb" : "#e3e7ec";
+  ctx.lineWidth = isSel ? 2 : 1;
+  roundRect(x, y, w, h, r); ctx.stroke();
+  // 左侧色条
+  ctx.save();
+  roundRect(x, y, w, h, r); ctx.clip();
+  ctx.fillStyle = n.color;
+  ctx.fillRect(x, y, Math.max(3, 4 * cam.s), h);
+  ctx.restore();
+
+  if (cam.s < 0.42) { return; }
+  ctx.fillStyle = "#131a22";
+  ctx.font = `600 ${clamp(11 + cam.s * 2.4, 10, 14)}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.textAlign = "left";
+  ctx.fillText(trunc(m.name, 22), x + 12, y + 20);
+  ctx.fillStyle = "#8b95a3";
+  ctx.font = `10px ui-monospace,Menlo,monospace`;
+  ctx.fillText(m.id, x + 12, y + 34);
+
+  if (cam.s > 0.62) {
+    ctx.fillStyle = "#5c6675";
+    ctx.font = `10px -apple-system,sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillText(`${fmt(m.loc)} 行 · ${m.counts.files} 文件`, x + w - 10, y + 34);
+  }
+  // L2 语义：层分布条贴在底部分隔线之上
+  if (cam.s > 1.05 && m.declarations.length) {
+    const counts = {};
+    m.declarations.forEach((d) => { counts[d.layer] = (counts[d.layer] || 0) + 1; });
+    const total = m.declarations.length;
+    let cx = x + 12;
+    const bw = w - 24, by = y + h - 28;
+    LAYER_ORDER.forEach((L) => {
+      if (!counts[L]) return;
+      const cw = (counts[L] / total) * bw;
+      ctx.fillStyle = LAYER_COLOR[L];
+      ctx.fillRect(cx, by, Math.max(1.5, cw - 1), 4);
+      cx += cw;
+    });
+  }
+  // 底部分隔线 + 底行：左侧「规模/扇入扇出」或「最近真实执行时间」，右侧测试证据
+  if (cam.s > 0.8) {
+    ctx.strokeStyle = "#eef1f5"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 10, y + h - 20); ctx.lineTo(x + w - 10, y + h - 20); ctx.stroke();
+    const ran = on.runtime
+      ? (m.testResults || []).filter((t) => t.ranAt).map((t) => t.ranAt).sort().pop()
+      : null;
+    ctx.textAlign = "left";
+    if (ran) {
+      ctx.fillStyle = "#0e8577";
+      ctx.font = `10px ui-monospace,Menlo,monospace`;
+      ctx.fillText("▷ " + ran, x + 12, y + h - 8);
+    } else {
+      ctx.fillStyle = "#8b95a3";
+      ctx.font = `10px ui-monospace,Menlo,monospace`;
+      ctx.fillText(`${m.counts.declarations} 声明 · ↓${m.fanOut} ↑${m.fanIn}`, x + 12, y + h - 8);
+    }
+  }
+
+  // 过程层：未提交文件（角标）+ 变更热度（比例环，而不是绝对阈值，避免一片橙色）
+  if (on.process && m.git) {
+    if (m.git.dirty && m.git.dirty.length) {
+      ctx.fillStyle = "#f0b429";
+      ctx.beginPath(); ctx.arc(x + w - 12, y + 11, 4, 0, 7); ctx.fill();
+      ctx.save();
+      roundRect(x, y, w, h, r); ctx.clip();
+      ctx.fillStyle = "#f0b429"; ctx.fillRect(x, y, w, 2);
+      ctx.restore();
+    }
+    const c90 = m.git.commits90d || 0;
+    const heat = MAX_C90 ? c90 / MAX_C90 : 0;
+    if (heat > 0.45 && cam.s > 0.7) {
+      ctx.strokeStyle = `rgba(210,120,20,${clamp(heat * 0.45, 0.15, 0.4)})`;
+      ctx.lineWidth = clamp(heat * 9, 2, 8);
+      roundRect(x - 5, y - 5, w + 10, h + 10, r + 5); ctx.stroke();
+    }
+  }
+
+  // L2 语义：层分布条
+  if (cam.s > 1.05 && m.declarations.length) {
+    const counts = {};
+    m.declarations.forEach((d) => { counts[d.layer] = (counts[d.layer] || 0) + 1; });
+    const total = m.declarations.length;
+    const bx = x + 12, bw = w - 24, by = y + h - 22 * clamp(cam.s, 1, 1.4);
+    let cx = bx;
+    ctx.save();
+    LAYER_ORDER.forEach((L) => {
+      if (!counts[L]) return;
+      const cw = (counts[L] / total) * bw;
+      ctx.fillStyle = LAYER_COLOR[L];
+      ctx.fillRect(cx, by, Math.max(1.5, cw - 1), 5);
+      cx += cw;
+    });
+    ctx.restore();
+  }
+
+  // 过程层：脏文件 + 变更热度
+  if (on.process && m.git) {
+    if (m.git.dirty && m.git.dirty.length) {
+      ctx.fillStyle = "#f0b429";
+      ctx.beginPath(); ctx.arc(x + w - 12, y + 12, 4.5, 0, 7); ctx.fill();
+      if (cam.s > 0.8) {
+        ctx.fillStyle = "#a25c07"; ctx.font = "10px -apple-system,sans-serif"; ctx.textAlign = "right";
+        ctx.fillText(`${m.git.dirty.length} 个未提交`, x + w - 22, y + 16);
+      }
+    }
+    const c90 = m.git.commits90d || 0;
+    if (c90 >= 8) {
+      ctx.strokeStyle = "rgba(210,120,20,.35)";
+      ctx.lineWidth = clamp(c90 / 6, 2, 7);
+      roundRect(x - 4, y - 4, w + 8, h + 8, r + 4); ctx.stroke();
+    }
+  }
+
+  // 证据层：测试证据徽标（固定在底部右侧，与左侧规模文字同一行，互不遮盖）
+  if (on.evidence && cam.s > 0.8) {
+    const tr = (m.testResults || []).filter((t) => !t.empty);
+    const cases = tr.reduce((a, b) => a + b.cases, 0);
+    const fails = tr.reduce((a, b) => a + b.failures + b.errors, 0);
+    ctx.textAlign = "right";
+    ctx.font = "10px ui-monospace,Menlo,monospace";
+    if (!m.testResults || !m.testResults.length) {
+      ctx.fillStyle = "#8b95a3";
+      ctx.fillText("无执行证据", x + w - 12, y + h - 8);
+    } else if (cases === 0) {
+      ctx.fillStyle = "#d92d20";
+      ctx.fillText("0 用例", x + w - 12, y + h - 8);
+    } else {
+      ctx.fillStyle = fails ? "#d92d20" : "#1a7f45";
+      ctx.fillText(`${cases} 用例通过`, x + w - 12, y + h - 8);
+    }
+  }
+
+  // 运行层：只有 test-results 存在时才画，且已并入底行，避免与模块 id 挤在一起
+
+  // Agent 层：被 agent trace 触碰过的模块
+  if (on.agent && AGENT && AGENT.modules && AGENT.modules.includes(m.id)) {
+    ctx.strokeStyle = "#7c4dff"; ctx.lineWidth = 2; ctx.setLineDash([2, 3]);
+    roundRect(x - 7, y - 7, w + 14, h + 14, r + 6); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+function drawDeclChip(n, isSel) {
+  const d = n.ref;
+  const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
+  if (y + h < -20 || y > vh + 20 || x + w < -20 || x > vw + 20) return;
+  ctx.fillStyle = isSel ? "#eef4ff" : "#fff";
+  roundRect(x, y, w, h, 6); ctx.fill();
+  ctx.strokeStyle = isSel ? "#1f6feb" : "#e6e9ee"; ctx.lineWidth = isSel ? 1.6 : 1; ctx.stroke();
+  ctx.fillStyle = LAYER_COLOR[d.layer] || "#98a1b0";
+  roundRect(x, y, 3, h, 1.5); ctx.fill();
+  ctx.fillStyle = "#131a22";
+  ctx.font = `${clamp(9.5 + cam.s * 1.4, 9.5, 12)}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.textAlign = "left";
+  ctx.fillText(trunc(d.name, cam.s > 0.8 ? 30 : 20), x + 9, y + h / 2 + 4);
+  if (cam.s > 0.62) {
+    ctx.fillStyle = "#8b95a3"; ctx.font = "9.5px ui-monospace,Menlo,monospace"; ctx.textAlign = "right";
+    ctx.fillText(d.isTest ? "test" : d.kind, x + w - 7, y + h / 2 + 3.5);
+  }
+  if (on.process) {
+    const f = FILE_BY_PATH.get(d.file);
+    if (f && f.lastCommit) {
+      ctx.fillStyle = "rgba(240,180,41,.85)";
+      ctx.beginPath(); ctx.arc(x + w - 3, y + 4, 2.4, 0, 7); ctx.fill();
+    }
+  }
+}
+
+function drawFileChip(n) {
+  const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
+  ctx.fillStyle = "#f4f6fa";
+  roundRect(x, y, w, h, 5); ctx.fill();
+  ctx.strokeStyle = "#e2e6ec"; ctx.setLineDash([3, 3]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = "#5c6675";
+  ctx.font = `${clamp(9.5 + cam.s * 1.2, 9.5, 11.5)}px ui-monospace,Menlo,monospace`;
+  ctx.textAlign = "left";
+  ctx.fillText(trunc(n.label, cam.s > 0.7 ? 30 : 18), x + 8, y + h / 2 + 3.5);
+}
+
+function drawLayerHead(n) {
+  const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
+  ctx.fillStyle = LAYER_COLOR[n.layer] || "#98a1b0";
+  ctx.fillRect(x, y + h - 2, w, 2);
+  ctx.font = `700 ${clamp(10 + cam.s * 2, 10, 13)}px -apple-system,"PingFang SC",sans-serif`;
+  ctx.textAlign = "left";
+  ctx.fillText(n.layer.toUpperCase(), x, y + h - 7);
+  ctx.fillStyle = "#8b95a3"; ctx.font = "10px ui-monospace,Menlo,monospace";
+  ctx.fillText(String(n.count), x + ctx.measureText(n.layer.toUpperCase()).width + 26, y + h - 7);
+}
+
+function drawSide(n) {
+  const m = n.ref;
+  const x = S(n.x), y = T(n.y), w = n.w * cam.s, h = n.h * cam.s;
+  ctx.fillStyle = "#fff";
+  roundRect(x, y, w, h, 7); ctx.fill();
+  ctx.strokeStyle = n.scope === "test" ? "#cfd5de" : "#e3e7ec";
+  ctx.setLineDash(n.scope === "test" ? [4, 3] : n.origin === "convention" ? [7, 4] : []);
+  ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = n.color; roundRect(x, y, 3, h, 1.5); ctx.fill();
+  ctx.fillStyle = "#131a22"; ctx.font = `600 ${clamp(11 + cam.s, 10, 13)}px -apple-system,sans-serif`;
+  ctx.textAlign = "left";
+  ctx.fillText(m.name, x + 11, y + 19);
+  ctx.fillStyle = "#8b95a3"; ctx.font = "10px ui-monospace,Menlo,monospace";
+  ctx.fillText(`${n.origin === "convention" ? "隐式 " : ""}${n.scope === "test" ? "test" : "main"}`, x + 11, y + 34);
+}
+
+// ======================= 层级 / HUD =======================
+function levelInfo() {
+  if (layout.mode === "project") {
+    if (cam.s < 0.72) return { n: "L1", t: "项目全景", d: "系统边界、核心模块、整体依赖" };
+    return { n: "L2", t: "模块与业务流程", d: "模块责任、依赖方向、层分布" };
+  }
+  if (sel.decl) return { n: "L4", t: "单个执行过程", d: "一条链路：调用者 → 本声明 → 被调用" };
+  if (cam.s < 0.85) return { n: "L3", t: "模块概览", d: "该模块的层与文件构成" };
+  return { n: "L3", t: "文件、类和函数", d: "文件分组、声明清单、行号" };
+}
+function updateHud() {
+  const l = levelInfo();
+  const pctS = ((Math.log(cam.s) - Math.log(0.18)) / (Math.log(3.2) - Math.log(0.18))) * 100;
+  $("#hud").innerHTML =
+    `<div class="lv">${l.n} · ${esc(l.t)}</div><div class="lvd">${esc(l.d)}</div>` +
+    `<div class="zp"><div class="zbar"><i style="width:${clamp(pctS, 2, 100)}%"></i></div>` +
+    `<span>×${cam.s.toFixed(2)}</span><span style="margin-left:auto">${layout.nodes.length} 节点</span></div>`;
+  drawCrumbs();
+}
+function drawCrumbs() {
+  const c = $("#crumbs");
+  if (layout.mode === "project") {
+    c.innerHTML = `<span class="cur">项目全景</span><span class="sep">·</span>` +
+      `<span class="sub">${MODULES.length} 个模块 · 点击模块下钻</span>`;
+  } else {
+    c.innerHTML = `<button id="croot">项目全景</button><span class="sep">›</span>` +
+      `<span class="cur">${esc(layout.focusModule.id)}</span>` +
+      (sel.decl ? `<span class="sep">›</span><span class="cur">${esc(sel.decl.name)}</span>` : "");
+    $("#croot").onclick = exitDetail;
+  }
+}
+
+// ======================= 面板 =======================
+const pctBar = (m) => {
+  const counts = {};
+  m.declarations.forEach((d) => { counts[d.layer] = (counts[d.layer] || 0) + 1; });
+  const total = m.declarations.length || 1;
+  const seg = LAYER_ORDER.filter((L) => counts[L]).map((L) =>
+    `<i style="width:${(counts[L] / total) * 100}%;background:${LAYER_COLOR[L]}" title="${L} ${counts[L]}"></i>`).join("");
+  const keys = LAYER_ORDER.filter((L) => counts[L]).map((L) =>
+    `<span class="chip" style="border-left:3px solid ${LAYER_COLOR[L]}">${L} ${counts[L]}</span>`).join("");
+  return `<div class="pct">${seg}</div><div class="chips">${keys}</div>`;
+};
+
+function modulePanel(m, opts = {}) {
+  const outs = MAIN_EDGES.filter((e) => e.from === m.id);
+  const outsTest = TEST_EDGES.filter((e) => e.from === m.id);
+  const ins = MAIN_EDGES.filter((e) => e.to === m.id);
+  const tr = m.testResults || [];
+  const cases = tr.filter((t) => !t.empty).reduce((a, b) => a + b.cases, 0);
+  const fails = tr.reduce((a, b) => a + b.failures + b.errors, 0);
+
+  return `
+  <div class="p">
+    <h2>${esc(m.id)}</h2>
+    <div class="sub">${esc(m.type)} · <span class="mono">${esc(m.namespace || "-")}</span></div>
+    <div class="btnbar">
+      <button class="b pri" id="enter">展开到声明层</button>
+      <button class="b" id="focusEdges">高亮依赖</button>
+      <button class="b" id="copyPath">复制模块路径</button>
+    </div>
+  </div>
+
+  <div class="p">
+    <h3>结构层 · 构成</h3>
+    <div class="stat">
+      <div class="c"><b>${fmt(m.loc)}</b><span>有效代码行</span></div>
+      <div class="c"><b>${m.counts.files}</b><span>文件（主 ${m.counts.mainFiles} / 测 ${m.counts.testFiles}）</span></div>
+      <div class="c"><b>${m.counts.declarations}</b><span>顶层声明</span></div>
+    </div>
+    <div style="margin-top:10px">${pctBar(m)}</div>
+    <dl class="kv" style="margin-top:10px">
+      <dt>依赖（出）</dt><dd>${m.fanOut} 个模块</dd>
+      <dt>被依赖（入）</dt><dd>${m.fanIn} 个模块</dd>
+      <dt>应用的 plugin</dt><dd class="mono" style="font-size:11px">${(m.plugins || []).map(esc).join(", ") || "-"}</dd>
+    </dl>
+    <div class="hint"><span class="tag measured">实测</span>build 文件与 convention plugin 解析结果</div>
+  </div>
+
+  <div class="p">
+    <h3>结构层 · 依赖边（带证据）</h3>
+    ${outs.length === 0 ? '<div class="empty">该模块没有显式生产依赖</div>' : ""}
+    <ul class="list">
+      ${outs.map((e) => `<li data-goto="${esc(e.to)}">
+        <span class="nm">${esc(BY_ID.get(e.to) ? BY_ID.get(e.to).name : e.to)}</span>
+        <span class="badge ${e.origin === "convention" ? "dash" : ""}">${e.origin === "convention" ? "隐式" : esc(e.declaration)}</span>
+        <span class="rt mono" style="font-size:10.5px">${esc(e.evidence)}</span></li>`).join("")}
+    </ul>
+    ${outsTest.length ? `<div class="hint" style="margin-top:8px">测试作用域：${outsTest.map((e) => esc(e.to)).join(", ")}</div>` : ""}
+    <div style="margin-top:12px">
+      <h3>被谁依赖</h3>
+      <ul class="list">
+        ${ins.length ? ins.map((e) => `<li data-goto="${esc(e.from)}">
+          <span class="nm">${esc(BY_ID.get(e.from) ? BY_ID.get(e.from).name : e.from)}</span>
+          <span class="rt mono" style="font-size:10.5px">${esc(e.evidence)}</span></li>`).join("")
+        : '<li><span class="sub">没有模块依赖它</span></li>'}
+      </ul>
+    </div>
+  </div>
+
+  <div class="p">
+    <h3>证据层 · 测试执行证据</h3>
+    ${tr.length === 0
+      ? `<div class="empty"><b>没有 build/test-results 记录</b>该模块从未在本机跑出测试结果 —— BUILD SUCCESSFUL 不等于测过。</div>`
+      : tr.map((t) => `<div class="rowline">
+          <span class="vt ${t.empty ? "p1" : t.failures + t.errors ? "p1" : "p3"}">${t.empty ? "0 用例" : t.failures + t.errors ? "失败" : "通过"}</span>
+          <span class="mono" style="font-size:11px">${esc(t.task)}</span>
+          <span style="margin-left:auto" class="mono">${t.cases} 用例 · ${t.failures + t.errors} 失败</span>
+        </div>
+        <div class="ev" style="margin:4px 0 8px"><span class="tag measured">实测</span>
+          <span class="mono">${esc(t.evidence)}/*.xml</span> · ${t.suites} 个测试类 · 最近执行 ${esc(t.ranAt || "-")}</div>`).join("")}
+    <div class="hint">合计 ${cases} 个用例通过，${fails} 个失败。数据直接读自 Gradle 的 TEST-*.xml，不是估算。</div>
+  </div>
+
+  <div class="p">
+    <h3>过程层 · 变更</h3>
+    <dl class="kv">
+      <dt>提交数（HEAD 可达）</dt><dd>${m.git ? fmt(m.git.commits) : "-"}</dd>
+      <dt>近 90 天提交</dt><dd>${m.git ? m.git.commits90d : "-"}</dd>
+      <dt>最后一次变更</dt><dd>${m.git && m.git.last ? esc(m.git.last.date) : "-"}</dd>
+    </dl>
+    ${m.git && m.git.last ? `<div class="ev" style="margin-top:6px"><span class="tag measured">实测</span>
+      <span class="mono">${esc(m.git.last.hash)}</span> ${esc(m.git.last.subject)}</div>` : ""}
+    ${m.git && m.git.dirty.length ? `<div style="margin-top:8px"><b style="font-size:12px">工作区未提交（${m.git.dirty.length}）</b>
+      <ul class="list">${m.git.dirty.slice(0, 8).map((d) => `<li><span class="badge warn">${esc(d.code)}</span>
+        <span class="mono" style="font-size:10.5px">${esc(d.path.split("/").slice(-1)[0])}</span>
+        <span class="rt mono" style="font-size:10px">${esc(d.path.split("/").slice(0, -1).join("/"))}</span></li>`).join("")}</ul>
+      ${m.git.dirty.length > 8 ? `<div class="hint">还有 ${m.git.dirty.length - 8} 个文件…</div>` : ""}</div>`
+      : '<div class="hint">工作区干净</div>'}
+  </div>
+
+  <div class="p">
+    <h3>运行状态层</h3>
+    ${renderRuntime(m)}
+  </div>
+
+  <div class="p">
+    <h3>AI 工作层</h3>
+    ${renderAgent(m)}
+  </div>`;
+}
+
+function declPanel(d) {
+  const callers = ALL_DECLS.filter((x) => (x.callees || []).includes(d.globalIdx));
+  const callees = (d.callees || []).map((i) => DECL_BY_IDX.get(i)).filter(Boolean);
+  const testCallers = callers.filter((c) => c.isTest);
+  const f = FILE_BY_PATH.get(d.file);
+  const mod = BY_ID.get(d.module);
+  return `
+  <div class="p">
+    <h2>${esc(d.name)}</h2>
+    <div class="sub"><span class="chip" style="border-left:3px solid ${LAYER_COLOR[d.layer] || "#98a1b0"}">${esc(d.layer)}</span>
+      ${esc(d.kind)}${d.composable ? " · @Composable" : ""}${d.isTest ? " · 测试代码" : ""}</div>
+    <div class="ev mono" style="margin-top:6px">${esc(d.file)}:${d.line}</div>
+    <div class="btnbar">
+      <button class="b" id="backMod">← ${esc(mod ? mod.name : "")}</button>
+      <button class="b" id="openSrc">在面板查看源码</button>
+      <button class="b" id="copyRef">复制引用</button>
+    </div>
+  </div>
+
+  <div class="p">
+    <h3>证据层 · 源码</h3>
+    <pre class="src" id="src"><div class="l"><i></i><span class="c">加载中…</span></div></pre>
+    <div class="hint" id="srcHint"><span class="tag measured">实测</span>直接读取磁盘上的 ${esc(d.file)}</div>
+  </div>
+
+  <div class="p">
+    <h3>L4 · 静态调用链</h3>
+    <div class="ev"><span class="tag inferred">推断</span>按符号名在函数体内解析得到，不是运行时追踪；
+      同名遮蔽、扩展函数、反射调用会漏。</div>
+    <div style="margin-top:10px"><b style="font-size:12px">被这些声明引用（${callers.length}）</b>
+      <ul class="list">${callers.length ? callers.slice(0, 14).map((c) =>
+        `<li class="clk" data-decl="${c.globalIdx}"><span class="nm">${esc(c.name)}</span>
+         ${c.isTest ? '<span class="badge ok">测试引用</span>' : ""}
+         <span class="rt mono" style="font-size:10px">${esc(c.file.split("/").pop())}:${c.line}</span></li>`).join("")
+        : '<li><span class="sub">没有其他声明引用它</span></li>'}</ul></div>
+    <div style="margin-top:12px"><b style="font-size:12px">它引用了（${(d.calleeCount || 0)}）</b>
+      <ul class="list">${callees.length ? callees.map((c) =>
+        `<li class="clk" data-decl="${c.globalIdx}"><span class="nm">${esc(c.name)}</span>
+         <span class="badge">${esc(c.module)}</span>
+         <span class="rt mono" style="font-size:10px">:${c.line}</span></li>`).join("")
+        : '<li><span class="sub">没有解析出内部引用（可能是叶子实现或纯 UI）</span></li>'}</ul></div>
+    ${testCallers.length ? `<div class="hint">有 ${testCallers.length} 个测试声明引用了它：${testCallers.slice(0, 5).map((t) => esc(t.name)).join("、")}</div>`
+      : `<div class="hint">没有任何测试声明引用它 —— 这不代表没被测，但静态引用里看不到测试。</div>`}
+  </div>
+
+  <div class="p">
+    <h3>过程层 · 本文件最后一次变更</h3>
+    ${f && f.lastCommit ? `<div class="ev"><span class="tag measured">实测</span>
+      <span class="mono">${esc(f.lastCommit.hash)}</span> · ${esc(f.lastCommit.date)} · ${esc(f.lastCommit.author)}<br>
+      ${esc(f.lastCommit.subject)}</div>`
+      : '<div class="ev">该文件在最近 600 个提交里没有记录</div>'}
+    <dl class="kv" style="margin-top:8px">
+      <dt>文件规模</dt><dd>${f ? f.loc : "-"} 行 / ${f ? f.declCount : "-"} 个顶层声明</dd>
+      <dt>源集</dt><dd class="mono">${f ? esc(f.srcSet) : "-"}</dd>
+    </dl>
+  </div>`;
+}
+
+function overviewPanel() {
+  const s = D.stats;
+  const findings = D.findings || [];
+  const groups = {};
+  MODULES.forEach((m) => {
+    groups[m.group] = groups[m.group] || { n: 0, loc: 0 };
+    groups[m.group].n++; groups[m.group].loc += m.loc;
+  });
+  return `
+  <div class="p">
+    <h2>${esc(D.meta.project)} · Codebase State Canvas</h2>
+    <div class="sub">HEAD <span class="mono">${esc(D.meta.head)}</span> · ${esc(D.meta.branch)} ·
+      分支上还有 <b>${s.dirtyFiles}</b> 个文件未提交</div>
+    <div class="hint">数据由 <span class="mono">scan.py</span> 于 ${esc(D.meta.generatedAt.replace("T", " ").slice(0, 16))} 生成。
+      所有事实都能回溯到文件行、git 对象或 Gradle 结果 XML。</div>
+  </div>
+
+  <div class="p">
+    <h3>结构层 · 概览</h3>
+    <div class="stat">
+      <div class="c"><b>${s.modules}</b><span>Gradle 模块</span></div>
+      <div class="c"><b>${fmt(s.loc)}</b><span>有效代码行</span></div>
+      <div class="c"><b>${s.declarations}</b><span>顶层声明</span></div>
+    </div>
+    <div style="margin-top:8px" class="chips">
+      ${Object.entries(groups).map(([g, v]) =>
+        `<span class="chip" style="border-left:3px solid ${COLOR[g] || COLOR.other}">${g} ${v.n} 模块 / ${fmt(v.loc)} 行</span>`).join("")}
+    </div>
+    <div style="margin-top:10px">
+      <dl class="kv">
+        <dt>依赖边总数</dt><dd>${s.edges}（生产 ${s.mainEdges} / 测试 ${s.testEdges}）</dd>
+        <dt>其中隐式注入</dt><dd>${s.conventionEdges} 条 · build 文件里看不到</dd>
+        <dt>显式声明</dt><dd>${s.explicitEdges} 条</dd>
+      </dl>
+      <div class="hint"><span class="tag measured">实测</span>隐式边来自
+        <span class="mono">build-logic/convention/AndroidFeatureConventionPlugin.kt:15-19</span>，
+        6 个 feature 模块各自被注入 5 个 core 依赖 —— 只看模块自己的 build 文件会以为它们互不相干。</div>
+    </div>
+  </div>
+
+  <div class="p">
+    <h3>证据层 · 测试与规则</h3>
+    <div class="stat" style="grid-template-columns:repeat(2,1fr)">
+      <div class="c"><b>${fmt(s.testCases)}</b><span>Gradle XML 里的真实用例数</span></div>
+      <div class="c"><b style="color:${s.testFailures ? "#d92d20" : "#1a7f45"}">${s.testFailures}</b><span>失败数</span></div>
+    </div>
+    <div class="hint" style="margin-top:8px">
+      ${s.modulesWithTestEvidence}/${s.modules} 个模块在本机留下过 test-results 证据；
+      ${s.testFiles} 个测试文件。规则命中 <b>${findings.length}</b> 条。
+    </div>
+    ${findings.length ? `<ul class="list" style="margin-top:8px">${findings.map((f) => `
+      <li data-finding="${esc(f.module || "")}"><span class="vt ${f.severity.toLowerCase()}">${f.severity}</span>
+        <span><span class="nm">${esc(f.title)}</span><br><span class="ev">${esc(f.evidence)}</span></span></li>`).join("")}</ul>`
+      : `<div class="empty" style="margin-top:8px"><b>10 条规则全部通过</b>
+        这是扫描器逐条跑完 AGENTS.md 红线的结果：feature 互不依赖、feature 不绕开 :core:data、
+        :core:model 无 Android 依赖、无裸 IO、无硬编码颜色、无依赖环、生产作用域不引入测试模块、无零用例测试任务。
+        跑出 0 条不等于没问题，但至少这几类是实测过的。</div>`}
+  </div>
+
+  <div class="p">
+    <h3>五层当前状态</h3>
+    ${layersStatus()}
+  </div>
+
+  <div class="p">
+    <h3>怎么读这张画布</h3>
+    <div class="foot">
+      <b>缩放即换粒度</b>：L1 全景 → L2 模块与责任 → 点进模块变 L3 文件/类/函数 → 选中声明变 L4 调用链。<br>
+      <b>点击</b>模块看构成与依赖证据；<b>双击</b>进入声明层；<b>滚轮</b>缩放；<b>拖拽</b>平移；<b>Esc</b> 返回。<br>
+      <b>图层开关</b>控制叠加真实数据：过程层画未提交文件与变更热度，证据层画测试用例数，运行层画最近一次真实执行时间。<br>
+      上一行工具栏的「过程」开关打开后，底部会出现提交时间轴，点一格就能看到那次提交动了哪些模块。
+    </div>
+  </div>`;
+}
+
+function layersStatus() {
+  const s = D.stats;
+  const rows = [
+    ["结构", `#4f9d69`, `${s.modules} 模块 · ${s.declarations} 声明 · ${s.edges} 条边`, "实测"],
+    ["过程", `#4f9d69`, `${D.git.recent.length} 个提交轨迹 · ${s.dirtyFiles} 个未提交文件`, "实测"],
+    ["证据", `#4f9d69`, `${s.testCases} 用例 / ${s.modulesWithTestEvidence} 模块有 XML · ${s.findings} 条规则命中`, "实测"],
+    ["运行", `#c98a1d`, "只有「最近一次真实执行时间」，没有线程/请求/内存的运行时探针", "部分"],
+    ["Agent", `#98a1b0`, "未接入：没有 agent 的 tool call / 计划 / 审批记录", "未接入"],
+  ];
+  return rows.map(([n, c, t, tag]) => `<div class="rowline">
+      <span style="width:7px;height:7px;border-radius:2px;background:${c};flex:none"></span>
+      <b style="width:44px;font-size:12px">${n}</b>
+      <span class="ev" style="flex:1">${esc(t)}</span>
+      <span class="badge ${tag === "未接入" ? "dash" : ""}">${tag}</span>
+    </div>`).join("") +
+    `<div class="hint">运行层与 Agent 层刻意留空而不是编数据：要填满它们需要在代码里埋点
+     （Kermit sink → JSONL、WorkManager 的 worker 状态、或 agent 侧写出 tool 调用轨迹），
+     这不是静态扫描能诚实回答的问题。</div>`;
+}
+
+function renderRuntime(m) {
+  const tr = (m.testResults || []).filter((t) => t.ranAt);
+  if (!tr.length) {
+    return `<div class="empty"><b>该模块没有可证实的执行痕迹</b>
+      没有 test-results 目录，说明本机没有留下任何运行证据。</div>`;
+  }
+  return `${tr.map((t) => `<div class="rowline">
+      <span class="vt p3">执行</span><span class="mono" style="font-size:11px">${esc(t.task)}</span>
+      <span style="margin-left:auto" class="mono">${esc(t.ranAt)}</span></div>`).join("")}
+    <div class="hint"><span class="tag measured">实测</span>取自 <span class="mono">build/test-results/*</span> 的目录时间戳。
+      真正的运行态（线程、请求、内存、后台任务）需要运行时探针，画布不猜。</div>`;
+}
+
+function renderAgent() {
+  if (AGENT) {
+    return `<div class="hint">已载入 <span class="mono">out/agent-trace.json</span>：${AGENT.events.length} 条事件</div>` +
+      AGENT.events.slice(0, 20).map((e) => `<div class="rowline">
+        <span class="vt p3">${esc(e.type || "event")}</span>
+        <span class="mono" style="font-size:10.5px;flex:1">${esc(e.summary || e.tool || "")}</span>
+        <span class="rt mono" style="font-size:10px">${esc(e.at || "")}</span></div>`).join("");
+  }
+  return `<div class="empty"><b>未接入 —— 这里现在是空的</b>
+    这一层要回答的是「AI 在系统里做了什么」，需要 agent 自己产出的轨迹。画布已经定义了它读的接口：
+    <span class="mono">out/agent-trace.json</span>，形如
+    <span class="mono">{"events":[{"type":"tool","tool":"Edit","summary":"…","at":"…","modules":[":feature:schedule"]}]}</span>。
+    文件存在就会自动渲染，不存在就保持空 —— 不会拿 git 提交冒充 AI 工作记录。</div>`;
+}
+
+// ======================= 源码查看 =======================
+const srcCache = new Map();
+function hl(line) {
+  const KW = /\b(package|import|class|interface|object|fun|val|var|private|internal|public|protected|override|suspend|return|if|else|when|for|while|try|catch|finally|throw|is|as|in|out|by|where|init|constructor|sealed|data|enum|annotation|inline|operator|infix|const|lateinit|companion|actual|expect|typealias|this|super|null|true|false|it|abstract|open|external|vararg|reified|crossinline|noinline|tailrec)\b/;
+  const RE = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|"""(?:[\s\S]*?)"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|@[A-Za-z_]\w*|\b\d[\w._]*\b|\b[A-Za-z_]\w*\b)/g;
+  let out = "", last = 0, m;
+  while ((m = RE.exec(line))) {
+    out += esc(line.slice(last, m.index));
+    const t = m[0];
+    let cls;
+    if (t.startsWith("//") || t.startsWith("/*")) cls = "c";
+    else if (t.startsWith('"') || t.startsWith("'")) cls = "s";
+    else if (t.startsWith("@")) cls = "a";
+    else if (/^\d/.test(t)) cls = "n";
+    else if (KW.test(t)) cls = "kw";
+    else if (/^[A-Z]/.test(t)) cls = "k";
+    out += `<span class="${cls}">${esc(t)}</span>`;
+    last = m.index + t.length;
+  }
+  out += esc(line.slice(last));
+  return out;
+}
+
+async function showSource(d, only) {
+  const el = only || $("#src");
+  if (!el) return;
+  const path = d ? (d.file || d) : null;
+  if (!path) return;
+  try {
+    let text = srcCache.get(path);
+    if (!text) {
+      const res = await fetch("/" + path, { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      text = await res.text();
+      srcCache.set(path, text);
+    }
+    const lines = text.split("\n");
+    const target = d && d.line ? d.line : 1;
+    const from = Math.max(0, target - 14), to = Math.min(lines.length, target + 34);
+    el.innerHTML = lines.slice(from, to).map((l, i) => {
+      const no = from + i + 1;
+      return `<div class="l${no === target ? " hit" : ""}"><i>${no}</i><span>${hl(l)}</span></div>`;
+    }).join("") || '<div class="l"><i></i><span class="c">（空文件）</span></div>';
+    const hit = el.querySelector(".l.hit");
+    if (hit) el.scrollTop = Math.max(0, hit.offsetTop - 90);
+  } catch (err) {
+    el.innerHTML = `<div class="l"><i></i><span class="c">无法读取源码：${esc(err.message)}</span></div>`;
+    const h = $("#srcHint");
+    if (h) h.innerHTML = '<span class="tag missing">未接入</span>浏览器在 file:// 下不能读本地文件。' +
+      '请在仓库根目录跑 <span class="mono">python3 -m http.server 8765</span>，' +
+      '再用 <span class="mono">http://localhost:8765/tools/codebase-canvas/index.html</span> 打开。';
+  }
+}
+
+// ======================= 交互 =======================
+function selectModule(m) {
+  sel.module = m; sel.decl = null;
+  $("#panel").innerHTML = modulePanel(m);
+  bindPanel(m);
+  updateHud();
+}
+function selectDecl(d) {
+  sel.decl = d;
+  const m = BY_ID.get(d.module);
+  if (m && (!sel.module || sel.module.id !== m.id)) {
+    if (layout.mode === "detail" && layout.focusModule && layout.focusModule.id !== m.id) enterDetail(m, true);
+    sel.module = m;
+  }
+  $("#panel").innerHTML = declPanel(d);
+  bindPanel(m);
+  showSource(d);
+  updateHud();
+}
+function enterDetail(m, silent) {
+  computeDetailLayout(m);
+  fit(layout.bounds, 90, 1.0);
+  sel.module = m; sel.decl = silent ? sel.decl : null;
+  updateStrip();
+  updateHud();
+  if (!silent) { $("#panel").innerHTML = modulePanel(m); bindPanel(m); }
+}
+function exitDetail() {
+  computeProjectLayout();
+  fit(layout.bounds, 80, 1.1);
+  sel.decl = null;
+  updateStrip(); updateHud();
+  if (sel.module) { $("#panel").innerHTML = modulePanel(sel.module); bindPanel(sel.module); }
+  else $("#panel").innerHTML = overviewPanel(), bindPanel(null);
+}
+
+function bindPanel(m) {
+  const p = $("#panel");
+  const enter = p.querySelector("#enter");
+  if (enter) enter.onclick = () => enterDetail(m);
+  const fe = p.querySelector("#focusEdges");
+  if (fe) fe.onclick = () => { sel.activeLayers = new Set(["edges"]); draw(); };
+  const cp = p.querySelector("#copyPath");
+  if (cp) cp.onclick = () => navigator.clipboard.writeText(m.path);
+  const bm = p.querySelector("#backMod");
+  if (bm) bm.onclick = () => { sel.decl = null; if (m) selectModule(m); updateHud(); };
+  const os = p.querySelector("#openSrc");
+  if (os) os.onclick = () => showSource(sel.decl);
+  const cr = p.querySelector("#copyRef");
+  if (cr) cr.onclick = () => navigator.clipboard.writeText(`${sel.decl.file}:${sel.decl.line}`);
+  p.querySelectorAll("[data-goto]").forEach((li) => {
+    li.classList.add("clk");
+    li.onclick = () => { const t = BY_ID.get(li.dataset.goto); if (t) { selectModule(t); centerOn(t.id); } };
+  });
+  p.querySelectorAll("[data-decl]").forEach((li) => {
+    li.onclick = () => { const d = DECL_BY_IDX.get(+li.dataset.decl); if (d) selectDecl(d); };
+  });
+  p.querySelectorAll("[data-finding]").forEach((li) => {
+    li.onclick = () => { const t = BY_ID.get(li.dataset.finding); if (t) { selectModule(t); centerOn(t.id); } };
+  });
+}
+function centerOn(id) {
+  const n = layout.nodes.find((x) => x.type === "module" && x.ref.id === id);
+  if (!n) return;
+  cam.ts = clamp(cam.s, 0.9, 1.6);
+  cam.tx = vw / 2 - (n.x + n.w / 2) * cam.ts;
+  cam.ty = vh / 2 - (n.y + n.h / 2) * cam.ts;
+  cam.anim = 1; updateHud();
+}
+
+// 鼠标
+let drag = null;
+cv.addEventListener("pointerdown", (e) => {
+  drag = { x: e.clientX, y: e.clientY, tx: cam.tx, ty: cam.ty, moved: 0, node: nodeAt(e.offsetX, e.offsetY) };
+  cv.classList.add("drag");
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener("pointermove", (e) => {
+  if (!drag) {
+    const n = nodeAt(e.offsetX, e.offsetY);
+    const key = n ? (n.type + (n.ref ? (n.ref.id || n.ref.globalIdx) : n.label)) : "";
+    if (key !== sel.hover) { sel.hover = key; cv.style.cursor = n ? "pointer" : "grab"; }
+    return;
+  }
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+  cam.tx = drag.tx + dx; cam.ty = drag.ty + dy;
+  cam.ts = cam.s;
+});
+cv.addEventListener("pointerup", (e) => {
+  cv.classList.remove("drag");
+  const n = drag ? drag.node : null;
+  const moved = drag ? drag.moved : 0;
+  drag = null;
+  if (moved > 4 || !n) return;
+  if (n.type === "module" || n.type === "side") {
+    if (n.type === "side") { selectModule(n.ref); centerOn(n.ref.id); return; }
+    if (sel.module && sel.module.id === n.ref.id && layout.mode === "detail") return;
+    selectModule(n.ref);
+  } else if (n.type === "decl") {
+    selectDecl(n.ref);
+  } else if (n.type === "file") {
+    const first = layout.nodes.filter((x) => x.type === "decl" && x.ref.file === n.file)
+      .sort((a, b) => a.ref.line - b.ref.line)[0];
+    if (first) selectDecl(first.ref);
+  }
+});
+cv.addEventListener("dblclick", (e) => {
+  const n = nodeAt(e.offsetX, e.offsetY);
+  if (n && (n.type === "module" || n.type === "side")) enterDetail(n.ref);
+});
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0016));
+}, { passive: false });
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (sel.decl) { sel.decl = null; if (sel.module) selectModule(sel.module); else $("#panel").innerHTML = overviewPanel(); }
+    else if (layout.mode === "detail") exitDetail();
+  } else if (e.key === "0") { fit(layout.bounds, 70, 1.1); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); $("#q").focus(); }
+});
+
+// 搜索
+const qEl = $("#q"), rEl = $("#results");
+let qHits = [], qAct = 0;
+function search(q) {
+  q = q.trim().toLowerCase();
+  if (!q) { rEl.classList.remove("on"); qHits = []; return; }
+  const mods = MODULES.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+    .map((m) => ({ kind: "模块", label: m.id, sub: `${fmt(m.loc)} 行`, go: () => { exitDetailIfNeeded(m); selectModule(m); centerOn(m.id); } }));
+  const decls = [];
+  for (const d of ALL_DECLS) {
+    if (decls.length >= 60) break;
+    if (d.name.toLowerCase().includes(q)) decls.push({
+      kind: d.kind, label: d.name, sub: `${d.module} · ${d.file.split("/").pop()}:${d.line}`,
+      go: () => { if (BY_ID.get(d.module)) { const mm = BY_ID.get(d.module); enterDetail(mm, true); } selectDecl(d); },
+    });
+  }
+  qHits = mods.concat(decls).slice(0, 40);
+  qAct = 0;
+  rEl.innerHTML = qHits.map((h, i) => `<div class="r${i === 0 ? " act" : ""}" data-i="${i}">
+      <b>${esc(h.label)}</b><span class="k">${esc(h.kind)}</span><span class="k">${esc(h.sub)}</span></div>`).join("")
+    || '<div class="r"><span class="k">无匹配</span></div>';
+  rEl.classList.add("on");
+  rEl.querySelectorAll(".r").forEach((el) => {
+    el.onclick = () => { const h = qHits[+el.dataset.i]; if (h) { rEl.classList.remove("on"); qEl.blur(); h.go(); } };
+  });
+}
+function exitDetailIfNeeded(m) { if (layout.mode === "detail") exitDetail(); }
+qEl.addEventListener("input", () => search(qEl.value));
+qEl.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    qAct = clamp(qAct + (e.key === "ArrowDown" ? 1 : -1), 0, qHits.length - 1);
+    rEl.querySelectorAll(".r").forEach((el, i) => el.classList.toggle("act", i === qAct));
+  } else if (e.key === "Enter" && qHits[qAct]) {
+    rEl.classList.remove("on"); qEl.blur(); qHits[qAct].go();
+  } else if (e.key === "Escape") rEl.classList.remove("on");
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) rEl.classList.remove("on"); });
+
+// ======================= 顶栏 / 底栏 =======================
+function buildToggles() {
+  $("#layerBar").innerHTML = LAYERS.map((l) => `<button class="ltoggle" data-l="${l.id}" data-on="${on[l.id] ? 1 : 0}"
+      title="${esc(l.desc)}"><span class="sw"></span><span class="n">${l.name}</span></button>`).join("");
+  $("#layerBar").querySelectorAll(".ltoggle").forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.l;
+      on[id] = on[id] ? 0 : 1;
+      b.dataset.on = on[id] ? 1 : 0;
+      updateStrip();
+      if (id === "process") fit(layout.bounds, layout.mode === "detail" ? 90 : 80, layout.mode === "detail" ? 1.0 : 1.1);
+      if (id === "agent") { $("#panel").innerHTML = (sel.decl ? declPanel(sel.decl) : sel.module ? modulePanel(sel.module) : overviewPanel()); bindPanel(sel.module); if (sel.decl) showSource(sel.decl); }
+      draw();
+    };
+  });
+}
+function updateStrip() {
+  const el = $("#strip");
+  if (!on.process) { el.classList.remove("on"); document.body.classList.remove("strip-on"); return; }
+  el.classList.add("on");
+  document.body.classList.add("strip-on");
+  const rec = D.git.recent.slice().reverse();
+  const n = rec.length;
+  const ticks = rec.map((c, i) => {
+    const left = 6 + (i / n) * 86;
+    return `<div class="tick" data-i="${i}" style="left:${left}%" title="${esc(c.hash)} ${esc(c.date)} ${esc(c.subject)}"></div>`;
+  }).join("");
+  el.innerHTML = `<div class="cap">提交</div><div class="track" style="width:calc(100% - 8px)">${ticks}
+    <div class="lbl" style="left:6%">${esc(rec[0] ? rec[0].date : "")}</div>
+    <div class="lbl" style="left:88%">最新 ${esc(rec[n - 1] ? rec[n - 1].hash : "")}</div></div>`;
+  el.querySelectorAll(".tick").forEach((t) => {
+    t.onclick = () => pickCommit(+t.dataset.i);
+  });
+}
+function pickCommit(i) {
+  const c = D.git.recent.slice().reverse()[i];
+  if (!c) return;
+  const prev = sel.commit && sel.commit.hash === c.hash ? null : c;
+  sel.commit = prev;
+  $("#strip").querySelectorAll(".tick").forEach((t) => t.classList.toggle("sel", +t.dataset.i === i && !!prev));
+  if (!prev) { draw(); return; }
+  const mods = new Map();
+  (c.touched || []).forEach((p) => {
+    const key = [...BY_ID.keys()].filter((id) => p.startsWith(BY_ID.get(id).path + "/"));
+    key.forEach((k) => mods.set(k, (mods.get(k) || 0) + 1));
+  });
+  c._mods = [...mods.keys()];
+  $("#panel").innerHTML = `
+    <div class="p"><h2>${esc(c.hash)}</h2>
+      <div class="sub">${esc(c.date)} · ${esc(c.author)}</div>
+      <div style="margin-top:8px;font-size:13px">${esc(c.subject)}</div>
+      <div class="hint"><span class="tag measured">实测</span>git log --name-only，
+        这次提交动了 ${(c.touched || []).length} 个 .kt 文件</div>
+    </div>
+    <div class="p"><h3>过程层 · 影响到的模块</h3>
+      ${mods.size ? `<ul class="list">${[...mods.entries()].map(([id, n]) =>
+        `<li class="clk" data-goto="${esc(id)}"><span class="nm">${esc(id)}</span>
+         <span class="rt">${n} 个文件</span></li>`).join("")}</ul>`
+        : '<div class="empty">这次提交没有碰 .kt 文件（纯文档/资源改动）</div>'}
+      <div class="hint">切图上的其它格子可以看别的提交；再点同一格取消高亮。</div>
+    </div>`;
+  bindPanel(null);
+  draw();
+}
+
+// ======================= 图例 =======================
+function buildLegend() {
+  const dot = (c) => `<svg width="9" height="9"><rect width="9" height="9" rx="2" fill="${c}"/></svg>`;
+  const ln = (stroke, dash) => `<svg width="26" height="8"><line x1="0" y1="4" x2="26" y2="4"
+      stroke="${stroke}" stroke-width="1.6" ${dash ? `stroke-dasharray="${dash}"` : ""}/></svg>`;
+  $("#legend").innerHTML = `
+    <div class="row">${dot(COLOR.app)}App</div>
+    <div class="row">${dot(COLOR.core)}core（库 / 底座）</div>
+    <div class="row">${dot(COLOR.feature)}feature（界面）</div>
+    <div class="row">${dot(COLOR.sync)}sync（后台）</div>
+    <div class="row" style="margin-top:5px">${ln("#9aa5b5")}生产依赖（显式）</div>
+    <div class="row">${ln("#a8b3c4", "7 4")}生产依赖（convention 注入）</div>
+    <div class="row">${ln("#cbd2dc", "4 3")}测试作用域依赖</div>
+    <div class="row" style="margin-top:5px;color:var(--muted)">节点大小 = 代码行数</div>`;
+}
+
+// 可选：agent trace
+let AGENT = null;
+fetch("out/agent-trace.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null))
+  .then((j) => { if (j && j.events) { AGENT = j; } }).catch(() => {});
+
+// ======================= 启动 =======================
+function boot() {
+  $("#projName").textContent = D.meta.project;  $("#scanMeta").innerHTML = `HEAD <span class="mono">${esc(D.meta.head)}</span> · ${D.stats.modules} 模块 ·
+    ${fmt(D.stats.loc)} 行 · ${D.stats.edges} 条依赖边<br>
+    <span style="color:${D.stats.dirtyFiles ? "#a25c07" : "#6d7887"}">工作区 ${D.stats.dirtyFiles ? D.stats.dirtyFiles + " 个文件未提交" : "干净"}</span>`;
+  buildToggles();
+  buildLegend();
+  resize();
+  computeProjectLayout();
+  $("#panel").innerHTML = overviewPanel();
+  bindPanel(null);
+  fit(layout.bounds, 80, 1.1);
+  cam.s = 0.2; cam.x = vw / 2; cam.y = vh / 2; // 从远处推入
+  updateHud();
+  updateStrip();
+  tick();
+  if (location.protocol === "file:") {
+    $("#warn").classList.remove("hidden");
+    $("#warn").innerHTML = '当前以 file:// 打开：画布可用，但<b>源码查看</b>需要 HTTP。' +
+      '在仓库根目录跑 <span class="mono">python3 -m http.server 8765</span> 后访问 ' +
+      '<span class="mono">http://localhost:8765/tools/codebase-canvas/index.html</span>';
+  }
+
+  // 只读自省接口：给自动化验证用，让脚本按真实节点坐标去点，而不是靠猜坐标。
+  // 不改变任何状态（select*/enterDetail 只是复用页面自己的点击路径）。
+  window.canvasInternals = {
+    snapshot: () => ({
+      mode: layout.mode, scale: +cam.s.toFixed(3), nodeCount: layout.nodes.length,
+      level: levelInfo(),
+      modules: layout.nodes.filter((n) => n.type === "module")
+        .map((n) => ({ id: n.ref.id, x: n.x, y: n.y, w: n.w, h: n.h })),
+    }),
+    // 返回「视口坐标」而不是画布内坐标：自动化脚本要拿它去点真实鼠标事件，
+    // 而画布顶在工具栏下方，两者差一个 offsetTop
+    screenOf: (id) => {
+      const n = layout.nodes.find((x) => x.type === "module" && x.ref.id === id);
+      if (!n) return null;
+      const r = cv.getBoundingClientRect();
+      return { x: (n.x + n.w / 2) * cam.s + cam.x + r.left, y: (n.y + n.h / 2) * cam.s + cam.y + r.top };
+    },
+    pickCommit: (i) => { pickCommit(i); return true; },
+    selectModule: (id) => { const m = BY_ID.get(id); if (m) { selectModule(m); return true; } return false; },
+    enterDetail: (id) => { const m = BY_ID.get(id); if (m) { enterDetail(m); return true; } return false; },
+    selectDeclByName: (n) => {
+      const d = ALL_DECLS.find((x) => x.name === n);
+      if (!d) return null;
+      selectDecl(d);
+      return d.file + ":" + d.line;
+    },
+    setZoom: (s) => { cam.ts = clamp(s, 0.18, 3.2); cam.anim = 1; updateHud(); return cam.ts; },
+    setLayer: (id, v) => { on[id] = v ? 1 : 0; buildToggles(); updateStrip(); draw(); return on[id]; },
+    panelText: () => $("#panel").innerText,
+    srcText: () => ($("#src") ? $("#src").innerText : ""),
+    commitCount: () => D.git.recent.length,
+  };
+}
+window.addEventListener("resize", () => { resize(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) resize(); });
+boot();
+})();
+</script>
+</body>
+</html>

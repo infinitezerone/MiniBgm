@@ -178,11 +178,14 @@ class ScheduleViewModel(
             map
         }
 
-    // 响应式观察用户正在追番的条目集合及收藏详情
+    // 响应式观察用户正在追番与想看的条目集合及收藏详情（【我的追番】包含在看与想看）
     private val userCollectionsFlow =
-        collectionRepository
-            .getCollectionsByTypeStream(CollectionType.DOING)
-            .distinctUntilChanged()
+        combine(
+            collectionRepository.getCollectionsByTypeStream(CollectionType.DOING),
+            collectionRepository.getCollectionsByTypeStream(CollectionType.WISH),
+        ) { doing, wish ->
+            (doing + wish).distinctBy { it.subjectId }
+        }.distinctUntilChanged()
 
     // 本地乐观更新追番状态缓存：subjectId -> isWatching (true: 加入在看, false: 移出在看)
     private val optimisticWatching = MutableStateFlow<Map<Long, Boolean>>(emptyMap())

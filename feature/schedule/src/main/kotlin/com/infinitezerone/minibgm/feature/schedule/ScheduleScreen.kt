@@ -16,6 +16,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -43,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
@@ -74,7 +77,17 @@ fun ScheduleScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
+    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val handleLaunchStreamingUrl: (String) -> Unit = { url ->
+        context.launchStreamingUrl(
+            url = url,
+            onAppNotInstalled = { appName, webUrl ->
+                appNotInstalledPrompt = appName to webUrl
+            },
+        )
+    }
 
     // 7天平滑滑动的 Pager，初始定位到今天
     val initialPage = (uiState.todayWeekday - 1).coerceIn(0, 6)
@@ -251,11 +264,11 @@ fun ScheduleScreen(
                             val weekday = page + 1
                             val isTodayPage = weekday == uiState.todayWeekday
                             val timeGrouped =
-                                remember(uiState.weeklySchedules, weekday) {
+                                remember(uiState.weeklySchedules, weekday, uiState.onlyWatching, uiState.watchingSubjectIds) {
                                     uiState.getTimeGroupedSchedulesForWeekday(weekday)
                                 }
                             val allDaySchedules =
-                                remember(uiState.weeklySchedules, weekday) {
+                                remember(uiState.weeklySchedules, weekday, uiState.onlyWatching, uiState.watchingSubjectIds) {
                                     uiState.getAllDaySchedulesForWeekday(weekday)
                                 }
                             val listState = weekdayListStates[weekday] ?: rememberLazyListState()
@@ -274,6 +287,8 @@ fun ScheduleScreen(
                                 },
                                 onDismissNextUpAction = viewModel::dismissNextUpAction,
                                 onShowSources = { selectedScheduleForSources = it },
+                                onPlayClick = handleLaunchStreamingUrl,
+                                onSwitchToAll = viewModel::toggleOnlyWatching,
                                 listState = listState,
                             )
                         }
@@ -287,7 +302,30 @@ fun ScheduleScreen(
         ScheduleSourcesBottomSheet(
             schedule = schedule,
             onDismissRequest = { selectedScheduleForSources = null },
-            onOpenUrl = { context.launchWebUrl(it) },
+            onOpenUrl = handleLaunchStreamingUrl,
+        )
+    }
+
+    appNotInstalledPrompt?.let { (appName, webUrl) ->
+        AlertDialog(
+            onDismissRequest = { appNotInstalledPrompt = null },
+            title = { Text("未安装 $appName 客户端") },
+            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        appNotInstalledPrompt = null
+                        context.launchWebUrl(webUrl)
+                    },
+                ) {
+                    Text("浏览器打开")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appNotInstalledPrompt = null }) {
+                    Text("取消")
+                }
+            },
         )
     }
 }
@@ -304,6 +342,8 @@ private fun DayScheduleList(
     onMarkEpisodeWatched: (Long, Int) -> Unit,
     onDismissNextUpAction: () -> Unit,
     onShowSources: (AirSchedule) -> Unit,
+    onPlayClick: (String) -> Unit,
+    onSwitchToAll: () -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -325,10 +365,9 @@ private fun DayScheduleList(
 
             if (isTodayPage && uiState.nextUpAction != null && !uiState.isActionDismissed) {
                 item(key = "next_up_action_card") {
-                    val context = LocalContext.current
                     NextUpActionCard(
                         action = uiState.nextUpAction,
-                        onPlayClick = { url -> context.launchWebUrl(url) },
+                        onPlayClick = onPlayClick,
                         onMarkWatched = onMarkEpisodeWatched,
                         onDismiss = onDismissNextUpAction,
                         onClick = { onSubjectClick(SubjectDetailRoute(uiState.nextUpAction.subjectId)) },
@@ -350,7 +389,10 @@ private fun DayScheduleList(
             // 如果当天完全没有排播
             if (timeGrouped.isEmpty() && allDaySchedules.isEmpty()) {
                 item(key = "empty_day_$weekday") {
-                    ScheduleDayEmptyNote(onlyWatching = uiState.onlyWatching)
+                    ScheduleDayEmptyNote(
+                        onlyWatching = uiState.onlyWatching,
+                        onSwitchToAll = onSwitchToAll,
+                    )
                 }
             } else {
                 // ==================== 时间线排播节点（时间醒目 + 聚合防冗余） ====================
@@ -364,6 +406,7 @@ private fun DayScheduleList(
                             onSubjectClick = onSubjectClick,
                             onToggleWatching = onToggleWatching,
                             onShowSources = onShowSources,
+                            onOpenUrl = onPlayClick,
                         )
                     }
                 }
@@ -377,6 +420,7 @@ private fun DayScheduleList(
                             onSubjectClick = onSubjectClick,
                             onToggleWatching = onToggleWatching,
                             onShowSources = onShowSources,
+                            onOpenUrl = onPlayClick,
                         )
                     }
                 }

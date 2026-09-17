@@ -63,7 +63,7 @@ import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.feature.schedule.CatchupScheduleItem
 
 enum class AirStatus {
@@ -108,6 +108,7 @@ fun TimelineSlotRow(
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     val airStatus = getAirStatus(time, isToday = isToday)
     val jstTime = schedules.firstOrNull()?.timeJst
@@ -193,6 +194,7 @@ fun TimelineSlotRow(
                     onSubjectClick = onSubjectClick,
                     onToggleWatching = onToggleWatching,
                     onShowSources = onShowSources,
+                    onOpenUrl = onOpenUrl,
                 )
             }
         }
@@ -302,6 +304,7 @@ fun ScheduleTimelineSingleCard(
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val displayName = schedule.titleCn.ifBlank { schedule.title }
@@ -441,7 +444,13 @@ fun ScheduleTimelineSingleCard(
                     if (schedule.siteLinks.isNotEmpty()) {
                         SiteLinksRow(
                             links = schedule.siteLinks,
-                            onOpenUrl = { context.launchWebUrl(it) },
+                            onOpenUrl = { url ->
+                                if (onOpenUrl != null) {
+                                    onOpenUrl(url)
+                                } else {
+                                    context.launchStreamingUrl(url)
+                                }
+                            },
                             onShowMoreSources = { onShowSources(schedule) },
                         )
                     } else {
@@ -744,6 +753,7 @@ fun ScheduleUntimedSection(
     onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     var isExpanded by remember { mutableStateOf(true) }
 
@@ -814,6 +824,7 @@ fun ScheduleUntimedSection(
                             onSubjectClick = onSubjectClick,
                             onToggleWatching = onToggleWatching,
                             onShowSources = onShowSources,
+                            onOpenUrl = onOpenUrl,
                         )
                     }
                 }

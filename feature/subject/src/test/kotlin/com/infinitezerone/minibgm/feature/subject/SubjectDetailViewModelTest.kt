@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentUser
+import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
@@ -871,6 +872,133 @@ class SubjectDetailViewModelTest {
 
             testScheduler.advanceUntilIdle()
             assertEquals(1, collectionRepository.markEpisodesWatchedUpToCallCount)
+        }
+
+    @Test
+    fun undoMarkWatchedUpTo_revertsOptimisticProgressAndCallsRepository() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepository = FakeCollectionRepository()
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                )
+            testScheduler.advanceUntilIdle()
+
+            // 初始打卡至第 2 集
+            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
+            viewModel.markWatchedUpTo(targetEp)
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+
+            // 撤销打卡回退至第 0 集
+            viewModel.undoMarkWatchedUpTo(
+                previousEpStatus = 0,
+                previousType = CollectionType.DOING.value,
+                undoneEpisodeIds = listOf(2001L, 2002L),
+            )
+
+            // 立即乐观回退
+            assertEquals(
+                0,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, collectionRepository.revertEpisodesWatchedCallCount)
+        }
+
+    @Test
+    fun undoMarkWatchedUpTo_whenPreviousWasUncollected_clearsOptimisticCollection() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepository = FakeCollectionRepository()
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                )
+            testScheduler.advanceUntilIdle()
+
+            // 之前未收藏该条目 (null)
+            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
+            viewModel.markWatchedUpTo(targetEp)
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+
+            // 撤销打卡回退至初始未收藏状态 (previousEpStatus = 0, previousType = 0)
+            viewModel.undoMarkWatchedUpTo(
+                previousEpStatus = 0,
+                previousType = 0,
+                undoneEpisodeIds = listOf(2001L, 2002L),
+            )
+
+            // 乐观回退应为 null
+            assertEquals(null, viewModel.uiState.value.collection)
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(1, collectionRepository.revertEpisodesWatchedCallCount)
+        }
+
+    @Test
+    fun markWatchedUpTo_excludesSpAndNonMainEpisodes() =
+        runTest {
+            val mixedEpisodes =
+                listOf(
+                    Episode(id = 1001L, type = 0, sort = 1f, ep = 1f, name = "第 1 话"),
+                    Episode(id = 1002L, type = 1, sort = 1f, ep = 1f, name = "SP 1"),
+                    Episode(id = 1003L, type = 0, sort = 2f, ep = 2f, name = "第 2 话"),
+                )
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, mixedEpisodes)
+                }
+            val collectionRepository = FakeCollectionRepository()
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepository,
+                    communityRepository = FakeCommunityRepository(),
+                )
+            testScheduler.advanceUntilIdle()
+
+            val targetEp = mixedEpisodes.first { it.id == 1003L }
+            viewModel.markWatchedUpTo(targetEp)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(1, collectionRepository.markEpisodesWatchedUpToCallCount)
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
         }
 
     @Test

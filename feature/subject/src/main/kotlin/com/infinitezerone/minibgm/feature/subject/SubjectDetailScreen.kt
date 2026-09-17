@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -27,15 +28,21 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +66,7 @@ import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
+import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.CharacterDetailBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.CharacterImagePreviewDialog
@@ -79,6 +87,7 @@ import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSk
 import com.infinitezerone.minibgm.feature.subject.components.SubjectHeaderCard
 import com.infinitezerone.minibgm.feature.subject.components.SubjectPersonalProgressCard
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -152,6 +161,9 @@ fun SubjectDetailScreen(
 
     val haptic = LocalHapticFeedback.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    var batchMarkTargetEpisode by remember { mutableStateOf<Episode?>(null) }
     val isEntering = isNavEntering()
     var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
     if (!isEntering) {
@@ -200,6 +212,7 @@ fun SubjectDetailScreen(
         }
     val subjectType = displaySubject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
     var previewCharacter by remember { mutableStateOf<SubjectCharacter?>(null) }
+    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val handleLinkClick: (String) -> Unit = { url ->
         when (val link = BgmUrlParser.parse(url)) {
@@ -230,7 +243,14 @@ fun SubjectDetailScreen(
             }
             is BgmLink.Topic -> context.launchWebUrl(url)
             is BgmLink.User -> context.launchWebUrl(url)
-            is BgmLink.External -> context.launchWebUrl(url)
+            is BgmLink.External -> {
+                context.launchStreamingUrl(
+                    url = url,
+                    onAppNotInstalled = { appName, webUrl ->
+                        appNotInstalledPrompt = appName to webUrl
+                    },
+                )
+            }
         }
     }
 
@@ -274,6 +294,7 @@ fun SubjectDetailScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier,
     ) { innerPadding ->
         PullToRefreshBox(
@@ -356,7 +377,28 @@ fun SubjectDetailScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                             val epNumber =
                                 if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                            val previousEpStatus = uiState.collection?.epStatus ?: 0
+                            val previousType = uiState.collection?.type ?: 0
+
                             viewModel.toggleEpisodeWatched(episode.id, isWatched, epNumber)
+
+                            if (isWatched) {
+                                coroutineScope.launch {
+                                    val snackbarResult =
+                                        snackbarHostState.showSnackbar(
+                                            message = "已标记第 $epNumber 话",
+                                            actionLabel = "撤销",
+                                            duration = SnackbarDuration.Short,
+                                        )
+                                    if (snackbarResult == SnackbarResult.ActionPerformed) {
+                                        viewModel.undoMarkWatchedUpTo(
+                                            previousEpStatus = previousEpStatus,
+                                            previousType = previousType,
+                                            undoneEpisodeIds = listOf(episode.id),
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         Box(
@@ -391,6 +433,7 @@ fun SubjectDetailScreen(
                                 onLinkClick = handleLinkClick,
                                 onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                 isTransitionStabilizing = isTransitionStabilizing,
+                                onBatchMarkEpisode = { batchMarkTargetEpisode = it },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
                         }
@@ -398,6 +441,79 @@ fun SubjectDetailScreen(
                 }
             }
         }
+    }
+
+    batchMarkTargetEpisode?.let { episode ->
+        val targetEpNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+        AlertDialog(
+            onDismissRequest = { batchMarkTargetEpisode = null },
+            title = { Text("看到此集？") },
+            text = { Text("是否将第 1 集至第 $targetEpNumber 集全部标记为已看过？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val targetEpisode = episode
+                        batchMarkTargetEpisode = null
+                        val previousEpStatus = uiState.collection?.epStatus ?: 0
+                        val previousType = uiState.collection?.type ?: 0
+                        val newlyMarkedIds =
+                            uiState.episodes
+                                .filter { ep ->
+                                    ep.type == 0 &&
+                                        (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in (previousEpStatus + 1)..targetEpNumber
+                                }.map { it.id }
+
+                        viewModel.markWatchedUpTo(targetEpisode)
+
+                        coroutineScope.launch {
+                            val snackbarResult =
+                                snackbarHostState.showSnackbar(
+                                    message = "已标记至第 $targetEpNumber 集",
+                                    actionLabel = "撤销",
+                                    duration = SnackbarDuration.Short,
+                                )
+                            if (snackbarResult == SnackbarResult.ActionPerformed) {
+                                viewModel.undoMarkWatchedUpTo(
+                                    previousEpStatus = previousEpStatus,
+                                    previousType = previousType,
+                                    undoneEpisodeIds = newlyMarkedIds,
+                                )
+                            }
+                        }
+                    },
+                ) {
+                    Text("确认")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { batchMarkTargetEpisode = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    appNotInstalledPrompt?.let { (appName, webUrl) ->
+        AlertDialog(
+            onDismissRequest = { appNotInstalledPrompt = null },
+            title = { Text("未安装 $appName 客户端") },
+            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        appNotInstalledPrompt = null
+                        context.launchWebUrl(webUrl)
+                    },
+                ) {
+                    Text("浏览器打开")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appNotInstalledPrompt = null }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 
     if (uiState.showCollectionSheet) {
@@ -488,6 +604,7 @@ private fun SubjectDetailContent(
     onLinkClick: (String) -> Unit,
     onLoadMoreComments: () -> Unit,
     isTransitionStabilizing: Boolean,
+    onBatchMarkEpisode: (Episode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -658,7 +775,14 @@ private fun SubjectDetailContent(
                                 episodes = currentEpisodes,
                                 watchedCount = uiState.collection?.epStatus ?: 0,
                                 onToggleWatched = onToggleEpisodeWatched,
-                                onEpisodeLongClick = onSelectEpisodeForDetail,
+                                onEpisodeLongClick = { episode ->
+                                    val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
+                                    if (!isWatched && episode.type == 0) {
+                                        onBatchMarkEpisode(episode)
+                                    } else {
+                                        onSelectEpisodeForDetail(episode)
+                                    }
+                                },
                                 columns = gridColumns,
                             )
                         }
@@ -671,6 +795,13 @@ private fun SubjectDetailContent(
                                 onClick = { onSelectEpisodeForDetail(episode) },
                                 onToggleWatched = {
                                     onToggleEpisodeWatched(episode, !isWatched)
+                                },
+                                onLongClick = {
+                                    if (!isWatched && episode.type == 0) {
+                                        onBatchMarkEpisode(episode)
+                                    } else {
+                                        onSelectEpisodeForDetail(episode)
+                                    }
                                 },
                             )
                         }

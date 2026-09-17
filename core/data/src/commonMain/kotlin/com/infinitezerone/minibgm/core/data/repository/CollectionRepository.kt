@@ -94,6 +94,17 @@ interface CollectionRepository : UserDataClearable {
     ): AppResult<Unit>
 
     /**
+     * 撤销/回退单集观看进度至指定状态。
+     * 将受影响的单集状态置为 0（未看），并将条目的 epStatus 与 type 恢复为原状态。
+     */
+    suspend fun revertEpisodesWatched(
+        subjectId: Long,
+        targetEpStatus: Int,
+        targetType: CollectionType?,
+        undoneEpisodeIds: List<Long> = emptyList(),
+    ): AppResult<Unit>
+
+    /**
      * 登录会话建立后，把云端「在看」（动画类）收藏全量分页同步进本地 Room。
      * 时刻表「我追的」、待补更新、桌面小组件与开播提醒均消费本地收藏流，
      * 本地无数据即表现为「没有在追的番」，故会话建立时必须先执行本同步。
@@ -387,6 +398,51 @@ class CollectionRepositoryImpl(
             }
         }
 
+    override suspend fun revertEpisodesWatched(
+        subjectId: Long,
+        targetEpStatus: Int,
+        targetType: CollectionType?,
+        undoneEpisodeIds: List<Long>,
+    ): AppResult<Unit> =
+        withContext(NonCancellable) {
+            val activeUid = tokenProvider.activeUserId.first()
+            if (activeUid == null) return@withContext AppResult.Error(IllegalStateException("请先在「我的」页面登录 Bangumi 账号"))
+
+            val localPrevious = getOrFetchPreviousCollection(activeUid, subjectId)
+            val subjectType = localPrevious?.subjectType ?: 2
+
+            if (targetType == null) {
+                userCollectionDao.deleteBySubjectId(activeUid, subjectId)
+            } else {
+                saveOptimisticCollection(activeUid, subjectId, subjectType, targetType.value, targetEpStatus)
+            }
+
+            try {
+                if (undoneEpisodeIds.isNotEmpty()) {
+                    apiService.updateEpisodesStatus(
+                        subjectId = subjectId,
+                        episodeIds = undoneEpisodeIds,
+                        type = 0,
+                    )
+                }
+                if (targetType != null) {
+                    apiService.updateCollection(
+                        subjectId = subjectId,
+                        type = targetType.value,
+                        epStatus = targetEpStatus,
+                    )
+                }
+                clearCountsCache()
+                AppResult.Success(Unit)
+            } catch (e: CancellationException) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                throw e
+            } catch (e: Throwable) {
+                rollbackRoom(activeUid, subjectId, localPrevious)
+                AppResult.Error(e, e.toUserFriendlyMessage("撤销打卡"))
+            }
+        }
+
     private suspend fun getOrFetchPreviousCollection(
         userId: Long,
         subjectId: Long,
@@ -430,7 +486,7 @@ class CollectionRepositoryImpl(
         if (providedIds.isNotEmpty()) return providedIds
         val episodes = apiService.getEpisodes(subjectId).data
         return episodes
-            .filter { (it.ep.toInt() in 1..epNumber) || (it.sort.toInt() in 1..epNumber) }
+            .filter { it.type == 0 && ((it.ep.toInt() in 1..epNumber) || (it.sort.toInt() in 1..epNumber)) }
             .map { it.id }
     }
 

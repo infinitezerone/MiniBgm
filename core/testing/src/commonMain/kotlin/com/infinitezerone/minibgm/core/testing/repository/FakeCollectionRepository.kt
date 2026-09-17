@@ -148,6 +148,30 @@ class FakeCollectionRepository : CollectionRepository {
         return AppResult.Success(Unit)
     }
 
+    var revertEpisodesWatchedCallCount: Int = 0
+        private set
+
+    override suspend fun revertEpisodesWatched(
+        subjectId: Long,
+        targetEpStatus: Int,
+        targetType: CollectionType?,
+        undoneEpisodeIds: List<Long>,
+    ): AppResult<Unit> {
+        revertEpisodesWatchedCallCount++
+        val current = collectionsState.value[subjectId]
+        val updated =
+            current?.copy(
+                epStatus = targetEpStatus,
+                type = targetType?.value ?: current.type,
+            )
+        if (targetType == null && targetEpStatus <= 0) {
+            collectionsState.value = collectionsState.value - subjectId
+        } else if (updated != null) {
+            collectionsState.value = collectionsState.value + (subjectId to updated)
+        }
+        return AppResult.Success(Unit)
+    }
+
     override suspend fun syncWatchingCollections(): AppResult<Unit> {
         syncWatchingCallCount++
         syncWatchingResult?.let { return it }

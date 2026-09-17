@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ScheduleDayEmptyNote(
     onlyWatching: Boolean,
+    onSwitchToAll: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -43,13 +44,26 @@ fun ScheduleDayEmptyNote(
                 .fillMaxWidth()
                 .padding(vertical = 16.dp),
     ) {
-        Text(
-            text = if (onlyWatching) "本日暂无您在追的番剧" else "本日暂无新番排播",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.outline,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(vertical = 24.dp),
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = if (onlyWatching) "今天没有你追的番更新哦，去【全网开播】看看新番吧" else "本日暂无新番排播",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline,
+                textAlign = TextAlign.Center,
+            )
+            if (onlyWatching && onSwitchToAll != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = onSwitchToAll,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text("查看全网开播")
+                }
+            }
+        }
     }
 }
 
