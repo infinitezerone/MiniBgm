@@ -19,6 +19,16 @@ data class TopicReply(
 )
 
 /**
+ * 讨论帖关联条目的精简评分模型（适配 next.bgm.tv p1 结构）
+ */
+@Serializable
+data class TopicSubjectRating(
+    val score: Double = 0.0,
+    val total: Int = 0,
+    val rank: Int = 0,
+)
+
+/**
  * 讨论帖所属条目的精简元数据
  */
 @Serializable
@@ -28,7 +38,7 @@ data class TopicParentSubject(
     @SerialName("nameCN") val nameCn: String = "",
     val type: Int = 0,
     val images: SubjectImages? = null,
-    val rating: Rating? = null,
+    val rating: TopicSubjectRating? = null,
 ) {
     val displayName: String
         get() = nameCn.ifBlank { name }
