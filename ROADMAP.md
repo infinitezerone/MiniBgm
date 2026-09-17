@@ -1,7 +1,8 @@
 # MiniBgm 演进路线图 (Product & Technical Roadmap)
 
 > **做最懂二次元、交互最流畅、视觉最精致的现代化 Bangumi 客户端**  
-> 本路线图围绕二次元核心体验三大业务支柱——**追番 (Tracking)**、**找番 (Discovery)**、**社区 (Community)**，以及两大支撑底座——**UI/UX 现代美学系统** 与 **系统级现代智能化 (System Intelligence)** 制定，旨在系统性解决现有功能断层，打造标杆级移动端体验。
+> 本路线图围绕二次元核心体验三大业务支柱——**追番 (Tracking)**、**找番 (Discovery)**、**社区 (Community)**，以及两大支撑底座——**UI/UX 现代美学系统** 与 **系统级现代智能化 (System Intelligence)** 制定，旨在系统性解决现有功能断层，打造标杆级移动端体验。  
+> 💡 *针对当前已存在功能中反人类交互、逻辑卡点的专项整治方案，请参见独立跟踪文档：[🩺 体验排雷与交互治理计划 (UX_REMEDIATION.md)](UX_REMEDIATION.md)*。
 
 ---
 
