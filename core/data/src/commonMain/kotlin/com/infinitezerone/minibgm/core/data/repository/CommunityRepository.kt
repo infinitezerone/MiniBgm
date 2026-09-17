@@ -5,10 +5,11 @@ import com.infinitezerone.minibgm.core.common.asAppResult
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
+import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 
 /**
- * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版）
+ * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版、讨论帖详情）
  */
 interface CommunityRepository {
     /** 获取单集吐槽列表 */
@@ -27,6 +28,12 @@ interface CommunityRepository {
         limit: Int = 10,
         offset: Int = 0,
     ): AppResult<List<SubjectTopic>>
+
+    /** 获取讨论帖详情（支持条目讨论与小组讨论自动探测与回退） */
+    suspend fun getTopicDetail(
+        topicId: Long,
+        type: String = "subject",
+    ): AppResult<TopicDetail>
 }
 
 class CommunityRepositoryImpl(
@@ -53,5 +60,19 @@ class CommunityRepositoryImpl(
     ): AppResult<List<SubjectTopic>> =
         asAppResult(errorMessage = { it.message ?: "获取条目讨论版失败" }) {
             communityService.getSubjectTopics(subjectId, limit, offset).data
+        }
+
+    override suspend fun getTopicDetail(
+        topicId: Long,
+        type: String,
+    ): AppResult<TopicDetail> =
+        asAppResult(errorMessage = { it.message ?: "获取讨论帖详情失败" }) {
+            if (type == "group") {
+                runCatching { communityService.getGroupTopicDetail(topicId) }
+                    .getOrElse { communityService.getSubjectTopicDetail(topicId) }
+            } else {
+                runCatching { communityService.getSubjectTopicDetail(topicId) }
+                    .getOrElse { communityService.getGroupTopicDetail(topicId) }
+            }
         }
 }

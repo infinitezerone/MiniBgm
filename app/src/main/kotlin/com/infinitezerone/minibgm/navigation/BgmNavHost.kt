@@ -22,6 +22,7 @@ import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
+import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.feature.assistant.navigation.assistantEntry
@@ -33,6 +34,7 @@ import com.infinitezerone.minibgm.feature.search.navigation.tagSubjectsEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.episodeDetailEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
+import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userCollectionsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
@@ -135,6 +137,9 @@ fun BgmNavHost(
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
+                                onTopicClick = { topicId, title ->
+                                    navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
+                                },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -146,6 +151,9 @@ fun BgmNavHost(
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
+                                },
+                                onTopicClick = { topicId, title ->
+                                    navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 metadata = bgmExtraPane(),
                             )
@@ -164,6 +172,20 @@ fun BgmNavHost(
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
+                                onTopicClick = { topicId, title ->
+                                    navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
+                                },
+                                metadata = bgmExtraPane(),
+                            )
+
+                            topicDetailEntry(
+                                onBackClick = { navState.goBack() },
+                                onSubjectClick = { subjectId ->
+                                    navState.navigateTo(LinkedSubjectRoute(subjectId))
+                                },
+                                onTopicClick = { topicId, title ->
+                                    navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
+                                },
                                 metadata = bgmExtraPane(),
                             )
                         },

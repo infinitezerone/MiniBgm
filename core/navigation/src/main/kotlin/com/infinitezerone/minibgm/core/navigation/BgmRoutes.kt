@@ -89,3 +89,14 @@ data class SeasonalGuideRoute(
     val initialYear: Int = 0,
     val initialSeasonMonth: Int = 0,
 ) : BgmRoute
+
+/**
+ * 讨论帖详情交互界面路由（包含主楼正文、楼层回帖与楼中楼树形回复）。
+ * [initialTitle] 为初始预填标题，[type] 为 "subject" 或 "group"。
+ */
+@Serializable
+data class TopicDetailRoute(
+    val topicId: Long,
+    val initialTitle: String = "",
+    val type: String = "subject",
+) : BgmRoute

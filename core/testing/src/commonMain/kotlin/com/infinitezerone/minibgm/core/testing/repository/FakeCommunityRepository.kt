@@ -5,12 +5,14 @@ import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
+import com.infinitezerone.minibgm.core.model.TopicDetail
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class FakeCommunityRepository : CommunityRepository {
     private val episodeCommentsState = MutableStateFlow<Map<Long, List<EpisodeComment>>>(emptyMap())
     private val subjectCommentsState = MutableStateFlow<Map<Long, SubjectCommentPage>>(emptyMap())
     private val subjectTopicsState = MutableStateFlow<Map<Long, List<SubjectTopic>>>(emptyMap())
+    private val topicDetailState = MutableStateFlow<Map<Long, TopicDetail>>(emptyMap())
 
     var getEpisodeCommentsResult: AppResult<List<EpisodeComment>>? = null
     var getEpisodeCommentsCallCount: Int = 0
@@ -20,6 +22,9 @@ class FakeCommunityRepository : CommunityRepository {
         private set
     var getSubjectTopicsResult: AppResult<List<SubjectTopic>>? = null
     var getSubjectTopicsCallCount: Int = 0
+        private set
+    var getTopicDetailResult: AppResult<TopicDetail>? = null
+    var getTopicDetailCallCount: Int = 0
         private set
 
     fun setEpisodeComments(
@@ -41,6 +46,13 @@ class FakeCommunityRepository : CommunityRepository {
         topics: List<SubjectTopic>,
     ) {
         subjectTopicsState.value = subjectTopicsState.value + (subjectId to topics)
+    }
+
+    fun setTopicDetail(
+        topicId: Long,
+        topicDetail: TopicDetail,
+    ) {
+        topicDetailState.value = topicDetailState.value + (topicId to topicDetail)
     }
 
     override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> {
@@ -67,5 +79,19 @@ class FakeCommunityRepository : CommunityRepository {
         getSubjectTopicsCallCount++
         getSubjectTopicsResult?.let { return it }
         return AppResult.Success(subjectTopicsState.value[subjectId].orEmpty())
+    }
+
+    override suspend fun getTopicDetail(
+        topicId: Long,
+        type: String,
+    ): AppResult<TopicDetail> {
+        getTopicDetailCallCount++
+        getTopicDetailResult?.let { return it }
+        val detail = topicDetailState.value[topicId]
+        return if (detail != null) {
+            AppResult.Success(detail)
+        } else {
+            AppResult.Error(IllegalArgumentException("Topic $topicId not found in fake"))
+        }
     }
 }

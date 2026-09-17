@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.di
 
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailViewModel
+import com.infinitezerone.minibgm.feature.subject.TopicDetailViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -26,6 +27,16 @@ val subjectModule =
                 collectionRepository = get(),
                 communityRepository = get(),
                 authRepository = get(),
+            )
+        }
+
+        viewModel { params ->
+            val topicId = runCatching { params.get<Long>(0) }.getOrDefault(0L)
+            val type = runCatching { params.get<String>(1) }.getOrDefault("subject")
+            TopicDetailViewModel(
+                topicId = topicId,
+                type = type,
+                communityRepository = get(),
             )
         }
     }

@@ -13,6 +13,7 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
     onCharacterClick: (Long) -> Unit = {},
     onPersonClick: (Long) -> Unit = {},
+    onTopicClick: (Long, String) -> Unit = { _, _ -> },
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<EpisodeDetailRoute>(metadata = metadata) { route ->
@@ -47,6 +48,7 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
             },
             onCharacterClick = onCharacterClick,
             onPersonClick = onPersonClick,
+            onTopicClick = onTopicClick,
         )
     }
 }
