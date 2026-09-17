@@ -34,6 +34,8 @@
 - [x] 📱 **桌面小组件** — 覆盖全尺寸域的状态分区看板与焦点卡片，点击直达时间表
 - [x] ☁️ **后台同步** — WorkManager 周期同步与 ETag 条件缓存
 
+> 📌 想要了解未来追番、找番、社区与智能化的演进规划？请查看完整的 **[🗺️ 演进路线图 (ROADMAP.md)](ROADMAP.md)**。
+
 ## 📥 获取应用
 
 前往 [Releases](https://github.com/infinitezerone/MiniBgm/releases/latest) 下载最新 APK 直接安装（需要 **Android 12+**）。
