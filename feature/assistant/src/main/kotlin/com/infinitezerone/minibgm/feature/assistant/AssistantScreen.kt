@@ -352,7 +352,7 @@ private fun EmptyAssistantGuide(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "支持自然语言查询时刻表、追番进度，以及经由 HITL 安全机制打卡分集与管理收藏。",
+            text = "支持自然语言查询时刻表、追番进度，打卡分集与管理收藏需经确认后同步，安全无忧。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),

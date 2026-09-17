@@ -12,6 +12,8 @@ import kotlinx.serialization.Serializable
 sealed interface PendingAction {
     val actionId: String
     val subjectId: Long
+    val subjectTitle: String get() = ""
+    val coverUrl: String get() = ""
     val description: String
 
     /**
@@ -22,7 +24,8 @@ sealed interface PendingAction {
     data class UpdateCollection(
         override val actionId: String,
         override val subjectId: Long,
-        val subjectTitle: String = "",
+        override val subjectTitle: String = "",
+        override val coverUrl: String = "",
         val collectionType: CollectionType,
         val rating: Int? = null,
         val comment: String? = null,
@@ -38,7 +41,8 @@ sealed interface PendingAction {
     data class UpdateEpisode(
         override val actionId: String,
         override val subjectId: Long,
-        val subjectTitle: String = "",
+        override val subjectTitle: String = "",
+        override val coverUrl: String = "",
         val episodeNumber: Int,
         val isWatched: Boolean = true,
         override val description: String,
