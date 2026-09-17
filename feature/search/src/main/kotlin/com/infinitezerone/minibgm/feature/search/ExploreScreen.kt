@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -68,6 +69,7 @@ fun ExploreScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
+    onSeasonalGuideClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     viewModel: ExploreViewModel = koinViewModel(),
 ) {
@@ -128,6 +130,14 @@ fun ExploreScreen(
                                         },
                                 )
                             }
+                        }
+
+                        // 进入季度新番导视大盘
+                        IconButton(onClick = onSeasonalGuideClick) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarMonth,
+                                contentDescription = "新番导视",
+                            )
                         }
 
                         // 进入全域深度检索
