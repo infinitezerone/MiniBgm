@@ -12,7 +12,9 @@ val searchModule =
     module {
         viewModelOf(::SearchViewModel)
         viewModelOf(::ExploreViewModel)
-        viewModel { (tag: String, initialType: Int) ->
+        viewModel { params ->
+            val tag = runCatching { params.get<String>(0) }.getOrDefault("")
+            val initialType = runCatching { params.get<Int>(1) }.getOrDefault(0)
             TagSubjectsViewModel(
                 tag = tag,
                 initialType = initialType,
@@ -20,13 +22,15 @@ val searchModule =
                 collectionRepository = get(),
             )
         }
-        viewModel { (initialYear: Int?, initialSeasonMonth: Int?) ->
+        viewModel { params ->
+            val initialYear = runCatching { params.get<Int>(0) }.getOrDefault(0)
+            val initialSeasonMonth = runCatching { params.get<Int>(1) }.getOrDefault(0)
             SeasonalGuideViewModel(
                 searchRepository = get(),
                 collectionRepository = get(),
                 authRepository = get(),
-                initialYear = initialYear ?: 0,
-                initialSeasonMonth = initialSeasonMonth ?: 0,
+                initialYear = initialYear,
+                initialSeasonMonth = initialSeasonMonth,
             )
         }
     }
