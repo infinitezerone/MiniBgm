@@ -53,6 +53,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
@@ -435,11 +443,19 @@ private fun ChatMessageItem(
                 },
             modifier = Modifier.widthIn(max = 320.dp),
         ) {
-            Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            )
+            if (isUser) {
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            } else {
+                LinkifiedMessageText(
+                    content = message.content,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
         }
 
         // 若该消息携带 HITL 操作提案，在消息气泡下方渲染提案交互卡片
@@ -490,4 +506,47 @@ private fun AssistantLoadingBubble(modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** 助手回答里的裸 URL（找源结果就是链接本身，必须可点） */
+private val URL_PATTERN = Regex("https?://\\S+")
+
+private val TRAILING_PUNCTUATION = charArrayOf('，', '。', '、', '）', ')', '】', '」', '’', '"', '.', ',')
+
+/** 助手消息按纯文本渲染，但把其中的 URL 变成可点击链接（系统提示词要求一行一个链接） */
+@Composable
+private fun LinkifiedMessageText(
+    content: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    val uriHandler = LocalUriHandler.current
+    val linkColor = MaterialTheme.colorScheme.primary
+    val annotated =
+        buildAnnotatedString {
+            var cursor = 0
+            URL_PATTERN.findAll(content).forEach { match ->
+                append(content, cursor, match.range.first)
+                val url = match.value.trimEnd { it in TRAILING_PUNCTUATION }
+                withLink(
+                    LinkAnnotation.Url(
+                        url = url,
+                        styles =
+                            TextLinkStyles(
+                                style =
+                                    SpanStyle(
+                                        color = linkColor,
+                                        textDecoration = TextDecoration.Underline,
+                                    ),
+                            ),
+                        linkInteractionListener = { uriHandler.openUri(url) },
+                    ),
+                ) {
+                    append(url)
+                }
+                cursor = match.range.first + match.value.length
+            }
+            append(content, cursor, content.length)
+        }
+    Text(text = annotated, style = style, modifier = modifier)
 }
