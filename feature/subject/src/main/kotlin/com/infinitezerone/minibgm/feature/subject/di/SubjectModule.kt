@@ -16,6 +16,7 @@ val subjectModule =
                 collectionRepository = get(),
                 communityRepository = get(),
                 authRepository = get(),
+                settingsRepository = get(),
             )
         }
 

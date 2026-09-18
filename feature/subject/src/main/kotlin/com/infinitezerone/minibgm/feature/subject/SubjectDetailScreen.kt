@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,11 +56,14 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
+import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.Subject
@@ -166,6 +171,18 @@ fun SubjectDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var batchMarkTargetEpisode by remember { mutableStateOf<Episode?>(null) }
+    var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
+    var showAiringReminderPrompt by remember { mutableStateOf(false) }
+
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                viewModel.enableAiringReminder()
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("已开启追番开播提醒 ✨")
+                }
+            }
+        }
     val isEntering = isNavEntering()
     var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
     if (!isEntering) {
@@ -424,7 +441,16 @@ fun SubjectDetailScreen(
                                 isGridView = uiState.isEpisodeGridView,
                                 onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
                                 onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
-                                onToggleWatching = viewModel::toggleWatching,
+                                onToggleWatching = {
+                                    val wasWatching = uiState.collection?.type == CollectionType.DOING.value
+                                    viewModel.toggleWatching()
+                                    if (!wasWatching && uiState.isLoggedIn) {
+                                        val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                                        if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                                            showAiringReminderPrompt = true
+                                        }
+                                    }
+                                },
                                 onToggleEpisodeWatched = onToggleEpisodeWatched,
                                 onSelectEpisodeForDetail = onSelectEpisodeForDetail,
                                 onSubjectClick = onSubjectClick,
@@ -576,6 +602,12 @@ fun SubjectDetailScreen(
                     comment = comment,
                     private = private,
                 )
+                if (type == CollectionType.DOING && uiState.isLoggedIn) {
+                    val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                    if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                        showAiringReminderPrompt = true
+                    }
+                }
             },
         )
     }
@@ -617,6 +649,24 @@ fun SubjectDetailScreen(
             onSubjectClick = { relSubjectId ->
                 viewModel.dismissEntityDetail()
                 onSubjectClick(relSubjectId)
+            },
+        )
+    }
+
+    if (showAiringReminderPrompt) {
+        AiringReminderPermissionDialog(
+            subjectTitle = uiState.subject?.nameCn?.ifBlank { uiState.subject?.name } ?: initialName.ifBlank { null },
+            onConfirm = {
+                showAiringReminderPrompt = false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    viewModel.enableAiringReminder()
+                }
+            },
+            onDismiss = {
+                showAiringReminderPrompt = false
+                hasDismissedAiringReminderPrompt = true
             },
         )
     }

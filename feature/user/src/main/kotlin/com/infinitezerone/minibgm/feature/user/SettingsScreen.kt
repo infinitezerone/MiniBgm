@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +33,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
@@ -67,13 +73,48 @@ fun SettingsScreen(
         context.launchWebUrl(url)
     }
 
-    // 开启提醒时顺带请求通知权限（Android 13+；拒绝仅影响送达，不影响开关本身）
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            NotificationManagerCompat.from(context).areNotificationsEnabled(),
+        )
+    }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+
     val notificationPermissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            hasNotificationPermission = granted
+            if (granted) {
+                viewModel.setAiringReminderEnabled(true)
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("已开启追番开播提醒 ✨")
+                }
+            } else {
+                viewModel.setAiringReminderEnabled(false)
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("未授予通知权限，无法接收提醒")
+                }
+            }
+        }
+
     val toggleAiringReminder: (Boolean) -> Unit = { enabled ->
-        viewModel.setAiringReminderEnabled(enabled)
-        if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (enabled) {
+            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            if (!systemAllowed) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    showPermissionRationaleDialog = true
+                }
+            } else {
+                viewModel.setAiringReminderEnabled(true)
+            }
+        } else {
+            viewModel.setAiringReminderEnabled(false)
         }
     }
 
@@ -93,6 +134,7 @@ fun SettingsScreen(
             }
         },
         onToggleAiringReminder = toggleAiringReminder,
+        hasNotificationPermission = hasNotificationPermission,
         airingReminderHour = uiState.airingReminderHour,
         onSelectReminderHour = viewModel::setAiringReminderHour,
         airDelayOffsetMinutes = uiState.airDelayOffsetMinutes,
@@ -109,6 +151,45 @@ fun SettingsScreen(
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
+
+    if (showPermissionRationaleDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationaleDialog = false },
+            title = {
+                Text(
+                    text = "需要系统通知权限",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPermissionRationaleDialog = false
+                        val intent =
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                        context.startActivity(intent)
+                    },
+                ) {
+                    Text("前往设置")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationaleDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,6 +200,7 @@ fun SettingsScreenContent(
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onSyncNow: () -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit,
+    hasNotificationPermission: Boolean = true,
     airingReminderHour: Int,
     onSelectReminderHour: (Int) -> Unit,
     airDelayOffsetMinutes: Int,
@@ -174,6 +256,7 @@ fun SettingsScreenContent(
                     isSyncing = uiState.isSyncing,
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
+                    hasNotificationPermission = hasNotificationPermission,
                     airingReminderHour = airingReminderHour,
                     aiConfig = uiState.aiConfig,
                     onOpenAiSettingsDialog = { showAiSettingsDialog = true },

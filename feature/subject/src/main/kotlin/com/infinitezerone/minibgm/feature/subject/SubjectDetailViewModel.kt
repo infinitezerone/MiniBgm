@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -45,6 +46,7 @@ enum class SubjectDetailTab(
 data class SubjectDetailUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
+    val isLoggedIn: Boolean = false,
     val selectedTab: SubjectDetailTab = SubjectDetailTab.EPISODES,
     val isEpisodeGridView: Boolean = true,
     val selectedEpisodeForDetail: Episode? = null,
@@ -81,15 +83,27 @@ class SubjectDetailViewModel(
     private val collectionRepository: CollectionRepository,
     private val communityRepository: CommunityRepository,
     private val authRepository: AuthRepository,
+    private val settingsRepository: SettingsRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
+
+    fun enableAiringReminder() {
+        viewModelScope.launch {
+            settingsRepository?.setAiringReminderEnabled(true)
+        }
+    }
 
     private val isLoggedIn =
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
+        viewModelScope.launch {
+            authRepository.isLoggedIn.collect { loggedIn ->
+                _uiState.update { it.copy(isLoggedIn = loggedIn) }
+            }
+        }
         // 先订阅本地库/内存缓存流：如果仓库中已有缓存，立刻合成进入 UiState，秒开无白屏
         viewModelScope.launch {
             combine(
