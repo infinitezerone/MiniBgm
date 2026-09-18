@@ -39,7 +39,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,9 +61,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
@@ -133,7 +134,10 @@ fun SeasonalGuideContent(
     modifier: Modifier = Modifier,
     viewModel: SeasonalGuideViewModel = koinViewModel(),
     scrollToTop: Flow<Unit>? = null,
+    isTopLevel: Boolean = false,
 ) {
+    val adaptiveInfo = LocalWindowAdaptiveInfo.current
+    val isWideScreen = adaptiveInfo.isWide
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -288,7 +292,7 @@ fun SeasonalGuideContent(
                                     start = 16.dp,
                                     end = 16.dp,
                                     top = 8.dp,
-                                    bottom = 32.dp,
+                                    bottom = if (isTopLevel && !isWideScreen) 96.dp else 32.dp,
                                 ),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -326,8 +330,9 @@ fun SeasonalGuideContent(
             }
         }
 
-        SnackbarHost(
+        BgmSnackbarHost(
             hostState = snackbarHostState,
+            isTopLevel = isTopLevel,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 

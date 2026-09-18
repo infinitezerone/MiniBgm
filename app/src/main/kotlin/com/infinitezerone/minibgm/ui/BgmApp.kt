@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
@@ -111,9 +113,31 @@ fun BgmApp(
         val adaptiveInfo = LocalWindowAdaptiveInfo.current
         val isWideScreen = adaptiveInfo.isWide
         val isTopLevel = navState.currentKey in navState.topLevelKeys
+        val targetPadding =
+            BgmSnackbarDefaults.calculateBottomPadding(
+                isTopLevel = isTopLevel,
+                isWideScreen = isWideScreen,
+            )
+        val snackbarBottomPadding by animateDpAsState(
+            targetValue = targetPadding,
+            animationSpec =
+                spring(
+                    dampingRatio = 0.82f,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            label = "app_snackbar_bottom_padding",
+        )
 
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            snackbarHost = {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier =
+                        Modifier
+                            .navigationBarsPadding()
+                            .padding(bottom = snackbarBottomPadding),
+                )
+            },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             modifier = modifier.fillMaxSize(),
         ) { innerPadding ->

@@ -15,7 +15,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -27,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.feature.search.components.SearchCategoryTabs
 import com.infinitezerone.minibgm.feature.search.components.SearchErrorState
 import com.infinitezerone.minibgm.feature.search.components.SearchNoResultsState
@@ -89,7 +89,7 @@ fun TagSubjectsScreen(
                     ),
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { BgmSnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets.safeDrawing,
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->

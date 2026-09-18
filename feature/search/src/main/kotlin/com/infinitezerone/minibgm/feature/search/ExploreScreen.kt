@@ -23,7 +23,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -44,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -182,7 +182,12 @@ fun ExploreScreen(
                     }
                 }
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            snackbarHost = {
+                BgmSnackbarHost(
+                    hostState = snackbarHostState,
+                    isTopLevel = true,
+                )
+            },
             modifier = Modifier.fillMaxSize(),
         ) { innerPadding ->
             Box(
@@ -198,6 +203,7 @@ fun ExploreScreen(
                         modifier = Modifier.fillMaxSize(),
                         viewModel = seasonalGuideViewModel,
                         scrollToTop = if (selectedTabIndex == 0) scrollToTop else null,
+                        isTopLevel = true,
                     )
                 } else {
                     // Tab 1: 淘番漫游与榜单瀑布流
