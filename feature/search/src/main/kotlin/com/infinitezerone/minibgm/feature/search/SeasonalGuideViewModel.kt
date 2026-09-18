@@ -45,11 +45,16 @@ class SeasonalGuideViewModel(
     // 提供未来 1 年至过去 15 年的年份切换选项
     private val availableYearsList = ((currentDate.year + 1) downTo (currentDate.year - 15)).toList()
 
+    private val currentYear = currentDate.year
+    private val currentQuarter = SeasonQuarter.fromMonth(currentDate.monthValue)
+
     private val _uiState =
         MutableStateFlow(
             SeasonalGuideUiState(
                 selectedYear = defaultYear,
                 selectedQuarter = defaultQuarter,
+                currentYear = currentYear,
+                currentQuarter = currentQuarter,
                 availableYears = availableYearsList,
             ),
         )
@@ -104,6 +109,15 @@ class SeasonalGuideViewModel(
     fun selectQuarter(quarter: SeasonQuarter) {
         if (_uiState.value.selectedQuarter == quarter) return
         _uiState.update { it.copy(selectedQuarter = quarter) }
+        loadSeasonalAnime()
+    }
+
+    fun selectSeason(
+        year: Int,
+        quarter: SeasonQuarter,
+    ) {
+        if (_uiState.value.selectedYear == year && _uiState.value.selectedQuarter == quarter) return
+        _uiState.update { it.copy(selectedYear = year, selectedQuarter = quarter) }
         loadSeasonalAnime()
     }
 
