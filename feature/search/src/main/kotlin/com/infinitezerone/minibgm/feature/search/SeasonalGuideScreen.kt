@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -21,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Refresh
@@ -45,8 +49,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -131,6 +139,7 @@ fun SeasonalGuideContent(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val gridState = rememberLazyGridState()
+    var showSeasonPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(scrollToTop) {
         scrollToTop?.collect {
@@ -167,102 +176,75 @@ fun SeasonalGuideContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 1. 年份快捷切换横条
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    items(uiState.availableYears, key = { it }) { year ->
-                        FilterChip(
-                            selected = uiState.selectedYear == year,
-                            onClick = { viewModel.selectYear(year) },
-                            label = {
-                                Text(
-                                    text = "${year}年",
-                                    fontWeight = if (uiState.selectedYear == year) FontWeight.Bold else FontWeight.Normal,
-                                )
-                            },
-                            border = null,
-                            colors =
-                                FilterChipDefaults.filterChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                ),
-                        )
-                    }
-                }
-
-                // 2. 四季胶囊切换栏（1月冬、4月春、7月夏、10月秋）
+                // 单行紧凑复合过滤栏：左侧年份季度选择胶囊 + 右侧播出形式滚动过滤
                 Row(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SeasonQuarter.entries.forEach { quarter ->
-                        val isSelected = uiState.selectedQuarter == quarter
-                        Surface(
-                            onClick = { viewModel.selectQuarter(quarter) },
-                            shape = RoundedCornerShape(12.dp),
-                            color =
-                                if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHigh
-                                },
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .height(36.dp),
+                    // 1. 复合档期选择胶囊 [ 2026 · 4月春 ▾ ]
+                    Surface(
+                        onClick = { showSeasonPicker = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.height(36.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = quarter.displayLabel,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "${uiState.selectedYear} · ${uiState.selectedQuarter.displayLabel}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "选择档期",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                }
 
-                // 3. 播出形式分类过滤（全部、TV动画、网络独播、剧场版/OVA）
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    SeasonCategoryFilter.entries.forEach { category ->
-                        FilterChip(
-                            selected = uiState.selectedCategory == category,
-                            onClick = { viewModel.selectCategory(category) },
-                            label = {
-                                Text(
-                                    text = category.label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
-                            },
-                            border = null,
-                            colors =
-                                FilterChipDefaults.filterChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                ),
-                        )
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 2. 播出形式分类横向滚动流 (全部 / TV动画 / 网络独播 / 剧场版/OVA)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        items(SeasonCategoryFilter.entries) { category ->
+                            FilterChip(
+                                selected = uiState.selectedCategory == category,
+                                onClick = { viewModel.selectCategory(category) },
+                                label = {
+                                    Text(
+                                        text = category.label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
+                                modifier = Modifier.height(36.dp),
+                                border = null,
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    ),
+                            )
+                        }
                     }
                 }
 
@@ -392,6 +374,22 @@ fun SeasonalGuideContent(
                 },
             )
         }
+
+        // 档期选择半屏抽屉
+        if (showSeasonPicker) {
+            SeasonPickerBottomSheet(
+                selectedYear = uiState.selectedYear,
+                selectedQuarter = uiState.selectedQuarter,
+                currentYear = uiState.currentYear,
+                currentQuarter = uiState.currentQuarter,
+                availableYears = uiState.availableYears,
+                onSelectSeason = { year, quarter ->
+                    viewModel.selectSeason(year, quarter)
+                    showSeasonPicker = false
+                },
+                onDismiss = { showSeasonPicker = false },
+            )
+        }
     }
 }
 
@@ -508,6 +506,212 @@ private fun SeasonalGuideEmptyState(
                 text = "可尝试切换年份或季度查看其他番剧导视",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * 档期选择半屏抽屉：快速切换年份与季度，支持一键回到当季
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SeasonPickerBottomSheet(
+    selectedYear: Int,
+    selectedQuarter: SeasonQuarter,
+    currentYear: Int,
+    currentQuarter: SeasonQuarter,
+    availableYears: List<Int>,
+    onSelectSeason: (year: Int, quarter: SeasonQuarter) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var tempYear by remember { mutableIntStateOf(selectedYear) }
+
+    BgmModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .navigationBarsPadding(),
+        ) {
+            // 标题栏与回到当季快捷键
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "选择新番档期",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                TextButton(
+                    onClick = {
+                        onSelectSeason(currentYear, currentQuarter)
+                    },
+                ) {
+                    Text(
+                        text = "回到当前季 ($currentYear ${currentQuarter.displayLabel})",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+
+            // 1. 年份选择（横向滚动 Chip）
+            Text(
+                text = "年份",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            ) {
+                items(availableYears, key = { it }) { year ->
+                    val isYearSelected = tempYear == year
+                    FilterChip(
+                        selected = isYearSelected,
+                        onClick = { tempYear = year },
+                        label = {
+                            Text(
+                                text = "${year}年",
+                                fontWeight = if (isYearSelected) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        },
+                        border = null,
+                        colors =
+                            FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ),
+                    )
+                }
+            }
+
+            // 2. 季度选择卡片（2x2 网格，点击即选中并确认）
+            Text(
+                text = "季度",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            ) {
+                listOf(SeasonQuarter.WINTER, SeasonQuarter.SPRING).forEach { quarter ->
+                    SeasonQuarterCard(
+                        quarter = quarter,
+                        isSelected = selectedQuarter == quarter && selectedYear == tempYear,
+                        isCurrent = currentQuarter == quarter && currentYear == tempYear,
+                        onClick = { onSelectSeason(tempYear, quarter) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            ) {
+                listOf(SeasonQuarter.SUMMER, SeasonQuarter.AUTUMN).forEach { quarter ->
+                    SeasonQuarterCard(
+                        quarter = quarter,
+                        isSelected = selectedQuarter == quarter && selectedYear == tempYear,
+                        isCurrent = currentQuarter == quarter && currentYear == tempYear,
+                        onClick = { onSelectSeason(tempYear, quarter) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeasonQuarterCard(
+    quarter: SeasonQuarter,
+    isSelected: Boolean,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dateSpan =
+        when (quarter) {
+            SeasonQuarter.WINTER -> "1月 ~ 3月"
+            SeasonQuarter.SPRING -> "4月 ~ 6月"
+            SeasonQuarter.SUMMER -> "7月 ~ 9月"
+            SeasonQuarter.AUTUMN -> "10月 ~ 12月"
+        }
+
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color =
+            if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        border =
+            if (isCurrent && !isSelected) {
+                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            } else {
+                null
+            },
+        modifier = modifier.height(64.dp),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = quarter.displayLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                )
+                if (isCurrent) {
+                    Text(
+                        text = "当季",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            Text(
+                text = dateSpan,
+                style = MaterialTheme.typography.bodySmall,
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
     }

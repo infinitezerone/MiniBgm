@@ -127,6 +127,27 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
+    fun selectSeason_triggersSingleSearchWithUpdatedYearAndQuarter() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+
+            viewModel.selectSeason(2025, SeasonQuarter.SUMMER)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(2025, state.selectedYear)
+            assertEquals(SeasonQuarter.SUMMER, state.selectedQuarter)
+            assertEquals(2, searchRepository.advancedSearchCallCount)
+            val request = searchRepository.lastAdvancedRequest
+            assertEquals(listOf(">=2025-07-01", "<=2025-09-30"), request?.filter?.airDate)
+            assertEquals(listOf("2025年7月"), request?.filter?.tag)
+        }
+
+    @Test
     fun selectCategory_filtersSubjectsLocallyWithoutAdditionalNetworkCall() =
         runTest {
             val tvAnime = sampleSubject.copy(id = 1L, name = "TV Anime", tags = listOf(Tag("TV", 10)))

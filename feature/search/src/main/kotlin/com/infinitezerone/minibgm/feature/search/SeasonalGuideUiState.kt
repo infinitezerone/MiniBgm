@@ -96,6 +96,8 @@ fun matchesCategory(
 data class SeasonalGuideUiState(
     val selectedYear: Int = 2026,
     val selectedQuarter: SeasonQuarter = SeasonQuarter.WINTER,
+    val currentYear: Int = 2026,
+    val currentQuarter: SeasonQuarter = SeasonQuarter.WINTER,
     val selectedCategory: SeasonCategoryFilter = SeasonCategoryFilter.ALL,
     val availableYears: List<Int> = emptyList(),
     val subjects: List<Subject> = emptyList(),
