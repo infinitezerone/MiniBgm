@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentUser
@@ -20,8 +21,10 @@ import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -1252,5 +1255,24 @@ class SubjectDetailViewModelTest {
             viewModel.markWatchedUpTo(sampleEpisodeList.first())
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepo.markEpisodesWatchedUpToCallCount)
+        }
+
+    @Test
+    fun enableAiringReminder_setsSettingsRepositoryTrue() =
+        runTest {
+            val settingsRepo = FakeSettingsRepository(UserSettings(airingReminderEnabled = false))
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settingsRepo,
+                )
+
+            viewModel.enableAiringReminder()
+            assertEquals(1, settingsRepo.setAiringReminderEnabledCallCount)
+            assertTrue(settingsRepo.settings.first().airingReminderEnabled)
         }
 }

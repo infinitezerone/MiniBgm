@@ -78,6 +78,7 @@ internal fun SettingsSection(
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     airingReminderHour: Int,
+    hasNotificationPermission: Boolean = true,
     aiConfig: AiConfig = AiConfig(),
     onOpenAiSettingsDialog: () -> Unit = {},
     onOpenReminderHourDialog: () -> Unit,
@@ -166,21 +167,31 @@ internal fun SettingsSection(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
 
+                val isReminderActive = airingReminderEnabled && hasNotificationPermission
+                val reminderSubtitle =
+                    if (!hasNotificationPermission) {
+                        "⚠️ 系统通知未开启，点击开启权限与每日推送"
+                    } else {
+                        "每日汇总「我追的」当日更新，开播前 15 分钟逐集提醒"
+                    }
                 SettingsItemRow(
                     icon = Icons.Filled.NotificationsActive,
-                    iconTint = MaterialTheme.colorScheme.primary,
+                    iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     title = "追番更新提醒",
-                    subtitle = "每日汇总「我追的」当日更新，开播前 15 分钟逐集提醒",
+                    subtitle = reminderSubtitle,
+                    onClick = {
+                        onToggleAiringReminder(!isReminderActive)
+                    },
                     trailing = {
                         Switch(
-                            checked = airingReminderEnabled,
+                            checked = isReminderActive,
                             onCheckedChange = onToggleAiringReminder,
                         )
                     },
                 )
 
                 AnimatedVisibility(
-                    visible = airingReminderEnabled,
+                    visible = isReminderActive,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut(),
                 ) {

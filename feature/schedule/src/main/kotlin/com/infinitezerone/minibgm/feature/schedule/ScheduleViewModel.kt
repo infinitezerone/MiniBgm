@@ -498,6 +498,13 @@ class ScheduleViewModel(
         showLoginPromptDialog.value = true
     }
 
+    fun enableAiringReminder() {
+        viewModelScope.launch {
+            settingsRepository.setAiringReminderEnabled(true)
+            _userMessage.send("已开启追番开播提醒 ✨")
+        }
+    }
+
     fun dismissNextUpAction() {
         isActionDismissed.value = true
     }

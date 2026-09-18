@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.feature.schedule
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -83,6 +88,34 @@ fun ScheduleScreen(
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
     var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
+    var showAiringReminderPrompt by remember { mutableStateOf(false) }
+    var pendingReminderSubjectTitle by remember { mutableStateOf<String?>(null) }
+
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                viewModel.enableAiringReminder()
+            }
+        }
+
+    val handleToggleWatching: (Long) -> Unit = { subjectId ->
+        val wasWatching = uiState.watchingSubjectIds.contains(subjectId)
+        viewModel.toggleWatching(subjectId)
+        if (!wasWatching && uiState.isLoggedIn) {
+            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                val subjectTitle =
+                    uiState.weeklySchedules.values
+                        .flatten()
+                        .firstOrNull { it.bgmId == subjectId }
+                        ?.let { it.titleCn.ifBlank { it.title } }
+                pendingReminderSubjectTitle = subjectTitle
+                showAiringReminderPrompt = true
+            }
+        }
+    }
 
     val handleLaunchStreamingUrl: (String) -> Unit = { url ->
         context.launchStreamingUrl(
@@ -286,7 +319,7 @@ fun ScheduleScreen(
                                 allDaySchedules = allDaySchedules,
                                 uiState = uiState,
                                 onSubjectClick = onSubjectClick,
-                                onToggleWatching = viewModel::toggleWatching,
+                                onToggleWatching = handleToggleWatching,
                                 onMarkEpisodeWatched = { subjectId, ep ->
                                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                     viewModel.markEpisodeWatched(subjectId, ep)
@@ -376,6 +409,24 @@ fun ScheduleScreen(
                 TextButton(onClick = viewModel::dismissLoginPrompt) {
                     Text("稍后再说")
                 }
+            },
+        )
+    }
+
+    if (showAiringReminderPrompt) {
+        AiringReminderPermissionDialog(
+            subjectTitle = pendingReminderSubjectTitle,
+            onConfirm = {
+                showAiringReminderPrompt = false
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    viewModel.enableAiringReminder()
+                }
+            },
+            onDismiss = {
+                showAiringReminderPrompt = false
+                hasDismissedAiringReminderPrompt = true
             },
         )
     }

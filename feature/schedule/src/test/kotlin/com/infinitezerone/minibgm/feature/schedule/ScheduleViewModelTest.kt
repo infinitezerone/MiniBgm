@@ -579,4 +579,16 @@ class ScheduleViewModelTest {
             val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
             assertFalse(dismissedState.showLoginPromptDialog)
         }
+
+    @Test
+    fun enableAiringReminder_setsSettingsRepositoryTrue() =
+        runTest {
+            val settingsRepository = FakeSettingsRepository()
+            val viewModel = createViewModel(settingsRepository = settingsRepository)
+
+            viewModel.enableAiringReminder()
+
+            assertEquals(1, settingsRepository.setAiringReminderEnabledCallCount)
+            assertTrue(settingsRepository.settings.first().airingReminderEnabled)
+        }
 }
