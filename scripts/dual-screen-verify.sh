@@ -28,7 +28,7 @@ mkdir -p "$OUT_DIR"
 PROFILES=("phone|1080x2340|420" "expanded|1920x1200|240")
 
 png_magic_ok() {
-  # PNG 魔数校验：模拟器多显示器的 screencap 警告会污染 stdout（见 AGENTS.md 红线 5）
+  # PNG 魔数校验：模拟器多显示器的 screencap 警告会污染 stdout（见 AGENTS.md「Safe ADB screenshots」规则）
   [ "$(od -An -tx1 -N8 "$1" | tr -d ' \n')" = "89504e470d0a1a0a" ]
 }
 
@@ -63,7 +63,7 @@ for profile in "${PROFILES[@]}"; do
   sleep 6
 
   shot="$OUT_DIR/$name-home.png"
-  # 先落盘到设备再 pull，避免 exec-out 输出流污染（AGENTS.md 红线 5）
+  # 先落盘到设备再 pull，避免 exec-out 输出流污染（AGENTS.md「Safe ADB screenshots」规则）
   $ADB shell screencap -p /data/local/tmp/minibgm-verify.png
   $ADB pull /data/local/tmp/minibgm-verify.png "$shot" >/dev/null
   $ADB shell rm /data/local/tmp/minibgm-verify.png
