@@ -67,6 +67,7 @@ object StreamingAppLauncher {
         if (url.isBlank()) return StreamingLaunchResult.FallbackWeb(url)
 
         val target = StreamingIntentResolver.resolve(url)
+        val isSearch = target?.isSearch == true || url.startsWith("bilibili://search")
         if (target != null && target.packageNames.isNotEmpty()) {
             val installedPkg = findInstalledPackage(context, target.packageNames)
             if (installedPkg != null) {
@@ -89,15 +90,30 @@ object StreamingAppLauncher {
                 } catch (_: Exception) {
                     // 唤起异常则向下降级
                 }
-            } else if (onAppNotInstalled != null) {
+            } else if (onAppNotInstalled != null && !isSearch) {
                 onAppNotInstalled(target.appName, target.webFallbackUrl)
                 return StreamingLaunchResult.AppNotInstalled(target.appName, target.webFallbackUrl)
             }
         }
 
-        // 降级为 Custom Tabs / 外部浏览器
-        context.launchWebUrl(url)
-        return StreamingLaunchResult.FallbackWeb(url)
+        // 降级为 Custom Tabs / 外部浏览器（优先使用解析出的合法 webFallbackUrl，避免在浏览器中加载 custom scheme 导致异常）
+        val fallbackUrl = target?.webFallbackUrl ?: url
+        context.launchWebUrl(fallbackUrl)
+        return StreamingLaunchResult.FallbackWeb(fallbackUrl)
+    }
+
+    /**
+     * 快捷发起哔哩哔哩番剧搜索：
+     * 优先通过 DeepLink 唤起 B 站客户端直接搜索番剧，若未安装或未传 [onAppNotInstalled] 则平滑降级至网页端搜索页。
+     */
+    fun launchBilibiliSearch(
+        context: Context,
+        keyword: String,
+        onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
+    ): StreamingLaunchResult {
+        val target = StreamingIntentResolver.buildBilibiliSearchTarget(keyword)
+        val targetUri = target.deepLinkUri ?: target.webFallbackUrl
+        return launch(context, targetUri, onAppNotInstalled)
     }
 }
 
@@ -108,3 +124,11 @@ fun Context.launchStreamingUrl(
     url: String,
     onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
 ): StreamingLaunchResult = StreamingAppLauncher.launch(this, url, onAppNotInstalled)
+
+/**
+ * [Context] 扩展快捷发起哔哩哔哩搜索。
+ */
+fun Context.launchBilibiliSearch(
+    keyword: String,
+    onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
+): StreamingLaunchResult = StreamingAppLauncher.launchBilibiliSearch(this, keyword, onAppNotInstalled)

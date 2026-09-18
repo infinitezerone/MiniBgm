@@ -22,13 +22,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
@@ -59,7 +59,6 @@ import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
-import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
@@ -441,21 +440,17 @@ fun ScheduleTimelineSingleCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    if (schedule.siteLinks.isNotEmpty()) {
-                        SiteLinksRow(
-                            links = schedule.siteLinks,
-                            onOpenUrl = { url ->
-                                if (onOpenUrl != null) {
-                                    onOpenUrl(url)
-                                } else {
-                                    context.launchStreamingUrl(url)
-                                }
-                            },
-                            onShowMoreSources = { onShowSources(schedule) },
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.width(1.dp))
-                    }
+                    SiteLinksRow(
+                        links = schedule.siteLinks,
+                        onOpenUrl = { url ->
+                            if (onOpenUrl != null) {
+                                onOpenUrl(url)
+                            } else {
+                                context.launchStreamingUrl(url)
+                            }
+                        },
+                        onShowMoreSources = { onShowSources(schedule) },
+                    )
 
                     BookmarkChip(
                         isWatching = isWatching,
@@ -523,55 +518,44 @@ fun SiteLinksRow(
     onShowMoreSources: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sortedLinks = remember(links) { links.sortedBySitePriority() }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    val hasBilibili = remember(links) { links.any { it.siteName.equals("bilibili", ignoreCase = true) } }
+    Surface(
+        onClick = onShowMoreSources,
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier,
     ) {
-        sortedLinks.firstOrNull()?.let { topLink ->
-            Surface(
-                onClick = { onOpenUrl(topLink.playUrl) },
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayCircleOutline,
+                contentDescription = null,
+                modifier = Modifier.size(11.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = "播放源",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (hasBilibili) {
+                Spacer(modifier = Modifier.width(3.dp))
+                Surface(
+                    shape = RoundedCornerShape(3.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
                 ) {
                     Text(
-                        text = topLink.displayName,
+                        text = "B站",
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                        contentDescription = null,
-                        modifier = Modifier.size(9.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                }
-            }
-        }
-
-        if (sortedLinks.size > 1) {
-            Surface(
-                onClick = onShowMoreSources,
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.5.dp),
-                ) {
-                    Text(
-                        text = "+${sortedLinks.size - 1} 更多源",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.75f,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 2.5.dp, vertical = 0.5.dp),
                     )
                 }
             }
