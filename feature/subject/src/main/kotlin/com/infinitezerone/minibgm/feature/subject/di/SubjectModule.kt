@@ -18,6 +18,7 @@ val subjectModule =
                 communityRepository = get(),
                 authRepository = get(),
                 settingsRepository = get(),
+                failureStore = get(),
             )
         }
 
@@ -49,6 +50,7 @@ val subjectModule =
                 initialStreamUrl = streamUrl,
                 collectionRepository = get(),
                 authRepository = get(),
+                failureStore = get(),
             )
         }
     }

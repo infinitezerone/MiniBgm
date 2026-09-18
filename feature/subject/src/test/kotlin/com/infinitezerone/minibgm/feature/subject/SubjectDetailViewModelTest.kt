@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -8,6 +9,8 @@ import com.infinitezerone.minibgm.core.model.CommentUser
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
@@ -1578,5 +1581,39 @@ class SubjectDetailViewModelTest {
 
             val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
             assertTrue(event.message.contains("自定义播放规则"))
+        }
+
+    @Test
+    fun uiState_exposesPlaylistsAndRecentPlaybackFailures() =
+        runTest {
+            val settingsRepository = FakeSettingsRepository()
+            val failureStore = PlaybackFailureStore()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository(),
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settingsRepository,
+                    failureStore = failureStore,
+                )
+
+            settingsRepository.setPlaylists(
+                listOf(
+                    PlaybackPlaylist(
+                        id = "pl-1",
+                        name = "我的片源",
+                        bgmSubjectId = sampleSubject.id,
+                        entries = listOf(PlaylistEntry(label = "01", url = "https://cdn.example.com/a.m3u8")),
+                    ),
+                ),
+            )
+            failureStore.markFailed("https://cdn.example.com/a.m3u8", "网络不可达")
+
+            val state = viewModel.uiState.first { it.playlists.isNotEmpty() && it.failedSourceReasons.isNotEmpty() }
+
+            assertEquals(listOf("pl-1"), state.playlists.map { it.id })
+            assertEquals("网络不可达", state.failedSourceReasons["https://cdn.example.com/a.m3u8"])
         }
 }

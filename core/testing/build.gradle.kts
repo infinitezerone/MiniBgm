@@ -17,6 +17,7 @@ kotlin {
             api(project(":core:data"))
             api(project(":core:datastore"))
             api(libs.androidx.datastore.core)
+            implementation(libs.kotlinx.serialization.json)
             api(libs.kotlinx.coroutines.test)
             api(libs.kotlin.test)
             api(libs.junit)

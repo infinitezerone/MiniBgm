@@ -728,6 +728,8 @@ fun SubjectDetailScreen(
                     }
                 },
                 playbackRules = uiState.playbackRules,
+                playlists = uiState.playlists,
+                failedSourceReasons = uiState.failedSourceReasons,
             )
         } else {
             SubjectSourcesBottomSheet(
@@ -751,6 +753,8 @@ fun SubjectDetailScreen(
                     }
                 },
                 playbackRules = uiState.playbackRules,
+                playlists = uiState.playlists,
+                failedSourceReasons = uiState.failedSourceReasons,
             )
         }
     }

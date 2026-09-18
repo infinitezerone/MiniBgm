@@ -127,6 +127,7 @@ data object SettingsRoute : SubFeatureRoute
 
 /**
  * 应用内视频播放交互界面路由（基于 Media3 ExoPlayer 渲染）。
+ * [requestHeaders] 为用户自备列表条目的必要请求头（如 Referer/Cookie），随媒体请求发送。
  */
 @Serializable
 data class PlayerRoute(
@@ -137,6 +138,7 @@ data class PlayerRoute(
     val subjectName: String = "",
     val episodeSort: Float = 1f,
     val episodeType: Int = 0,
+    val requestHeaders: Map<String, String> = emptyMap(),
 ) : DetailChainRoute
 
 /**

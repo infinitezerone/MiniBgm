@@ -50,8 +50,12 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.PlaylistEntryMatch
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -60,9 +64,10 @@ import kotlinx.coroutines.launch
  * 分集播放源向导 BottomSheet：
  * 当用户在条目详情页（:feature:subject）分集列表点击单集播放按钮且暂无可播直链时呼出。
  *
- * 界面采用简洁克制的现代 Material 3 Expressive 风格，去除突兀描边与花哨徽章，清晰划分为两大区域：
- * 1. 内部播放：尝试在应用内解析播放直链或管理第三方播放规则；
- * 2. 外部跳转：外部 App / 网页直达（哔哩哔哩分集搜索、蜜柑计划资源页）。
+ * 界面采用简洁克制的现代 Material 3 Expressive 风格，去除突兀描边与花哨徽章，清晰划分为三大区域：
+ * 1. 自备片单：用户导入的 JSON 片源（[PlaybackPlaylist]），按话数匹配后直接给出；
+ * 2. 内部播放：尝试在应用内解析播放直链或管理第三方播放规则；
+ * 3. 外部跳转：外部 App / 网页直达（哔哩哔哩分集搜索、蜜柑计划资源页）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,11 +83,23 @@ fun EpisodeSourceGuideBottomSheet(
     onAiSniff: ((Episode) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
+    playlists: List<PlaybackPlaylist> = emptyList(),
+    failedSourceReasons: Map<String, String> = emptyMap(),
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val displayName = subject.displayName
     val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
+    val playlistMatches =
+        remember(playlists, subject.id, episode) {
+            playlists.matchesForEpisode(subject.id, if (episode.ep > 0f) episode.ep else episode.sort)
+        }
+    val runAfterDismiss: (() -> Unit) -> Unit = { action ->
+        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+            onDismissRequest()
+            action()
+        }
+    }
 
     val epLabel =
         remember(episode) {
@@ -205,6 +222,18 @@ fun EpisodeSourceGuideBottomSheet(
                         .padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // 分组 0：用户自备片单（JSON 导入），按话数命中后排在本集最前面
+                PlaylistSourceSection(
+                    matches = playlistMatches,
+                    subject = subject,
+                    episode = episode,
+                    displayName = displayName,
+                    failedSourceReasons = failedSourceReasons,
+                    onOpenUrl = onOpenUrl,
+                    onInternalPlayClick = onInternalPlayClick,
+                    runAfterDismiss = runAfterDismiss,
+                )
+
                 // 分组 1：内部播放
                 Text(
                     text = "内部播放",
@@ -232,12 +261,16 @@ fun EpisodeSourceGuideBottomSheet(
                             remember(resolvedUrl, rule.description) {
                                 isLikelyMediaStream(resolvedUrl, rule.description)
                             }
+                        val ruleFailure = failedSourceReasons[resolvedUrl]
                         EpisodeSourceActionCard(
                             title = rule.name,
                             subtitle =
-                                rule.description.ifBlank {
-                                    if (isMedia) "应用内播放直链" else "打开解析链接"
-                                },
+                                playbackSourceSubtitle(
+                                    rule.description.ifBlank {
+                                        if (isMedia) "应用内播放直链" else "打开解析链接"
+                                    },
+                                    ruleFailure,
+                                ),
                             iconVector =
                                 if (isMedia) {
                                     Icons.Filled.PlayCircleOutline
@@ -245,10 +278,10 @@ fun EpisodeSourceGuideBottomSheet(
                                     Icons.AutoMirrored.Filled.OpenInNew
                                 },
                             iconTint =
-                                if (isMedia) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                when {
+                                    ruleFailure != null -> MaterialTheme.colorScheme.error
+                                    isMedia -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                             trailingContent = {
                                 val trailingIcon =
@@ -344,8 +377,8 @@ fun EpisodeSourceGuideBottomSheet(
 
                 if (onManageRules != null) {
                     EpisodeSourceActionCard(
-                        title = "自定义播放规则",
-                        subtitle = "导入与管理第三方解析规则",
+                        title = "播放源管理",
+                        subtitle = "导入自备片单 / 维护解析规则",
                         iconVector = Icons.Filled.Settings,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = {
@@ -403,6 +436,109 @@ fun EpisodeSourceGuideBottomSheet(
         }
     }
 }
+
+/**
+ * 自备片单分组：按话数命中的条目优先；条目 kind 决定应用内播放还是外部打开页面。
+ */
+@Composable
+internal fun PlaylistSourceSection(
+    matches: List<PlaylistEntryMatch>,
+    subject: Subject,
+    episode: Episode,
+    displayName: String,
+    failedSourceReasons: Map<String, String>,
+    onOpenUrl: (String) -> Unit,
+    onInternalPlayClick: ((PlayerRoute) -> Unit)?,
+    runAfterDismiss: (() -> Unit) -> Unit,
+) {
+    if (matches.isEmpty()) return
+    val grouped = remember(matches) { matches.groupBy { it.playlist } }
+
+    Text(
+        text = "自备片单",
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+    )
+
+    for ((playlist, items) in grouped) {
+        val header =
+            if (items.all { it.matched }) {
+                playlist.name
+            } else {
+                "${playlist.name} · 未按话数匹配，展示前 ${items.size} 条"
+            }
+        Text(
+            text = header,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+        for (item in items) {
+            val entry = item.entry
+            val failure = failedSourceReasons[entry.url]
+            val playableInApp = entry.kind == PlaylistEntryKind.DIRECT && onInternalPlayClick != null
+            EpisodeSourceActionCard(
+                title =
+                    if (entry.title.isBlank()) {
+                        entry.label
+                    } else {
+                        "${entry.label} · ${entry.title}"
+                    },
+                subtitle =
+                    playbackSourceSubtitle(
+                        entry.siteName.ifBlank {
+                            if (entry.kind == PlaylistEntryKind.DIRECT) "应用内播放片单直链" else "外部打开片单页面"
+                        },
+                        failure,
+                    ),
+                iconVector =
+                    if (entry.kind == PlaylistEntryKind.DIRECT) {
+                        Icons.Filled.PlayCircleOutline
+                    } else {
+                        Icons.AutoMirrored.Filled.OpenInNew
+                    },
+                iconTint =
+                    when {
+                        failure != null -> MaterialTheme.colorScheme.error
+                        playableInApp -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                onClick = {
+                    runAfterDismiss {
+                        if (playableInApp) {
+                            onInternalPlayClick?.invoke(
+                                PlayerRoute(
+                                    subjectId = subject.id,
+                                    episodeId = episode.id,
+                                    streamUrl = entry.url,
+                                    episodeName = episode.nameCn.ifBlank { episode.name },
+                                    subjectName = displayName,
+                                    episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                    episodeType = episode.type,
+                                    requestHeaders = entry.headers,
+                                ),
+                            )
+                        } else {
+                            onOpenUrl(entry.url)
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+/** 来源副标题：叠加最近一次播放失败归因 */
+internal fun playbackSourceSubtitle(
+    base: String,
+    failureReason: String?,
+): String = if (failureReason == null) base else "$base · 上次播放失败：$failureReason"
 
 @Composable
 internal fun EpisodeSourceActionCard(

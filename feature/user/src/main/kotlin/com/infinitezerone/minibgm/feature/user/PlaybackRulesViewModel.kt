@@ -2,13 +2,16 @@ package com.infinitezerone.minibgm.feature.user
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -17,10 +20,11 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * 播放规则界面状态
+ * 播放源管理界面状态：自备片单为主入口，解析规则为高级入口
  */
 data class PlaybackRulesUiState(
     val rules: List<PlaybackSourceRule> = emptyList(),
+    val playlists: List<PlaybackPlaylist> = emptyList(),
     val isLoading: Boolean = false,
 )
 
@@ -34,7 +38,7 @@ sealed interface PlaybackRulesUiEvent {
 }
 
 /**
- * 自定义播放规则管理 ViewModel
+ * 播放源管理 ViewModel：自备片单（JSON 导入）与第三方解析规则的读写。
  */
 class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
@@ -49,14 +53,61 @@ class PlaybackRulesViewModel(
     val events: Flow<PlaybackRulesUiEvent> = _events.receiveAsFlow()
 
     val uiState: StateFlow<PlaybackRulesUiState> =
-        settingsRepository.playbackRules
-            .map { rules ->
-                PlaybackRulesUiState(rules = rules, isLoading = false)
-            }.stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5000),
-                initialValue = PlaybackRulesUiState(isLoading = true),
-            )
+        combine(
+            settingsRepository.playbackRules,
+            settingsRepository.playlists,
+        ) { rules, playlists ->
+            PlaybackRulesUiState(rules = rules, playlists = playlists, isLoading = false)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = PlaybackRulesUiState(isLoading = true),
+        )
+
+    /** 导入文本来自 SAF 文件或粘贴框，解析/校验/合并由 SettingsRepository 负责 */
+    fun importPlaylistsFromJson(jsonText: String) {
+        val trimmed = jsonText.trim()
+        if (trimmed.isBlank()) {
+            sendSnackbar("导入内容不能为空")
+            return
+        }
+        viewModelScope.launch {
+            when (val result = settingsRepository.importPlaylistsFromJson(trimmed)) {
+                is AppResult.Success -> sendSnackbar(describeImport(result.data))
+                is AppResult.Error -> sendSnackbar(result.message)
+                AppResult.Loading -> Unit
+            }
+        }
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        viewModelScope.launch {
+            val target = uiState.value.playlists.firstOrNull { it.id == playlistId }
+            settingsRepository.deletePlaylist(playlistId)
+            sendSnackbar("已删除片单${if (target != null) "：${target.name}" else ""}")
+        }
+    }
+
+    fun clearPlaylists() {
+        viewModelScope.launch {
+            settingsRepository.clearPlaylists()
+            sendSnackbar("已清空全部自备片单")
+        }
+    }
+
+    private fun describeImport(summary: PlaylistImportSummary): String {
+        val parts =
+            buildList {
+                if (summary.addedCount > 0) add("新增 ${summary.addedCount} 份片单")
+                if (summary.replacedCount > 0) add("覆盖 ${summary.replacedCount} 份")
+            }
+        val head = if (parts.isEmpty()) "没有导入任何片单" else parts.joinToString("，")
+        return if (summary.issues.isEmpty()) {
+            head
+        } else {
+            "$head；${summary.issues.size} 条问题：${summary.issues.first()}"
+        }
+    }
 
     @OptIn(ExperimentalUuidApi::class)
     fun addRule(

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
@@ -106,6 +107,9 @@ data class SubjectDetailUiState(
     val isSniffingSources: Boolean = false,
     val sniffingEpisodeId: Long? = null,
     val playbackRules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule> = emptyList(),
+    val playlists: List<com.infinitezerone.minibgm.core.model.PlaybackPlaylist> = emptyList(),
+    /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
+    val failedSourceReasons: Map<String, String> = emptyMap(),
 )
 
 class SubjectDetailViewModel(
@@ -115,6 +119,7 @@ class SubjectDetailViewModel(
     private val communityRepository: CommunityRepository,
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository? = null,
+    private val failureStore: PlaybackFailureStore? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
@@ -221,6 +226,18 @@ class SubjectDetailViewModel(
             viewModelScope.launch {
                 settingsRepository.playbackRules.collect { rules ->
                     _uiState.update { it.copy(playbackRules = rules) }
+                }
+            }
+            viewModelScope.launch {
+                settingsRepository.playlists.collect { playlists ->
+                    _uiState.update { it.copy(playlists = playlists) }
+                }
+            }
+        }
+        if (failureStore != null) {
+            viewModelScope.launch {
+                failureStore.recentFailures.collect { failures ->
+                    _uiState.update { it.copy(failedSourceReasons = failures) }
                 }
             }
         }

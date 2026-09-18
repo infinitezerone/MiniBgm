@@ -167,8 +167,8 @@ internal fun SettingsSection(
                 SettingsItemRow(
                     icon = Icons.Filled.PlayCircleOutline,
                     iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "自定义播放规则",
-                    subtitle = "配置与管理第三方播放源解析规则",
+                    title = "播放源管理",
+                    subtitle = "导入自备片单、维护第三方解析规则",
                     onClick = onOpenPlaybackRules,
                 )
 

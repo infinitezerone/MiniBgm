@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
@@ -146,5 +147,25 @@ class PlayerViewModelTest {
 
         viewModel.onPlaybackError("Network timeout")
         assertEquals("Network timeout", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun playbackFailure_and_recovery_areAttributedToCurrentStreamUrl() {
+        val failureStore = PlaybackFailureStore()
+        val viewModel =
+            PlayerViewModel(
+                subjectId = subjectId,
+                episodeId = episodeId,
+                initialStreamUrl = initialStreamUrl,
+                collectionRepository = FakeCollectionRepository(),
+                authRepository = FakeAuthRepository(initialLoggedIn = true),
+                failureStore = failureStore,
+            )
+
+        viewModel.onPlaybackError("被来源拒绝访问")
+        assertEquals("被来源拒绝访问", failureStore.recentFailures.value[initialStreamUrl])
+
+        viewModel.onPlaybackReady()
+        assertFalse(failureStore.recentFailures.value.containsKey(initialStreamUrl))
     }
 }

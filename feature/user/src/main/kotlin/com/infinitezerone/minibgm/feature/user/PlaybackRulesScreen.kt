@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,10 +20,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.AlertDialog
@@ -29,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,10 +48,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,12 +63,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * 自定义播放规则管理界面：
- * 支持查看、新增、编辑、启用/禁用、删除及 JSON 批量导入自定义播放源规则。
+ * 播放源管理界面：
+ * 主入口是用户自备片单（JSON 导入，支持文件与粘贴），高级入口是第三方解析规则。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,11 +85,39 @@ fun PlaybackRulesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var ruleToEdit by remember { mutableStateOf<PlaybackSourceRule?>(null) }
     var isAddingRule by remember { mutableStateOf(false) }
-    var isImportingJson by remember { mutableStateOf(false) }
+    var isImportingRuleJson by remember { mutableStateOf(false) }
+    var isImportingPlaylistJson by remember { mutableStateOf(false) }
+    var showAdvancedRules by rememberSaveable { mutableStateOf(false) }
     var ruleToDelete by remember { mutableStateOf<PlaybackSourceRule?>(null) }
+    var playlistToDelete by remember { mutableStateOf<PlaybackPlaylist?>(null) }
+    var confirmClearPlaylists by rememberSaveable { mutableStateOf(false) }
+
+    val playlistPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                val outcome =
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { stream ->
+                                val bytes = stream.readNBytes(MAX_IMPORT_BYTES + 1)
+                                require(bytes.size <= MAX_IMPORT_BYTES) { "文件过大（上限 ${MAX_IMPORT_BYTES / 1024 / 1024} MB）" }
+                                bytes.decodeToString()
+                            } ?: error("无法读取所选文件")
+                        }
+                    }
+                outcome
+                    .onSuccess { text -> viewModel.importPlaylistsFromJson(text) }
+                    .onFailure { error ->
+                        snackbarHostState.showSnackbar("片单读取失败：${error.message ?: "未知错误"}")
+                    }
+            }
+        }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -90,7 +132,7 @@ fun PlaybackRulesScreen(
     Scaffold(
         topBar = {
             BgmTopAppBar(
-                title = { Text(text = "播放规则管理") },
+                title = { Text(text = "播放源管理") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
@@ -100,16 +142,16 @@ fun PlaybackRulesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { isImportingJson = true }) {
+                    IconButton(onClick = { isImportingPlaylistJson = true }) {
                         Icon(
-                            imageVector = Icons.Filled.FileDownload,
-                            contentDescription = "导入规则",
+                            imageVector = Icons.Filled.ContentPaste,
+                            contentDescription = "粘贴片单 JSON",
                         )
                     }
-                    IconButton(onClick = { isAddingRule = true }) {
+                    IconButton(onClick = { playlistPicker.launch(PLAYLIST_MIME_TYPES) }) {
                         Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "添加规则",
+                            imageVector = Icons.Filled.FileUpload,
+                            contentDescription = "从文件导入片单",
                         )
                     }
                 },
@@ -120,17 +162,14 @@ fun PlaybackRulesScreen(
     ) { innerPadding ->
         if (uiState.isLoading) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-        } else if (uiState.rules.isEmpty()) {
-            PlaybackRulesEmptyView(
-                onAddClick = { isAddingRule = true },
-                onImportClick = { isImportingJson = true },
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-            )
         } else {
             LazyColumn(
                 modifier =
@@ -141,17 +180,102 @@ fun PlaybackRulesScreen(
                 contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item(key = "template_hint") {
-                    RuleVariablesHintCard()
+                item(key = "playlist_header") {
+                    SectionHeader(
+                        title = "自备片单",
+                        supporting = "导入 JSON 片源后，分集播放向导会直接给出对应地址",
+                        trailing = {
+                            if (uiState.playlists.isNotEmpty()) {
+                                TextButton(onClick = { confirmClearPlaylists = true }) {
+                                    Text("清空", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        },
+                    )
                 }
 
-                items(uiState.rules, key = { it.id }) { rule ->
-                    PlaybackRuleCard(
-                        rule = rule,
-                        onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
-                        onEdit = { ruleToEdit = rule },
-                        onDelete = { ruleToDelete = rule },
-                    )
+                if (uiState.playlists.isEmpty()) {
+                    item(key = "playlist_empty") {
+                        PlaylistEmptyCard(
+                            onPickFile = { playlistPicker.launch(PLAYLIST_MIME_TYPES) },
+                            onPasteJson = { isImportingPlaylistJson = true },
+                        )
+                    }
+                } else {
+                    items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
+                        PlaylistCard(
+                            playlist = playlist,
+                            onDelete = { playlistToDelete = playlist },
+                        )
+                    }
+                }
+
+                item(key = "playlist_template") {
+                    PlaylistTemplateCard()
+                }
+
+                item(key = "advanced_header") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        )
+                        SectionHeader(
+                            title = "解析规则（高级）",
+                            supporting =
+                                if (showAdvancedRules) {
+                                    "按占位符模板拼出解析地址，适合自定义第三方源"
+                                } else {
+                                    "已配置 ${uiState.rules.size} 条规则"
+                                },
+                            trailing = {
+                                if (showAdvancedRules) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        TextButton(onClick = { isImportingRuleJson = true }) {
+                                            Text("导入")
+                                        }
+                                        TextButton(onClick = { isAddingRule = true }) {
+                                            Text("添加")
+                                        }
+                                    }
+                                }
+                                TextButton(onClick = { showAdvancedRules = !showAdvancedRules }) {
+                                    Text(if (showAdvancedRules) "收起" else "展开")
+                                }
+                            },
+                        )
+                    }
+                }
+
+                if (showAdvancedRules) {
+                    item(key = "template_hint") {
+                        RuleVariablesHintCard()
+                    }
+
+                    if (uiState.rules.isEmpty()) {
+                        item(key = "rule_empty") {
+                            Surface(
+                                shape = BgmShapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = "暂无自定义播放规则，可点击「添加」或「导入」配置。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(14.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    items(uiState.rules, key = { it.id }) { rule ->
+                        PlaybackRuleCard(
+                            rule = rule,
+                            onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
+                            onEdit = { ruleToEdit = rule },
+                            onDelete = { ruleToDelete = rule },
+                        )
+                    }
                 }
             }
         }
@@ -178,13 +302,24 @@ fun PlaybackRulesScreen(
         )
     }
 
-    // 导入 JSON 对话框
-    if (isImportingJson) {
+    // 规则 JSON 批量导入对话框
+    if (isImportingRuleJson) {
         RuleImportDialog(
-            onDismiss = { isImportingJson = false },
+            onDismiss = { isImportingRuleJson = false },
             onConfirm = { json ->
                 viewModel.importRulesFromJson(json)
-                isImportingJson = false
+                isImportingRuleJson = false
+            },
+        )
+    }
+
+    // 片单 JSON 粘贴导入对话框
+    if (isImportingPlaylistJson) {
+        PlaylistImportDialog(
+            onDismiss = { isImportingPlaylistJson = false },
+            onConfirm = { text ->
+                viewModel.importPlaylistsFromJson(text)
+                isImportingPlaylistJson = false
             },
         )
     }
@@ -212,6 +347,337 @@ fun PlaybackRulesScreen(
             },
         )
     }
+
+    playlistToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { playlistToDelete = null },
+            title = { Text("确认删除片单") },
+            text = { Text("确定要删除片单「${target.name}」及其 ${target.entries.size} 条分集吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deletePlaylist(target.id)
+                        playlistToDelete = null
+                    },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToDelete = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    if (confirmClearPlaylists) {
+        AlertDialog(
+            onDismissRequest = { confirmClearPlaylists = false },
+            title = { Text("清空全部片单") },
+            text = { Text("将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearPlaylists()
+                        confirmClearPlaylists = false
+                    },
+                ) {
+                    Text("清空", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearPlaylists = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+}
+
+private const val MAX_IMPORT_BYTES = 4 * 1024 * 1024
+
+private val PLAYLIST_MIME_TYPES =
+    arrayOf(
+        "application/json",
+        "text/plain",
+        "application/octet-stream",
+    )
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    supporting: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        trailing()
+    }
+}
+
+/**
+ * 片单为空时的引导卡片
+ */
+@Composable
+private fun PlaylistEmptyCard(
+    onPickFile: () -> Unit,
+    onPasteJson: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.VideoLibrary,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    text = "还没有自备片单",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Text(
+                text = "自备片单是你自己提供的 JSON 文件：为每个条目声明分集地址（DIRECT 直链在应用内播放，PAGE 页面链接外部打开），可附带 Referer 等请求头。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onPickFile) {
+                    Icon(
+                        imageVector = Icons.Filled.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("选择 JSON 文件")
+                }
+                TextButton(onClick = onPasteJson) {
+                    Text("粘贴 JSON 导入")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 单份自备片单概览
+ */
+@Composable
+private fun PlaylistCard(
+    playlist: PlaybackPlaylist,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val directCount = playlist.entries.count { it.kind == PlaylistEntryKind.DIRECT }
+    val pageCount = playlist.entries.size - directCount
+    val labelPreview = playlist.entries.take(8).joinToString("、") { it.label }
+
+    Surface(
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = playlist.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text =
+                            if (playlist.bgmSubjectId > 0L) {
+                                "绑定条目 ${playlist.bgmSubjectId} · 直链 $directCount / 页面 $pageCount"
+                            } else {
+                                "未绑定条目（不会出现在分集入口）· 直链 $directCount / 页面 $pageCount"
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Filled.DeleteOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            Text(
+                text = labelPreview + if (playlist.entries.size > 8) " …" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 导入模板示例（与 :core:model 的 schema 常量同源，避免文案漂移）
+ */
+@Composable
+private fun PlaylistTemplateCard(modifier: Modifier = Modifier) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Surface(
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = "片单 JSON 格式（schemaVersion ${PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION}）",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "收起示例" else "查看示例")
+                }
+            }
+            if (expanded) {
+                Text(
+                    text = PlaybackPlaylistSchema.TEMPLATE_EXAMPLE_JSON.trimIndent(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f))
+                            .padding(10.dp),
+                )
+                Text(
+                    text =
+                        "上限：" +
+                            "${PlaybackPlaylistSchema.MAX_PLAYLISTS} 份片单、" +
+                            "每份 ${PlaybackPlaylistSchema.MAX_ENTRIES_PER_PLAYLIST} 条、" +
+                            "每条 ${PlaybackPlaylistSchema.MAX_HEADERS_PER_ENTRY} 个请求头；" +
+                            "同 id 的片单会被新导入的覆盖。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 片单 JSON 粘贴导入对话框
+ */
+@Composable
+private fun PlaylistImportDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var jsonText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("粘贴片单 JSON") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "顶层需为 schemaVersion ${PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION} 的片单文档；校验通过的片单会合并进现有列表（同 id 覆盖）。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = jsonText,
+                    onValueChange = { jsonText = it },
+                    placeholder = {
+                        Text(
+                            PlaybackPlaylistSchema.TEMPLATE_EXAMPLE_JSON.trimIndent(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    },
+                    minLines = 6,
+                    maxLines = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(jsonText) },
+                enabled = jsonText.isNotBlank(),
+            ) {
+                Text("导入")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 /**
@@ -345,55 +811,6 @@ private fun PlaybackRuleCard(
 }
 
 /**
- * 规则为空时的占位
- */
-@Composable
-private fun PlaybackRulesEmptyView(
-    onAddClick: () -> Unit,
-    onImportClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(32.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.VideoLibrary,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(56.dp),
-            )
-            Text(
-                text = "暂无自定义播放规则",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "配置规则后，在分集播放向导中可直接唤起目标播放地址",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onAddClick) {
-                    Text("添加规则")
-                }
-                TextButton(onClick = onImportClick) {
-                    Text("导入 JSON")
-                }
-            }
-        }
-    }
-}
-
-/**
  * 规则添加/编辑对话框
  */
 @Composable
@@ -437,7 +854,7 @@ private fun RuleEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    listOf("{title}", "{ep}", "{subjectId}").forEach { placeholder ->
+                    listOf("{title}", "{ep}", "{subjectId}", "{episodeId}").forEach { placeholder ->
                         FilterChip(
                             selected = false,
                             onClick = { urlTemplate += placeholder },
