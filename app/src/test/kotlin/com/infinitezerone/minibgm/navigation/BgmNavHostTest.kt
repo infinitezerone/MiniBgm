@@ -32,7 +32,7 @@ class BgmNavHostTest {
         assertFalse(isTopLevelRoute(SubjectDetailRoute(1001L)))
         assertFalse(isTopLevelRoute(SearchRoute("test")))
         assertFalse(isTopLevelRoute(UserCollectionsRoute(3)))
-        assertFalse(isTopLevelRoute(AssistantRoute))
+        assertFalse(isTopLevelRoute(AssistantRoute()))
         assertFalse(isTopLevelRoute(SeasonalGuideRoute()))
         assertFalse(isTopLevelRoute(LinkedSubjectRoute(1002L)))
         assertFalse(isTopLevelRoute(EpisodeDetailRoute(1L, 1001L)))

@@ -16,12 +16,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -30,12 +30,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,7 +53,6 @@ import com.infinitezerone.minibgm.core.model.PlaylistEntryMatch
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -66,7 +61,7 @@ import kotlinx.coroutines.launch
  *
  * 界面采用简洁克制的现代 Material 3 Expressive 风格，去除突兀描边与花哨徽章，清晰划分为三大区域：
  * 1. 自备片单：用户导入的 JSON 片源（[PlaybackPlaylist]），按话数匹配后直接给出；
- * 2. 内部播放：尝试在应用内解析播放直链或管理第三方播放规则；
+ * 2. 内部播放 / AI 找源：应用内解析播放、管理第三方播放规则，或把找源请求交给 AI 助手会话；
  * 3. 外部跳转：外部 App / 网页直达（哔哩哔哩分集搜索、蜜柑计划资源页）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,9 +73,8 @@ fun EpisodeSourceGuideBottomSheet(
     onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
     mikanId: String? = null,
-    isSniffing: Boolean = false,
     onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
-    onAiSniff: ((Episode) -> Unit)? = null,
+    onAiSourceSearch: () -> Unit = {},
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
     playlists: List<PlaybackPlaylist> = emptyList(),
@@ -101,15 +95,7 @@ fun EpisodeSourceGuideBottomSheet(
         }
     }
 
-    val epLabel =
-        remember(episode) {
-            if (episode.type == 0) {
-                val num = if (episode.ep > 0f) episode.ep else episode.sort
-                "第 ${num.toEpisodeLabel()} 话"
-            } else {
-                "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
-            }
-        }
+    val epLabel = remember(episode) { episodeGuideLabel(episode) }
 
     val bilibiliKeyword =
         remember(displayName, epLabel) {
@@ -135,9 +121,6 @@ fun EpisodeSourceGuideBottomSheet(
         remember(mikanId, mikanKeyword) {
             StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = mikanKeyword)
         }
-
-    var localScanning by rememberSaveable { mutableStateOf(false) }
-    val scanning = isSniffing || localScanning
 
     BgmModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -319,58 +302,33 @@ fun EpisodeSourceGuideBottomSheet(
                             },
                         )
                     }
-                } else {
+                } else if (onInternalPlayClick != null) {
                     // 无已启用自定义规则时的默认内置播放入口
                     EpisodeSourceActionCard(
                         title = "应用内播放",
-                        subtitle =
-                            if (scanning) {
-                                "正在检索可用播放直链..."
-                            } else {
-                                "尝试在应用内解析并播放该分集"
-                            },
+                        subtitle = "尝试在应用内解析并播放该分集",
                         iconVector = Icons.Filled.PlayCircleOutline,
                         iconTint = MaterialTheme.colorScheme.primary,
                         trailingContent = {
-                            if (scanning) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "开始播放",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "开始播放",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(20.dp),
+                            )
                         },
                         onClick = {
-                            if (onInternalPlayClick != null) {
-                                val route =
-                                    PlayerRoute(
-                                        subjectId = subject.id,
-                                        episodeId = episode.id,
-                                        streamUrl = "",
-                                        episodeName = episode.nameCn.ifBlank { episode.name },
-                                        subjectName = displayName,
-                                        episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
-                                        episodeType = episode.type,
-                                    )
-                                onInternalPlayClick(route)
-                            } else if (!scanning) {
-                                if (onAiSniff != null) {
-                                    onAiSniff(episode)
-                                } else {
-                                    localScanning = true
-                                    coroutineScope.launch {
-                                        delay(1500)
-                                        localScanning = false
-                                    }
-                                }
-                            }
+                            val route =
+                                PlayerRoute(
+                                    subjectId = subject.id,
+                                    episodeId = episode.id,
+                                    streamUrl = "",
+                                    episodeName = episode.nameCn.ifBlank { episode.name },
+                                    subjectName = displayName,
+                                    episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                    episodeType = episode.type,
+                                )
+                            onInternalPlayClick(route)
                         },
                     )
                 }
@@ -397,6 +355,25 @@ fun EpisodeSourceGuideBottomSheet(
                         },
                     )
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // 分组 1.5：AI 找源——只检索可观看页面链接，检索在助手会话中显式触发
+                Text(
+                    text = "AI 找源",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+
+                EpisodeSourceActionCard(
+                    title = "让 AI 助手找源",
+                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    iconVector = Icons.Filled.AutoAwesome,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    onClick = { runAfterDismiss(onAiSourceSearch) },
+                )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -603,6 +580,15 @@ internal fun EpisodeSourceActionCard(
     }
 }
 
+/** 分集口语化编号：正片为「第 N 话」，其他类型为「SP 1」等分组前缀加序号 */
+fun episodeGuideLabel(episode: Episode): String =
+    if (episode.type == 0) {
+        val num = if (episode.ep > 0f) episode.ep else episode.sort
+        "第 ${num.toEpisodeLabel()} 话"
+    } else {
+        "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
+    }
+
 /**
  * 格式化分集播放源向导顶部标题：
  * 例如《葬送的芙莉莲》 第 5 话 · 死亡与安宁
@@ -611,13 +597,7 @@ fun formatEpisodeGuideHeader(
     displayName: String,
     episode: Episode,
 ): String {
-    val epLabel =
-        if (episode.type == 0) {
-            val num = if (episode.ep > 0f) episode.ep else episode.sort
-            "第 ${num.toEpisodeLabel()} 话"
-        } else {
-            "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
-        }
+    val epLabel = episodeGuideLabel(episode)
     val rawTitle = episode.nameCn.ifBlank { episode.name }.trim()
     val numLabel = (if (episode.ep > 0f) episode.ep else episode.sort).toEpisodeLabel()
     val isRedundant =

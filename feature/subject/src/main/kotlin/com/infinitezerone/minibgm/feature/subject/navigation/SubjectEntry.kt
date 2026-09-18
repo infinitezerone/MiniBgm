@@ -17,6 +17,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
     onManageRules: () -> Unit = {},
+    onSourceSearch: (String) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SubjectDetailRoute>(metadata = metadata) { route ->
@@ -33,6 +34,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
             onTagClick = onTagClick,
             onTopicClick = onTopicClick,
             onManageRules = onManageRules,
+            onSourceSearch = onSourceSearch,
         )
     }
 }
@@ -46,6 +48,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
     onManageRules: () -> Unit = {},
+    onSourceSearch: (String) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<LinkedSubjectRoute>(metadata = metadata) { route ->
@@ -62,6 +65,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
             onTagClick = onTagClick,
             onTopicClick = onTopicClick,
             onManageRules = onManageRules,
+            onSourceSearch = onSourceSearch,
         )
     }
 }

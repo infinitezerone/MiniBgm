@@ -125,6 +125,24 @@ class AssistantViewModelTest {
         }
 
     @Test
+    fun sendPrefilledPrompt_sends_route_prompt_only_once() =
+        runTest {
+            val agentService = FakeAgentService(executeResult = AppResult.Success("页面链接列表"))
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendPrefilledPrompt("帮我找《葬送的芙莉莲》的在线观看页面")
+            advanceUntilIdle()
+            // 路由未带预填提问（普通入口）与返回该页时的重复触发：都不再唤起智能体
+            viewModel.sendPrefilledPrompt("")
+            viewModel.sendPrefilledPrompt("帮我找《葬送的芙莉莲》的在线观看页面")
+            advanceUntilIdle()
+
+            assertEquals(1, agentService.prompts.size)
+            assertEquals("帮我找《葬送的芙莉莲》的在线观看页面", agentService.prompts[0])
+            assertEquals(2, viewModel.uiState.value.messages.size)
+        }
+
+    @Test
     fun sendMessage_captures_PendingAction_proposals() =
         runTest {
             val executor = FakePendingActionExecutor()

@@ -90,7 +90,7 @@ fun BgmNavHost(
                             scheduleEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
-                                onAssistantClick = { navState.navigateTo(AssistantRoute) },
+                                onAssistantClick = { navState.navigateTo(AssistantRoute()) },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
@@ -160,6 +160,7 @@ fun BgmNavHost(
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
+                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -177,6 +178,7 @@ fun BgmNavHost(
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
+                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
                                 metadata = bgmExtraPane(),
                             )
 

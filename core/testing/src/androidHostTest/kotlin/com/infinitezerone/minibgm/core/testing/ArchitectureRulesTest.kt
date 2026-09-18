@@ -17,6 +17,7 @@ import kotlin.test.fail
  * 7. 主题一致性：feature 源码严禁硬编码 Color(0x...)，必须使用 :core:designsystem 主题 token
  * 8. 裸 IO 隔离：feature 源码严禁手写底层网络传输（HttpURLConnection / java.net.*）与私有磁盘 IO（cacheDir / filesDir / FileOutputStream）
  * 9. 路由 sealed 契约：NavKey 路由必须实现 BgmRoutes.kt 中的 sealed BgmRoute（让 BgmNavState 入栈语义 when 编译期穷尽，新增路由必须显式声明层级语义）
+ * 10. AI 能力边界：只有 :feature:assistant 可依赖 :core:ai，其他页面须走 AssistantRoute 预填交接
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -382,6 +383,43 @@ class ArchitectureRulesTest {
 
         if (violations.isNotEmpty()) {
             fail("违反路由 sealed 契约：\n" + violations.joinToString("\n"))
+        }
+    }
+
+    @Test
+    fun only_assistant_feature_may_invoke_the_ai_agent() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+        featureDir
+            .walkTopDown()
+            .filter { it.parentFile?.name != "assistant" }
+            .forEach { file ->
+                val relPath = file.relativeTo(projectRoot).path
+                when {
+                    file.name == "build.gradle.kts" ->
+                        file.readLines().forEachIndexed { index, line ->
+                            if (line.contains("project(\":core:ai\")") || line.contains("project(':core:ai')")) {
+                                violations.add("$relPath:${index + 1} 直接依赖 :core:ai -> $line")
+                            }
+                        }
+
+                    file.isFile && file.extension == "kt" && !relPath.contains("/build/") ->
+                        file.readLines().forEachIndexed { index, line ->
+                            if (line.contains("import com.infinitezerone.minibgm.core.ai.")) {
+                                violations.add("$relPath:${index + 1} 直接调用智能体 -> $line")
+                            }
+                        }
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反 AI 能力边界（ROADMAP 第 5 节）：智能体调用只能发生在 :feature:assistant 会话内；" +
+                    "其他页面要触发 AI 检索必须跳转 AssistantRoute(prefillPrompt) 交接提问，" +
+                    "不得在页内自建 agent 调用：\n" + violations.joinToString("\n"),
+            )
         }
     }
 }

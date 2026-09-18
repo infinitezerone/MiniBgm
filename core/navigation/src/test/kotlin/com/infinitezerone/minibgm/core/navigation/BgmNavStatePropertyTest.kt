@@ -93,7 +93,7 @@ class BgmNavStatePropertyTest {
 
     private data object PushAssistant : Action {
         override fun applyTo(state: BgmNavState): Boolean {
-            state.navigateTo(AssistantRoute)
+            state.navigateTo(AssistantRoute())
             return true
         }
     }
@@ -345,7 +345,7 @@ class BgmNavStatePropertyTest {
                 "seed=$seed: 进入收藏列表后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
                 state.currentSubStack.first() == state.currentTopLevelKey,
             )
-            state.navigateTo(AssistantRoute)
+            state.navigateTo(AssistantRoute(prefillPrompt = "帮我找《测试番剧》第 3 话的在线观看页面"))
             assertTrue(
                 "seed=$seed: 进入助手页后详情层级应被清理，实际 ${state.currentSubStack.toList()}",
                 state.currentSubStack.none { it is SubjectDetailRoute },

@@ -27,6 +27,8 @@ class AssistantViewModel(
     private val _events = Channel<AssistantUiEvent>(Channel.BUFFERED)
     val events: Flow<AssistantUiEvent> = _events.receiveAsFlow()
 
+    private var prefillConsumed = false
+
     init {
         viewModelScope.launch {
             settingsRepository.aiConfig.collect { config ->
@@ -37,6 +39,14 @@ class AssistantViewModel(
 
     fun onInputChanged(text: String) {
         _uiState.update { it.copy(inputText = text) }
+    }
+
+    /** 路由预填提问只消费一次，避免重组或返回该页时重复发起智能体调用 */
+    fun sendPrefilledPrompt(prompt: String) {
+        if (prefillConsumed) return
+        if (prompt.isBlank()) return
+        prefillConsumed = true
+        sendMessage(prompt)
     }
 
     fun sendMessage(prompt: String = _uiState.value.inputText) {

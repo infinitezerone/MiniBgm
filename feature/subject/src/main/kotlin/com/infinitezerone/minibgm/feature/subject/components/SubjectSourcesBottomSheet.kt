@@ -14,14 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -29,12 +28,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,7 +46,6 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.forSubject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,8 +57,7 @@ fun SubjectSourcesBottomSheet(
     modifier: Modifier = Modifier,
     episode: Episode? = null,
     mikanId: String? = null,
-    isSniffing: Boolean = false,
-    onAiSniff: (() -> Unit)? = null,
+    onAiSourceSearch: () -> Unit = {},
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
     playlists: List<PlaybackPlaylist> = emptyList(),
@@ -78,8 +71,7 @@ fun SubjectSourcesBottomSheet(
             onOpenUrl = onOpenUrl,
             modifier = modifier,
             mikanId = mikanId,
-            isSniffing = isSniffing,
-            onAiSniff = { onAiSniff?.invoke() },
+            onAiSourceSearch = onAiSourceSearch,
             onManageRules = onManageRules,
             playbackRules = playbackRules,
             playlists = playlists,
@@ -103,8 +95,12 @@ fun SubjectSourcesBottomSheet(
             StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = displayName)
         }
 
-    var localScanning by rememberSaveable { mutableStateOf(false) }
-    val scanning = isSniffing || localScanning
+    val runAfterDismiss: (() -> Unit) -> Unit = { action ->
+        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+            onDismissRequest()
+            action()
+        }
+    }
 
     BgmModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -218,9 +214,9 @@ fun SubjectSourcesBottomSheet(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // 分组 1：内部播放
+                // 分组 1：AI 找源（条目级无具体分集，交由助手会话检索页面链接）
                 Text(
-                    text = "内部播放",
+                    text = "AI 找源",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -228,44 +224,11 @@ fun SubjectSourcesBottomSheet(
                 )
 
                 EpisodeSourceActionCard(
-                    title = "应用内播放",
-                    subtitle =
-                        if (scanning) {
-                            "正在检索可用播放直链..."
-                        } else {
-                            "尝试在应用内解析并播放该番剧"
-                        },
-                    iconVector = Icons.Filled.PlayCircleOutline,
+                    title = "让 AI 助手找源",
+                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    iconVector = Icons.Filled.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    trailingContent = {
-                        if (scanning) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "开始播放",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    },
-                    onClick = {
-                        if (!scanning) {
-                            if (onAiSniff != null) {
-                                onAiSniff()
-                            } else {
-                                localScanning = true
-                                coroutineScope.launch {
-                                    delay(1500)
-                                    localScanning = false
-                                }
-                            }
-                        }
-                    },
+                    onClick = { runAfterDismiss(onAiSourceSearch) },
                 )
 
                 if (onManageRules != null) {
