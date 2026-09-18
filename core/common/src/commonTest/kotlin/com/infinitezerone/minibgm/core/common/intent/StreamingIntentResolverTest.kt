@@ -82,6 +82,186 @@ class StreamingIntentResolverTest {
     }
 
     @Test
+    fun resolve_bilibiliSearchDeepLink_returnsSearchTarget() {
+        val url = "bilibili://search?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals("bilibili", target.siteName)
+        assertEquals("哔哩哔哩", target.appName)
+        assertEquals(url, target.deepLinkUri)
+        assertEquals(
+            "https://search.bilibili.com/all?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2",
+            target.webFallbackUrl,
+        )
+        assertTrue(target.packageNames.contains("tv.danmaku.bili"))
+    }
+
+    @Test
+    fun resolve_bilibiliSearchWebUrl_returnsSearchTargetWithDeepLink() {
+        val url = "https://search.bilibili.com/all?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals("bilibili", target.siteName)
+        assertEquals("bilibili://search?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2", target.deepLinkUri)
+        assertEquals(url, target.webFallbackUrl)
+    }
+
+    @Test
+    fun buildBilibiliSearchTarget_encodesKeywordProperly() {
+        val target = StreamingIntentResolver.buildBilibiliSearchTarget("葬送的芙莉莲")
+        assertEquals("bilibili", target.siteName)
+        assertEquals("bilibili://search?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2", target.deepLinkUri)
+        assertEquals(
+            "https://search.bilibili.com/all?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2",
+            target.webFallbackUrl,
+        )
+    }
+
+    @Test
+    fun buildMikanUrl_withDirectId_returnsBangumiPage() {
+        val url = StreamingIntentResolver.buildMikanUrl(mikanId = "3233")
+        assertEquals("https://mikanani.me/Home/Bangumi/3233", url)
+    }
+
+    @Test
+    fun buildMikanUrl_withKeywordFallback_returnsSearchPage() {
+        val url = StreamingIntentResolver.buildMikanUrl(mikanId = null, keyword = "葬送的芙莉莲")
+        assertEquals("https://mikanani.me/Home/Search?searchstr=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2", url)
+    }
+
+    @Test
+    fun buildBilibiliSearchTarget_withSpacesPunctuationAndJapanese() {
+        val target = StreamingIntentResolver.buildBilibiliSearchTarget("SPY×FAMILY 第2期")
+        assertTrue(target.isSearch)
+        assertEquals("bilibili", target.siteName)
+        assertTrue(target.packageNames.contains("tv.danmaku.bilibilihd"))
+        assertTrue(target.packageNames.contains("com.bilibili.app.blue"))
+        // Check deepLink and fallback contain encoded keyword
+        val expectedKeyword = StreamingIntentResolver.encodeQueryParameter("SPY×FAMILY 第2期")
+        assertEquals("bilibili://search?keyword=$expectedKeyword", target.deepLinkUri)
+        assertEquals("https://search.bilibili.com/all?keyword=$expectedKeyword", target.webFallbackUrl)
+    }
+
+    @Test
+    fun buildBilibiliSearchTarget_emptyKeyword_handlesGracefully() {
+        val target = StreamingIntentResolver.buildBilibiliSearchTarget("   ")
+        assertTrue(target.isSearch)
+        assertEquals("bilibili://search", target.deepLinkUri)
+        assertEquals("https://search.bilibili.com", target.webFallbackUrl)
+    }
+
+    @Test
+    fun resolve_bilibiliSearchDeepLink_withExtraParameters_extractsKeywordCleanly() {
+        val url = "bilibili://search?from_source=web&keyword=%E9%AC%BC%E7%81%AD&extra_tag=anime"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertTrue(target.isSearch)
+        assertEquals("bilibili", target.siteName)
+        assertEquals(url, target.deepLinkUri)
+        assertEquals("https://search.bilibili.com/all?keyword=%E9%AC%BC%E7%81%AD", target.webFallbackUrl)
+    }
+
+    @Test
+    fun resolve_bilibiliSearchDeepLink_withoutKeyword_fallsBackToSearchRoot() {
+        val url = "bilibili://search"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertTrue(target.isSearch)
+        assertEquals(url, target.deepLinkUri)
+        assertEquals("https://search.bilibili.com", target.webFallbackUrl)
+    }
+
+    @Test
+    fun resolve_bilibiliSearchWebUrl_withQueryParamBeforeKeyword_resolvesCorrectly() {
+        val url =
+            "https://search.bilibili.com/all?from_source=web_search&keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2#results"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertTrue(target.isSearch)
+        val expectedDeepLink = "bilibili://search?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2"
+        assertEquals(expectedDeepLink, target.deepLinkUri)
+        assertEquals(url, target.webFallbackUrl)
+    }
+
+    @Test
+    fun encodeQueryParameter_unreservedAndSpecialCharacters() {
+        assertEquals("abcXYZ0129-_.~", StreamingIntentResolver.encodeQueryParameter("abcXYZ0129-_.~"))
+        assertEquals("%20", StreamingIntentResolver.encodeQueryParameter(" "))
+        assertEquals("%26%3D%3F%2B%2F%23", StreamingIntentResolver.encodeQueryParameter("&=?+/#"))
+        assertEquals("", StreamingIntentResolver.encodeQueryParameter(""))
+    }
+
+    @Test
+    fun buildMikanUrl_withHttpPrefixedId_returnsDirectUrl() {
+        val url = StreamingIntentResolver.buildMikanUrl(mikanId = "https://mikanani.me/Home/Bangumi/3233")
+        assertEquals("https://mikanani.me/Home/Bangumi/3233", url)
+    }
+
+    @Test
+    fun resolve_bilibiliVideoAvUrl_returnsVideoAvDeepLink() {
+        val url = "https://www.bilibili.com/video/av170001"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals("bilibili://video/av170001", target.deepLinkUri)
+    }
+
+    @Test
+    fun resolve_bilibiliGeneralCustomScheme_returnsTarget() {
+        val url = "bilibili://live/12345"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals(url, target.deepLinkUri)
+        assertEquals("https://www.bilibili.com", target.webFallbackUrl)
+    }
+
+    @Test
+    fun resolve_bilibiliGeneralWeb_returnsTargetWithNullDeepLink() {
+        val url = "https://www.bilibili.com/read/cv12345"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertNull(target.deepLinkUri)
+        assertEquals(url, target.webFallbackUrl)
+    }
+
+    @Test
+    fun resolve_gamerGeneralWeb_returnsTargetWithNullDeepLink() {
+        val url = "https://ani.gamer.com.tw/index.php"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertNull(target.deepLinkUri)
+        assertEquals("gamer", target.siteName)
+    }
+
+    @Test
+    fun resolve_tencentUrl_returnsTargetWithPackage() {
+        val url = "https://v.qq.com/x/cover/m44101.html"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals("qq", target.siteName)
+        assertTrue(target.packageNames.contains("com.tencent.qqlive"))
+    }
+
+    @Test
+    fun resolve_youkuUrl_returnsTargetWithPackage() {
+        val url = "https://v.youku.com/v_show/id_XMTI3.html"
+        val target = StreamingIntentResolver.resolve(url)
+
+        assertNotNull(target)
+        assertEquals("youku", target.siteName)
+        assertTrue(target.packageNames.contains("com.youku.phone"))
+    }
+
+    @Test
     fun resolve_unknownUrl_returnsNull() {
         val url = "https://example.com/anime"
         val target = StreamingIntentResolver.resolve(url)

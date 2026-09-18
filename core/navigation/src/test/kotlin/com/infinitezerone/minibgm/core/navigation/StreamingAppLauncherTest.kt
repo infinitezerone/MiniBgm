@@ -17,4 +17,26 @@ class StreamingAppLauncherTest {
         val fallback = StreamingLaunchResult.FallbackWeb("https://example.com")
         assertEquals("https://example.com", fallback.webUrl)
     }
+
+    @Test
+    fun launch_withBlankUrl_returnsFallbackWeb() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val result = StreamingAppLauncher.launch(dummyContext, "")
+        org.junit.Assert.assertTrue(result is StreamingLaunchResult.FallbackWeb)
+        assertEquals("", (result as StreamingLaunchResult.FallbackWeb).webUrl)
+    }
+
+    @Test
+    fun isAppInstalled_whenContextThrowsException_returnsFalse() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val installed = StreamingAppLauncher.isAppInstalled(dummyContext, "tv.danmaku.bili")
+        org.junit.Assert.assertFalse(installed)
+    }
+
+    @Test
+    fun findInstalledPackage_whenNoneInstalled_returnsNull() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val pkg = StreamingAppLauncher.findInstalledPackage(dummyContext, listOf("tv.danmaku.bili", "com.bilibili.app.in"))
+        org.junit.Assert.assertNull(pkg)
+    }
 }
