@@ -4,8 +4,7 @@ import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.SharedTransitionScope.OverlayClip
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
@@ -21,13 +20,14 @@ val LocalSharedTransitionScope: ProvidableCompositionLocal<SharedTransitionScope
     compositionLocalOf { null }
 
 /**
- * 与全局页面横向滑动推进时长（300ms, FastOutSlowInEasing）严格同步的共享元素位移动画规格。
- * 避免默认 Spring 曲线（~500ms）在页面滑动已停止后仍在滞后漂移造成的拖拽感与卡顿感。
+ * 与全局页面物理弹性转场严格同步的共享元素位移动画规格。
+ * 采用 Material 3 Expressive 官方推荐的空间弹簧规范 (dampingRatio = 0.8f, stiffness = 380f)，
+ * 与页面滑动基于相同物理刚度与阻尼，确保封面飞渡位移与页面转场完全贴合，杜绝漂移与脱节感。
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 val BgmSharedBoundsTransform: BoundsTransform =
     BoundsTransform { _, _ ->
-        tween(durationMillis = 300, easing = FastOutSlowInEasing)
+        spring(dampingRatio = 0.8f, stiffness = 380f)
     }
 
 /**

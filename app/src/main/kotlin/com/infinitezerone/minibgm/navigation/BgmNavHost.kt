@@ -87,7 +87,7 @@ fun BgmNavHost(
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick = { navState.navigateTo(AssistantRoute) },
                                 scrollToTop = scheduleScrollToTop,
-                                metadata = bgmListPane(detailPlaceholder),
+                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             assistantEntry(
@@ -100,7 +100,7 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 scrollToTop = exploreScrollToTop,
-                                metadata = bgmListPane(detailPlaceholder),
+                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             seasonalGuideEntry(
@@ -120,6 +120,7 @@ fun BgmNavHost(
                                     navState.navigateTo(UserCollectionsRoute(type.value))
                                 },
                                 scrollToTop = userScrollToTop,
+                                metadata = bgmTopLevelTransitionMetadata,
                             )
 
                             userCollectionsEntry(

@@ -119,34 +119,22 @@ class BgmNavState(
             when (route) {
                 is SubjectDetailRoute -> {
                     // 当从列表选择条目详情时（尤其是分栏模式下左右双栏同屏展示），
-                    // 替换掉当前栈中已有的条目详情或详情子层级（条目详情、关联条目、分集讨论、标签专题），
+                    // 替换掉当前栈中已有的条目详情或详情子层级（条目详情、关联条目、分集讨论、标签专题、讨论帖），
                     // 避免用户在列表连续点击多个条目时在栈内无限堆叠，
                     // 保证返回时直接回到当前列表/占位页，而非倒退返回上一个条目。
-                    removeAll {
-                        it is SubjectDetailRoute ||
-                            it is LinkedSubjectRoute ||
-                            it is EpisodeDetailRoute ||
-                            it is TagSubjectsRoute ||
-                            it is TopicDetailRoute
-                    }
+                    removeAll { it is DetailChainRoute }
                 }
-                is SearchRoute, is UserCollectionsRoute, is AssistantRoute, is SeasonalGuideRoute -> {
+                is SubFeatureRoute -> {
                     // 进入新的列表/功能二级页面时，清理先前残留的详情层级；
                     // 同类二级页（不同 query/type 的搜索、收藏、助手、导视大盘）按层级语义替换而非堆叠，
                     // 避免返回时倒退经过过期的旧页面
-                    removeAll {
-                        it is SubjectDetailRoute ||
-                            it is LinkedSubjectRoute ||
-                            it is EpisodeDetailRoute ||
-                            it is TagSubjectsRoute ||
-                            it is TopicDetailRoute
-                    }
+                    removeAll { it is DetailChainRoute }
                     removeAll { it::class == key::class }
                 }
                 // 钻取链层级：关联条目、分集讨论、标签专题、帖子详情允许逐层压栈（single-top 去重相同 key）
-                is LinkedSubjectRoute, is EpisodeDetailRoute, is TagSubjectsRoute, is TopicDetailRoute -> remove(key)
+                is DetailChainRoute -> remove(key)
                 // 顶层 Tab 根永远是子栈首元素，不允许作为子页入栈（走 navigateTo 的顶层分支）
-                is ScheduleRoute, is ExploreRoute, is UserRoute ->
+                is TopLevelRoute ->
                     error("Top-level route cannot be pushed onto a sub stack: $key")
             }
             add(key)
