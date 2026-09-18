@@ -118,7 +118,6 @@ class AssistantViewModel(
                             isLoading = false,
                         )
                     }
-                    _events.send(AssistantUiEvent.ShowSnackbar(errorMsg))
                 }
                 is AppResult.Loading -> Unit
             }
