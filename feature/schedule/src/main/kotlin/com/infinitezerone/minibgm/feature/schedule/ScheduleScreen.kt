@@ -224,6 +224,8 @@ fun ScheduleScreen(
                     watchingCount = currentWeekdayWatching,
                     onlyWatching = uiState.onlyWatching,
                     onToggleOnlyWatching = viewModel::toggleOnlyWatching,
+                    isLoggedIn = uiState.isLoggedIn,
+                    onPromptLogin = viewModel::promptLogin,
                     modifier = Modifier.widthIn(max = 840.dp),
                 )
             }
