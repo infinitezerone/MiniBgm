@@ -1,5 +1,10 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +55,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
+import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -104,7 +111,7 @@ internal fun SettingsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Group 1: 播放源与数据同步
+        // Group 1: 数据同步与提醒
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
@@ -115,7 +122,7 @@ internal fun SettingsSection(
         ) {
             Column(modifier = Modifier.padding(vertical = 10.dp)) {
                 Text(
-                    text = "数据同步与存储",
+                    text = "数据同步与提醒",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -133,7 +140,7 @@ internal fun SettingsSection(
                 SettingsItemRow(
                     icon = Icons.Filled.CloudQueue,
                     iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "立即同步放送源",
+                    title = "检查最新放送源",
                     subtitle = "状态：$lastSyncText · bgm-data",
                     trailing = {
                         if (isSyncing) {
@@ -160,38 +167,10 @@ internal fun SettingsSection(
                 )
 
                 SettingsItemRow(
-                    icon = Icons.Filled.CleaningServices,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "清理本地缓存",
-                    subtitle = "清理离线网络图片与临时缓存数据",
-                    onClick = onClearCache,
-                )
-            }
-        }
-
-        // Group 1.5: 通知与提醒
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "通知与提醒",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
-
-                SettingsItemRow(
                     icon = Icons.Filled.NotificationsActive,
                     iconTint = MaterialTheme.colorScheme.primary,
                     title = "追番更新提醒",
-                    subtitle = "每日汇总「我追的」的当日内更新，开播前 15 分钟逐集提醒",
+                    subtitle = "每日汇总「我追的」当日更新，开播前 15 分钟逐集提醒",
                     trailing = {
                         Switch(
                             checked = airingReminderEnabled,
@@ -200,35 +179,43 @@ internal fun SettingsSection(
                     },
                 )
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                AnimatedVisibility(
+                    visible = airingReminderEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        )
 
-                SettingsItemRow(
-                    icon = Icons.Filled.Schedule,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "提醒时刻",
-                    subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
-                    onClick = onOpenReminderHourDialog,
-                )
+                        SettingsItemRow(
+                            icon = Icons.Filled.Schedule,
+                            iconTint = MaterialTheme.colorScheme.secondary,
+                            title = "提醒时刻",
+                            subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
+                            onClick = onOpenReminderHourDialog,
+                        )
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        )
 
-                SettingsItemRow(
-                    icon = Icons.Filled.Schedule,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "开播提醒延迟偏移",
-                    subtitle = if (airDelayOffsetMinutes == 0) "无延迟" else "延迟 $airDelayOffsetMinutes 分钟",
-                    onClick = onOpenDelayOffsetDialog,
-                )
+                        SettingsItemRow(
+                            icon = Icons.Filled.Schedule,
+                            iconTint = MaterialTheme.colorScheme.tertiary,
+                            title = "开播提醒延迟偏移",
+                            subtitle = if (airDelayOffsetMinutes == 0) "无延迟" else "延迟 $airDelayOffsetMinutes 分钟",
+                            onClick = onOpenDelayOffsetDialog,
+                        )
+                    }
+                }
             }
         }
 
-        // Group 1.8: AI 智能服务
+        // Group 2: 智能服务与存储
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
@@ -239,7 +226,7 @@ internal fun SettingsSection(
         ) {
             Column(modifier = Modifier.padding(vertical = 10.dp)) {
                 Text(
-                    text = "AI 智能服务",
+                    text = "智能服务与存储",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -264,14 +251,27 @@ internal fun SettingsSection(
                 SettingsItemRow(
                     icon = Icons.Filled.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "AI 服务配置",
+                    title = "AI 追番助手配置",
                     subtitle = "$providerDisplay · $modelDisplay",
                     onClick = onOpenAiSettingsDialog,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.CleaningServices,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    title = "清理本地缓存",
+                    subtitle = "清理离线网络图片与临时缓存数据",
+                    onClick = onClearCache,
                 )
             }
         }
 
-        // Group 2: 社区与关于
+        // Group 3: 关于与系统支持
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
@@ -282,7 +282,7 @@ internal fun SettingsSection(
         ) {
             Column(modifier = Modifier.padding(vertical = 10.dp)) {
                 Text(
-                    text = "关于与社区服务",
+                    text = "关于与支持",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -290,8 +290,29 @@ internal fun SettingsSection(
                 )
 
                 SettingsItemRow(
-                    icon = Icons.Filled.Language,
+                    icon = Icons.Filled.BookmarkBorder,
                     iconTint = MaterialTheme.colorScheme.primary,
+                    title = "MiniBgm 客户端",
+                    subtitle = "v$clientVersion · MIT 开源协议",
+                    trailing = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "打开开源主页",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.Language,
+                    iconTint = MaterialTheme.colorScheme.secondary,
                     title = "访问 Bangumi 官网",
                     subtitle = "bgm.tv · ACG 动漫数据库与社区",
                     trailing = {
@@ -312,7 +333,7 @@ internal fun SettingsSection(
 
                 SettingsItemRow(
                     icon = Icons.Filled.Info,
-                    iconTint = MaterialTheme.colorScheme.secondary,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
                     title = "Bangumi 维基协作指南",
                     subtitle = "条目收录规范与编辑守则",
                     trailing = {
@@ -326,46 +347,10 @@ internal fun SettingsSection(
                     onClick = { onOpenWebUrl(BGM_WIKI_URL) },
                 )
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                SettingsItemRow(
-                    icon = Icons.Filled.BookmarkBorder,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "MiniBgm 客户端",
-                    subtitle = "v$clientVersion · MIT 开源协议",
-                    trailing = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "打开网页",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
-                )
-            }
-        }
-
-        // Group 3: 账号与登录安全 (仅在已登录状态下展示在最底部)
-        if (isLoggedIn) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-            ) {
-                Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                    Text(
-                        text = "账号设置",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                if (isLoggedIn) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
                     val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
@@ -555,9 +540,9 @@ private fun SettingsItemRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            shape = RoundedCornerShape(8.dp),
+            shape = RoundedCornerShape(10.dp),
             color = iconTint.copy(alpha = 0.12f),
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(38.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
@@ -595,5 +580,32 @@ private fun SettingsItemRow(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@ThemePreviews
+@Composable
+private fun SettingsSectionPreview() {
+    MiniBgmTheme {
+        SettingsSection(
+            isLoggedIn = true,
+            activeProfile = null,
+            savedAccountsCount = 1,
+            syncInterval = SyncInterval.DAILY,
+            lastSyncTimestamp = 123456789L,
+            isSyncing = false,
+            airingReminderEnabled = true,
+            onToggleAiringReminder = {},
+            airingReminderHour = 8,
+            onOpenReminderHourDialog = {},
+            airDelayOffsetMinutes = 15,
+            onOpenDelayOffsetDialog = {},
+            onOpenSyncDialog = {},
+            onSyncNow = {},
+            onOpenWebUrl = {},
+            onClearCache = {},
+            onLogoutCurrentClick = {},
+            onLogoutAllClick = {},
+        )
     }
 }

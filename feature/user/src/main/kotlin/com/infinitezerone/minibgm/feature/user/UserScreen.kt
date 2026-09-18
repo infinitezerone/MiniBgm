@@ -283,6 +283,7 @@ fun UserScreenContent(
                                     collectionCounts = uiState.collectionCounts,
                                     isCountsLoading = uiState.isCountsLoading,
                                     onCollectionClick = onCollectionClick,
+                                    onLogin = onLogin,
                                 )
                             }
                         }
@@ -294,6 +295,7 @@ fun UserScreenContent(
                                     collectionCounts = emptyMap(),
                                     isCountsLoading = false,
                                     onCollectionClick = onCollectionClick,
+                                    onLogin = onLogin,
                                 )
                             }
                         }
@@ -378,6 +380,7 @@ fun UserScreenContent(
                                 collectionCounts = uiState.collectionCounts,
                                 isCountsLoading = uiState.isCountsLoading,
                                 onCollectionClick = onCollectionClick,
+                                onLogin = onLogin,
                             )
                         }
                     }
@@ -389,6 +392,7 @@ fun UserScreenContent(
                                 collectionCounts = emptyMap(),
                                 isCountsLoading = false,
                                 onCollectionClick = onCollectionClick,
+                                onLogin = onLogin,
                             )
                         }
                     }
