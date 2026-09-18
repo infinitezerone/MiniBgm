@@ -44,6 +44,8 @@ data class UserPreferences(
     val aiModel: String = "",
     /** AI 服务配置：服务商类型（如 ollama, openai） */
     val aiProvider: String = "ollama",
+    /** 自定义播放规则列表 JSON 序列化字符串 */
+    val playbackRulesJson: String = "",
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

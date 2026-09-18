@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user.di
 
+import com.infinitezerone.minibgm.feature.user.PlaybackRulesViewModel
 import com.infinitezerone.minibgm.feature.user.UserCollectionsViewModel
 import com.infinitezerone.minibgm.feature.user.UserViewModel
 import org.koin.core.module.dsl.viewModelOf
@@ -9,4 +10,5 @@ val userModule =
     module {
         viewModelOf(::UserViewModel)
         viewModelOf(::UserCollectionsViewModel)
+        viewModelOf(::PlaybackRulesViewModel)
     }

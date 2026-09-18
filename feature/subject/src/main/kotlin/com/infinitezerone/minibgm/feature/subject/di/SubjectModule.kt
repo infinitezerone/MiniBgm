@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.di
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.TopicDetailViewModel
+import com.infinitezerone.minibgm.feature.subject.player.PlayerViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
@@ -38,6 +39,16 @@ val subjectModule =
                 topicId = topicId,
                 type = type,
                 communityRepository = get(),
+            )
+        }
+
+        viewModel { (subjectId: Long, episodeId: Long, streamUrl: String) ->
+            PlayerViewModel(
+                subjectId = subjectId,
+                episodeId = episodeId,
+                initialStreamUrl = streamUrl,
+                collectionRepository = get(),
+                authRepository = get(),
             )
         }
     }

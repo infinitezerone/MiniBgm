@@ -2,9 +2,13 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * 面向 UI 的用户设置投影：仅包含展示与行为偏好，不含登录态与账号数据
@@ -23,6 +27,7 @@ interface SettingsRepository {
     val settings: Flow<UserSettings>
     val aiConfig: Flow<AiConfig>
     val airDelayOffsetMinutes: Flow<Int>
+    val playbackRules: Flow<List<PlaybackSourceRule>>
 
     suspend fun setSyncInterval(interval: SyncInterval)
 
@@ -36,11 +41,30 @@ interface SettingsRepository {
     suspend fun setAiConfig(config: AiConfig)
 
     suspend fun setAirDelayOffsetMinutes(minutes: Int)
+
+    suspend fun addPlaybackRule(rule: PlaybackSourceRule)
+
+    suspend fun updatePlaybackRule(rule: PlaybackSourceRule)
+
+    suspend fun deletePlaybackRule(ruleId: String)
+
+    suspend fun togglePlaybackRule(
+        ruleId: String,
+        isEnabled: Boolean,
+    )
+
+    suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>)
 }
 
 class SettingsRepositoryImpl(
     private val userPreferences: UserPreferencesDataSource,
 ) : SettingsRepository {
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
+
     override val settings: Flow<UserSettings> =
         userPreferences.userPreferences.map { prefs ->
             UserSettings(
@@ -71,6 +95,17 @@ class SettingsRepositoryImpl(
     override val airDelayOffsetMinutes: Flow<Int> =
         userPreferences.userPreferences.map { it.airDelayOffsetMinutes }
 
+    override val playbackRules: Flow<List<PlaybackSourceRule>> =
+        userPreferences.userPreferences.map { prefs ->
+            if (prefs.playbackRulesJson.isBlank()) {
+                emptyList()
+            } else {
+                runCatching {
+                    json.decodeFromString<List<PlaybackSourceRule>>(prefs.playbackRulesJson)
+                }.getOrDefault(emptyList())
+            }
+        }
+
     override suspend fun setSyncInterval(interval: SyncInterval) {
         userPreferences.setSyncInterval(interval)
     }
@@ -94,5 +129,40 @@ class SettingsRepositoryImpl(
 
     override suspend fun setAirDelayOffsetMinutes(minutes: Int) {
         userPreferences.setAirDelayOffsetMinutes(minutes)
+    }
+
+    override suspend fun addPlaybackRule(rule: PlaybackSourceRule) {
+        val current = playbackRules.first()
+        val updated = current + rule
+        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+    }
+
+    override suspend fun updatePlaybackRule(rule: PlaybackSourceRule) {
+        val current = playbackRules.first()
+        val updated = current.map { if (it.id == rule.id) rule else it }
+        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+    }
+
+    override suspend fun deletePlaybackRule(ruleId: String) {
+        val current = playbackRules.first()
+        val updated = current.filterNot { it.id == ruleId }
+        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+    }
+
+    override suspend fun togglePlaybackRule(
+        ruleId: String,
+        isEnabled: Boolean,
+    ) {
+        val current = playbackRules.first()
+        val updated = current.map { if (it.id == ruleId) it.copy(isEnabled = isEnabled) else it }
+        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+    }
+
+    override suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>) {
+        val current = playbackRules.first()
+        val existingIds = current.map { it.id }.toSet()
+        val newRules = rules.filterNot { it.id in existingIds }
+        val updated = current + newRules
+        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
     }
 }

@@ -156,4 +156,11 @@ class UserPreferencesDataSource(
             )
         }
     }
+
+    /** 更新自定义播放规则配置 JSON */
+    suspend fun setPlaybackRulesJson(json: String) {
+        dataStore.updateData { current ->
+            current.copy(playbackRulesJson = json)
+        }
+    }
 }

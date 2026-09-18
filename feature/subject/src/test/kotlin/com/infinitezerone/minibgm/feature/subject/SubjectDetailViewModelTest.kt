@@ -1246,15 +1246,62 @@ class SubjectDetailViewModelTest {
                 )
 
             viewModel.toggleEpisodeWatched(episodeId = sampleEpisodeList.first().id, isWatched = true)
+            testScheduler.advanceUntilIdle()
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepo.updateEpisodeCallCount)
+            assertNull(viewModel.uiState.value.collection)
+            val event1 = viewModel.uiEvents.first()
+            assertTrue(event1 is SubjectDetailUiEvent.ShowMessage)
+            assertEquals("请先登录 Bangumi 账号", (event1 as SubjectDetailUiEvent.ShowMessage).message)
 
             viewModel.dismissLoginPrompt()
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
 
             viewModel.markWatchedUpTo(sampleEpisodeList.first())
+            testScheduler.advanceUntilIdle()
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepo.markEpisodesWatchedUpToCallCount)
+            assertNull(viewModel.uiState.value.collection)
+            val event2 = viewModel.uiEvents.first()
+            assertTrue(event2 is SubjectDetailUiEvent.ShowMessage)
+            assertEquals("请先登录 Bangumi 账号", (event2 as SubjectDetailUiEvent.ShowMessage).message)
+
+            viewModel.dismissLoginPrompt()
+            viewModel.promptLogin()
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+            val event3 = viewModel.uiEvents.first()
+            assertTrue(event3 is SubjectDetailUiEvent.ShowMessage)
+            assertEquals("请先登录 Bangumi 账号", (event3 as SubjectDetailUiEvent.ShowMessage).message)
+        }
+
+    @Test
+    fun authenticated_markWatchedUpTo_emitsBatchMarkedEvent() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo = FakeCollectionRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            val targetEp = sampleEpisodeList[1] // ep 2
+            viewModel.markWatchedUpTo(targetEp)
+            testScheduler.advanceUntilIdle()
+
+            val event = viewModel.uiEvents.first()
+            assertTrue(event is SubjectDetailUiEvent.BatchMarked)
+            assertEquals(2, (event as SubjectDetailUiEvent.BatchMarked).targetEpNumber)
+            assertEquals(1, collectionRepo.markEpisodesWatchedUpToCallCount)
         }
 
     @Test
@@ -1274,5 +1321,262 @@ class SubjectDetailViewModelTest {
             viewModel.enableAiringReminder()
             assertEquals(1, settingsRepo.setAiringReminderEnabledCallCount)
             assertTrue(settingsRepo.settings.first().airingReminderEnabled)
+        }
+
+    @Test
+    fun authenticated_toggleEpisodeWatched_mainEpisode_updatesEpStatus_and_emitsEpisodeMarked() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo = FakeCollectionRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            val ep2 = sampleEpisodeList[1] // ep 2, type 0
+            viewModel.toggleEpisodeWatched(episodeId = ep2.id, isWatched = true, epNumber = 2, episodeType = 0)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+            assertEquals(1, collectionRepo.updateEpisodeCallCount)
+            val event = viewModel.uiEvents.first()
+            assertTrue(event is SubjectDetailUiEvent.EpisodeMarked)
+            val markedEvent = event as SubjectDetailUiEvent.EpisodeMarked
+            assertEquals(2, markedEvent.epNumber)
+            assertEquals(0, markedEvent.episodeType)
+        }
+
+    @Test
+    fun authenticated_toggleEpisodeWatched_spEpisode_doesNotCorruptMainEpStatus_and_emitsEpisodeMarkedWithSp() =
+        runTest {
+            val spEpisode = Episode(id = 999L, type = 1, sort = 1f, ep = 1f, name = "SP 1")
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList + spEpisode)
+                }
+            val collectionRepo = FakeCollectionRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            // 当前 epStatus 为 0，打卡 SP 1（type = 1）
+            viewModel.toggleEpisodeWatched(episodeId = spEpisode.id, isWatched = true, epNumber = 1, episodeType = 1)
+            testScheduler.advanceUntilIdle()
+
+            // 关键断言：非本篇（SP）决不能将条目正篇进度篡改为 1
+            assertEquals(
+                0,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+            assertEquals(1, collectionRepo.updateEpisodeCallCount)
+
+            val event = viewModel.uiEvents.first()
+            assertTrue(event is SubjectDetailUiEvent.EpisodeMarked)
+            val markedEvent = event as SubjectDetailUiEvent.EpisodeMarked
+            assertEquals(1, markedEvent.epNumber)
+            assertEquals(1, markedEvent.episodeType)
+        }
+
+    @Test
+    fun undoMarkWatchedUpTo_whenRepositoryFails_revertsOptimisticState_and_emitsErrorMessage() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    revertEpisodesWatchedResult = AppResult.Error(IllegalStateException("网络异常"))
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            // 先标记至第 2 集
+            viewModel.markWatchedUpTo(sampleEpisodeList[1])
+            testScheduler.advanceUntilIdle()
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+
+            // 撤销打卡，但仓库返回失败
+            viewModel.undoMarkWatchedUpTo(previousEpStatus = 0, previousType = 0, undoneEpisodeIds = listOf(1L, 2L))
+            testScheduler.advanceUntilIdle()
+
+            // 验证失败后回滚为撤销前的状态
+            assertEquals(
+                2,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+            assertEquals(1, collectionRepo.revertEpisodesWatchedCallCount)
+
+            val events = mutableListOf<SubjectDetailUiEvent>()
+            // uiEvents 消费已有的 BatchMarked 以及后续发射的 ShowMessage
+            events.add(viewModel.uiEvents.first())
+            events.add(viewModel.uiEvents.first())
+            val errorEvent = events.filterIsInstance<SubjectDetailUiEvent.ShowMessage>().firstOrNull()
+            assertEquals("网络异常", errorEvent?.message)
+        }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sniffEpisodeSources_emitsScanningStateAndUiMessage() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            val targetEp = sampleEpisodeList.first()
+            viewModel.sniffEpisodeSources(targetEp)
+
+            // 验证即时进入扫描中状态，记录 episodeId
+            assertTrue(viewModel.uiState.value.isSniffingSources)
+            assertEquals(targetEp.id, viewModel.uiState.value.sniffingEpisodeId)
+
+            val initialMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
+            assertTrue(initialMessage.message.contains("正在检索"))
+
+            // 前进时间，模拟扫描完成
+            testScheduler.advanceTimeBy(1300)
+            testScheduler.advanceUntilIdle()
+
+            // 验证扫描状态复位
+            assertFalse(viewModel.uiState.value.isSniffingSources)
+            assertNull(viewModel.uiState.value.sniffingEpisodeId)
+
+            val completionMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
+            assertTrue(completionMessage.message.contains("未找到可用播放直链"))
+        }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sniffEpisodeSources_whileAlreadySniffing_ignoresSubsequentCalls() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            val targetEp1 = sampleEpisodeList[0]
+            val targetEp2 = sampleEpisodeList[1]
+            viewModel.sniffEpisodeSources(targetEp1)
+            assertTrue(viewModel.uiState.value.isSniffingSources)
+            assertEquals(targetEp1.id, viewModel.uiState.value.sniffingEpisodeId)
+
+            // 重复触发另一集嗅探，应被防抖重入保护忽略
+            viewModel.sniffEpisodeSources(targetEp2)
+            assertEquals(targetEp1.id, viewModel.uiState.value.sniffingEpisodeId)
+
+            testScheduler.advanceTimeBy(1300)
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isSniffingSources)
+            assertNull(viewModel.uiState.value.sniffingEpisodeId)
+        }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun sniffSubjectSources_emitsScanningStateAndUiMessage() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+            testScheduler.advanceUntilIdle()
+
+            viewModel.sniffSubjectSources()
+
+            assertTrue(viewModel.uiState.value.isSniffingSources)
+            assertNull(viewModel.uiState.value.sniffingEpisodeId)
+
+            val initialMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
+            assertTrue(initialMessage.message.contains("正在检索"))
+
+            testScheduler.advanceTimeBy(1300)
+            testScheduler.advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isSniffingSources)
+            val completionMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
+            assertTrue(completionMessage.message.contains("未找到可用播放直链"))
+        }
+
+    @Test
+    fun openPlaybackRuleManagement_emitsInformativeUiMessage() =
+        runTest {
+            val repository = FakeSubjectRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+
+            viewModel.openPlaybackRuleManagement()
+
+            val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
+            assertTrue(event.message.contains("自定义播放规则"))
         }
 }
