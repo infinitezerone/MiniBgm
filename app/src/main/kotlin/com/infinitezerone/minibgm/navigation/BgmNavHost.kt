@@ -91,6 +91,7 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick = { navState.navigateTo(AssistantRoute()) },
+                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )

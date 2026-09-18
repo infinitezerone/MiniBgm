@@ -78,6 +78,7 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
     onAssistantClick: () -> Unit = {},
+    onSourceSearch: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
@@ -347,6 +348,12 @@ fun ScheduleScreen(
             schedule = schedule,
             onDismissRequest = { selectedScheduleForSources = null },
             onOpenUrl = handleLaunchStreamingUrl,
+            onAiSourceSearch = {
+                val title = schedule.titleCn.ifBlank { schedule.title }
+                onSourceSearch(
+                    "帮我找《$title》的在线观看页面，只给我可以打开观看的网页链接（Bangumi 条目号 ${schedule.bgmId}）",
+                )
+            },
         )
     }
 
