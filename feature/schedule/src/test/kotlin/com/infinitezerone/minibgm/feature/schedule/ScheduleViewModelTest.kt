@@ -259,6 +259,30 @@ class ScheduleViewModelTest {
         }
 
     @Test
+    fun toggleOnlyWatching_whenNotLoggedIn_showsLoginPrompt() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel =
+                createViewModel(
+                    repository = repository,
+                    collectionRepository = collectionRepository,
+                    authRepository = authRepository,
+                )
+
+            val initial = viewModel.uiState.first { !it.isLoggedIn }
+            assertFalse(initial.isLoggedIn)
+            assertFalse(initial.showLoginPromptDialog)
+
+            viewModel.toggleOnlyWatching()
+
+            val promptState = viewModel.uiState.first { it.showLoginPromptDialog }
+            assertTrue(promptState.showLoginPromptDialog)
+            assertFalse(promptState.onlyWatching)
+        }
+
+    @Test
     fun refreshFailureSetsErrorState() =
         runTest {
             val repository = FakeScheduleRepository()

@@ -21,6 +21,7 @@ import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
+import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
@@ -35,6 +36,7 @@ import com.infinitezerone.minibgm.feature.subject.navigation.episodeDetailEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
+import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userCollectionsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
@@ -119,8 +121,14 @@ fun BgmNavHost(
                                 onCollectionClick = { type ->
                                     navState.navigateTo(UserCollectionsRoute(type.value))
                                 },
+                                onSettingsClick = { navState.navigateTo(SettingsRoute) },
                                 scrollToTop = userScrollToTop,
                                 metadata = bgmTopLevelTransitionMetadata,
+                            )
+
+                            settingsEntry(
+                                onBackClick = { navState.goBack() },
+                                metadata = bgmListPane(detailPlaceholder),
                             )
 
                             userCollectionsEntry(

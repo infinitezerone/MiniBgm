@@ -118,3 +118,9 @@ data class TopicDetailRoute(
     val initialTitle: String = "",
     val type: String = "subject",
 ) : DetailChainRoute
+
+/**
+ * 应用全局设置交互界面路由（包含数据源同步、AI 追番助手、存储管理、关于与账号安全）。
+ */
+@Serializable
+data object SettingsRoute : SubFeatureRoute

@@ -54,7 +54,7 @@ data class ScheduleUiState(
     val isRefreshing: Boolean = false,
     val error: String? = null,
     val selectedWeekday: Int,
-    val todayWeekday: Int = ScheduleViewModel.currentCstDate().dayOfWeek.value,
+    val todayWeekday: Int = ScheduleViewModel.currentLocalDate().dayOfWeek.value,
     val dateItems: List<WeekdayDateItem> = emptyList(),
     val weeklySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val watchingSubjectIds: Set<Long> = emptySet(),
@@ -64,6 +64,7 @@ data class ScheduleUiState(
     val nextUpAction: NextUpAction? = null,
     val isActionDismissed: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
+    val isLoggedIn: Boolean = false,
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
@@ -162,7 +163,7 @@ class ScheduleViewModel(
     private val settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository,
     private val authRepository: com.infinitezerone.minibgm.core.data.repository.AuthRepository,
 ) : ViewModel() {
-    private val selectedWeekday = MutableStateFlow(currentCstDate().dayOfWeek.value)
+    private val selectedWeekday = MutableStateFlow(currentLocalDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
@@ -243,9 +244,21 @@ class ScheduleViewModel(
             refreshing to error
         }
 
+    private data class ExtraScheduleState(
+        val delayMinutes: Int,
+        val dismissed: Boolean,
+        val showLogin: Boolean,
+        val loggedIn: Boolean,
+    )
+
     private val extraStateFlow =
-        combine(settingsRepository.airDelayOffsetMinutes, isActionDismissed, showLoginPromptDialog) { delayMinutes, dismissed, showLogin ->
-            Triple(delayMinutes, dismissed, showLogin)
+        combine(
+            settingsRepository.airDelayOffsetMinutes,
+            isActionDismissed,
+            showLoginPromptDialog,
+            isLoggedIn,
+        ) { delayMinutes, dismissed, showLogin, loggedIn ->
+            ExtraScheduleState(delayMinutes, dismissed, showLogin, loggedIn)
         }
 
     val uiState: StateFlow<ScheduleUiState> =
@@ -260,9 +273,10 @@ class ScheduleViewModel(
             (watchingIds, collectionMap),
             (weekday, onlyWatch),
             (refreshing, error),
-            (delayMinutes, dismissed, showLogin),
+            extra,
             ->
-            val currentToday = currentCstDate()
+            val (delayMinutes, dismissed, showLogin, loggedIn) = extra
+            val currentToday = currentLocalDate()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
 
@@ -435,13 +449,14 @@ class ScheduleViewModel(
                 nextUpAction = computedNextUpAction,
                 isActionDismissed = dismissed,
                 showLoginPromptDialog = showLogin,
+                isLoggedIn = loggedIn,
             )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue =
                 run {
-                    val initialToday = currentCstDate()
+                    val initialToday = currentLocalDate()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
                         isLoading = true,
@@ -449,6 +464,7 @@ class ScheduleViewModel(
                         selectedWeekday = initialWeekday,
                         todayWeekday = initialWeekday,
                         dateItems = calculateDateItems(initialToday),
+                        isLoggedIn = false,
                     )
                 },
         )
@@ -467,11 +483,19 @@ class ScheduleViewModel(
     }
 
     fun toggleOnlyWatching() {
+        if (!isLoggedIn.value && !onlyWatching.value) {
+            showLoginPromptDialog.value = true
+            return
+        }
         val next = !onlyWatching.value
         onlyWatching.value = next
         viewModelScope.launch {
             scheduleRepository.setScheduleDefaultOnlyWatching(next)
         }
+    }
+
+    fun promptLogin() {
+        showLoginPromptDialog.value = true
     }
 
     fun dismissNextUpAction() {
@@ -564,7 +588,10 @@ class ScheduleViewModel(
     companion object {
         val CST_ZONE_ID: ZoneId = ZoneId.of("Asia/Shanghai")
 
-        fun currentCstDate(): LocalDate = LocalDate.now(CST_ZONE_ID)
+        fun currentLocalDate(): LocalDate = LocalDate.now()
+
+        @Deprecated("Use currentLocalDate() instead", ReplaceWith("currentLocalDate()"))
+        fun currentCstDate(): LocalDate = currentLocalDate()
 
         fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> {
             val todayWeekday = today.dayOfWeek.value

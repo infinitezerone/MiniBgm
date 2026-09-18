@@ -202,63 +202,63 @@ fun FilterAndMetaBar(
     onlyWatching: Boolean,
     onToggleOnlyWatching: () -> Unit,
     modifier: Modifier = Modifier,
+    isLoggedIn: Boolean = true,
+    onPromptLogin: () -> Unit = {},
 ) {
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = onlyWatching,
-                onClick = { if (!onlyWatching) onToggleOnlyWatching() },
-                label = {
-                    Text(
-                        text = "⭐ 我的追番 ($watchingCount)",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-                shape = RoundedCornerShape(12.dp),
-                border = null,
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
+        FilterChip(
+            selected = onlyWatching,
+            onClick = {
+                if (!isLoggedIn) {
+                    onPromptLogin()
+                } else if (!onlyWatching) {
+                    onToggleOnlyWatching()
+                }
+            },
+            label = {
+                Text(
+                    text = if (!isLoggedIn) "⭐ 我的追番 (未登录)" else "⭐ 我的追番 ($watchingCount)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
+                )
+            },
+            shape = RoundedCornerShape(12.dp),
+            border = null,
+            colors =
+                FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+        )
 
-            FilterChip(
-                selected = !onlyWatching,
-                onClick = { if (onlyWatching) onToggleOnlyWatching() },
-                label = {
-                    Text(
-                        text = "全网开播 ($totalCount)",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-                shape = RoundedCornerShape(12.dp),
-                border = null,
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ),
-            )
-        }
-
-        Text(
-            text = "北京时间 CST",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        FilterChip(
+            selected = !onlyWatching,
+            onClick = { if (onlyWatching) onToggleOnlyWatching() },
+            label = {
+                Text(
+                    text = "全网开播 ($totalCount)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
+                )
+            },
+            shape = RoundedCornerShape(12.dp),
+            border = null,
+            colors =
+                FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
         )
     }
 }

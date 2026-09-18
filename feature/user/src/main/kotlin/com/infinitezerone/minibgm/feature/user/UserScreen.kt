@@ -1,20 +1,18 @@
 package com.infinitezerone.minibgm.feature.user
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -45,9 +43,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
-import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
@@ -58,6 +54,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UserScreen(
     onCollectionClick: (CollectionType) -> Unit = {},
+    onSettingsClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
@@ -66,20 +63,6 @@ fun UserScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
-
-    val openWebUrl = { url: String ->
-        context.launchWebUrl(url)
-    }
-
-    // 开启提醒时顺带请求通知权限（Android 13+；拒绝仅影响送达，不影响开关本身）
-    val notificationPermissionLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    val toggleAiringReminder: (Boolean) -> Unit = { enabled ->
-        viewModel.setAiringReminderEnabled(enabled)
-        if (enabled && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
 
     UserScreenContent(
         uiState = uiState,
@@ -102,35 +85,11 @@ fun UserScreen(
                 }
             }
         },
+        onSettingsClick = onSettingsClick,
         onSwitchAccount = viewModel::switchAccount,
-        onLogoutCurrent = viewModel::logout,
         onLogoutAccount = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
-        onOpenWebUrl = openWebUrl,
-        onClearCache = {
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar("本地缓存与临时数据已清理 ✨")
-            }
-        },
         onCollectionClick = onCollectionClick,
-        onSelectSyncInterval = viewModel::setSyncInterval,
-        onSyncNow = {
-            viewModel.syncBangumiDataNow { success ->
-                coroutineScope.launch {
-                    if (success) {
-                        snackbarHostState.showSnackbar("播放源已是最新状态 ✨")
-                    } else {
-                        snackbarHostState.showSnackbar("同步失败，请检查网络设置")
-                    }
-                }
-            }
-        },
-        onSaveAiConfig = viewModel::setAiConfig,
-        onToggleAiringReminder = toggleAiringReminder,
-        airingReminderHour = uiState.airingReminderHour,
-        onSelectReminderHour = viewModel::setAiringReminderHour,
-        airDelayOffsetMinutes = uiState.airDelayOffsetMinutes,
-        onSelectDelayOffsetMinutes = viewModel::setAirDelayOffsetMinutes,
         scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
@@ -143,21 +102,11 @@ fun UserScreenContent(
     uiState: UserUiState,
     onLogin: () -> Unit,
     onRefresh: () -> Unit,
+    onSettingsClick: () -> Unit,
     onSwitchAccount: (Long) -> Unit,
-    onLogoutCurrent: () -> Unit,
     onLogoutAccount: (Long) -> Unit,
     onLogoutAll: () -> Unit,
-    onOpenWebUrl: (String) -> Unit,
-    onClearCache: () -> Unit,
     onCollectionClick: (CollectionType) -> Unit,
-    onSelectSyncInterval: (SyncInterval) -> Unit,
-    onSyncNow: () -> Unit,
-    onSaveAiConfig: (AiConfig) -> Unit = {},
-    onToggleAiringReminder: (Boolean) -> Unit = {},
-    airingReminderHour: Int = 8,
-    onSelectReminderHour: (Int) -> Unit = {},
-    airDelayOffsetMinutes: Int = 0,
-    onSelectDelayOffsetMinutes: (Int) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -165,11 +114,6 @@ fun UserScreenContent(
     var showAccountSheet by remember { mutableStateOf(false) }
     var accountToLogout by remember { mutableStateOf<UserProfile?>(null) }
     var showLogoutAllDialog by remember { mutableStateOf(false) }
-    var showLogoutCurrentDialog by remember { mutableStateOf(false) }
-    var showSyncIntervalDialog by remember { mutableStateOf(false) }
-    var showReminderHourDialog by remember { mutableStateOf(false) }
-    var showDelayOffsetDialog by remember { mutableStateOf(false) }
-    var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
 
@@ -183,9 +127,7 @@ fun UserScreenContent(
         topBar = {
             BgmTopAppBar(
                 title = {
-                    Text(
-                        text = "个人中心",
-                    )
+                    Text(text = "个人中心")
                 },
                 actions = {
                     if (uiState.isLoggedIn) {
@@ -211,6 +153,13 @@ fun UserScreenContent(
                             }
                         }
                     }
+
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "设置",
+                        )
+                    }
                 },
             )
         },
@@ -228,7 +177,15 @@ fun UserScreenContent(
             val adaptiveInfo = LocalWindowAdaptiveInfo.current
             val isWideScreen = adaptiveInfo.isWide
 
-            if (isWideScreen) {
+            if (!uiState.isLoggedIn) {
+                // 未登录状态：全屏沉浸式登录引导区，干净聚焦无冗余
+                UnauthenticatedLandingView(
+                    onLogin = onLogin,
+                    isAuthenticating = uiState.isAuthenticating,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else if (isWideScreen) {
+                // 已登录宽屏双栏模式
                 Row(
                     modifier =
                         Modifier
@@ -236,7 +193,7 @@ fun UserScreenContent(
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    // 左栏：个人资料概览、多账号管理与五维收藏分布
+                    // 左栏：个人资料概览与多账号管理
                     LazyColumn(
                         state = listState,
                         modifier =
@@ -246,112 +203,7 @@ fun UserScreenContent(
                         contentPadding = PaddingValues(bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        if (!uiState.isLoggedIn) {
-                            item(key = "wide_unauthenticated_card") {
-                                UnauthenticatedCard(
-                                    onLogin = onLogin,
-                                    isAuthenticating = uiState.isAuthenticating,
-                                )
-                            }
-                        } else {
-                            item(key = "wide_profile_header") {
-                                UserProfileHeaderCard(
-                                    profile = uiState.activeProfile,
-                                    savedAccountsCount = uiState.savedAccounts.size,
-                                    onManageAccountsClick = { showAccountSheet = true },
-                                )
-                            }
-
-                            if (uiState.savedAccounts.size > 1) {
-                                item(key = "wide_multi_account_card") {
-                                    MultiAccountQuickCard(
-                                        accounts = uiState.savedAccounts,
-                                        activeProfile = uiState.activeProfile,
-                                        onSwitchAccount = onSwitchAccount,
-                                        onManageAccountsClick = { showAccountSheet = true },
-                                        onAddAccountClick = {
-                                            showAccountSheet = false
-                                            onLogin()
-                                        },
-                                    )
-                                }
-                            }
-
-                            item(key = "wide_collections_overview") {
-                                CollectionOverviewCard(
-                                    isLoggedIn = true,
-                                    collectionCounts = uiState.collectionCounts,
-                                    isCountsLoading = uiState.isCountsLoading,
-                                    onCollectionClick = onCollectionClick,
-                                    onLogin = onLogin,
-                                )
-                            }
-                        }
-
-                        if (!uiState.isLoggedIn) {
-                            item(key = "wide_collections_overview_placeholder") {
-                                CollectionOverviewCard(
-                                    isLoggedIn = false,
-                                    collectionCounts = emptyMap(),
-                                    isCountsLoading = false,
-                                    onCollectionClick = onCollectionClick,
-                                    onLogin = onLogin,
-                                )
-                            }
-                        }
-                    }
-
-                    // 右栏：同步设置、提醒、缓存与系统信息
-                    LazyColumn(
-                        modifier =
-                            Modifier
-                                .weight(0.55f)
-                                .fillMaxHeight(),
-                        contentPadding = PaddingValues(bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        item(key = "wide_settings_and_about") {
-                            SettingsSection(
-                                isLoggedIn = uiState.isLoggedIn,
-                                activeProfile = uiState.activeProfile,
-                                savedAccountsCount = uiState.savedAccounts.size,
-                                syncInterval = uiState.syncInterval,
-                                lastSyncTimestamp = uiState.lastSyncTimestamp,
-                                isSyncing = uiState.isSyncing,
-                                airingReminderEnabled = uiState.airingReminderEnabled,
-                                onToggleAiringReminder = onToggleAiringReminder,
-                                airingReminderHour = airingReminderHour,
-                                aiConfig = uiState.aiConfig,
-                                onOpenAiSettingsDialog = { showAiSettingsDialog = true },
-                                onOpenReminderHourDialog = { showReminderHourDialog = true },
-                                airDelayOffsetMinutes = airDelayOffsetMinutes,
-                                onOpenDelayOffsetDialog = { showDelayOffsetDialog = true },
-                                onOpenSyncDialog = { showSyncIntervalDialog = true },
-                                onSyncNow = onSyncNow,
-                                onOpenWebUrl = onOpenWebUrl,
-                                onClearCache = onClearCache,
-                                onLogoutCurrentClick = { showLogoutCurrentDialog = true },
-                                onLogoutAllClick = { showLogoutAllDialog = true },
-                            )
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    if (!uiState.isLoggedIn) {
-                        item(key = "unauthenticated_card") {
-                            UnauthenticatedCard(
-                                onLogin = onLogin,
-                                isAuthenticating = uiState.isAuthenticating,
-                            )
-                        }
-                    } else {
-                        item(key = "profile_header") {
+                        item(key = "wide_profile_header") {
                             UserProfileHeaderCard(
                                 profile = uiState.activeProfile,
                                 savedAccountsCount = uiState.savedAccounts.size,
@@ -360,7 +212,7 @@ fun UserScreenContent(
                         }
 
                         if (uiState.savedAccounts.size > 1) {
-                            item(key = "multi_account_card") {
+                            item(key = "wide_multi_account_card") {
                                 MultiAccountQuickCard(
                                     accounts = uiState.savedAccounts,
                                     activeProfile = uiState.activeProfile,
@@ -373,8 +225,18 @@ fun UserScreenContent(
                                 )
                             }
                         }
+                    }
 
-                        item(key = "collections_overview") {
+                    // 右栏：五维收藏分布全景看板
+                    LazyColumn(
+                        modifier =
+                            Modifier
+                                .weight(0.55f)
+                                .fillMaxHeight(),
+                        contentPadding = PaddingValues(bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        item(key = "wide_collections_overview") {
                             CollectionOverviewCard(
                                 isLoggedIn = true,
                                 collectionCounts = uiState.collectionCounts,
@@ -384,78 +246,50 @@ fun UserScreenContent(
                             )
                         }
                     }
+                }
+            } else {
+                // 已登录单栏竖屏模式
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    item(key = "profile_header") {
+                        UserProfileHeaderCard(
+                            profile = uiState.activeProfile,
+                            savedAccountsCount = uiState.savedAccounts.size,
+                            onManageAccountsClick = { showAccountSheet = true },
+                        )
+                    }
 
-                    if (!uiState.isLoggedIn) {
-                        item(key = "collections_overview_placeholder") {
-                            CollectionOverviewCard(
-                                isLoggedIn = false,
-                                collectionCounts = emptyMap(),
-                                isCountsLoading = false,
-                                onCollectionClick = onCollectionClick,
-                                onLogin = onLogin,
+                    if (uiState.savedAccounts.size > 1) {
+                        item(key = "multi_account_card") {
+                            MultiAccountQuickCard(
+                                accounts = uiState.savedAccounts,
+                                activeProfile = uiState.activeProfile,
+                                onSwitchAccount = onSwitchAccount,
+                                onManageAccountsClick = { showAccountSheet = true },
+                                onAddAccountClick = {
+                                    showAccountSheet = false
+                                    onLogin()
+                                },
                             )
                         }
                     }
 
-                    item(key = "settings_and_about") {
-                        SettingsSection(
-                            isLoggedIn = uiState.isLoggedIn,
-                            activeProfile = uiState.activeProfile,
-                            savedAccountsCount = uiState.savedAccounts.size,
-                            syncInterval = uiState.syncInterval,
-                            lastSyncTimestamp = uiState.lastSyncTimestamp,
-                            isSyncing = uiState.isSyncing,
-                            airingReminderEnabled = uiState.airingReminderEnabled,
-                            onToggleAiringReminder = onToggleAiringReminder,
-                            airingReminderHour = airingReminderHour,
-                            aiConfig = uiState.aiConfig,
-                            onOpenAiSettingsDialog = { showAiSettingsDialog = true },
-                            onOpenReminderHourDialog = { showReminderHourDialog = true },
-                            airDelayOffsetMinutes = airDelayOffsetMinutes,
-                            onOpenDelayOffsetDialog = { showDelayOffsetDialog = true },
-                            onOpenSyncDialog = { showSyncIntervalDialog = true },
-                            onSyncNow = onSyncNow,
-                            onOpenWebUrl = onOpenWebUrl,
-                            onClearCache = onClearCache,
-                            onLogoutCurrentClick = { showLogoutCurrentDialog = true },
-                            onLogoutAllClick = { showLogoutAllDialog = true },
+                    item(key = "collections_overview") {
+                        CollectionOverviewCard(
+                            isLoggedIn = true,
+                            collectionCounts = uiState.collectionCounts,
+                            isCountsLoading = uiState.isCountsLoading,
+                            onCollectionClick = onCollectionClick,
+                            onLogin = onLogin,
                         )
                     }
                 }
             }
         }
-    }
-
-    if (showAiSettingsDialog) {
-        AiSettingsDialog(
-            currentConfig = uiState.aiConfig,
-            onSaveConfig = onSaveAiConfig,
-            onDismiss = { showAiSettingsDialog = false },
-        )
-    }
-
-    if (showSyncIntervalDialog) {
-        SyncIntervalDialog(
-            currentInterval = uiState.syncInterval,
-            onSelectInterval = onSelectSyncInterval,
-            onDismiss = { showSyncIntervalDialog = false },
-        )
-    }
-
-    if (showReminderHourDialog) {
-        ReminderHourDialog(
-            currentHour = airingReminderHour,
-            onSelectHour = onSelectReminderHour,
-            onDismiss = { showReminderHourDialog = false },
-        )
-    }
-
-    if (showDelayOffsetDialog) {
-        DelayOffsetDialog(
-            currentOffset = airDelayOffsetMinutes,
-            onSelectOffset = onSelectDelayOffsetMinutes,
-            onDismiss = { showDelayOffsetDialog = false },
-        )
     }
 
     if (showAccountSheet) {
@@ -519,50 +353,6 @@ fun UserScreenContent(
         )
     }
 
-    if (showLogoutCurrentDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutCurrentDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Logout,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(text = "退出当前账号") },
-            text = {
-                val currentDisplayName =
-                    uiState.activeProfile
-                        ?.displayName
-                        .orEmpty()
-                        .ifBlank { "当前账号" }
-                Text(
-                    text = "确定要退出当前登录的账号「$currentDisplayName」吗？",
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onLogoutCurrent()
-                        showLogoutCurrentDialog = false
-                    },
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                ) {
-                    Text(text = "确认退出")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutCurrentDialog = false }) {
-                    Text(text = "取消")
-                }
-            },
-        )
-    }
-
     if (showLogoutAllDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutAllDialog = false },
@@ -576,7 +366,7 @@ fun UserScreenContent(
             title = { Text(text = "退出所有账号") },
             text = {
                 Text(
-                    text = "确定要退出全部已登录的 Bangumi 账号吗？设备上的登录状态与本地缓存将被清除。",
+                    text = "确定要退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号吗？所有已保存的授权凭据都将被清除。",
                 )
             },
             confirmButton = {
@@ -603,8 +393,6 @@ fun UserScreenContent(
         )
     }
 }
-
-// ---------------- Components ----------------
 
 // ---------------- Previews ----------------
 
@@ -636,15 +424,11 @@ private fun UserScreenUnauthenticatedPreview() {
             uiState = UserUiState(isLoggedIn = false),
             onLogin = {},
             onRefresh = {},
+            onSettingsClick = {},
             onSwitchAccount = {},
-            onLogoutCurrent = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onOpenWebUrl = {},
-            onClearCache = {},
             onCollectionClick = {},
-            onSelectSyncInterval = {},
-            onSyncNow = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }
@@ -671,15 +455,11 @@ private fun UserScreenSingleAccountPreview() {
                 ),
             onLogin = {},
             onRefresh = {},
+            onSettingsClick = {},
             onSwitchAccount = {},
-            onLogoutCurrent = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onOpenWebUrl = {},
-            onClearCache = {},
             onCollectionClick = {},
-            onSelectSyncInterval = {},
-            onSyncNow = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }
@@ -704,15 +484,11 @@ private fun UserScreenMultiAccountPreview() {
                 ),
             onLogin = {},
             onRefresh = {},
+            onSettingsClick = {},
             onSwitchAccount = {},
-            onLogoutCurrent = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onOpenWebUrl = {},
-            onClearCache = {},
             onCollectionClick = {},
-            onSelectSyncInterval = {},
-            onSyncNow = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }
