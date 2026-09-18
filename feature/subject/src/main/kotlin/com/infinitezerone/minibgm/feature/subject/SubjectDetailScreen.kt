@@ -141,6 +141,7 @@ fun SubjectDetailScreen(
     onCharacterClick: ((Long) -> Unit)? = null,
     onPersonClick: ((Long) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
+    onSourceSearch: (String) -> Unit = {},
     viewModel: SubjectDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId) }),
 ) {
     val context = LocalContext.current
@@ -185,6 +186,9 @@ fun SubjectDetailScreen(
             when (event) {
                 is SubjectDetailUiEvent.ShowMessage -> {
                     snackbarHostState.showSnackbar(event.message)
+                }
+                is SubjectDetailUiEvent.OpenSourceSearch -> {
+                    onSourceSearch(event.prefillPrompt)
                 }
                 is SubjectDetailUiEvent.EpisodeMarked -> {
                     val group = EpisodeGroup.fromType(event.episodeType)
@@ -714,18 +718,11 @@ fun SubjectDetailScreen(
                     selectedEpisodeForSources = null
                     onPlayClick(route)
                 },
-                isSniffing = uiState.isSniffingSources && uiState.sniffingEpisodeId == selectedEpisode.id,
-                onAiSniff = { ep ->
-                    viewModel.sniffEpisodeSources(ep)
-                },
+                onAiSourceSearch = { viewModel.requestSourceSearch(selectedEpisode) },
                 onManageRules = {
-                    if (onManageRules != null) {
-                        showSourcesBottomSheet = false
-                        selectedEpisodeForSources = null
-                        onManageRules()
-                    } else {
-                        viewModel.openPlaybackRuleManagement()
-                    }
+                    showSourcesBottomSheet = false
+                    selectedEpisodeForSources = null
+                    onManageRules?.invoke()
                 },
                 playbackRules = uiState.playbackRules,
                 playlists = uiState.playlists,
@@ -739,18 +736,11 @@ fun SubjectDetailScreen(
                     selectedEpisodeForSources = null
                 },
                 onOpenUrl = handleStreamingUrl,
-                isSniffing = uiState.isSniffingSources,
-                onAiSniff = {
-                    viewModel.sniffSubjectSources()
-                },
+                onAiSourceSearch = { viewModel.requestSourceSearch() },
                 onManageRules = {
-                    if (onManageRules != null) {
-                        showSourcesBottomSheet = false
-                        selectedEpisodeForSources = null
-                        onManageRules()
-                    } else {
-                        viewModel.openPlaybackRuleManagement()
-                    }
+                    showSourcesBottomSheet = false
+                    selectedEpisodeForSources = null
+                    onManageRules?.invoke()
                 },
                 playbackRules = uiState.playbackRules,
                 playlists = uiState.playlists,

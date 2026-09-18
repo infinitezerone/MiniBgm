@@ -13,6 +13,7 @@ import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import com.infinitezerone.minibgm.core.ai.tools.CollectionTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
+import com.infinitezerone.minibgm.core.ai.tools.SourceSearchTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -21,13 +22,14 @@ import kotlinx.coroutines.flow.first
 
 /**
  * 默认智能体执行服务，利用 JetBrains Koog 框架与 SettingsRepository 提供的 AI 配置进行交互。
- * 整合放送时刻表、条目检索与收藏进度等 Koog 工具集，并在写操作执行中引入 HITL 安全保护机制。
+ * 整合放送时刻表、条目检索、收藏进度与找源等 Koog 工具集，并在写操作执行中引入 HITL 安全保护机制。
  */
 class DefaultBgmAiAgentService(
     private val settingsRepository: SettingsRepository,
     val scheduleTools: ScheduleTools? = null,
     val subjectTools: SubjectTools? = null,
     val collectionTools: CollectionTools? = null,
+    val sourceSearchTools: SourceSearchTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
@@ -133,6 +135,7 @@ class DefaultBgmAiAgentService(
         scheduleTools = null,
         subjectTools = null,
         collectionTools = null,
+        sourceSearchTools = null,
         pendingActionExecutor = null,
         pendingActionStore = null,
         agentRunner = { config, prompt, _ -> agentRunner(config, prompt) },
@@ -143,6 +146,7 @@ class DefaultBgmAiAgentService(
             scheduleTools?.let { tools(it) }
             subjectTools?.let { tools(it) }
             collectionTools?.let { tools(it) }
+            sourceSearchTools?.let { tools(it) }
         }
 
     override suspend fun execute(prompt: String): AppResult<String> {

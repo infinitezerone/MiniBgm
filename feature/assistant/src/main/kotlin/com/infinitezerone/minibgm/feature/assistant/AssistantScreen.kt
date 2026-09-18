@@ -75,11 +75,16 @@ private val PROMPT_SUGGESTIONS =
 fun AssistantScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: (() -> Unit)? = null,
+    prefillPrompt: String = "",
     modifier: Modifier = Modifier,
     viewModel: AssistantViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(prefillPrompt) {
+        viewModel.sendPrefilledPrompt(prefillPrompt)
+    }
 
     LaunchedEffect(viewModel.events) {
         viewModel.events.collect { event ->

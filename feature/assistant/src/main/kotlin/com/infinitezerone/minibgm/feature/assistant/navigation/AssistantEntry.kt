@@ -14,8 +14,9 @@ fun EntryProviderScope<NavKey>.assistantEntry(
     onBackClick: (() -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<AssistantRoute>(metadata = metadata) {
+    entry<AssistantRoute>(metadata = metadata) { route ->
         AssistantScreen(
+            prefillPrompt = route.prefillPrompt,
             onSubjectClick = onSubjectClick,
             onBackClick = onBackClick,
         )

@@ -93,6 +93,18 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToAssistantWithDifferentPrefill_replacesExistingAssistant() {
+        val state = newState()
+        state.navigateTo(AssistantRoute("找源 A"))
+        state.navigateTo(AssistantRoute("找源 B"))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, AssistantRoute("找源 B")),
+            state.currentSubStack.toList(),
+        )
+    }
+
+    @Test
     fun navigateToTagSubjects_preservesSubjectDetailInBackStack() {
         val state = newState()
         state.navigateTo(SubjectDetailRoute(1L))

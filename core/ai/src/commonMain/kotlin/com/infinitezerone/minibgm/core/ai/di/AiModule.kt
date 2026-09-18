@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.ai.PendingActionExecutor
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.ai.tools.CollectionTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
+import com.infinitezerone.minibgm.core.ai.tools.SourceSearchTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
 import org.koin.dsl.module
 
@@ -16,6 +17,7 @@ val aiModule =
         single { ScheduleTools(scheduleRepository = get()) }
         single { SubjectTools(searchRepository = get(), subjectRepository = get()) }
         single { CollectionTools(collectionRepository = get(), pendingActionStore = get<PendingActionStore>()) }
+        single { SourceSearchTools(scheduleRepository = get(), subjectRepository = get()) }
         single<PendingActionExecutor> { DefaultPendingActionExecutor(collectionRepository = get()) }
 
         single<BgmAiAgentService> {
@@ -24,6 +26,7 @@ val aiModule =
                 scheduleTools = getOrNull(),
                 subjectTools = getOrNull(),
                 collectionTools = getOrNull(),
+                sourceSearchTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
             )

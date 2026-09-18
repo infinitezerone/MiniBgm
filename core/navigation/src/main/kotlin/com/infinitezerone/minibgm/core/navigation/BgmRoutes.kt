@@ -94,9 +94,12 @@ data class TagSubjectsRoute(
 
 /**
  * AI 追番助手交互界面路由。
+ * [prefillPrompt] 非空时进入页面即自动作为首条提问发送（如条目页「AI 找源」交接的检索请求）。
  */
 @Serializable
-data object AssistantRoute : SubFeatureRoute
+data class AssistantRoute(
+    val prefillPrompt: String = "",
+) : SubFeatureRoute
 
 /**
  * 季度新番导视大盘交互界面路由。

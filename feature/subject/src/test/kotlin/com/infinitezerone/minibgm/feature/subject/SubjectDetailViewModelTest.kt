@@ -1452,9 +1452,8 @@ class SubjectDetailViewModelTest {
             assertEquals("网络异常", errorEvent?.message)
         }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
-    fun sniffEpisodeSources_emitsScanningStateAndUiMessage() =
+    fun requestSourceSearch_forEpisode_emitsAssistantPrompt() =
         runTest {
             val repository =
                 FakeSubjectRepository().apply {
@@ -1467,35 +1466,21 @@ class SubjectDetailViewModelTest {
                     subjectId = sampleSubject.id,
                     collectionRepository = FakeCollectionRepository(),
                     communityRepository = FakeCommunityRepository(),
-                    authRepository = FakeAuthRepository(initialLoggedIn = true),
                 )
             testScheduler.advanceUntilIdle()
 
-            val targetEp = sampleEpisodeList.first()
-            viewModel.sniffEpisodeSources(targetEp)
+            viewModel.requestSourceSearch(sampleEpisodeList.first())
 
-            // 验证即时进入扫描中状态，记录 episodeId
-            assertTrue(viewModel.uiState.value.isSniffingSources)
-            assertEquals(targetEp.id, viewModel.uiState.value.sniffingEpisodeId)
-
-            val initialMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
-            assertTrue(initialMessage.message.contains("正在检索"))
-
-            // 前进时间，模拟扫描完成
-            testScheduler.advanceTimeBy(1300)
-            testScheduler.advanceUntilIdle()
-
-            // 验证扫描状态复位
-            assertFalse(viewModel.uiState.value.isSniffingSources)
-            assertNull(viewModel.uiState.value.sniffingEpisodeId)
-
-            val completionMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
-            assertTrue(completionMessage.message.contains("未找到可用播放直链"))
+            val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
+            assertTrue(event.prefillPrompt.contains("葬送的芙莉莲"))
+            assertTrue(event.prefillPrompt.contains("1001"))
+            // 边界约束：交接给助手的是"页面链接"检索请求，而非直链嗅探
+            assertTrue(event.prefillPrompt.contains("在线观看页面"))
+            assertTrue(event.prefillPrompt.contains("网页链接"))
         }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
-    fun sniffEpisodeSources_whileAlreadySniffing_ignoresSubsequentCalls() =
+    fun requestSourceSearch_withoutEpisode_emitsSeriesLevelPrompt() =
         runTest {
             val repository =
                 FakeSubjectRepository().apply {
@@ -1508,79 +1493,13 @@ class SubjectDetailViewModelTest {
                     subjectId = sampleSubject.id,
                     collectionRepository = FakeCollectionRepository(),
                     communityRepository = FakeCommunityRepository(),
-                    authRepository = FakeAuthRepository(initialLoggedIn = true),
                 )
             testScheduler.advanceUntilIdle()
 
-            val targetEp1 = sampleEpisodeList[0]
-            val targetEp2 = sampleEpisodeList[1]
-            viewModel.sniffEpisodeSources(targetEp1)
-            assertTrue(viewModel.uiState.value.isSniffingSources)
-            assertEquals(targetEp1.id, viewModel.uiState.value.sniffingEpisodeId)
+            viewModel.requestSourceSearch()
 
-            // 重复触发另一集嗅探，应被防抖重入保护忽略
-            viewModel.sniffEpisodeSources(targetEp2)
-            assertEquals(targetEp1.id, viewModel.uiState.value.sniffingEpisodeId)
-
-            testScheduler.advanceTimeBy(1300)
-            testScheduler.advanceUntilIdle()
-
-            assertFalse(viewModel.uiState.value.isSniffingSources)
-            assertNull(viewModel.uiState.value.sniffingEpisodeId)
-        }
-
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    @Test
-    fun sniffSubjectSources_emitsScanningStateAndUiMessage() =
-        runTest {
-            val repository =
-                FakeSubjectRepository().apply {
-                    sendSubject(sampleSubject)
-                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
-                }
-            val viewModel =
-                SubjectDetailViewModel(
-                    subjectRepository = repository,
-                    subjectId = sampleSubject.id,
-                    collectionRepository = FakeCollectionRepository(),
-                    communityRepository = FakeCommunityRepository(),
-                    authRepository = FakeAuthRepository(initialLoggedIn = true),
-                )
-            testScheduler.advanceUntilIdle()
-
-            viewModel.sniffSubjectSources()
-
-            assertTrue(viewModel.uiState.value.isSniffingSources)
-            assertNull(viewModel.uiState.value.sniffingEpisodeId)
-
-            val initialMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
-            assertTrue(initialMessage.message.contains("正在检索"))
-
-            testScheduler.advanceTimeBy(1300)
-            testScheduler.advanceUntilIdle()
-
-            assertFalse(viewModel.uiState.value.isSniffingSources)
-            val completionMessage = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
-            assertTrue(completionMessage.message.contains("未找到可用播放直链"))
-        }
-
-    @Test
-    fun openPlaybackRuleManagement_emitsInformativeUiMessage() =
-        runTest {
-            val repository = FakeSubjectRepository()
-            val viewModel =
-                SubjectDetailViewModel(
-                    subjectRepository = repository,
-                    subjectId = sampleSubject.id,
-                    collectionRepository = FakeCollectionRepository(),
-                    communityRepository = FakeCommunityRepository(),
-                    authRepository = FakeAuthRepository(initialLoggedIn = true),
-                )
-
-            viewModel.openPlaybackRuleManagement()
-
-            val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.ShowMessage
-            assertTrue(event.message.contains("自定义播放规则"))
+            val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
+            assertTrue(event.prefillPrompt.contains("《葬送的芙莉莲》的在线观看页面"))
         }
 
     @Test

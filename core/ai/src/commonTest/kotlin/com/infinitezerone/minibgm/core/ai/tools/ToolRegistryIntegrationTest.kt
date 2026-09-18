@@ -15,12 +15,14 @@ class ToolRegistryIntegrationTest {
         val scheduleTools = ScheduleTools(FakeScheduleRepository())
         val subjectTools = SubjectTools(FakeSearchRepository(), FakeSubjectRepository())
         val collectionTools = CollectionTools(FakeCollectionRepository())
+        val sourceSearchTools = SourceSearchTools(FakeScheduleRepository(), FakeSubjectRepository())
 
         val registry =
             ToolRegistry {
                 tools(scheduleTools)
                 tools(subjectTools)
                 tools(collectionTools)
+                tools(sourceSearchTools)
             }
 
         val toolNames = registry.tools.map { it.name }
@@ -42,5 +44,12 @@ class ToolRegistryIntegrationTest {
         val getScheduleDescriptor = registry.getTool("getSchedule").descriptor
         assertNotNull(getScheduleDescriptor)
         assertTrue(getScheduleDescriptor.description.contains("broadcast schedule"))
+
+        // Source search tool：工具描述必须写明"只返回页面链接、绝非媒体直链"
+        assertTrue(toolNames.contains("findWatchPages"))
+        val findWatchPagesDescriptor = registry.getTool("findWatchPages").descriptor
+        assertNotNull(findWatchPagesDescriptor)
+        assertTrue(findWatchPagesDescriptor.description.contains("WEBPAGE"))
+        assertTrue(findWatchPagesDescriptor.description.contains("NEVER direct video file/stream URLs"))
     }
 }

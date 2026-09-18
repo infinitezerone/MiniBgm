@@ -24,11 +24,9 @@ import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
-import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
+import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -59,6 +57,11 @@ sealed interface SubjectDetailUiEvent {
 
     data class ShowMessage(
         val message: String,
+    ) : SubjectDetailUiEvent
+
+    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问，仅返回可观看页面链接） */
+    data class OpenSourceSearch(
+        val prefillPrompt: String,
     ) : SubjectDetailUiEvent
 }
 
@@ -104,8 +107,6 @@ data class SubjectDetailUiState(
     val subjectTopics: List<SubjectTopic> = emptyList(),
     val episodeComments: Map<Long, List<EpisodeComment>> = emptyMap(),
     val isEpisodeCommentsLoading: Boolean = false,
-    val isSniffingSources: Boolean = false,
-    val sniffingEpisodeId: Long? = null,
     val playbackRules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule> = emptyList(),
     val playlists: List<com.infinitezerone.minibgm.core.model.PlaybackPlaylist> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
@@ -141,46 +142,19 @@ class SubjectDetailViewModel(
         }
     }
 
-    /** 触发单集播放源内部直链检索 */
-    fun sniffEpisodeSources(episode: Episode) {
-        if (_uiState.value.isSniffingSources) return
-        val epLabel =
-            if (episode.type == 0) {
-                val num = if (episode.ep > 0f) episode.ep else episode.sort
-                "第 ${num.toEpisodeLabel()} 话"
-            } else {
-                "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
-            }
-        _uiState.update { it.copy(isSniffingSources = true, sniffingEpisodeId = episode.id) }
+    /**
+     * 把找源请求交接给 AI 助手会话：本页面不做任何检索，只生成显式触发用的提问文案。
+     * 能力边界见 ROADMAP 第 5 节——助手只返回可观看页面链接，不产出媒体直链。
+     */
+    fun requestSourceSearch(episode: Episode? = null) {
+        val title =
+            _uiState.value.subject
+                ?.displayName
+                ?.ifBlank { "本条目" } ?: "本条目"
+        val target = if (episode == null) "《$title》" else "《$title》 ${episodeGuideLabel(episode)}"
+        val prompt = "帮我找${target}的在线观看页面，只给我可以打开观看的网页链接（Bangumi 条目号 $subjectId）"
         viewModelScope.launch {
-            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("正在检索 $epLabel 播放直链..."))
-            delay(1200)
-            _uiState.update { it.copy(isSniffingSources = false, sniffingEpisodeId = null) }
-            _uiEvents.send(
-                SubjectDetailUiEvent.ShowMessage("未找到可用播放直链，可使用下方外部跳转"),
-            )
-        }
-    }
-
-    /** 触发条目全局播放源内部直链检索 */
-    fun sniffSubjectSources() {
-        if (_uiState.value.isSniffingSources) return
-        val subjectTitle = _uiState.value.subject?.displayName ?: "条目"
-        _uiState.update { it.copy(isSniffingSources = true, sniffingEpisodeId = null) }
-        viewModelScope.launch {
-            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("正在检索《$subjectTitle》播放直链..."))
-            delay(1200)
-            _uiState.update { it.copy(isSniffingSources = false) }
-            _uiEvents.send(
-                SubjectDetailUiEvent.ShowMessage("未找到可用播放直链，可使用下方外部跳转"),
-            )
-        }
-    }
-
-    /** 引导进入播放规则管理页面 */
-    fun openPlaybackRuleManagement() {
-        viewModelScope.launch {
-            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("自定义播放规则管理功能即将上线"))
+            _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))
         }
     }
 
