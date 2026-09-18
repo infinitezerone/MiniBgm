@@ -19,6 +19,7 @@ import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
+import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
@@ -34,8 +35,10 @@ import com.infinitezerone.minibgm.feature.search.navigation.seasonalGuideEntry
 import com.infinitezerone.minibgm.feature.search.navigation.tagSubjectsEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.episodeDetailEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
+import com.infinitezerone.minibgm.feature.subject.navigation.playerEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
+import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userCollectionsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
@@ -128,6 +131,12 @@ fun BgmNavHost(
 
                             settingsEntry(
                                 onBackClick = { navState.goBack() },
+                                onPlaybackRulesClick = { navState.navigateTo(PlaybackRulesRoute) },
+                                metadata = bgmListPane(detailPlaceholder),
+                            )
+
+                            playbackRulesEntry(
+                                onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
@@ -143,12 +152,14 @@ fun BgmNavHost(
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
+                                onPlayClick = { route -> navState.navigateTo(route) },
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
+                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -158,12 +169,14 @@ fun BgmNavHost(
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
+                                onPlayClick = { route -> navState.navigateTo(route) },
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
+                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
                                 metadata = bgmExtraPane(),
                             )
 
@@ -195,6 +208,11 @@ fun BgmNavHost(
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
+                                metadata = bgmExtraPane(),
+                            )
+
+                            playerEntry(
+                                onBackClick = { navState.goBack() },
                                 metadata = bgmExtraPane(),
                             )
                         },

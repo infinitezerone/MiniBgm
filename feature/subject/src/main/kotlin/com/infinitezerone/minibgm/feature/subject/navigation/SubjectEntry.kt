@@ -3,6 +3,8 @@ package com.infinitezerone.minibgm.feature.subject.navigation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
+import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailScreen
 
@@ -11,8 +13,10 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
+    onPlayClick: (PlayerRoute) -> Unit = {},
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
+    onManageRules: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SubjectDetailRoute>(metadata = metadata) { route ->
@@ -25,8 +29,10 @@ fun EntryProviderScope<NavKey>.subjectEntry(
             onBackClick = onBackClick,
             onSubjectClick = onSubjectClick,
             onEpisodeClick = onEpisodeClick,
+            onPlayClick = onPlayClick,
             onTagClick = onTagClick,
             onTopicClick = onTopicClick,
+            onManageRules = onManageRules,
         )
     }
 }
@@ -36,11 +42,13 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
+    onPlayClick: (PlayerRoute) -> Unit = {},
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
+    onManageRules: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
-    entry<com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute>(metadata = metadata) { route ->
+    entry<LinkedSubjectRoute>(metadata = metadata) { route ->
         SubjectDetailScreen(
             subjectId = route.subjectId,
             initialName = route.initialName,
@@ -50,8 +58,10 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
             onBackClick = onBackClick,
             onSubjectClick = onSubjectClick,
             onEpisodeClick = onEpisodeClick,
+            onPlayClick = onPlayClick,
             onTagClick = onTagClick,
             onTopicClick = onTopicClick,
+            onManageRules = onManageRules,
         )
     }
 }

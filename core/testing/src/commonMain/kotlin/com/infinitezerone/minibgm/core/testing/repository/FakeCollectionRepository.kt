@@ -150,6 +150,7 @@ class FakeCollectionRepository : CollectionRepository {
 
     var revertEpisodesWatchedCallCount: Int = 0
         private set
+    var revertEpisodesWatchedResult: AppResult<Unit>? = null
 
     override suspend fun revertEpisodesWatched(
         subjectId: Long,
@@ -158,6 +159,7 @@ class FakeCollectionRepository : CollectionRepository {
         undoneEpisodeIds: List<Long>,
     ): AppResult<Unit> {
         revertEpisodesWatchedCallCount++
+        revertEpisodesWatchedResult?.let { return it }
         val current = collectionsState.value[subjectId]
         val updated =
             current?.copy(

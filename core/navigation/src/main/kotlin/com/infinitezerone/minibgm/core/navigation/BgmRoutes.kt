@@ -124,3 +124,23 @@ data class TopicDetailRoute(
  */
 @Serializable
 data object SettingsRoute : SubFeatureRoute
+
+/**
+ * 应用内视频播放交互界面路由（基于 Media3 ExoPlayer 渲染）。
+ */
+@Serializable
+data class PlayerRoute(
+    val subjectId: Long,
+    val episodeId: Long,
+    val streamUrl: String = "",
+    val episodeName: String = "",
+    val subjectName: String = "",
+    val episodeSort: Float = 1f,
+    val episodeType: Int = 0,
+) : DetailChainRoute
+
+/**
+ * 自定义播放规则管理交互界面路由。
+ */
+@Serializable
+data object PlaybackRulesRoute : SubFeatureRoute

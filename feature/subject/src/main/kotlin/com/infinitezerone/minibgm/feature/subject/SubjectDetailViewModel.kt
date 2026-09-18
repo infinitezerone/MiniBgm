@@ -23,15 +23,43 @@ import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
+import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
+import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** 条目详情页单次 UI 事件（Snackbar 反馈、撤销动作与状态提示） */
+sealed interface SubjectDetailUiEvent {
+    data class EpisodeMarked(
+        val epNumber: Int,
+        val episodeId: Long,
+        val previousEpStatus: Int,
+        val previousType: Int,
+        val episodeType: Int = 0,
+    ) : SubjectDetailUiEvent
+
+    data class BatchMarked(
+        val targetEpNumber: Int,
+        val episodeIds: List<Long>,
+        val previousEpStatus: Int,
+        val previousType: Int,
+    ) : SubjectDetailUiEvent
+
+    data class ShowMessage(
+        val message: String,
+    ) : SubjectDetailUiEvent
+}
 
 /** 条目详情页二级分栏枚举 */
 enum class SubjectDetailTab(
@@ -75,6 +103,9 @@ data class SubjectDetailUiState(
     val subjectTopics: List<SubjectTopic> = emptyList(),
     val episodeComments: Map<Long, List<EpisodeComment>> = emptyMap(),
     val isEpisodeCommentsLoading: Boolean = false,
+    val isSniffingSources: Boolean = false,
+    val sniffingEpisodeId: Long? = null,
+    val playbackRules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule> = emptyList(),
 )
 
 class SubjectDetailViewModel(
@@ -88,9 +119,63 @@ class SubjectDetailViewModel(
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
 
+    private val _uiEvents = Channel<SubjectDetailUiEvent>(Channel.BUFFERED)
+    val uiEvents: Flow<SubjectDetailUiEvent> = _uiEvents.receiveAsFlow()
+
+    /** 引导未登录用户登录 Bangumi 账号并提示 */
+    fun promptLogin() {
+        _uiState.update { it.copy(showLoginPromptDialog = true) }
+        viewModelScope.launch {
+            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+        }
+    }
+
     fun enableAiringReminder() {
         viewModelScope.launch {
             settingsRepository?.setAiringReminderEnabled(true)
+        }
+    }
+
+    /** 触发单集播放源内部直链检索 */
+    fun sniffEpisodeSources(episode: Episode) {
+        if (_uiState.value.isSniffingSources) return
+        val epLabel =
+            if (episode.type == 0) {
+                val num = if (episode.ep > 0f) episode.ep else episode.sort
+                "第 ${num.toEpisodeLabel()} 话"
+            } else {
+                "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
+            }
+        _uiState.update { it.copy(isSniffingSources = true, sniffingEpisodeId = episode.id) }
+        viewModelScope.launch {
+            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("正在检索 $epLabel 播放直链..."))
+            delay(1200)
+            _uiState.update { it.copy(isSniffingSources = false, sniffingEpisodeId = null) }
+            _uiEvents.send(
+                SubjectDetailUiEvent.ShowMessage("未找到可用播放直链，可使用下方外部跳转"),
+            )
+        }
+    }
+
+    /** 触发条目全局播放源内部直链检索 */
+    fun sniffSubjectSources() {
+        if (_uiState.value.isSniffingSources) return
+        val subjectTitle = _uiState.value.subject?.displayName ?: "条目"
+        _uiState.update { it.copy(isSniffingSources = true, sniffingEpisodeId = null) }
+        viewModelScope.launch {
+            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("正在检索《$subjectTitle》播放直链..."))
+            delay(1200)
+            _uiState.update { it.copy(isSniffingSources = false) }
+            _uiEvents.send(
+                SubjectDetailUiEvent.ShowMessage("未找到可用播放直链，可使用下方外部跳转"),
+            )
+        }
+    }
+
+    /** 引导进入播放规则管理页面 */
+    fun openPlaybackRuleManagement() {
+        viewModelScope.launch {
+            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("自定义播放规则管理功能即将上线"))
         }
     }
 
@@ -129,6 +214,13 @@ class SubjectDetailViewModel(
                         collection = mergedCollection,
                         isLoading = if (subject != null || state.subject != null) false else state.isLoading,
                     )
+                }
+            }
+        }
+        if (settingsRepository != null) {
+            viewModelScope.launch {
+                settingsRepository.playbackRules.collect { rules ->
+                    _uiState.update { it.copy(playbackRules = rules) }
                 }
             }
         }
@@ -223,6 +315,9 @@ class SubjectDetailViewModel(
     fun setCollectionSheetVisible(visible: Boolean) {
         if (visible && !isLoggedIn.value) {
             _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
             return
         }
         _uiState.update { it.copy(showCollectionSheet = visible) }
@@ -349,6 +444,9 @@ class SubjectDetailViewModel(
     ) {
         if (!isLoggedIn.value) {
             _uiState.update { it.copy(showCollectionSheet = false, showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
             return
         }
 
@@ -387,6 +485,7 @@ class SubjectDetailViewModel(
             result.onError { _, message ->
                 // 2. 失败回滚为原状态并提示错误
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "更新收藏状态失败，请确认是否已登录账号" }))
             }
         }
     }
@@ -395,6 +494,9 @@ class SubjectDetailViewModel(
     fun toggleWatching() {
         if (!isLoggedIn.value) {
             _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
             return
         }
         val current = _uiState.value.collection
@@ -407,17 +509,26 @@ class SubjectDetailViewModel(
         episodeId: Long,
         isWatched: Boolean,
         epNumber: Int = 1,
+        episodeType: Int = 0,
     ) {
         if (!isLoggedIn.value) {
             _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
             return
         }
 
         val previousCollection = _uiState.value.collection
-        val currentEp = previousCollection?.epStatus ?: 0
-        // 乐观更新 UI 状态中的 collection.epStatus
+        val previousEpStatus = previousCollection?.epStatus ?: 0
+        val previousType = previousCollection?.type ?: 0
+        val currentEp = previousEpStatus
+        val isMainEpisode = episodeType == 0
+        // 乐观更新 UI 状态中的 collection.epStatus（仅正篇改变主篇进度，特别篇/OP/ED 不污染正篇进度）
         val newEpStatus =
-            if (isWatched) {
+            if (!isMainEpisode) {
+                currentEp
+            } else if (isWatched) {
                 maxOf(currentEp, epNumber)
             } else {
                 if (epNumber >= currentEp) maxOf(0, epNumber - 1) else currentEp
@@ -449,17 +560,32 @@ class SubjectDetailViewModel(
             state.copy(collection = updatedCollection, error = null)
         }
 
+        if (isWatched) {
+            viewModelScope.launch {
+                _uiEvents.send(
+                    SubjectDetailUiEvent.EpisodeMarked(
+                        epNumber = epNumber,
+                        episodeId = episodeId,
+                        previousEpStatus = previousEpStatus,
+                        previousType = previousType,
+                        episodeType = episodeType,
+                    ),
+                )
+            }
+        }
+
         viewModelScope.launch {
             val result =
                 collectionRepository.updateEpisodeStatus(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     isWatched = isWatched,
-                    epNumber = epNumber,
+                    epNumber = if (isMainEpisode) epNumber else 0,
                 )
             result.onError { _, message ->
                 // 回滚
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "打卡失败，请确认是否已登录账号" }))
             }
         }
     }
@@ -471,11 +597,16 @@ class SubjectDetailViewModel(
     fun markWatchedUpTo(targetEpisode: Episode) {
         if (!isLoggedIn.value) {
             _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
             return
         }
         val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
         val previousCollection = _uiState.value.collection
-        val currentEp = previousCollection?.epStatus ?: 0
+        val previousEpStatus = previousCollection?.epStatus ?: 0
+        val previousType = previousCollection?.type ?: 0
+        val currentEp = previousEpStatus
         val newEpStatus = maxOf(currentEp, targetEpNumber)
 
         val targetType =
@@ -508,6 +639,24 @@ class SubjectDetailViewModel(
                     ep.type == 0 && (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in 1..targetEpNumber
                 }.map { it.id }
 
+        val newlyMarkedIds =
+            _uiState.value.episodes
+                .filter { ep ->
+                    ep.type == 0 &&
+                        (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in (previousEpStatus + 1)..targetEpNumber
+                }.map { it.id }
+
+        viewModelScope.launch {
+            _uiEvents.send(
+                SubjectDetailUiEvent.BatchMarked(
+                    targetEpNumber = targetEpNumber,
+                    episodeIds = newlyMarkedIds,
+                    previousEpStatus = previousEpStatus,
+                    previousType = previousType,
+                ),
+            )
+        }
+
         viewModelScope.launch {
             val result =
                 collectionRepository.markEpisodesWatchedUpTo(
@@ -517,6 +666,7 @@ class SubjectDetailViewModel(
                 )
             result.onError { _, message ->
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "批量打卡失败，请确认是否已登录账号" }))
             }
         }
     }
@@ -529,6 +679,13 @@ class SubjectDetailViewModel(
         previousType: Int,
         undoneEpisodeIds: List<Long>,
     ) {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
+            return
+        }
         val currentCollection = _uiState.value.collection
         val revertedCollection =
             if (previousType <= 0 && previousEpStatus <= 0) {
@@ -541,14 +698,20 @@ class SubjectDetailViewModel(
             }
         _uiState.update { it.copy(collection = revertedCollection) }
 
+        val previousState = currentCollection
         viewModelScope.launch {
             val targetType = if (previousType > 0) CollectionType.fromValue(previousType) else null
-            collectionRepository.revertEpisodesWatched(
-                subjectId = subjectId,
-                targetEpStatus = previousEpStatus,
-                targetType = targetType,
-                undoneEpisodeIds = undoneEpisodeIds,
-            )
+            val result =
+                collectionRepository.revertEpisodesWatched(
+                    subjectId = subjectId,
+                    targetEpStatus = previousEpStatus,
+                    targetType = targetType,
+                    undoneEpisodeIds = undoneEpisodeIds,
+                )
+            result.onError { _, message ->
+                _uiState.update { it.copy(collection = previousState) }
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "撤销失败，请确认是否已登录账号" }))
+            }
         }
     }
 

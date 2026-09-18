@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
@@ -90,6 +91,7 @@ internal fun SettingsSection(
     onClearCache: () -> Unit,
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
+    onOpenPlaybackRules: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -160,6 +162,14 @@ internal fun SettingsSection(
                         }
                     },
                     onClick = if (!isSyncing) onSyncNow else null,
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.PlayCircleOutline,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = "自定义播放规则",
+                    subtitle = "配置与管理第三方播放源解析规则",
+                    onClick = onOpenPlaybackRules,
                 )
 
                 HorizontalDivider(

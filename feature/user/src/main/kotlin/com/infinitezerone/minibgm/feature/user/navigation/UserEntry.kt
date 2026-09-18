@@ -3,10 +3,12 @@ package com.infinitezerone.minibgm.feature.user.navigation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
+import com.infinitezerone.minibgm.feature.user.PlaybackRulesScreen
 import com.infinitezerone.minibgm.feature.user.SettingsScreen
 import com.infinitezerone.minibgm.feature.user.UserCollectionsScreen
 import com.infinitezerone.minibgm.feature.user.UserScreen
@@ -46,10 +48,24 @@ fun EntryProviderScope<NavKey>.userCollectionsEntry(
 /** 应用「全局设置」二级页面条目 */
 fun EntryProviderScope<NavKey>.settingsEntry(
     onBackClick: () -> Unit = {},
+    onPlaybackRulesClick: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SettingsRoute>(metadata = metadata) {
         SettingsScreen(
+            onBackClick = onBackClick,
+            onPlaybackRulesClick = onPlaybackRulesClick,
+        )
+    }
+}
+
+/** 自定义「播放规则管理」二级页面条目 */
+fun EntryProviderScope<NavKey>.playbackRulesEntry(
+    onBackClick: () -> Unit = {},
+    metadata: Map<String, Any> = emptyMap(),
+) {
+    entry<PlaybackRulesRoute>(metadata = metadata) {
+        PlaybackRulesScreen(
             onBackClick = onBackClick,
         )
     }

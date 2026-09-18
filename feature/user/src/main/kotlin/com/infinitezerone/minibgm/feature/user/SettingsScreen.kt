@@ -21,7 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +38,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -62,6 +62,7 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlaybackRulesClick: () -> Unit = {},
     viewModel: UserViewModel = koinViewModel(),
 ) {
     val context = LocalContext.current
@@ -148,6 +149,7 @@ fun SettingsScreen(
         },
         onLogoutCurrent = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
+        onPlaybackRulesClick = onPlaybackRulesClick,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -212,6 +214,7 @@ fun SettingsScreenContent(
     onLogoutAll: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
+    onPlaybackRulesClick: () -> Unit = {},
 ) {
     var showLogoutAllDialog by remember { mutableStateOf(false) }
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
@@ -234,7 +237,7 @@ fun SettingsScreenContent(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         modifier = modifier,
     ) { innerPadding ->
         LazyColumn(
@@ -269,6 +272,7 @@ fun SettingsScreenContent(
                     onClearCache = onClearCache,
                     onLogoutCurrentClick = { showLogoutCurrentDialog = true },
                     onLogoutAllClick = { showLogoutAllDialog = true },
+                    onOpenPlaybackRules = onPlaybackRulesClick,
                 )
             }
         }
