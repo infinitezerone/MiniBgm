@@ -78,7 +78,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
@@ -103,6 +105,35 @@ internal fun formatDuration(millis: Long): String {
         String.format(Locale.US, "%02d:%02d", minutes, seconds)
     }
 }
+
+/**
+ * 把 Media3 播放异常归类为可归因的失败原因（网络不可达 / 被来源拒绝 / 非媒体内容），
+ * 供来源列表展示"打不开"标注。
+ */
+private fun classifyPlaybackError(error: PlaybackException): String =
+    when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_TIMEOUT,
+        -> "网络不可达"
+
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+        PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+        -> "被来源拒绝访问"
+
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> "资源不存在"
+
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODING_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        -> "非媒体内容或格式不支持"
+
+        else -> error.localizedMessage ?: "视频播放失败"
+    }
 
 /**
  * MiniBgm 应用内播放界面：
@@ -162,12 +193,24 @@ fun PlayerScreen(
         }
     }
 
-    // 构造 ExoPlayer 实例并托管生命周期
+    // 构造 ExoPlayer 实例并托管生命周期；
+    // 用户自备列表的条目可携带必要请求头（Referer/Cookie 等），经 HttpDataSource 随媒体请求发送
     val exoPlayer =
-        remember(context) {
-            ExoPlayer.Builder(context).build().apply {
-                playWhenReady = true
-            }
+        remember(context, route.requestHeaders) {
+            val httpDataSourceFactory =
+                DefaultHttpDataSource.Factory().apply {
+                    setAllowCrossProtocolRedirects(true)
+                    if (route.requestHeaders.isNotEmpty()) {
+                        setDefaultRequestProperties(route.requestHeaders)
+                    }
+                }
+            ExoPlayer
+                .Builder(context)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
+                .build()
+                .apply {
+                    playWhenReady = true
+                }
         }
 
     // 设置数据源
@@ -197,6 +240,7 @@ fun PlayerScreen(
                             isBuffering = false
                             isPlaybackEnded = false
                             totalDuration = exoPlayer.duration.coerceAtLeast(0L)
+                            viewModel.onPlaybackReady()
                         }
                         Player.STATE_ENDED -> {
                             isBuffering = false
@@ -212,7 +256,7 @@ fun PlayerScreen(
 
                 override fun onPlayerError(error: PlaybackException) {
                     isBuffering = false
-                    viewModel.onPlaybackError(error.localizedMessage ?: "视频播放失败")
+                    viewModel.onPlaybackError(classifyPlaybackError(error))
                 }
             }
 

@@ -47,8 +47,10 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.forSubject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -65,6 +67,8 @@ fun SubjectSourcesBottomSheet(
     onAiSniff: (() -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
+    playlists: List<PlaybackPlaylist> = emptyList(),
+    failedSourceReasons: Map<String, String> = emptyMap(),
 ) {
     if (episode != null) {
         EpisodeSourceGuideBottomSheet(
@@ -78,6 +82,8 @@ fun SubjectSourcesBottomSheet(
             onAiSniff = { onAiSniff?.invoke() },
             onManageRules = onManageRules,
             playbackRules = playbackRules,
+            playlists = playlists,
+            failedSourceReasons = failedSourceReasons,
         )
         return
     }
@@ -85,6 +91,7 @@ fun SubjectSourcesBottomSheet(
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val displayName = subject.displayName
+    val boundPlaylists = remember(playlists, subject.id) { playlists.forSubject(subject.id) }
 
     val bilibiliTarget =
         remember(displayName) {
@@ -178,6 +185,39 @@ fun SubjectSourcesBottomSheet(
                         .padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // 分组 0：自备片单概览（条目级只看总量，逐话选择在分集入口完成）
+                if (onManageRules != null && boundPlaylists.isNotEmpty()) {
+                    Text(
+                        text = "自备片单",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                    for (playlist in boundPlaylists) {
+                        val hasFailure =
+                            playlist.entries.any { it.url in failedSourceReasons }
+                        EpisodeSourceActionCard(
+                            title = playlist.name,
+                            subtitle =
+                                playbackSourceSubtitle(
+                                    "${playlist.entries.size} 条 · 在具体分集的播放入口中选择",
+                                    if (hasFailure) "存在上次播放失败的条目" else null,
+                                ),
+                            iconVector = Icons.Filled.PlayCircleOutline,
+                            iconTint =
+                                if (hasFailure) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            onClick = { onManageRules() },
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
                 // 分组 1：内部播放
                 Text(
                     text = "内部播放",
@@ -230,8 +270,8 @@ fun SubjectSourcesBottomSheet(
 
                 if (onManageRules != null) {
                     EpisodeSourceActionCard(
-                        title = "自定义播放规则",
-                        subtitle = "导入与管理第三方解析规则",
+                        title = "播放源管理",
+                        subtitle = "导入自备片单 / 维护解析规则",
                         iconVector = Icons.Filled.Settings,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = { onManageRules() },

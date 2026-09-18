@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import kotlinx.coroutines.channels.Channel
@@ -53,6 +54,7 @@ class PlayerViewModel(
     val initialStreamUrl: String,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
+    private val failureStore: PlaybackFailureStore? = null,
 ) : ViewModel() {
     private val _uiState =
         MutableStateFlow(
@@ -108,7 +110,13 @@ class PlayerViewModel(
         _uiState.update { it.copy(streamUrl = newUrl, error = null) }
     }
 
+    /** 播放成功建立（STATE_READY）：清除该地址的失败标记 */
+    fun onPlaybackReady() {
+        failureStore?.markPlayable(_uiState.value.streamUrl)
+    }
+
     fun onPlaybackError(message: String) {
         _uiState.update { it.copy(error = message) }
+        failureStore?.markFailed(_uiState.value.streamUrl, message)
     }
 }

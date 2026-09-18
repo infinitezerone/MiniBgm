@@ -72,6 +72,10 @@ val dataModule =
             )
         }
         single {
+            com.infinitezerone.minibgm.core.data.playback
+                .PlaybackFailureStore()
+        }
+        single {
             UserDataCleaner(
                 clearables =
                     listOf(

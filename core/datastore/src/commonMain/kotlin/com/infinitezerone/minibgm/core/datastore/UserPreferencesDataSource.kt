@@ -163,4 +163,11 @@ class UserPreferencesDataSource(
             current.copy(playbackRulesJson = json)
         }
     }
+
+    /** 更新用户自备播放列表信封 JSON */
+    suspend fun setPlaylistsJson(json: String) {
+        dataStore.updateData { current ->
+            current.copy(playlistsJson = json)
+        }
+    }
 }
