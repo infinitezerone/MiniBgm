@@ -13,19 +13,37 @@ import kotlinx.serialization.Serializable
  */
 sealed interface BgmRoute : NavKey
 
-@Serializable
-data object ScheduleRoute : BgmRoute
+/**
+ * 顶层 Tab 路由层级（Schedule, Explore, User）。
+ * 用于标识应用主导航栏的核心目的地，配合 Navigation 3 entry 元数据实现瞬时无缝转场。
+ */
+sealed interface TopLevelRoute : BgmRoute
+
+/**
+ * 二级功能/列表页路由层级（搜索、收藏、AI 追番助手、新番导视等）。
+ * 进入时清理先前残留的详情层级，同类型二级页按层级替换而非堆叠。
+ */
+sealed interface SubFeatureRoute : BgmRoute
+
+/**
+ * 条目详情及钻取链路由层级（条目详情、关联条目、分集讨论、标签专题、讨论帖等）。
+ * 详情页在列表中点击时替换旧详情，钻取链层级逐层压栈。
+ */
+sealed interface DetailChainRoute : BgmRoute
 
 @Serializable
-data object ExploreRoute : BgmRoute
+data object ScheduleRoute : TopLevelRoute
 
 @Serializable
-data object UserRoute : BgmRoute
+data object ExploreRoute : TopLevelRoute
+
+@Serializable
+data object UserRoute : TopLevelRoute
 
 @Serializable
 data class SearchRoute(
     val initialQuery: String = "",
-) : BgmRoute
+) : SubFeatureRoute
 
 @Serializable
 data class SubjectDetailRoute(
@@ -34,7 +52,7 @@ data class SubjectDetailRoute(
     val initialCoverUrl: String = "",
     val initialScore: Double = 0.0,
     val source: String = "",
-) : BgmRoute
+) : DetailChainRoute
 
 /**
  * 关联/外链条目详情路由（由分集评论外链或关联作品触发）；
@@ -47,12 +65,12 @@ data class LinkedSubjectRoute(
     val initialCoverUrl: String = "",
     val initialScore: Double = 0.0,
     val source: String = "",
-) : BgmRoute
+) : DetailChainRoute
 
 @Serializable
 data class UserCollectionsRoute(
     val initialType: Int = 3,
-) : BgmRoute
+) : SubFeatureRoute
 
 @Serializable
 data class EpisodeDetailRoute(
@@ -62,7 +80,7 @@ data class EpisodeDetailRoute(
     val episodeType: Int = 0,
     val episodeName: String = "",
     val episodeNameCn: String = "",
-) : BgmRoute
+) : DetailChainRoute
 
 /**
  * 标签专题条目路由（从条目详情页点击热门标签触发）；
@@ -72,13 +90,13 @@ data class EpisodeDetailRoute(
 data class TagSubjectsRoute(
     val tag: String,
     val initialType: Int = 0,
-) : BgmRoute
+) : DetailChainRoute
 
 /**
  * AI 追番助手交互界面路由。
  */
 @Serializable
-data object AssistantRoute : BgmRoute
+data object AssistantRoute : SubFeatureRoute
 
 /**
  * 季度新番导视大盘交互界面路由。
@@ -88,7 +106,7 @@ data object AssistantRoute : BgmRoute
 data class SeasonalGuideRoute(
     val initialYear: Int = 0,
     val initialSeasonMonth: Int = 0,
-) : BgmRoute
+) : SubFeatureRoute
 
 /**
  * 讨论帖详情交互界面路由（包含主楼正文、楼层回帖与楼中楼树形回复）。
@@ -99,4 +117,4 @@ data class TopicDetailRoute(
     val topicId: Long,
     val initialTitle: String = "",
     val type: String = "subject",
-) : BgmRoute
+) : DetailChainRoute
