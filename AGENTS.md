@@ -9,10 +9,11 @@ The rules below are **deterministically enforced by `ArchitectureRulesTest`** in
 1. **Feature isolation**: `:feature:A` must never depend on `:feature:B`; inter-feature navigation goes through type-safe route contracts.
 2. **Single source of truth**: UI layers go through `:core:data` repositories only — no `:core:network` / `:core:database` / `:core:datastore` project dependencies, and no `io.ktor.*` / `androidx.room.*` imports, in feature sources. User-preference reads/writes go through `SettingsRepository` (login state through `AuthRepository`).
 3. **`:core:model` is pure Kotlin**: no `android.*` / `androidx.*` imports.
-4. **MVI**: ViewModels expose a single, immutable `StateFlow<UiState>` — never a public `MutableStateFlow`; one-off events (snackbars, navigation) go through `Channel`/`SharedFlow`.
+4. **MVI**: a ViewModel never exposes a `MutableStateFlow` publicly (this is the half enforced by `viewModels_never_expose_mutable_state_flow`). How many read-only `StateFlow`s it exposes is a design choice — independent slices may stay separate; don't fold unrelated state into one object just to have a single flow. One-off events (snackbar text, transient messages) go through a `Channel` + `receiveAsFlow()`, never through state; navigation stays a callback lambda on the screen.
 5. **Credential isolation**: OAuth tokens only ever live in `AuthTokensDataSource` (AndroidKeyStore-encrypted, excluded from backups) — never in `UserPreferences` or plain DataStore keys.
 6. **Theming**: no hardcoded `Color(0x...)` in features — build under `MiniBgmTheme` with tokens from `:core:designsystem`.
 7. **No raw IO in features**: feature sources must never hand-roll raw networking (`HttpURLConnection`, `java.net.URL`, `java.net.Socket`) or private disk I/O (`context.cacheDir`, `context.filesDir`, `FileOutputStream`) — all networking and persistence belong in `:core:network` / `:core:database` / `:core:datastore` and are coordinated exclusively through `:core:data` repositories.
+8. **Every route declares its stacking layer**: route contracts are sealed under `BgmRoute` in `:core:navigation` (`BgmRoutes.kt`) and rendered by `NavDisplay` in `:app`; per-tab `NavBackStack`s live in `BgmNavState` (exit-through-home, survives process death). `BgmNavState`'s stacking-semantics `when` is compiler-exhaustive, so a new route must declare its layer (detail replace / second-level same-class replace / drill-down push) or it won't compile. Enforced by `ArchitectureRulesTest.navigation_routes_are_sealed_and_declared_only_in_bgm_routes`, with stacking/back invariants by `BgmNavStatePropertyTest`. Don't relocate route contracts or rewire the navigation stack without a deliberate decision.
 
 Equally binding, but enforced by build config or code structure rather than the test suite:
 
@@ -38,10 +39,9 @@ scripts/dual-screen-verify.sh                 # dynamic gate: dual window-size e
 
 1. **Verify before claiming**: the default loop for everyday changes is `spotlessCheck` → `:core:testing:testAndroid` (architecture redlines) → the matching test task for each touched module (`testAndroid` for KMP; normally `testDebugUnitTest` for Android-only) → `:app:assembleDebug`. Report failures honestly.
 2. **Full `./gradlew allTests testDebugUnitTest` only for cross-cutting changes**: touching `build-logic/`, `gradle/libs.versions.toml`, or the shared bases `:core:model` / `:core:common` (everything depends on them), and before opening a PR. `allTests` alone is a Kotlin Multiplatform aggregate and only covers KMP modules — Android-only modules (`:app`, `:feature:*`, `:sync:work`, `:core:designsystem`, `:core:navigation`) have no `allTests` task, so the root-level `testDebugUnitTest` must be named alongside it or their suites silently don't run.
-3. **Declare dependencies in the catalog first**: add versions/libraries/plugins to `gradle/libs.versions.toml`, then reference them via type-safe accessors (`libs.xxx`).
-4. **Green ≠ tested**: a misnamed or empty test source set fails silently (the `androidUnitTest` → `androidHostTest` incident shipped a build where tests ran zero cases, all green). After any build-script or source-set change, verify the selected task's `build/test-results/<task>/*.xml` exists with `tests > 0` before claiming tests pass — BUILD SUCCESSFUL alone proves nothing.
-5. **Safe ADB screenshots**: never use bare `adb exec-out screencap -p > file.png` (emulator multi-display warnings corrupt PNG magic headers and break multimodal API calls). Always specify `-d 0` (`adb exec-out screencap -d 0 -p > ...`) or capture on-device first (`adb shell screencap -p /data/local/tmp/s.png && adb pull ...`), and verify with `file <file>.png` before passing to `view_file`.
-6. **Dynamic gate for layout/navigation/skeleton changes**: static checks cannot catch split-pane transitions, back-stack behaviour or frame jank — the incidents of 2026-09 (split-mode shared transition, detail-route stacking) were all "statically green, behaviourally broken". Changes touching `:app` navigation (`BgmNavHost`, `BgmAdaptiveScenes`, `BgmNavTransitions`), `:core:navigation`, or skeleton/loading UI must additionally run `scripts/dual-screen-verify.sh` on a booted emulator (it walks Compact + Expanded window profiles, asserts no crash + rendered UI, and saves evidence screenshots to `build/verification/`); a deeper interactive walkthrough (tap-through list → detail → back) via emulator tooling is expected when the change touches back-stack semantics — navigation invariants are otherwise covered by `BgmNavStatePropertyTest`.
+3. **Green ≠ tested**: a misnamed or empty test source set fails silently — KMP test source sets are `androidHostTest` / `androidDeviceTest` and host tests are **opt-in**, so a stale name simply stops being collected (the `androidUnitTest` → `androidHostTest` incident shipped a build where tests ran zero cases, all green). After any build-script or source-set change, verify the selected task's `build/test-results/<task>/*.xml` exists with `tests > 0` before claiming tests pass — BUILD SUCCESSFUL alone proves nothing.
+4. **Safe ADB screenshots**: never use bare `adb exec-out screencap -p > file.png` (emulator multi-display warnings corrupt PNG magic headers and break multimodal API calls). Always specify `-d 0` (`adb exec-out screencap -d 0 -p > ...`) or capture on-device first (`adb shell screencap -p /data/local/tmp/s.png && adb pull ...`), and verify with `file <file>.png` before passing to `view_file`.
+5. **Dynamic gate for layout/navigation/skeleton changes**: static checks cannot catch split-pane transitions, back-stack behaviour or frame jank — the incidents of 2026-09 (split-mode shared transition, detail-route stacking) were all "statically green, behaviourally broken". Changes touching `:app` navigation (`BgmNavHost`, `BgmAdaptiveScenes`, `BgmNavTransitions`), `:core:navigation`, or skeleton/loading UI must additionally run `scripts/dual-screen-verify.sh` on a booted emulator (it walks Compact + Expanded window profiles, asserts no crash + rendered UI, and saves evidence screenshots to `build/verification/`); a deeper interactive walkthrough (tap-through list → detail → back) via emulator tooling is expected when the change touches back-stack semantics — navigation invariants are otherwise covered by `BgmNavStatePropertyTest`.
 
 ## Canonical Precedents and New Decisions
 
@@ -58,31 +58,25 @@ If none of these precedents fits, stop before introducing a new architectural pa
 
 ## Tech Stack
 
-Exact versions live in `gradle/libs.versions.toml` and `build-logic` convention plugins — treat those as the source of truth. Only these constraints affect everyday coding decisions: Kotlin (K2) with JVM target 25 + desugaring (governs `java.*` surface); minSdk 31, compileSdk/targetSdk 37 (governs `android.*` surface); Kotlin Multiplatform for `:core:model/common/network/database/datastore/data/testing` (androidTarget only), Android-only for `:app`, `:core:designsystem`, `:core:navigation`; Jetpack Compose + Material 3 Expressive; Ktor 3, Room 3 (KMP) + DataStore, Coil 3, Koin 4.
+Nothing here is a fact worth keeping in sync: dependency versions live in `gradle/libs.versions.toml`, shared module config in `build-logic` convention plugins, and the platform surface (JVM target + desugaring, which governs the `java.*` you may use; minSdk, which governs `android.*`) in those same files. Read them instead.
 
-## Module Map
+Two things a build file does not tell you:
 
-- `:app` — entry point: MainActivity, Koin init, OAuth deep-link handling. Navigation 3 (`androidx.navigation3`): `@Serializable` `NavKey` routes live in `:core:navigation` (`BgmRoutes.kt`), rendered by `NavDisplay` in `:app`; per-tab `NavBackStack`s live in `BgmNavState` (exit-through-home, survives process death). Route contracts are sealed under `BgmRoute` — `BgmNavState`'s stacking-semantics `when` is compiler-exhaustive, so a new route must declare its layer (detail replace / second-level same-class replace / drill-down push) or it won't compile; redline enforced by `ArchitectureRulesTest.navigation_routes_are_sealed_and_declared_only_in_bgm_routes`, and stacking/back invariants by `BgmNavStatePropertyTest`. Don't relocate route contracts or rewire the navigation stack without a deliberate decision.
-- `build-logic` — convention plugins (`minibgm.*` ids); all shared module config lives here.
-- `:core:*` — `model` (pure data classes), `common` (AppResult, BgmDispatchers, TimeUtils), `network` (Ktor dual-client, Bangumi REST v0, AniList GraphQL `AniListService`, Bilibili Web API `BilibiliService`, OAuth refresh loop, ETag cache), `database` (Room), `datastore` (UserPreferences + Keystore-encrypted AuthTokensDataSource), `data` (repositories, SyncManager), `testing` (fakes, TestData, ArchitectureRulesTest).
-- `:sync:work` — WorkManager background sync (`BgmSyncWorker`).
-- `:feature:*` — `schedule`, `subject`, `user`, `search`, `widget`; scaffolded with the `minibgm.android.feature` plugin.
-- OAuth token-exchange proxy: maintained in a separate private Cloudflare Workers repo, not in this codebase.
+- Every KMP module in this repo configures **`androidTarget` only** — there is no second platform target, so an `expect` has exactly one `actual` and nothing needs a multiplatform design.
+- A module being KMP vs Android-only changes its source sets, its test task name, and whether an `android.*` import is legal at all. Read the `minibgm.*` plugin in that module's own `build.gradle.kts`; inventories of this drifted twice before being deleted.
+
+## Module Layout
+
+No inventory here — `settings.gradle.kts` and the directory tree are authoritative, and every list maintained in this document has drifted. What the tree does not tell you:
+
+- **The OAuth token-exchange/refresh proxy is not in this repository** — it lives in a separate private Cloudflare Workers project, so its code will never appear in a search here. Only token exchange/refresh goes through it; business API calls go direct to `api.bgm.tv`.
+- Dependency direction between layers is not a convention — it is mechanically enforced by redlines 1–3 and 7, so a misplaced import fails the build rather than merely looking wrong.
 
 ## Domain Notes
 
-- Wrap data/domain operations in `AppResult<T>` (`Success`/`Error`/`Loading`, defined in `:core:common`).
-- Room DAO reads return `Flow<T>`; writes/upserts are `suspend` functions.
-- Reuse `BgmHttpClient.jsonConfig` (`ignoreUnknownKeys`, `isLenient`, `coerceInputValues`, ...) instead of hand-rolling `Json` instances; errors surface as typed `BgmNetworkException` subclasses mapped from HTTP status codes.
-- Business API calls go direct to `api.bgm.tv`; only token exchange/refresh goes through the Cloudflare Worker proxy. The Ktor auth plugin auto-refreshes on 401 and clears credentials on unrecoverable refresh failures (auto-logout).
+- Reuse `BgmHttpClient.jsonConfig` (`ignoreUnknownKeys`, `isLenient`, `coerceInputValues`, ...) instead of hand-rolling `Json` instances — nothing fails when you don't, so this is one of the few conventions still without a test; it belongs in `ArchitectureRulesTest` once someone writes it.
+- The Ktor auth plugin auto-refreshes on 401 and **clears credentials on an unrecoverable refresh failure** (auto-logout). A caller that catches a 401 will not see this happen.
 - **Air Schedule Ground Truth (No predicted episodes)**: Single-episode air events (`AirEventEntity`) and next-episode tracking (`nextEpisode`, `nextEpisodeAtUtc`, `nextEpisodeKind`, `timeCst`, `timeJst`, `weekday`) are driven exclusively by verified episode events from AniList (`actual`/`scheduled`) and Bilibili (`pub_time`). Arithmetic prediction (`P7D` loop / `broadcastRule`) is completely deprecated and eliminated; never generate fake episodes. `bangumi-data` serves strictly as metadata and cross-platform relation mappings (`anilistId`, Bilibili IDs, `sitesJson`, `titleCn`), and must never overwrite or pollute official broadcast dates/times. AniList broadcast times and split-cour offsets are derived deterministically from verified air events without heuristic tolerance dropouts.
-- Keep recomposition cheap: immutable state classes, `@Stable` where useful, stable lambdas; support edge-to-edge (`enableEdgeToEdge()` + proper `WindowInsets` padding).
-
-## Build System (AGP 9)
-
-- `:app` / `:core:designsystem` use **AGP built-in Kotlin** — never re-add `org.jetbrains.kotlin.android`; Kotlin compile config goes through `android.compileOptions` (jvmTarget defaults to `targetCompatibility`).
-- KMP modules use `com.android.kotlin.multiplatform.library` (applied by `minibgm.kmp.library`), which is **single-variant** (no debug/release) and has **no top-level `android {}` extension** — Android config (namespace, desugaring, host tests) goes through `Project.kmpAndroidLibrary { }` (finalizeDsl) in `build-logic`, and test source sets are named `androidHostTest` / `androidDeviceTest` with tests **opt-in** (`withHostTest` is already enabled in the convention plugin).
-- KMP modules use `testAndroid` (per module) or `allTests` (aggregate); Android-only modules use the standard variant task such as `testDebugUnitTest`. Select the task from the module's applied convention plugin instead of assuming one task name for all modules.
 
 ## Git & Commits
 
