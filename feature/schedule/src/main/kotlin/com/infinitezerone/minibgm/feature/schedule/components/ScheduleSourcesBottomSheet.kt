@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -61,6 +62,7 @@ fun ScheduleSourcesBottomSheet(
     schedule: AirSchedule,
     onDismissRequest: () -> Unit,
     onOpenUrl: (String) -> Unit,
+    onAiSourceSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
@@ -175,6 +177,26 @@ fun ScheduleSourcesBottomSheet(
                         .padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Text(
+                    text = "AI 找源",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+
+                ScheduleSourceCard(
+                    title = "让 AI 助手找源",
+                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    iconVector = Icons.Filled.AutoAwesome,
+                    onClick = {
+                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                            onDismissRequest()
+                            onAiSourceSearch()
+                        }
+                    },
+                )
+
                 Text(
                     text = "外部跳转",
                     style = MaterialTheme.typography.labelMedium,
