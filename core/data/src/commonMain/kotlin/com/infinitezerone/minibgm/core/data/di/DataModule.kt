@@ -7,6 +7,8 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
@@ -27,6 +29,7 @@ import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.BilibiliService
+import com.infinitezerone.minibgm.core.network.PageFetchService
 import org.koin.dsl.module
 
 val dataModule =
@@ -64,6 +67,11 @@ val dataModule =
         single<CommunityRepository> {
             CommunityRepositoryImpl(
                 communityService = get<BangumiCommunityService>(),
+            )
+        }
+        single<PlaybackResolverRepository> {
+            PlaybackResolverRepositoryImpl(
+                pageFetchService = get<PageFetchService>(),
             )
         }
         single<SettingsRepository> {
