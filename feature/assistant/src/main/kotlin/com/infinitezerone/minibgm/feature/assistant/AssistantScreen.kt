@@ -41,7 +41,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
@@ -56,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -188,118 +188,117 @@ fun AssistantScreenContent(
                     ),
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+            ) {
+                // 底部快捷预设 Prompts 滚动条（仅在有消息时展示辅助操作）
+                if (uiState.messages.isNotEmpty()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        items(PROMPT_SUGGESTIONS) { prompt ->
+                            SuggestionChip(
+                                onClick = { onSendPrompt(prompt) },
+                                label = { Text(prompt, style = MaterialTheme.typography.labelMedium) },
+                                enabled = !uiState.isLoading,
+                            )
+                        }
+                    }
+                }
+
+                // 底部输入框与发送按钮
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.inputText,
+                            onValueChange = onInputChanged,
+                            placeholder = {
+                                Text(
+                                    text = "问问 AI 追番助手...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            singleLine = false,
+                            maxLines = 4,
+                            shape = RoundedCornerShape(20.dp),
+                            colors =
+                                OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            modifier = Modifier.weight(1f),
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        FilledIconButton(
+                            onClick = onSendMessage,
+                            enabled = uiState.inputText.isNotBlank() && !uiState.isLoading,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "发送",
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        snackbarHost = { BgmSnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
-        Column(
+        Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            // 对话流列表区域
-            Box(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-            ) {
-                if (uiState.messages.isEmpty()) {
-                    // 空状态引导卡片
-                    EmptyAssistantGuide(
-                        onSelectPrompt = onSendPrompt,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        items(uiState.messages, key = { it.id }) { message ->
-                            ChatMessageItem(
-                                message = message,
-                                onApproveAction = onApproveAction,
-                                onRejectAction = onRejectAction,
-                                onSubjectClick = onSubjectClick,
-                            )
-                        }
-
-                        if (uiState.isLoading) {
-                            item(key = "loading_indicator") {
-                                AssistantLoadingBubble()
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 底部快捷预设 Prompts 滚动条（仅在有消息时展示辅助操作）
-            if (uiState.messages.isNotEmpty()) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
+            if (uiState.messages.isEmpty()) {
+                // 空状态引导卡片
+                EmptyAssistantGuide(
+                    onSelectPrompt = onSendPrompt,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(PROMPT_SUGGESTIONS) { prompt ->
-                        SuggestionChip(
-                            onClick = { onSendPrompt(prompt) },
-                            label = { Text(prompt, style = MaterialTheme.typography.labelMedium) },
-                            enabled = !uiState.isLoading,
+                    items(uiState.messages, key = { it.id }) { message ->
+                        ChatMessageItem(
+                            message = message,
+                            onApproveAction = onApproveAction,
+                            onRejectAction = onRejectAction,
+                            onSubjectClick = onSubjectClick,
                         )
                     }
-                }
-            }
 
-            // 底部输入框与发送按钮
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 4.dp,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = uiState.inputText,
-                        onValueChange = onInputChanged,
-                        placeholder = {
-                            Text(
-                                text = "问问 AI 追番助手...",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        },
-                        singleLine = false,
-                        maxLines = 4,
-                        shape = RoundedCornerShape(20.dp),
-                        colors =
-                            OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                        modifier = Modifier.weight(1f),
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    FilledIconButton(
-                        onClick = onSendMessage,
-                        enabled = uiState.inputText.isNotBlank() && !uiState.isLoading,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "发送",
-                            modifier = Modifier.size(20.dp),
-                        )
+                    if (uiState.isLoading) {
+                        item(key = "loading_indicator") {
+                            AssistantLoadingBubble()
+                        }
                     }
                 }
             }
