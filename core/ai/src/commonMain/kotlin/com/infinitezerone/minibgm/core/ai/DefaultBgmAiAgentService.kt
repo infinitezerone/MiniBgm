@@ -123,6 +123,7 @@ class DefaultBgmAiAgentService(
                 promptExecutor = executor,
                 llmModel = llmModel,
                 toolRegistry = tools,
+                systemPrompt = BGM_AGENT_SYSTEM_PROMPT,
             )
         agent.run(prompt)
     },
