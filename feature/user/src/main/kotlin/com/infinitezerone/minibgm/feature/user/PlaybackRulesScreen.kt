@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -97,6 +98,7 @@ fun PlaybackRulesScreen(
     var ruleToDelete by remember { mutableStateOf<PlaybackSourceRule?>(null) }
     var playlistToDelete by remember { mutableStateOf<PlaybackPlaylist?>(null) }
     var confirmClearPlaylists by rememberSaveable { mutableStateOf(false) }
+    var confirmClearPositions by rememberSaveable { mutableStateOf(false) }
 
     val playlistPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -213,6 +215,42 @@ fun PlaybackRulesScreen(
 
                 item(key = "playlist_template") {
                     PlaylistTemplateCard()
+                }
+
+                item(key = "positions_header") {
+                    SectionHeader(
+                        title = "续播记录",
+                        supporting = "内置播放器自动记录各播放地址的观看位置，用于下次断点续播",
+                        trailing = {
+                            if (uiState.playbackPositions.isNotEmpty()) {
+                                TextButton(onClick = { confirmClearPositions = true }) {
+                                    Text("清空", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        },
+                    )
+                }
+
+                if (uiState.playbackPositions.isEmpty()) {
+                    item(key = "positions_empty") {
+                        Text(
+                            text = "暂无续播记录。播放器会在你观看时自动记录进度（保留最近 50 条）。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                } else {
+                    items(
+                        uiState.playbackPositions.entries.toList().sortedByDescending { it.value },
+                        key = { "position_" + it.key },
+                    ) { entry ->
+                        PlaybackPositionRow(
+                            url = entry.key,
+                            positionMs = entry.value,
+                            onClear = { viewModel.clearPlaybackPosition(entry.key) },
+                        )
+                    }
                 }
 
                 item(key = "advanced_header") {
@@ -389,6 +427,29 @@ fun PlaybackRulesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmClearPlaylists = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    if (confirmClearPositions) {
+        AlertDialog(
+            onDismissRequest = { confirmClearPositions = false },
+            title = { Text("清空全部续播记录") },
+            text = { Text("将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        uiState.playbackPositions.keys.forEach { viewModel.clearPlaybackPosition(it) }
+                        confirmClearPositions = false
+                    },
+                ) {
+                    Text("清空", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearPositions = false }) {
                     Text("取消")
                 }
             },
@@ -988,4 +1049,63 @@ private fun RuleImportDialog(
             }
         },
     )
+}
+
+/** 续播记录单条：展示主机名与上次观看位置，可单条清除 */
+@Composable
+private fun PlaybackPositionRow(
+    url: String,
+    positionMs: Long,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = hostLabelOf(url),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "看到 " + formatPlaybackPosition(positionMs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            IconButton(onClick = onClear) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "清除该续播记录",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun hostLabelOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
+
+private fun formatPlaybackPosition(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val h = totalSeconds / 3600
+    val m = (totalSeconds % 3600) / 60
+    val sec = totalSeconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
 }

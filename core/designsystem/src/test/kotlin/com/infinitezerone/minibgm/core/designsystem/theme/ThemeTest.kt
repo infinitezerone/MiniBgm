@@ -141,6 +141,28 @@ class ThemeTest {
     }
 
     @Test
+    fun theme_amooledDarkPalette_pureBlackSurfacesAndLegibleText() {
+        val amoled = MiniBgmAmoledDarkColors
+
+        // AMOLED 的核心承诺：表面阶梯全部纯黑（背景/表面不透光、不偏灰）
+        assertEquals(0f, amoled.background.luminance(), "AMOLED background must be pure black")
+        assertEquals(0f, amoled.surface.luminance(), "AMOLED surface must be pure black")
+        assertTrue(amoled.surfaceContainerLowest.luminance() <= 0.01f)
+        assertTrue(amoled.surfaceContainerHigh.luminance() <= 0.12f, "AMOLED 容器阶梯须保持近黑，避免失去纯黑意义")
+
+        // 前景可读性：onBackground/onSurface 在纯黑上必须高亮
+        assertTrue(amoled.onBackground.luminance() > 0.8f)
+        assertTrue(amoled.onSurface.luminance() > 0.8f)
+
+        // 主色在纯黑上的对比度满足 WCAG AA（>= 4.5:1）
+        val primaryContrastOnBlack = (amoled.primary.luminance() + 0.05f) / 0.05f
+        assertTrue(primaryContrastOnBlack >= 4.5f, "PrimaryAmoled contrast ($primaryContrastOnBlack) must be >= 4.5:1 on black")
+
+        // 与常规深色方案区分：AMOLED 的 surface 不得高于普通深色方案
+        assertTrue(amoled.surface.luminance() <= MiniBgmDarkColors.surface.luminance())
+    }
+
+    @Test
     fun theme_designTokens_typographyAndShapesAreConfigured() {
         // Assert typography hierarchy and shapes are properly initialized
         assertEquals(57.sp, BgmTypography.displayLarge.fontSize)

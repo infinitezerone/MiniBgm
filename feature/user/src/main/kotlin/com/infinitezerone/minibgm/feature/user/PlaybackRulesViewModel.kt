@@ -27,6 +27,8 @@ data class PlaybackRulesUiState(
     val rules: List<PlaybackSourceRule> = emptyList(),
     val playlists: List<PlaybackPlaylist> = emptyList(),
     val isLoading: Boolean = false,
+    /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
+    val playbackPositions: Map<String, Long> = emptyMap(),
 )
 
 /**
@@ -57,8 +59,14 @@ class PlaybackRulesViewModel(
         combine(
             settingsRepository.playbackRules,
             settingsRepository.playlists,
-        ) { rules, playlists ->
-            PlaybackRulesUiState(rules = rules, playlists = playlists, isLoading = false)
+            settingsRepository.playbackPositions,
+        ) { rules, playlists, positions ->
+            PlaybackRulesUiState(
+                rules = rules,
+                playlists = playlists,
+                playbackPositions = positions,
+                isLoading = false,
+            )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -78,6 +86,14 @@ class PlaybackRulesViewModel(
                 is AppResult.Error -> sendSnackbar(result.message)
                 AppResult.Loading -> Unit
             }
+        }
+    }
+
+    /** 清除单条续播记录 */
+    fun clearPlaybackPosition(url: String) {
+        viewModelScope.launch {
+            settingsRepository.clearPlaybackPosition(url)
+            sendSnackbar("已清除该续播记录")
         }
     }
 
