@@ -6,7 +6,9 @@ import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.PendingAction
+import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeWebViewResolveRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -16,6 +18,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import kotlin.test.assertEquals
@@ -497,5 +500,79 @@ class AssistantViewModelTest {
                     .last()
                     .pendingActions[0]
             assertEquals(ActionStatus.SUCCESS, card.status)
+        }
+
+    @Test
+    fun noPlayableSourceReply_offersDeepResolveEntry() =
+        runTest {
+            val fakeSettingsRepository = FakeSettingsRepository()
+            val agentService =
+                FakeAgentService(
+                    executeResult =
+                        AppResult.Success(
+                            "No playable source found for subject ID 1001: no imported playlist is bound to it and no source page is recorded.",
+                        ),
+                )
+            val webviewRepo =
+                FakeWebViewResolveRepository().apply {
+                    setPlayableSources(1001L, listOf(PlayableSource(url = "https://cdn.example.com/1.m3u8")))
+                }
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository, webviewResolveRepository = webviewRepo)
+
+            viewModel.sendMessage("哪里能看")
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(1001L, state.deepResolve?.subjectId)
+            assertFalse(state.deepResolve?.isRunning ?: true)
+
+            viewModel.runDeepResolve()
+            advanceUntilIdle()
+
+            assertEquals(listOf(1001L), webviewRepo.deepResolveCalls)
+            val last =
+                viewModel.uiState.value.messages
+                    .last()
+            assertTrue(last.playableSources != null)
+            assertEquals("WebView 深度解析", last.playableSources?.source)
+        }
+
+    @Test
+    fun deepResolve_emptyResult_appendsPlainMessage() =
+        runTest {
+            val fakeSettingsRepository = FakeSettingsRepository()
+            val agentService = FakeAgentService(executeResult = AppResult.Success("No playable source found for subject ID 1002"))
+            val webviewRepo = FakeWebViewResolveRepository().apply { deepResolveResult = AppResult.Success(emptyList()) }
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository, webviewResolveRepository = webviewRepo)
+
+            viewModel.sendMessage("哪里能看")
+            advanceUntilIdle()
+            viewModel.runDeepResolve()
+            advanceUntilIdle()
+
+            val last =
+                viewModel.uiState.value.messages
+                    .last()
+            assertTrue(last.playableSources == null)
+            assertTrue(last.content.contains("没有捕获到"))
+        }
+
+    @Test
+    fun successfulSourceReply_doesNotOfferDeepResolve() =
+        runTest {
+            val fakeSettingsRepository = FakeSettingsRepository()
+            val sourcesJson =
+                """
+                {"subjectId": 1003, "title": "测试番剧", "source": "自备片单",
+                 "episodes": [{"url": "https://cdn.example.com/1.m3u8", "kind": "DIRECT", "label": "1"}]}
+                """.trimIndent()
+            val agentService = FakeAgentService(executeResult = AppResult.Success(sourcesJson))
+            val viewModel =
+                AssistantViewModel(agentService, fakeSettingsRepository, webviewResolveRepository = FakeWebViewResolveRepository())
+
+            viewModel.sendMessage("哪里能看")
+            advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.deepResolve)
         }
 }

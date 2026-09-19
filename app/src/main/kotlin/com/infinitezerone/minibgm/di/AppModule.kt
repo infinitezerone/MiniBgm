@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.data.di.platformDataModule
 import com.infinitezerone.minibgm.core.database.di.databaseModule
 import com.infinitezerone.minibgm.core.datastore.di.datastoreModule
 import com.infinitezerone.minibgm.core.network.di.networkModule
+import com.infinitezerone.minibgm.core.webview.di.webviewModule
 import com.infinitezerone.minibgm.feature.assistant.di.assistantModule
 import com.infinitezerone.minibgm.feature.schedule.di.scheduleModule
 import com.infinitezerone.minibgm.feature.search.di.searchModule
@@ -32,6 +33,7 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             scheduleModule,
             userModule,
             subjectModule,
+            webviewModule,
             searchModule,
             assistantModule,
             syncWorkModule,

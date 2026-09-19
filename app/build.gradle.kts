@@ -66,6 +66,7 @@ dependencies {
     implementation(project(":core:ai"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:navigation"))
+    implementation(project(":core:webview"))
     implementation(project(":feature:user"))
     implementation(project(":feature:schedule"))
     implementation(project(":feature:subject"))
