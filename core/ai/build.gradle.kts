@@ -17,6 +17,7 @@ kotlin {
             implementation(project(":core:data"))
 
             implementation(libs.koog.agents)
+            implementation(libs.ktor.client.core)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)

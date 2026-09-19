@@ -58,7 +58,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
-import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys

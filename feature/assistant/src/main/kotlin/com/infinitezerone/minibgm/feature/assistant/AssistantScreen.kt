@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -152,6 +153,7 @@ fun AssistantScreenContent(
     onPlaySource: (PlayerRoute) -> Unit = {},
     deepResolve: DeepResolveState? = null,
     onRunDeepResolve: () -> Unit = {},
+    onFetchModelsAsync: suspend (String, String, String) -> AppResult<List<String>> = { _, _, _ -> AppResult.Success(emptyList()) },
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -347,6 +349,7 @@ fun AssistantScreenContent(
             currentConfig = uiState.aiConfig,
             onSaveConfig = onSaveConfig,
             onDismiss = { onToggleConfigDialog(false) },
+            onFetchModels = onFetchModelsAsync,
         )
     }
 }
