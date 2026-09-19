@@ -53,6 +53,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
+    suspend fun setAmoledDarkMode(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(amoledDarkMode = enabled)
+        }
+    }
+
     suspend fun setNotifyBeforeAirMinutes(minutes: Int) {
         dataStore.updateData { current ->
             current.copy(notifyBeforeAirMinutes = minutes)
@@ -168,6 +175,13 @@ class UserPreferencesDataSource(
     suspend fun setPlaylistsJson(json: String) {
         dataStore.updateData { current ->
             current.copy(playlistsJson = json)
+        }
+    }
+
+    /** 更新断点续播位置表 JSON（Map<播放地址, 毫秒>，上限与淘汰策略由写入方维护） */
+    suspend fun setPlaybackPositionsJson(json: String) {
+        dataStore.updateData { current ->
+            current.copy(playbackPositionsJson = json)
         }
     }
 }

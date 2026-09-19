@@ -15,6 +15,8 @@ data class UserPreferences(
     /** 进行中登录的 PKCE 等价 verifier（其 sha256 指纹作为 OAuth state，见 BgmPkce） */
     val pendingOAuthVerifier: String = "",
     val isDarkMode: Boolean = false,
+    /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
+    val amoledDarkMode: Boolean = false,
     val notifyBeforeAirMinutes: Int = 15,
     /** 开播提醒总开关（每日追番更新汇总通知） */
     val airingReminderEnabled: Boolean = true,
@@ -48,6 +50,8 @@ data class UserPreferences(
     val playbackRulesJson: String = "",
     /** 用户自备播放列表信封 JSON（PlaybackPlaylistDocument 序列化串；空串表示从未导入） */
     val playlistsJson: String = "",
+    /** 断点续播位置表 JSON（Map<播放地址, 毫秒>，最多 50 条最近记录；与打卡进度是两套独立数据） */
+    val playbackPositionsJson: String = "",
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

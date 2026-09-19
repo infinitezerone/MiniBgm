@@ -18,6 +18,9 @@ enum class PlaybackRuleKind {
  * - `{episodeId}`: Bangumi 分集 ID
  *
  * [kind] 为 SOURCE 时，[headers] 会随模板请求一起发出（Referer / User-Agent 等固定头，不含登录态）。
+ * 响应识别顺序：先尝试结构化流清单 `{"streams":[{"url","title","headers"}]}`
+ * （Stremio `/stream` 响应兼容形态，`title` 作分集标注、条目级 `headers` 供播放器携带），
+ * 非清单响应回退为页面正则抽取。
  */
 @Serializable
 data class PlaybackSourceRule(

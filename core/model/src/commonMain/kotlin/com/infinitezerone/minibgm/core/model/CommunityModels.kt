@@ -42,6 +42,16 @@ data class CommentReaction(
 }
 
 /**
+ * 表态对象范围：与 p1 API 的 like 端点一一对应
+ * （小组帖子 / 条目讨论版帖子楼层 / 单集吐槽）。
+ */
+enum class CommunityLikeTarget {
+    GROUP_POST,
+    SUBJECT_POST,
+    EPISODE_COMMENT,
+}
+
+/**
  * 单集吐槽楼中楼回复
  */
 @Serializable

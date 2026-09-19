@@ -28,6 +28,8 @@ class FakeSettingsRepository(
         private set
     var setAiConfigCallCount: Int = 0
         private set
+    var setAmoledDarkModeCallCount: Int = 0
+        private set
 
     fun setSettings(settings: UserSettings) {
         settingsState.value = settings
@@ -50,6 +52,11 @@ class FakeSettingsRepository(
     override suspend fun setAiringReminderHour(hour: Int) {
         setAiringReminderHourCallCount++
         settingsState.value = settingsState.value.copy(airingReminderHour = hour)
+    }
+
+    override suspend fun setAmoledDarkMode(enabled: Boolean) {
+        setAmoledDarkModeCallCount++
+        settingsState.value = settingsState.value.copy(amoledDarkMode = enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {
@@ -132,5 +139,25 @@ class FakeSettingsRepository(
 
     override suspend fun clearPlaylists() {
         playlistsState.value = emptyList()
+    }
+
+    private val playbackPositionsState = MutableStateFlow<Map<String, Long>>(emptyMap())
+    override val playbackPositions: Flow<Map<String, Long>> = playbackPositionsState
+
+    override suspend fun savePlaybackPosition(
+        url: String,
+        positionMs: Long,
+    ) {
+        if (url.isBlank() || positionMs <= 0L) return
+        playbackPositionsState.value = playbackPositionsState.value + (url to positionMs)
+    }
+
+    override suspend fun clearPlaybackPosition(url: String) {
+        playbackPositionsState.value = playbackPositionsState.value - url
+    }
+
+    /** 直接注入续播位置（供 ViewModel 测试构造恢复场景） */
+    fun setPlaybackPositions(positions: Map<String, Long>) {
+        playbackPositionsState.value = positions
     }
 }

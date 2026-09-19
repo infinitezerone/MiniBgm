@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.network
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.respondRedirect
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
@@ -89,5 +90,33 @@ class PageFetchServiceTest {
             val page = service(body = "a".repeat(MAX_PAGE_BYTES + 4096)).fetchHtml("https://big.example.com/page")
 
             assertEquals(MAX_PAGE_BYTES, page?.html?.length)
+        }
+
+    @Test
+    fun `重定向后返回最终地址供 Referer 回填`() =
+        runTest {
+            var calls = 0
+            val impl =
+                PageFetchServiceImpl(
+                    HttpClient(
+                        MockEngine { request ->
+                            calls += 1
+                            if (calls == 1) {
+                                respondRedirect("https://final.example.com/e/1")
+                            } else {
+                                respond(
+                                    content = "<html>moved</html>",
+                                    status = HttpStatusCode.OK,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                                )
+                            }
+                        },
+                    ),
+                )
+
+            val page = impl.fetchHtml("https://origin.example.com/e/1")
+
+            assertEquals("https://final.example.com/e/1", page?.url)
+            assertEquals("<html>moved</html>", page?.html)
         }
 }

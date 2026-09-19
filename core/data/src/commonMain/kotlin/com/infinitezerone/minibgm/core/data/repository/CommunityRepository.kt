@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.asAppResult
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -10,7 +11,7 @@ import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 
 /**
- * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版、讨论帖详情）
+ * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版、讨论帖详情、表态）
  */
 interface CommunityRepository {
     /** 获取单集吐槽列表 */
@@ -35,6 +36,21 @@ interface CommunityRepository {
         topicId: Long,
         type: String = "subject",
     ): AppResult<TopicDetail>
+
+    /**
+     * 对楼层/吐槽添加一个表情表态（需登录态；[reactionValue] 为 bgm.tv 表情类型 id）。
+     */
+    suspend fun setLike(
+        target: CommunityLikeTarget,
+        id: Long,
+        reactionValue: Int,
+    ): AppResult<Unit>
+
+    /** 取消自己在该楼层/吐槽上的表态 */
+    suspend fun removeLike(
+        target: CommunityLikeTarget,
+        id: Long,
+    ): AppResult<Unit>
 }
 
 class CommunityRepositoryImpl(
@@ -81,5 +97,24 @@ class CommunityRepositoryImpl(
                     communityService.getGroupTopicDetail(topicId)
                 }
             }
+        }
+
+    override suspend fun setLike(
+        target: CommunityLikeTarget,
+        id: Long,
+        reactionValue: Int,
+    ): AppResult<Unit> =
+        asAppResult(errorMessage = { it.message ?: "表态失败" }) {
+            communityService.setLike(target, id, reactionValue)
+            Unit
+        }
+
+    override suspend fun removeLike(
+        target: CommunityLikeTarget,
+        id: Long,
+    ): AppResult<Unit> =
+        asAppResult(errorMessage = { it.message ?: "取消表态失败" }) {
+            communityService.removeLike(target, id)
+            Unit
         }
 }
