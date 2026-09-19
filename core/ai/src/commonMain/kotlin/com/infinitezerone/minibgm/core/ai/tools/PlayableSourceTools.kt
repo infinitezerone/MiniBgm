@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
@@ -57,6 +58,7 @@ class PlayableSourceTools(
         if (subjectId <= 0L) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
+        AiToolActivity.report("findPlayableSources", "条目 $subjectId，检查自备片单")
         val schedule = scheduleRepository.getAllSchedulesStream().first().firstOrNull { it.bgmId == subjectId }
         val title = resolveTitle(schedule, subjectId)
         val episodes = if (epNumber > 0) epNumber.toFloat() else 0f
@@ -65,10 +67,12 @@ class PlayableSourceTools(
             return encode(subjectId, title, "自备片单", hits)
         }
 
+        AiToolActivity.report("findPlayableSources", "条目 $subjectId，尝试用户配置的取源接口")
         fromRuleSources(subjectId, title, epNumber)?.let { (ruleName, hits) ->
             return encode(subjectId, title, "第三方接口 · $ruleName", hits)
         }
 
+        AiToolActivity.report("findPlayableSources", "条目 $subjectId，解析来源站页面")
         val pages = candidatePages(schedule)
         if (pages.isEmpty()) {
             return "No playable source found for subject ID $subjectId: no imported playlist is bound to it " +
