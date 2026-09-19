@@ -66,9 +66,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.assistant.components.AssistantConfigDialog
 import com.infinitezerone.minibgm.feature.assistant.components.PendingActionCard
+import com.infinitezerone.minibgm.feature.assistant.components.PlayableSourcesCard
 import org.koin.androidx.compose.koinViewModel
 
 private val PROMPT_SUGGESTIONS =
@@ -84,6 +86,7 @@ fun AssistantScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: (() -> Unit)? = null,
     prefillPrompt: String = "",
+    onPlaySource: (PlayerRoute) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: AssistantViewModel = koinViewModel(),
 ) {
@@ -116,6 +119,7 @@ fun AssistantScreen(
         onApproveAction = viewModel::approveAction,
         onRejectAction = viewModel::rejectAction,
         onSubjectClick = { subjectId -> onSubjectClick(SubjectDetailRoute(subjectId)) },
+        onPlaySource = onPlaySource,
         onClearConversation = viewModel::clearConversation,
         onToggleConfigDialog = viewModel::toggleConfigDialog,
         onSaveConfig = viewModel::saveAiConfig,
@@ -139,6 +143,7 @@ fun AssistantScreenContent(
     onToggleConfigDialog: (Boolean) -> Unit,
     onSaveConfig: (AiConfig) -> Unit,
     onBackClick: (() -> Unit)?,
+    onPlaySource: (PlayerRoute) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -305,6 +310,7 @@ fun AssistantScreenContent(
                             onApproveAction = onApproveAction,
                             onRejectAction = onRejectAction,
                             onSubjectClick = onSubjectClick,
+                            onPlaySource = onPlaySource,
                         )
                     }
 
@@ -409,6 +415,7 @@ private fun ChatMessageItem(
     onApproveAction: (String) -> Unit,
     onRejectAction: (String) -> Unit,
     onSubjectClick: (Long) -> Unit,
+    onPlaySource: (PlayerRoute) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isUser = message.role == MessageRole.USER
@@ -474,6 +481,16 @@ private fun ChatMessageItem(
                     )
                 }
             }
+        }
+
+        // 找源结果：可播放清单卡片，DIRECT 条目点击即进播放器
+        message.playableSources?.let { sources ->
+            Spacer(modifier = Modifier.height(8.dp))
+            PlayableSourcesCard(
+                sources = sources,
+                onPlaySource = onPlaySource,
+                modifier = Modifier.fillMaxWidth(0.95f),
+            )
         }
     }
 }

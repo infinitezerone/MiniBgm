@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.assistant.navigation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.assistant.AssistantScreen
 
@@ -12,6 +13,7 @@ import com.infinitezerone.minibgm.feature.assistant.AssistantScreen
 fun EntryProviderScope<NavKey>.assistantEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: (() -> Unit)? = null,
+    onPlaySource: (PlayerRoute) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<AssistantRoute>(metadata = metadata) { route ->
@@ -19,6 +21,7 @@ fun EntryProviderScope<NavKey>.assistantEntry(
             prefillPrompt = route.prefillPrompt,
             onSubjectClick = onSubjectClick,
             onBackClick = onBackClick,
+            onPlaySource = onPlaySource,
         )
     }
 }
