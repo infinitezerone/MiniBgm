@@ -74,6 +74,7 @@ No inventory here — `settings.gradle.kts` and the directory tree are authorita
 
 ## Domain Notes
 
+- **纯装饰特性必须 fail-open**：光晕/动效/横幅等不影响核心信息获取的增强，任何内部异常都应降级为"没有该装饰"（`runCatching` + 默认值），绝不允许让宿主页面崩溃。访问 `android.graphics.Bitmap` 一律假设 `Config#HARDWARE`（真机 Coil 默认解码，`getPixels` 会抛），读像素前先 `copy` 成软件位图。
 - Reuse `BgmHttpClient.jsonConfig` (`ignoreUnknownKeys`, `isLenient`, `coerceInputValues`, ...) instead of hand-rolling `Json` instances — nothing fails when you don't, so this is one of the few conventions still without a test; it belongs in `ArchitectureRulesTest` once someone writes it.
 - The Ktor auth plugin auto-refreshes on 401 and **clears credentials on an unrecoverable refresh failure** (auto-logout). A caller that catches a 401 will not see this happen.
 - **Air Schedule Ground Truth (No predicted episodes)**: Single-episode air events (`AirEventEntity`) and next-episode tracking (`nextEpisode`, `nextEpisodeAtUtc`, `nextEpisodeKind`, `timeCst`, `timeJst`, `weekday`) are driven exclusively by verified episode events from AniList (`actual`/`scheduled`) and Bilibili (`pub_time`). Arithmetic prediction (`P7D` loop / `broadcastRule`) is completely deprecated and eliminated; never generate fake episodes. `bangumi-data` serves strictly as metadata and cross-platform relation mappings (`anilistId`, Bilibili IDs, `sitesJson`, `titleCn`), and must never overwrite or pollute official broadcast dates/times. AniList broadcast times and split-cour offsets are derived deterministically from verified air events without heuristic tolerance dropouts.
