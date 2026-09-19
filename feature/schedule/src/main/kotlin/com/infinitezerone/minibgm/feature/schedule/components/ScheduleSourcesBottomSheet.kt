@@ -187,7 +187,7 @@ fun ScheduleSourcesBottomSheet(
 
                 ScheduleSourceCard(
                     title = "让 AI 助手找源",
-                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    subtitle = "解析可播放地址与集数，结果在助手会话中展示",
                     iconVector = Icons.Filled.AutoAwesome,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {

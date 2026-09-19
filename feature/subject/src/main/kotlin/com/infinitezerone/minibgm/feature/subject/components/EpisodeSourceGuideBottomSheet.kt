@@ -358,7 +358,7 @@ fun EpisodeSourceGuideBottomSheet(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // 分组 1.5：AI 找源——只检索可观看页面链接，检索在助手会话中显式触发
+                // 分组 1.5：AI 找源——解析可播放地址，检索在助手会话中显式触发
                 Text(
                     text = "AI 找源",
                     style = MaterialTheme.typography.labelMedium,
@@ -369,7 +369,7 @@ fun EpisodeSourceGuideBottomSheet(
 
                 EpisodeSourceActionCard(
                     title = "让 AI 助手找源",
-                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    subtitle = "解析可播放地址与集数，结果在助手会话中展示",
                     iconVector = Icons.Filled.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
                     onClick = { runAfterDismiss(onAiSourceSearch) },

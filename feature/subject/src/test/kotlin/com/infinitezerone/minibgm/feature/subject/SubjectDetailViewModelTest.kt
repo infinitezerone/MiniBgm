@@ -1474,9 +1474,9 @@ class SubjectDetailViewModelTest {
             val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
             assertTrue(event.prefillPrompt.contains("葬送的芙莉莲"))
             assertTrue(event.prefillPrompt.contains("1001"))
-            // 边界约束：交接给助手的是"页面链接"检索请求，而非直链嗅探
-            assertTrue(event.prefillPrompt.contains("在线观看页面"))
-            assertTrue(event.prefillPrompt.contains("网页链接"))
+            // 交接给助手的找源请求要求可播放数据，本页面自身不做任何检索
+            assertTrue(event.prefillPrompt.contains("可播放资源"))
+            assertTrue(event.prefillPrompt.contains("能播放的地址"))
         }
 
     @Test
@@ -1499,7 +1499,7 @@ class SubjectDetailViewModelTest {
             viewModel.requestSourceSearch()
 
             val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
-            assertTrue(event.prefillPrompt.contains("《葬送的芙莉莲》的在线观看页面"))
+            assertTrue(event.prefillPrompt.contains("《葬送的芙莉莲》的可播放资源"))
         }
 
     @Test
