@@ -98,6 +98,7 @@ fun BgmNavHost(
 
                             assistantEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
+                                onPlaySource = { route -> navState.navigateTo(route) },
                                 onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )

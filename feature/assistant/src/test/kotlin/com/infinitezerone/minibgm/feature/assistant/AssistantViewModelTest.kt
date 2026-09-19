@@ -21,6 +21,7 @@ import org.junit.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -413,6 +414,37 @@ class AssistantViewModelTest {
                     .last()
                     .pendingActions[0]
             assertEquals(ActionStatus.SUCCESS, card.status)
+        }
+
+    @Test
+    fun sendMessage_renders_playable_sources_card_from_agent_json() =
+        runTest {
+            val agentService =
+                FakeAgentService(
+                    executeResult =
+                        AppResult.Success(
+                            """
+                            {"subjectId":1001,"title":"葬送的芙莉莲","source":"自备片单","episodes":[
+                              {"url":"https://cdn.example.com/ep12.m3u8","kind":"DIRECT","label":"12","episodeSort":12,
+                               "headers":{"Referer":"https://example.com/"}}
+                            ]}
+                            """.trimIndent(),
+                        ),
+                )
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.onInputChanged("帮我找《葬送的芙莉莲》的可播放资源")
+            viewModel.sendMessage()
+            advanceUntilIdle()
+
+            val message =
+                viewModel.uiState.value.messages
+                    .last()
+            val sources = assertNotNull(message.playableSources)
+            assertEquals(1001L, sources.subjectId)
+            assertEquals("https://cdn.example.com/ep12.m3u8", sources.episodes.single().url)
+            assertTrue(message.content.contains("1 条可播放来源"))
+            assertTrue(message.content.contains("自备片单"))
         }
 
     @Test

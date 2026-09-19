@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionParser
+import com.infinitezerone.minibgm.core.ai.PlayableSourcesParser
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -81,11 +82,19 @@ class AssistantViewModel(
                             PendingActionCardState(action = it, status = ActionStatus.PENDING)
                         }
 
+                    val playableSources = PlayableSourcesParser.extract(rawContent)
+
                     val displayContent =
-                        if (rawContent.trim().startsWith("{") && combinedActions.isNotEmpty()) {
-                            "已为您生成待确认操作提案，请确认是否提交同步至 Bangumi："
-                        } else {
-                            rawContent
+                        when {
+                            playableSources != null -> {
+                                val source = playableSources.source
+                                val suffix = if (source.isBlank()) "" else "（来源：$source）"
+                                "为你找到 ${playableSources.episodes.size} 条可播放来源$suffix："
+                            }
+                            rawContent.trim().startsWith("{") && combinedActions.isNotEmpty() -> {
+                                "已为您生成待确认操作提案，请确认是否提交同步至 Bangumi："
+                            }
+                            else -> rawContent
                         }
 
                     val assistantMessage =
@@ -94,6 +103,7 @@ class AssistantViewModel(
                             role = MessageRole.ASSISTANT,
                             content = displayContent,
                             pendingActions = actionCardStates,
+                            playableSources = playableSources,
                         )
 
                     _uiState.update { state ->

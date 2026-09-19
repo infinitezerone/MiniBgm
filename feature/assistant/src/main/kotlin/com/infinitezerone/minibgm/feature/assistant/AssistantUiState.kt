@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.assistant
 
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.PendingAction
+import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 
 enum class MessageRole {
     USER,
@@ -28,6 +29,8 @@ data class AssistantMessage(
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
     val pendingActions: List<PendingActionCardState> = emptyList(),
+    /** 智能体转交的找源结果：非空时渲染为可播放清单卡片 */
+    val playableSources: PlayableEpisodeList? = null,
     val isError: Boolean = false,
 )
 
