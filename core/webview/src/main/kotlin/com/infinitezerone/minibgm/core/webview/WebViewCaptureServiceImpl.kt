@@ -51,17 +51,22 @@ class WebViewCaptureServiceImpl(
                 if (settled) return
                 settled = true
                 val sources =
-                    captured.entries.take(MAX_CANDIDATES).map { (url, headers) ->
-                        PlayableSource(
-                            url = url,
-                            kind = PlaylistEntryKind.DIRECT,
-                            label = "",
-                            episodeSort = 0f,
-                            siteName = hostOf(pageUrl),
-                            pageUrl = pageUrl,
-                            // 播放头直接取自捕获到的媒体请求自身（Referer/UA），比反推可靠
-                            headers = headers,
-                        )
+                    runCatching {
+                        captured.entries.take(MAX_CANDIDATES).map { (url, headers) ->
+                            PlayableSource(
+                                url = url,
+                                kind = PlaylistEntryKind.DIRECT,
+                                label = "",
+                                episodeSort = 0f,
+                                siteName = hostOf(pageUrl),
+                                pageUrl = pageUrl,
+                                // 播放头直接取自捕获到的媒体请求自身（Referer/UA），比反推可靠
+                                headers = headers,
+                            )
+                        }
+                    }.getOrElse {
+                        logger.w { "捕获结果映射异常（按空处理）: ${it.message}" }
+                        emptyList()
                     }
                 mainHandler.post {
                     webview?.destroy()
@@ -71,19 +76,23 @@ class WebViewCaptureServiceImpl(
             }
 
             fun record(request: WebResourceRequest) {
-                val url = request.url.toString()
-                if (!MEDIA_REQUEST_URL.matches(url)) return
-                synchronized(captured) {
-                    if (captured.containsKey(url)) return@synchronized
-                    val headers =
-                        buildMap {
-                            request.requestHeaders["Referer"]?.let { put("Referer", it) }
-                            request.requestHeaders["User-Agent"]?.let { put("User-Agent", it) }
-                            request.requestHeaders["Origin"]?.let { put("Origin", it) }
-                        }
-                    captured[url] = headers
-                    logger.d { "捕获媒体请求 ${request.requestHeaders["Referer"]?.let { "（带 Referer）" } ?: ""}: $url" }
-                }
+                // WebView 内部线程上的回调：任何异常都会炸进程，全部吞掉——
+                // 深度解析是可选兜底档，失败就是"没有结果"
+                runCatching {
+                    val url = request.url.toString()
+                    if (!MEDIA_REQUEST_URL.matches(url)) return
+                    synchronized(captured) {
+                        if (captured.containsKey(url)) return@synchronized
+                        val headers =
+                            buildMap {
+                                request.requestHeaders["Referer"]?.let { put("Referer", it) }
+                                request.requestHeaders["User-Agent"]?.let { put("User-Agent", it) }
+                                request.requestHeaders["Origin"]?.let { put("Origin", it) }
+                            }
+                        captured[url] = headers
+                        logger.d { "捕获媒体请求 ${request.requestHeaders["Referer"]?.let { "（带 Referer）" } ?: ""}: $url" }
+                    }
+                }.onFailure { e -> logger.w { "捕获回调异常（已忽略）: ${e.message}" } }
             }
 
             mainHandler.post {
