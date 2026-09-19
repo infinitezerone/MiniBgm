@@ -8,7 +8,9 @@ import com.infinitezerone.minibgm.core.ai.PlayableSourcesParser
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.WebViewResolveRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,10 +21,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/** 找源工具"无结果"回复的稳定前缀格式：从中提取条目 id 供 WebView 深度解析入口使用 */
+private val DEEP_RESOLVE_SUBJECT_ID = Regex("""^No playable source found for subject ID (\d+)""")
+
 class AssistantViewModel(
     private val agentService: BgmAiAgentService,
     private val settingsRepository: SettingsRepository,
     private val failureStore: PlaybackFailureStore? = null,
+    private val webviewResolveRepository: WebViewResolveRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
@@ -115,10 +121,17 @@ class AssistantViewModel(
                             playableSources = playableSources,
                         )
 
+                    val deepResolve =
+                        if (playableSources == null && webviewResolveRepository != null) {
+                            deepResolveSubjectId(rawContent)?.let { DeepResolveState(subjectId = it) }
+                        } else {
+                            null
+                        }
                     _uiState.update { state ->
                         state.copy(
                             messages = state.messages + assistantMessage,
                             isLoading = false,
+                            deepResolve = deepResolve,
                         )
                     }
                 }
@@ -274,5 +287,64 @@ class AssistantViewModel(
             _uiState.update { it.copy(showConfigDialog = false) }
             _events.send(AssistantUiEvent.ShowSnackbar("AI 配置已更新"))
         }
+    }
+
+    /**
+     * 用户显式触发的 WebView 深度解析（第 5 档）：对找源工具报告无结果的条目，
+     * 用确定性 WebView 会话加载候选来源页并捕获媒体请求；结果以可播放清单卡片追加进会话。
+     */
+    fun runDeepResolve() {
+        val state = _uiState.value.deepResolve ?: return
+        if (state.isRunning) return
+        _uiState.update { it.copy(deepResolve = state.copy(isRunning = true)) }
+        viewModelScope.launch {
+            val result = webviewResolveRepository?.deepResolve(state.subjectId)
+            _uiState.update { it.copy(deepResolve = it.deepResolve?.copy(isRunning = false)) }
+            when (result) {
+                is AppResult.Success -> {
+                    val message =
+                        if (result.data.isEmpty()) {
+                            AssistantMessage(
+                                id = UUID.randomUUID().toString(),
+                                role = MessageRole.ASSISTANT,
+                                content = "WebView 深度解析也没有捕获到可播放的媒体请求。",
+                            )
+                        } else {
+                            AssistantMessage(
+                                id = UUID.randomUUID().toString(),
+                                role = MessageRole.ASSISTANT,
+                                content = "WebView 深度解析找到 ${result.data.size} 条可播放来源：",
+                                playableSources =
+                                    PlayableEpisodeList(
+                                        subjectId = state.subjectId,
+                                        source = "WebView 深度解析",
+                                        episodes = result.data,
+                                    ),
+                            )
+                        }
+                    _uiState.update { it.copy(messages = it.messages + message) }
+                }
+                is AppResult.Error ->
+                    _uiState.update {
+                        it.copy(
+                            messages =
+                                it.messages +
+                                    AssistantMessage(
+                                        id = UUID.randomUUID().toString(),
+                                        role = MessageRole.ASSISTANT,
+                                        content = "❌ WebView 深度解析失败：${result.message}",
+                                        isError = true,
+                                    ),
+                        )
+                    }
+                is AppResult.Loading -> Unit
+                null -> Unit
+            }
+        }
+    }
+
+    private fun deepResolveSubjectId(rawContent: String): Long? {
+        val match = DEEP_RESOLVE_SUBJECT_ID.find(rawContent.trim()) ?: return null
+        return match.groupValues[1].toLongOrNull()?.takeIf { it > 0L }
     }
 }

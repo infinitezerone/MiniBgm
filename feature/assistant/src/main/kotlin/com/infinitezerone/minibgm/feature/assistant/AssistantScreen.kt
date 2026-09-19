@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -45,6 +47,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +62,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -120,6 +124,8 @@ fun AssistantScreen(
         onRejectAction = viewModel::rejectAction,
         onSubjectClick = { subjectId -> onSubjectClick(SubjectDetailRoute(subjectId)) },
         onPlaySource = onPlaySource,
+        deepResolve = uiState.deepResolve,
+        onRunDeepResolve = viewModel::runDeepResolve,
         onClearConversation = viewModel::clearConversation,
         onToggleConfigDialog = viewModel::toggleConfigDialog,
         onSaveConfig = viewModel::saveAiConfig,
@@ -144,6 +150,8 @@ fun AssistantScreenContent(
     onSaveConfig: (AiConfig) -> Unit,
     onBackClick: (() -> Unit)?,
     onPlaySource: (PlayerRoute) -> Unit = {},
+    deepResolve: DeepResolveState? = null,
+    onRunDeepResolve: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -320,6 +328,15 @@ fun AssistantScreenContent(
                             AssistantLoadingBubble()
                         }
                     }
+
+                    if (deepResolve != null) {
+                        item(key = "deep_resolve") {
+                            DeepResolveEntry(
+                                isRunning = deepResolve.isRunning,
+                                onClick = onRunDeepResolve,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -494,6 +511,44 @@ private fun ChatMessageItem(
                 onPlaySource = onPlaySource,
                 modifier = Modifier.fillMaxWidth(0.95f),
             )
+        }
+    }
+}
+
+/** WebView 深度解析入口：仅在找源工具报告无结果时展示，用户显式触发 */
+@Composable
+private fun DeepResolveEntry(
+    isRunning: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "常规找源没有找到可播放来源",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = if (isRunning) "正在真实加载来源页并捕获媒体请求…" else "可用 WebView 深度解析尝试真实加载来源页（约 30 秒）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (isRunning) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                TextButton(onClick = onClick) { Text("深度解析") }
+            }
         }
     }
 }

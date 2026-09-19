@@ -34,6 +34,12 @@ data class AssistantMessage(
     val isError: Boolean = false,
 )
 
+/** WebView 深度解析入口状态：subjectId 来自找源工具的"无结果"回复；null 表示入口不可用 */
+data class DeepResolveState(
+    val subjectId: Long,
+    val isRunning: Boolean = false,
+)
+
 data class AssistantUiState(
     val messages: List<AssistantMessage> = emptyList(),
     val inputText: String = "",
@@ -42,6 +48,8 @@ data class AssistantUiState(
     val showConfigDialog: Boolean = false,
     /** 播放失败归因（key = 播放地址）：找源卡片据此把打不开的条目标出来 */
     val failedSources: Map<String, String> = emptyMap(),
+    /** 非 null 时界面展示「WebView 深度解析」入口 */
+    val deepResolve: DeepResolveState? = null,
 )
 
 sealed interface AssistantUiEvent {
