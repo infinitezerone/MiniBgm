@@ -131,6 +131,8 @@ data object SettingsRoute : SubFeatureRoute
 /**
  * 应用内视频播放交互界面路由（基于 Media3 ExoPlayer 渲染）。
  * [requestHeaders] 为用户自备列表条目的必要请求头（如 Referer/Cookie），随媒体请求发送。
+ * [queue] 为本次播放的分集队列（自备片单/找源清单按序给出）：非空时播放器支持
+ * 播完自动连播与全屏内选集抽屉，[startIndex] 指定起始分集；为空时退化为单集播放。
  */
 @Serializable
 data class PlayerRoute(
@@ -142,7 +144,21 @@ data class PlayerRoute(
     val episodeSort: Float = 1f,
     val episodeType: Int = 0,
     val requestHeaders: Map<String, String> = emptyMap(),
+    val queue: List<PlayerQueueEntry> = emptyList(),
+    val startIndex: Int = 0,
 ) : DetailChainRoute
+
+/** 播放队列里的一条分集（与 [PlayerRoute] 同生命周期，仅用于播放器内换集与连播） */
+@Serializable
+data class PlayerQueueEntry(
+    val streamUrl: String,
+    val label: String = "",
+    val episodeName: String = "",
+    val episodeSort: Float = 1f,
+    val episodeType: Int = 0,
+    val episodeId: Long = 0L,
+    val requestHeaders: Map<String, String> = emptyMap(),
+)
 
 /**
  * 自定义播放规则管理交互界面路由。

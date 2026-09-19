@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import com.infinitezerone.minibgm.core.common.intent.ExternalPlayerTarget
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 
 /**
@@ -115,6 +116,40 @@ object StreamingAppLauncher {
         val targetUri = target.deepLinkUri ?: target.webFallbackUrl
         return launch(context, targetUri, onAppNotInstalled)
     }
+
+    /**
+     * 按目标探测外部播放器（mpv、VLC 等）并唤起：
+     * 探测到已安装包名则以 ACTION_VIEW 意图唤起（data = 视频 URL、type 为视频 MIME 类型、setPackage = 目标包名）；
+     * 未安装或唤起失败返回 false，并在提供 [onPlayerNotInstalled] 时回调，由 UI 自行展示降级提示。
+     *
+     * 注意：外部播放器意图无法携带 Referer 等自定义请求头（见 [ExternalPlayerTarget]）。
+     */
+    fun launchExternalPlayer(
+        context: Context,
+        target: ExternalPlayerTarget,
+        onPlayerNotInstalled: ((appName: String, packageName: String) -> Unit)? = null,
+    ): Boolean {
+        if (target.videoUrl.isBlank()) return false
+        if (!isAppInstalled(context, target.packageName)) {
+            onPlayerNotInstalled?.invoke(target.appName, target.packageName)
+            return false
+        }
+        return try {
+            val intent =
+                Intent(ExternalPlayerTarget.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(target.videoUrl), target.mimeType)
+                    setPackage(target.packageName)
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            onPlayerNotInstalled?.invoke(target.appName, target.packageName)
+            false
+        }
+    }
 }
 
 /**
@@ -132,3 +167,11 @@ fun Context.launchBilibiliSearch(
     keyword: String,
     onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
 ): StreamingLaunchResult = StreamingAppLauncher.launchBilibiliSearch(this, keyword, onAppNotInstalled)
+
+/**
+ * [Context] 扩展按目标唤起外部播放器（mpv、VLC 等）。
+ */
+fun Context.launchExternalPlayer(
+    target: ExternalPlayerTarget,
+    onPlayerNotInstalled: ((appName: String, packageName: String) -> Unit)? = null,
+): Boolean = StreamingAppLauncher.launchExternalPlayer(this, target, onPlayerNotInstalled)

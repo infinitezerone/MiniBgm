@@ -89,19 +89,42 @@ private val LightColorScheme =
         surfaceContainerLowest = SurfaceContainerLowestLight,
     )
 
+/**
+ * AMOLED 纯黑档：品牌/文本角色与深灰档完全一致，仅表面与容器阶梯沉到纯黑或近纯黑
+ * （见 Color.kt Layer 3）。仅应在深色模式下启用。
+ */
+private val AmoledDarkColorScheme =
+    DarkColorScheme.copy(
+        background = BackgroundAmoledDark,
+        surface = SurfaceAmoledDark,
+        surfaceVariant = SurfaceVariantAmoledDark,
+        surfaceDim = SurfaceDimAmoledDark,
+        surfaceBright = SurfaceBrightAmoledDark,
+        surfaceContainerLowest = SurfaceContainerLowestAmoledDark,
+        surfaceContainerLow = SurfaceContainerLowAmoledDark,
+        surfaceContainer = SurfaceContainerAmoledDark,
+        surfaceContainerHigh = SurfaceContainerHighAmoledDark,
+        surfaceContainerHighest = SurfaceContainerHighestAmoledDark,
+        inverseOnSurface = InverseOnSurfaceAmoledDark,
+    )
+
 /** 供 Glance 小组件等无 Material You 动态取色能力的宿主桥接品牌色 */
 val MiniBgmLightColors: ColorScheme = LightColorScheme
 val MiniBgmDarkColors: ColorScheme = DarkColorScheme
+val MiniBgmAmoledDarkColors: ColorScheme = AmoledDarkColorScheme
 
 @Composable
 fun MiniBgmTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    amoledDark: Boolean = false,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     // minSdk 31 起 Material You 动态取色恒可用，无需再判 SDK_INT
     val colorScheme =
         when {
+            // AMOLED 纯黑档是用户显式选择，优先级高于动态取色的深色方案（动态取色本身无 AMOLED 概念）
+            darkTheme && amoledDark -> AmoledDarkColorScheme
             dynamicColor -> {
                 val context = LocalContext.current
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

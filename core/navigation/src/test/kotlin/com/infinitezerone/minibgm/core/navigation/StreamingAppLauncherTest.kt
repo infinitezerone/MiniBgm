@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.core.navigation
 
+import com.infinitezerone.minibgm.core.common.intent.ExternalPlayerTarget
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class StreamingAppLauncherTest {
@@ -38,5 +40,55 @@ class StreamingAppLauncherTest {
         val dummyContext = android.content.ContextWrapper(null)
         val pkg = StreamingAppLauncher.findInstalledPackage(dummyContext, listOf("tv.danmaku.bili", "com.bilibili.app.in"))
         org.junit.Assert.assertNull(pkg)
+    }
+
+    @Test
+    fun launchExternalPlayer_whenPlayerNotInstalled_returnsFalseAndInvokesCallback() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val target = ExternalPlayerTarget("mpv", "is.xyz.mpv", "https://example.com/ep1.m3u8")
+        var callbackAppName: String? = null
+        var callbackPackageName: String? = null
+
+        val launched =
+            StreamingAppLauncher.launchExternalPlayer(dummyContext, target) { appName, packageName ->
+                callbackAppName = appName
+                callbackPackageName = packageName
+            }
+
+        assertFalse(launched)
+        assertEquals("mpv", callbackAppName)
+        assertEquals("is.xyz.mpv", callbackPackageName)
+    }
+
+    @Test
+    fun launchExternalPlayer_withBlankVideoUrl_returnsFalseWithoutCallback() {
+        val dummyContext = android.content.ContextWrapper(null)
+        var callbackInvoked = false
+
+        val launched =
+            StreamingAppLauncher.launchExternalPlayer(
+                dummyContext,
+                ExternalPlayerTarget("VLC", "org.videolan.vlc", "   "),
+            ) { _, _ ->
+                callbackInvoked = true
+            }
+
+        assertFalse(launched)
+        assertFalse(callbackInvoked)
+    }
+
+    @Test
+    fun externalPlayerTarget_describesActionViewIntent() {
+        val target =
+            ExternalPlayerTarget(
+                appName = "VLC",
+                packageName = "org.videolan.vlc",
+                videoUrl = "https://example.com/ep1.mp4",
+            )
+
+        assertEquals("android.intent.action.VIEW", target.action)
+        assertEquals("video/*", target.mimeType)
+        assertEquals("https://example.com/ep1.mp4", target.videoUrl)
+        assertEquals("org.videolan.vlc", target.packageName)
     }
 }

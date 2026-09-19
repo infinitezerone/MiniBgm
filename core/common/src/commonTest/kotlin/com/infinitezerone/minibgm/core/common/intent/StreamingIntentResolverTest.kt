@@ -274,4 +274,57 @@ class StreamingIntentResolverTest {
         assertNull(StreamingIntentResolver.resolve(""))
         assertNull(StreamingIntentResolver.resolve("   "))
     }
+
+    @Test
+    fun buildExternalPlayerTargets_httpUrl_returnsMpvAndVlcTargets() {
+        val url = "https://example.com/anime/ep1.m3u8?token=abc"
+        val targets = StreamingIntentResolver.buildExternalPlayerTargets(url)
+
+        assertEquals(2, targets.size)
+
+        val mpv = targets.first { it.packageName == "is.xyz.mpv" }
+        assertEquals("mpv", mpv.appName)
+        assertEquals(StreamingIntentResolver.MPV_PACKAGE_NAME, mpv.packageName)
+        assertEquals(url, mpv.videoUrl)
+        assertEquals("video/*", mpv.mimeType)
+        assertEquals("android.intent.action.VIEW", mpv.action)
+
+        val vlc = targets.first { it.packageName == "org.videolan.vlc" }
+        assertEquals("VLC", vlc.appName)
+        assertEquals(StreamingIntentResolver.VLC_PACKAGE_NAME, vlc.packageName)
+        assertEquals(url, vlc.videoUrl)
+        assertEquals("video/*", vlc.mimeType)
+        assertEquals(ExternalPlayerTarget.ACTION_VIEW, vlc.action)
+    }
+
+    @Test
+    fun buildExternalPlayerTargets_httpUrl_passesUrlThroughUnmodified() {
+        val url = "http://192.168.1.10:8080/stream/%E8%AF%95%E9%AA%8C.ts"
+        val targets = StreamingIntentResolver.buildExternalPlayerTargets(url)
+        assertTrue(targets.all { it.videoUrl == url })
+    }
+
+    @Test
+    fun buildExternalPlayerTargets_nonHttpUrl_returnsEmpty() {
+        assertTrue(StreamingIntentResolver.buildExternalPlayerTargets("bilibili://bangumi/season/28770").isEmpty())
+        assertTrue(StreamingIntentResolver.buildExternalPlayerTargets("rtsp://example.com/stream").isEmpty())
+        assertTrue(StreamingIntentResolver.buildExternalPlayerTargets("/storage/emulated/0/video.mp4").isEmpty())
+    }
+
+    @Test
+    fun buildExternalPlayerTargets_blankUrl_returnsEmpty() {
+        assertTrue(StreamingIntentResolver.buildExternalPlayerTargets("").isEmpty())
+        assertTrue(StreamingIntentResolver.buildExternalPlayerTargets("   ").isEmpty())
+    }
+
+    @Test
+    fun isHttpStreamUrl_distinguishesHttpSchemes() {
+        assertTrue(StreamingIntentResolver.isHttpStreamUrl("https://example.com/video.m3u8"))
+        assertTrue(StreamingIntentResolver.isHttpStreamUrl("  http://example.com/video.mp4  "))
+        assertTrue(StreamingIntentResolver.isHttpStreamUrl("HTTPS://EXAMPLE.COM/VIDEO.MP4"))
+        assertTrue(!StreamingIntentResolver.isHttpStreamUrl("bilibili://bangumi/season/28770"))
+        assertTrue(!StreamingIntentResolver.isHttpStreamUrl("ftp://example.com/video.mp4"))
+        assertTrue(!StreamingIntentResolver.isHttpStreamUrl("https:/example.com/video.mp4"))
+        assertTrue(!StreamingIntentResolver.isHttpStreamUrl(""))
+    }
 }
