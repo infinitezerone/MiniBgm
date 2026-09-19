@@ -55,7 +55,7 @@ class ScheduleViewModelTest {
 
             val state = viewModel.uiState.first { it.schedules.isNotEmpty() && !it.isLoading }
 
-            assertEquals(1, repository.refreshCallCount)
+            assertEquals(1, repository.refreshAllCalls)
             assertNull(state.error)
             assertEquals(today, state.selectedWeekday)
             assertEquals(today, state.todayWeekday)
@@ -329,7 +329,7 @@ class ScheduleViewModelTest {
             viewModel.refresh()
 
             val state = viewModel.uiState.first { !it.isLoading && it.error == null }
-            assertEquals(2, repository.refreshCallCount)
+            assertEquals(2, repository.refreshAllCalls)
             assertFalse(state.isLoading)
             assertNull(state.error)
             assertFalse(state.isOfflineCache)

@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
+import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -38,6 +39,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1934,5 +1938,102 @@ class ScheduleRepositoryImplTest {
             assertIs<AppResult.Success<Unit>>(result)
             // 验证未在追但属于 SOURCE_BGM_DATA 的条目依然包含在 targets 中请求 AniList，不会因已有封面且不在追而发生排期饿死与事件不同步
             assertTrue(anilist.requestedIds.contains(302L), "网播条目必须始终被纳入 AniList 逐话排期校验 targets")
+        }
+
+    @Test
+    fun refreshAllSchedules_holdsIntermediateEmissionsUntilAllSourcesFetched() =
+        runTest {
+            // 数据源 1（官方日历）：网播番 B（id=2002）
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
+                                items =
+                                    listOf(
+                                        Subject(
+                                            id = 2002L,
+                                            name = "网播番B",
+                                            nameCn = "网播番B",
+                                        ),
+                                    ),
+                            ),
+                        )
+                }
+            // 数据源 2（bangumi-data）：为官方番 A（id=2001）补全播放源
+            val dataService =
+                FakeBangumiDataService().apply {
+                    dataResult =
+                        BangumiDataResult.Success(
+                            items =
+                                listOf(
+                                    BangumiDataItem(
+                                        title = "官方番A",
+                                        titleTranslate = mapOf("zh-Hans" to listOf("官方番A")),
+                                        begin = "2026-09-16T15:00:00.000Z",
+                                        sites =
+                                            listOf(
+                                                BangumiDataSite(site = "bangumi", id = "2001"),
+                                                BangumiDataSite(site = "bilibili", id = "md2001"),
+                                            ),
+                                    ),
+                                ),
+                            etag = "W/\"gate-1\"",
+                        )
+                }
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 2001L,
+                                title = "官方番A",
+                                titleCn = "官方番A",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = "",
+                                weekday = 7,
+                                timeCst = "",
+                                timeJst = "",
+                                sitesJson = "[]",
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val emissions = mutableListOf<List<AirSchedule>>()
+            val collector =
+                launch {
+                    repo.getAllSchedulesStream().collect { emissions.add(it) }
+                }
+            runCurrent()
+            val initialEmissions = emissions.size
+            assertTrue(initialEmissions >= 1)
+
+            val result = repo.refreshAllSchedules()
+            assertIs<AppResult.Success<Unit>>(result)
+            advanceUntilIdle()
+            collector.cancel()
+
+            // 关键断言 1：管线期间中间态从未对外发流——闸门放开后只多发一次
+            assertEquals(initialEmissions + 1, emissions.size)
+            // 关键断言 2（DAO 层）：两个数据源都已合并——官方行 2002 已插入，
+            // bangumi-data 已为 2001 补全 bilibili 播放源
+            val stored = dao.getAllSchedulesList()
+            assertEquals(2, stored.size)
+            assertTrue(stored.any { it.bgmId == 2001L && it.sitesJson.contains("bilibili") })
+            assertTrue(stored.any { it.bgmId == 2002L })
+            // 关键断言 3：对外流与 DAO 最终态一致（不存在更晚的中间态外发）
+            assertEquals(emissions.last(), repo.getAllSchedulesStream().first())
         }
 }

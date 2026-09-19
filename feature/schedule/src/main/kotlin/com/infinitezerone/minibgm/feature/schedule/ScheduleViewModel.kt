@@ -583,7 +583,8 @@ class ScheduleViewModel(
     fun refresh() {
         viewModelScope.launch {
             isRefreshing.value = true
-            val schedulesResult = scheduleRepository.refreshSchedules()
+            // 全量管线：官方日历 + bangumi-data + 逐话事件全部拉齐后，仓库层才对外发流（列表一次更新）
+            val schedulesResult = scheduleRepository.refreshAllSchedules()
             collectionRepository.syncWatchingCollections()
             schedulesResult
                 .onSuccess { errorMessage.value = null }

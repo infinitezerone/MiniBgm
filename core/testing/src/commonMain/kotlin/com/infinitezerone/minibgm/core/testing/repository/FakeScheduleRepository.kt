@@ -27,6 +27,8 @@ class FakeScheduleRepository : ScheduleRepository {
     }
 
     var searchLocalSubjectsResult: List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> = emptyList()
+    var refreshAllCalls: Int = 0
+        private set
     val searchLocalSubjectsCalls = mutableListOf<String>()
 
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> = schedulesState.map { it[weekday].orEmpty() }
@@ -69,6 +71,16 @@ class FakeScheduleRepository : ScheduleRepository {
 
     override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) {
         scheduleDefaultOnlyWatching = onlyWatching
+    }
+
+    override suspend fun refreshAllSchedules(): AppResult<Unit> {
+        // 全量管线封装了 refreshSchedules + syncBangumiData：计数与错误注入沿用两者的既有语义
+        refreshAllCalls += 1
+        refreshCallCount++
+        syncBangumiDataCallCount++
+        if (refreshResult !is AppResult.Success) return refreshResult
+        if (syncBangumiDataResult !is AppResult.Success) return syncBangumiDataResult
+        return AppResult.Success(Unit)
     }
 
     override suspend fun searchLocalSubjects(

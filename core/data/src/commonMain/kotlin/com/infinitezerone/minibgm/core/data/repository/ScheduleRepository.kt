@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
@@ -25,8 +26,13 @@ import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,7 +41,10 @@ import kotlin.math.abs
 interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
 
-    /** 观察全量放送排播流（单流监听，避免按天拆流导致的重复数据库查询与高频重组） */
+    /**
+     * 全量排期流（单流监听，避免按天拆流导致的重复查询与高频重组）。
+     * 全量刷新管线进行期间扣住中间态，仅在管线完成后以最新完整数据对外发流。
+     */
     fun getAllSchedulesStream(): Flow<List<AirSchedule>>
 
     /**
@@ -55,6 +64,14 @@ interface ScheduleRepository {
      * 仅清理官方名单内的行，bgm-data 合并插入的网播番不受影响。
      */
     suspend fun refreshSchedules(): AppResult<Unit>
+
+    /**
+     * 全量刷新管线（UX_REMEDIATION 诉求：所有数据源获取完再更新 UI 列表）：
+     * 依次拉齐官方日历（含逐话事件）与 bangumi-data 播放源/网播番/事件仲裁，
+     * 期间对外流被闸门扣住，全部完成后才以最终状态对外发一次。
+     * 各数据源失败不互相中断，错误信息聚合返回。
+     */
+    suspend fun refreshAllSchedules(): AppResult<Unit>
 
     /**
      * 后台 / 手动同步：
@@ -100,13 +117,27 @@ class ScheduleRepositoryImpl(
                 .map { it.toModel(json) }
         }
 
+    /**
+     * 同步闸门：全量刷新管线进行中为 true，对外流扣住不发；
+     * 闸门放开时经 flatMapLatest 重新订阅 DAO 流，确保以管线完成后的最新数据发一次。
+     */
+    private val scheduleHoldGate = MutableStateFlow(false)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> =
-        scheduleDao.getAllSchedules().map { entities ->
-            val nowMillis = TimeUtils.nowEpochMillis()
-            entities
-                .filter { it.isActiveForSchedule(nowMillis) }
-                .map { it.toModel(json) }
-        }
+        scheduleHoldGate
+            .flatMapLatest { holding ->
+                if (holding) {
+                    flowOf(null)
+                } else {
+                    scheduleDao.getAllSchedules().map { entities ->
+                        val nowMillis = TimeUtils.nowEpochMillis()
+                        entities
+                            .filter { it.isActiveForSchedule(nowMillis) }
+                            .map { it.toModel(json) }
+                    }
+                }
+            }.filterNotNull()
 
     override suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,
@@ -217,6 +248,22 @@ class ScheduleRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("同步官方放送日历"))
         }
+
+    override suspend fun refreshAllSchedules(): AppResult<Unit> {
+        scheduleHoldGate.value = true
+        try {
+            val failures = mutableListOf<String>()
+            refreshSchedules().onError { _, message -> failures += message }
+            syncBangumiData().onError { _, message -> failures += message }
+            return if (failures.isEmpty()) {
+                AppResult.Success(Unit)
+            } else {
+                AppResult.Error(IllegalStateException(failures.joinToString("；")), failures.joinToString("；"))
+            }
+        } finally {
+            scheduleHoldGate.value = false
+        }
+    }
 
     override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> =
         try {
