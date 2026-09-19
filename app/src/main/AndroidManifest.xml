@@ -18,6 +18,9 @@
         <package android:name="com.qiyi.video" />
         <package android:name="com.tencent.qqlive" />
         <package android:name="com.youku.phone" />
+        <!-- 外部播放器 mpv / VLC（StreamingAppLauncher.isAppInstalled 依赖 getPackageInfo 探测） -->
+        <package android:name="is.xyz.mpv" />
+        <package android:name="org.videolan.vlc" />
 
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -26,6 +29,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="animegamer" />
+        </intent>
+        <!-- 任意注册了 video/* ACTION_VIEW 的外部播放器（ExternalPlayerTarget 的唤起目标） -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
         </intent>
     </queries>
 

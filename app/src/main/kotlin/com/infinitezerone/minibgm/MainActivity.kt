@@ -10,10 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
@@ -25,6 +28,7 @@ import org.koin.android.ext.android.inject
 class MainActivity : ComponentActivity() {
     private val authRepository: AuthRepository by inject()
     private val networkMonitor: NetworkMonitor by inject()
+    private val settingsRepository: SettingsRepository by inject()
     private val snackbarHostState = SnackbarHostState()
 
     /** 通知点击携带的"直达时间表"标记，消费后复位 */
@@ -44,7 +48,10 @@ class MainActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
         handleIntent(intent)
         setContent {
-            MiniBgmTheme {
+            // AMOLED 纯黑偏好由 :app 宿主读取并传给主题（设置页开关落库后在此生效）
+            val settings by settingsRepository.settings
+                .collectAsStateWithLifecycle(initialValue = UserSettings())
+            MiniBgmTheme(amoledDark = settings.amoledDarkMode) {
                 BgmApp(
                     snackbarHostState = snackbarHostState,
                     authRepository = authRepository,
