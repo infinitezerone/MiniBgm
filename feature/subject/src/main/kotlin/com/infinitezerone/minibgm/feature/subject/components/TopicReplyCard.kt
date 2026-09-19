@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
+import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicReply
 
 /**
@@ -36,6 +38,8 @@ fun TopicReplyCard(
     floorNumber: Int,
     onUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    currentUserId: Long? = null,
+    onReactionClick: ((CommentReaction) -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -97,21 +101,38 @@ fun TopicReplyCard(
                 onUrlClick = onUrlClick,
             )
 
-            // 点赞反应（Reactions）
+            // 点赞反应（Reactions）：已表态类型高亮，点击 toggle 己方表态
             if (reply.reactions.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     reply.reactions.forEach { reaction ->
+                        val mine = currentUserId != null && reaction.users.any { it.id == currentUserId }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color =
+                                if (mine) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                            modifier =
+                                if (onReactionClick != null) {
+                                    Modifier.clickable { onReactionClick(reaction) }
+                                } else {
+                                    Modifier
+                                },
                         ) {
                             Text(
                                 text = "❤️ ${reaction.count}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color =
+                                    if (mine) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }

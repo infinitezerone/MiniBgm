@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.di
 
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailViewModel
 import com.infinitezerone.minibgm.feature.subject.TopicDetailViewModel
@@ -40,16 +41,16 @@ val subjectModule =
                 topicId = topicId,
                 type = type,
                 communityRepository = get(),
+                authRepository = get(),
             )
         }
 
-        viewModel { (subjectId: Long, episodeId: Long, streamUrl: String) ->
+        viewModel { (route: PlayerRoute) ->
             PlayerViewModel(
-                subjectId = subjectId,
-                episodeId = episodeId,
-                initialStreamUrl = streamUrl,
+                route = route,
                 collectionRepository = get(),
                 authRepository = get(),
+                settingsRepository = get(),
                 failureStore = get(),
             )
         }

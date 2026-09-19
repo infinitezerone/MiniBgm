@@ -1,17 +1,24 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.CommentReactionUser
 import com.infinitezerone.minibgm.core.model.CommentUser
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicParentSubject
 import com.infinitezerone.minibgm.core.model.TopicReply
+import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -139,5 +146,107 @@ class TopicDetailViewModelTest {
             viewModel.refresh(isUserPullToRefresh = true)
             assertEquals(2, communityRepository.getTopicDetailCallCount)
             assertFalse(viewModel.uiState.value.isRefreshing)
+        }
+
+    private val loggedInUserId = 880270L
+
+    private fun loggedInViewModel(
+        communityRepository: FakeCommunityRepository,
+        type: String = "subject",
+    ): TopicDetailViewModel =
+        TopicDetailViewModel(
+            topicId = sampleTopicId,
+            type = type,
+            communityRepository = communityRepository,
+            authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile =
+                        com.infinitezerone.minibgm.core.model.UserProfile(
+                            id = loggedInUserId,
+                            username = "me",
+                            nickname = "我",
+                        ),
+                ),
+        )
+
+    @Test
+    fun toggleReaction_notLoggedIn_emitsLoginPromptWithoutRepoCall() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel =
+                TopicDetailViewModel(
+                    topicId = sampleTopicId,
+                    type = "subject",
+                    communityRepository = communityRepository,
+                    authRepository = FakeAuthRepository(initialLoggedIn = false),
+                )
+            advanceUntilIdle()
+
+            viewModel.toggleReaction(sampleTopicDetail.floorReplies.first(), CommentReaction(value = 141))
+            advanceUntilIdle()
+
+            assertTrue(communityRepository.setLikeCalls.isEmpty())
+            assertTrue(communityRepository.removeLikeCalls.isEmpty())
+            val event = viewModel.events.first()
+            assertTrue(event is TopicDetailUiEvent.ShowSnackbar && event.message.contains("登录"))
+        }
+
+    @Test
+    fun toggleReaction_notReacted_addsLikeWithExistingReactionValue() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+
+            val reaction =
+                CommentReaction(
+                    value = 141,
+                    users = listOf(CommentReactionUser(id = 489240L, username = "other", nickname = "别人")),
+                )
+            viewModel.toggleReaction(sampleTopicDetail.floorReplies.first(), reaction)
+            advanceUntilIdle()
+
+            val call = communityRepository.setLikeCalls.single()
+            assertEquals(CommunityLikeTarget.SUBJECT_POST, call.first)
+            assertEquals(1002L, call.second)
+            assertEquals(141, call.third)
+        }
+
+    @Test
+    fun toggleReaction_alreadyReacted_removesLike() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+
+            val reaction =
+                CommentReaction(
+                    value = 141,
+                    users = listOf(CommentReactionUser(id = loggedInUserId, username = "me", nickname = "我")),
+                )
+            viewModel.toggleReaction(sampleTopicDetail.floorReplies.first(), reaction)
+            advanceUntilIdle()
+
+            val call = communityRepository.removeLikeCalls.single()
+            assertEquals(CommunityLikeTarget.SUBJECT_POST, call.first)
+            assertEquals(1002L, call.second)
+            assertTrue(communityRepository.setLikeCalls.isEmpty())
+        }
+
+    @Test
+    fun toggleReaction_groupTopic_usesGroupPostTarget() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel = loggedInViewModel(communityRepository, type = "group")
+            advanceUntilIdle()
+
+            viewModel.toggleReaction(
+                sampleTopicDetail.floorReplies.first(),
+                CommentReaction(value = 6, users = emptyList()),
+            )
+            advanceUntilIdle()
+
+            assertEquals(CommunityLikeTarget.GROUP_POST, communityRepository.setLikeCalls.single().first)
         }
 }

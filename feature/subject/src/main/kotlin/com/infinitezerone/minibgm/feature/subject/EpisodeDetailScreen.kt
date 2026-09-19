@@ -35,11 +35,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,6 +97,16 @@ fun EpisodeDetailScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    // 吐槽表态结果与登录提示
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is EpisodeDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
+    }
     var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val episode = uiState.episode
@@ -126,6 +139,7 @@ fun EpisodeDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
                 title = {
@@ -495,6 +509,8 @@ fun EpisodeDetailScreen(
                             EpisodeCommentItem(
                                 comment = comment,
                                 onUrlClick = handleLinkClick,
+                                currentUserId = uiState.currentUserId,
+                                onReactionClick = { reaction -> viewModel.toggleCommentReaction(comment, reaction) },
                             )
                         }
                     }

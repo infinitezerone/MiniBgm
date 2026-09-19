@@ -26,8 +26,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -38,16 +41,24 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,16 +87,19 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
+import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import java.util.Locale
@@ -149,7 +163,7 @@ fun PlayerScreen(
     onRequestOpenSources: (() -> Unit)? = null,
     viewModel: PlayerViewModel =
         koinViewModel(
-            parameters = { parametersOf(route.subjectId, route.episodeId, route.streamUrl) },
+            parameters = { parametersOf(route) },
         ),
 ) {
     val context = LocalContext.current
@@ -169,13 +183,15 @@ fun PlayerScreen(
     var isPlaybackEnded by remember { mutableStateOf(false) }
     var areControlsVisible by remember { mutableStateOf(true) }
     var isLandscape by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
 
     val epLabel =
-        remember(route.episodeSort, route.episodeType) {
-            if (route.episodeType == 0) {
-                "第 ${route.episodeSort.toEpisodeLabel()} 话"
+        remember(uiState.episodeSort, uiState.episodeType) {
+            if (uiState.episodeType == 0) {
+                "第 ${uiState.episodeSort.toEpisodeLabel()} 话"
             } else {
-                "${EpisodeGroup.fromType(route.episodeType).label} ${route.episodeSort.toInt()}"
+                "${EpisodeGroup.fromType(uiState.episodeType).label} ${uiState.episodeSort.toInt()}"
             }
         }
 
@@ -194,14 +210,15 @@ fun PlayerScreen(
     }
 
     // 构造 ExoPlayer 实例并托管生命周期；
-    // 用户自备列表的条目可携带必要请求头（Referer/Cookie 等），经 HttpDataSource 随媒体请求发送
+    // 用户自备列表的条目可携带必要请求头（Referer/Cookie 等），经 HttpDataSource 随媒体请求发送；
+    // 队列内不同分集的请求头可能不同，请求头变化时重建播放器实例
     val exoPlayer =
-        remember(context, route.requestHeaders) {
+        remember(context, uiState.requestHeaders) {
             val httpDataSourceFactory =
                 DefaultHttpDataSource.Factory().apply {
                     setAllowCrossProtocolRedirects(true)
-                    if (route.requestHeaders.isNotEmpty()) {
-                        setDefaultRequestProperties(route.requestHeaders)
+                    if (uiState.requestHeaders.isNotEmpty()) {
+                        setDefaultRequestProperties(uiState.requestHeaders)
                     }
                 }
             ExoPlayer
@@ -212,6 +229,34 @@ fun PlayerScreen(
                     playWhenReady = true
                 }
         }
+
+    // 倍速：分集切换重建播放器实例后同样要重新套用
+    LaunchedEffect(exoPlayer, playbackSpeed) {
+        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+    }
+
+    // 断点续播：每个地址只恢复一次（超过总时长 95% 的记录视为看完，不再恢复）
+    var resumedForUrl by remember { mutableStateOf("") }
+
+    suspend fun resumeFromSavedPositionIfNeeded() {
+        val state = viewModel.uiState.value
+        if (resumedForUrl == state.streamUrl) return
+        resumedForUrl = state.streamUrl
+        val resume = state.resumePositionMs
+        if (resume < MIN_RESUME_POSITION_MS) return
+        val duration = exoPlayer.duration
+        if (duration > 0L && resume >= duration * 0.95) return
+        exoPlayer.seekTo(resume)
+        val result =
+            snackbarHostState.showSnackbar(
+                message = "已恢复到上次位置 ${formatDuration(resume)}",
+                actionLabel = "从头看",
+                duration = SnackbarDuration.Long,
+            )
+        if (result == SnackbarResult.ActionPerformed) {
+            exoPlayer.seekTo(0)
+        }
+    }
 
     // 设置数据源
     LaunchedEffect(uiState.streamUrl) {
@@ -241,12 +286,14 @@ fun PlayerScreen(
                             isPlaybackEnded = false
                             totalDuration = exoPlayer.duration.coerceAtLeast(0L)
                             viewModel.onPlaybackReady()
+                            // 就绪后跳到上次观看位置（断点续播）
+                            coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
                         }
                         Player.STATE_ENDED -> {
                             isBuffering = false
-                            isPlaybackEnded = true
-                            // 播放完成：自动触发已看打卡
-                            viewModel.markWatched(route.episodeSort.toInt())
+                            // 播放完成：打卡当前分集，并在开启连播且有下一集时自动切换；
+                            // 没切走才展示重播按钮
+                            isPlaybackEnded = !viewModel.onPlaybackEnded()
                         }
                         Player.STATE_IDLE -> {
                             isBuffering = false
@@ -273,12 +320,14 @@ fun PlayerScreen(
         while (isPlaying && !isPlaybackEnded) {
             if (!isScrubbing) {
                 currentPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
+                // 断点续播：进度回报给 ViewModel（内存暂存，节流落盘）
+                viewModel.onProgressChanged(currentPosition)
                 val dur = exoPlayer.duration
                 if (dur > 0L) {
                     totalDuration = dur
                     // 当播放进度达到 85% 自动打卡
                     if (currentPosition.toFloat() / dur.toFloat() >= 0.85f) {
-                        viewModel.markWatched(route.episodeSort.toInt())
+                        viewModel.onWatchThresholdReached()
                     }
                 }
             }
@@ -346,12 +395,13 @@ fun PlayerScreen(
         }
     }
 
-    // 生命周期联动：离开前台时自动暂停
+    // 生命周期联动：离开前台时自动暂停，并把当前观看位置立即落盘
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_PAUSE) {
                     exoPlayer.pause()
+                    viewModel.flushPlaybackPosition()
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -360,122 +410,242 @@ fun PlayerScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        snackbarHost = {
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier.navigationBarsPadding(),
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = uiState.queue.size > 1,
+        drawerContent = {
+            PlayerEpisodeQueueDrawer(
+                queue = uiState.queue,
+                currentIndex = uiState.currentIndex,
+                autoNextEnabled = uiState.autoNextEnabled,
+                onToggleAutoNext = viewModel::toggleAutoNext,
+                onSelect = { index ->
+                    viewModel.switchTo(index)
+                    coroutineScope.launch { drawerState.close() }
+                },
             )
         },
-        containerColor = Color.Black,
-    ) { paddingValues ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        areControlsVisible = !areControlsVisible
-                    },
-        ) {
-            // 播放器底图渲染层
-            if (uiState.streamUrl.isNotBlank()) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = false
-                            layoutParams =
-                                ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
+    ) {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            snackbarHost = {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.navigationBarsPadding(),
                 )
-            } else {
-                // 空数据源友好提示
-                PlayerEmptyView(
-                    subjectName = route.subjectName,
-                    epLabel = epLabel,
-                    onBackClick = onBackClick,
-                    onRequestOpenSources = onRequestOpenSources,
-                )
-            }
-
-            // 控制器覆盖遮罩
-            AnimatedVisibility(
-                visible = areControlsVisible || !isPlaying || isBuffering || isPlaybackEnded,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.fillMaxSize(),
+            },
+            containerColor = Color.Black,
+        ) { paddingValues ->
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            areControlsVisible = !areControlsVisible
+                        },
             ) {
-                PlayerControlsOverlay(
-                    subjectName = route.subjectName,
-                    epLabel = epLabel,
-                    episodeName = route.episodeName,
-                    isPlaying = isPlaying,
-                    isBuffering = isBuffering,
-                    isEnded = isPlaybackEnded,
-                    currentPosition = currentPosition,
-                    totalDuration = totalDuration,
-                    isScrubbing = isScrubbing,
-                    scrubProgress = scrubProgress,
-                    isLandscape = isLandscape,
-                    errorMessage = uiState.error,
-                    onBackClick = {
-                        if (isLandscape) toggleFullscreen(false) else onBackClick()
-                    },
-                    onPlayPauseToggle = {
-                        if (isPlaybackEnded) {
-                            exoPlayer.seekTo(0)
+                // 播放器底图渲染层
+                if (uiState.streamUrl.isNotBlank()) {
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false
+                                layoutParams =
+                                    ViewGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                    )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    // 空数据源友好提示
+                    PlayerEmptyView(
+                        subjectName = route.subjectName,
+                        epLabel = epLabel,
+                        onBackClick = onBackClick,
+                        onRequestOpenSources = onRequestOpenSources,
+                    )
+                }
+
+                // 控制器覆盖遮罩
+                AnimatedVisibility(
+                    visible = areControlsVisible || !isPlaying || isBuffering || isPlaybackEnded,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    PlayerControlsOverlay(
+                        subjectName = route.subjectName,
+                        epLabel = epLabel,
+                        episodeName = uiState.episodeName,
+                        isPlaying = isPlaying,
+                        isBuffering = isBuffering,
+                        isEnded = isPlaybackEnded,
+                        currentPosition = currentPosition,
+                        totalDuration = totalDuration,
+                        isScrubbing = isScrubbing,
+                        scrubProgress = scrubProgress,
+                        isLandscape = isLandscape,
+                        errorMessage = uiState.error,
+                        onBackClick = {
+                            if (isLandscape) toggleFullscreen(false) else onBackClick()
+                        },
+                        onPlayPauseToggle = {
+                            if (isPlaybackEnded) {
+                                exoPlayer.seekTo(0)
+                                exoPlayer.play()
+                            } else if (isPlaying) {
+                                exoPlayer.pause()
+                            } else {
+                                exoPlayer.play()
+                            }
+                        },
+                        onRewind10 = {
+                            val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
+                            exoPlayer.seekTo(newPos)
+                            currentPosition = newPos
+                        },
+                        onForward10 = {
+                            val dur = exoPlayer.duration
+                            val maxPos = if (dur > 0L) dur else Long.MAX_VALUE
+                            val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(maxPos)
+                            exoPlayer.seekTo(newPos)
+                            currentPosition = newPos
+                        },
+                        onScrubStart = {
+                            isScrubbing = true
+                        },
+                        onScrubbing = { progress ->
+                            scrubProgress = progress
+                        },
+                        onScrubEnd = { progress ->
+                            isScrubbing = false
+                            if (totalDuration > 0L) {
+                                val newPosition = (progress * totalDuration).toLong()
+                                exoPlayer.seekTo(newPosition)
+                                currentPosition = newPosition
+                            }
+                        },
+                        onToggleFullscreen = {
+                            toggleFullscreen(!isLandscape)
+                        },
+                        onRetry = {
+                            viewModel.retry()
+                            exoPlayer.prepare()
                             exoPlayer.play()
-                        } else if (isPlaying) {
-                            exoPlayer.pause()
-                        } else {
-                            exoPlayer.play()
-                        }
-                    },
-                    onRewind10 = {
-                        val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                        exoPlayer.seekTo(newPos)
-                        currentPosition = newPos
-                    },
-                    onForward10 = {
-                        val dur = exoPlayer.duration
-                        val maxPos = if (dur > 0L) dur else Long.MAX_VALUE
-                        val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(maxPos)
-                        exoPlayer.seekTo(newPos)
-                        currentPosition = newPos
-                    },
-                    onScrubStart = {
-                        isScrubbing = true
-                    },
-                    onScrubbing = { progress ->
-                        scrubProgress = progress
-                    },
-                    onScrubEnd = { progress ->
-                        isScrubbing = false
-                        if (totalDuration > 0L) {
-                            val newPosition = (progress * totalDuration).toLong()
-                            exoPlayer.seekTo(newPosition)
-                            currentPosition = newPosition
-                        }
-                    },
-                    onToggleFullscreen = {
-                        toggleFullscreen(!isLandscape)
-                    },
-                    onRetry = {
-                        viewModel.updateStreamUrl(route.streamUrl)
-                        exoPlayer.prepare()
-                        exoPlayer.play()
-                    },
+                        },
+                        playbackSpeed = playbackSpeed,
+                        onCyclePlaybackSpeed = {
+                            playbackSpeed =
+                                when (playbackSpeed) {
+                                    1f -> 1.25f
+                                    1.25f -> 1.5f
+                                    1.5f -> 2f
+                                    else -> 1f
+                                }
+                        },
+                        showEpisodeQueue = uiState.queue.size > 1,
+                        onOpenEpisodeQueue = {
+                            coroutineScope.launch { drawerState.open() }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 全屏内选集抽屉：分集列表 + 自动连播开关。
+ */
+@Composable
+private fun PlayerEpisodeQueueDrawer(
+    queue: List<PlayerQueueEntry>,
+    currentIndex: Int,
+    autoNextEnabled: Boolean,
+    onToggleAutoNext: () -> Unit,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ModalDrawerSheet(
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier,
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "选集 · ${queue.size} 项",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
                 )
+                Text(
+                    text = "自动连播",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Switch(checked = autoNextEnabled, onCheckedChange = { onToggleAutoNext() })
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                itemsIndexed(queue) { index, entry ->
+                    val selected = index == currentIndex
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(index) }
+                                .background(
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                ).padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = (index + 1).toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color =
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                        Text(
+                            text = entry.label.ifBlank { entry.episodeName.ifBlank { "第 ${index + 1} 条" } },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color =
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
         }
     }
@@ -507,6 +677,10 @@ private fun PlayerControlsOverlay(
     onScrubEnd: (Float) -> Unit,
     onToggleFullscreen: () -> Unit,
     onRetry: () -> Unit,
+    playbackSpeed: Float,
+    onCyclePlaybackSpeed: () -> Unit,
+    showEpisodeQueue: Boolean,
+    onOpenEpisodeQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -677,7 +851,6 @@ private fun PlayerControlsOverlay(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val displayPosition =
@@ -686,7 +859,30 @@ private fun PlayerControlsOverlay(
                     text = "${formatDuration(displayPosition)} / ${formatDuration(totalDuration)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.weight(1f),
                 )
+
+                // 倍速：1.0x → 1.25x → 1.5x → 2.0x 循环
+                Text(
+                    text = "${playbackSpeed}x",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    modifier = Modifier.clickable(onClick = onCyclePlaybackSpeed),
+                )
+
+                if (showEpisodeQueue) {
+                    IconButton(
+                        onClick = onOpenEpisodeQueue,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.List,
+                            contentDescription = "选集",
+                            tint = Color.White,
+                        )
+                    }
+                }
 
                 IconButton(
                     onClick = onToggleFullscreen,
