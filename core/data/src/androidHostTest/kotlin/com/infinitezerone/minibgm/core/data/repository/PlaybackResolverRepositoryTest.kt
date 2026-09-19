@@ -124,6 +124,149 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `集数带 ep 前缀时按地址标注真实集数`() =
+        runTest {
+            val repo =
+                repository(
+                    mapOf(
+                        "https://v.example.com/e/1" to
+                            """<a href="https://cdn.example.com/v/ep07.m3u8"></a><a href="https://cdn.example.com/v/ep12.m3u8"></a>""",
+                    ),
+                )
+
+            val sources =
+                repo.resolvePages(listOf("https://v.example.com/e/1"), epNumber = 12f, siteName = "example")
+
+            assertEquals(listOf("第 7 话", "第 12 话"), sources.map { it.label })
+            assertEquals(listOf(7f, 12f), sources.map { it.episodeSort })
+        }
+
+    @Test
+    fun `整季请求时按地址裸数字标注分集`() =
+        runTest {
+            val repo =
+                repository(
+                    mapOf(
+                        "https://v.example.com/e/1" to
+                            """var url = "https://cdn.example.com/hls/45/index.m3u8";""",
+                    ),
+                )
+
+            val sources = repo.resolvePages(listOf("https://v.example.com/e/1"))
+
+            assertEquals(listOf("第 45 话"), sources.map { it.label })
+            assertEquals(listOf(45f), sources.map { it.episodeSort })
+        }
+
+    @Test
+    fun `分辨率年份与编码数字不当作集数`() =
+        runTest {
+            val repo =
+                repository(
+                    mapOf(
+                        "https://v.example.com/e/1" to
+                            """var url = "https://cdn.example.com/1080p/2024/h264/vod.m3u8";""",
+                    ),
+                )
+
+            val sources = repo.resolvePages(listOf("https://v.example.com/e/1"))
+
+            assertEquals(listOf(""), sources.map { it.label })
+            assertEquals(listOf(0f), sources.map { it.episodeSort })
+        }
+
+    @Test
+    fun `单集查询且地址无强信号时保持查询话数`() =
+        runTest {
+            val repo =
+                repository(
+                    mapOf(
+                        "https://v.example.com/e/1" to
+                            """var url = "https://cdn.example.com/hls/45/index.m3u8";""",
+                    ),
+                )
+
+            val sources = repo.resolvePages(listOf("https://v.example.com/e/1"), epNumber = 12f)
+
+            assertEquals(listOf("第 12 话"), sources.map { it.label })
+            assertEquals(listOf(12f), sources.map { it.episodeSort })
+        }
+
+    @Test
+    fun `结构化流清单按字段映射并合并规则头`() =
+        runTest {
+            val fetch =
+                FakePageFetchService(
+                    mapOf(
+                        "https://api.example.com/streams" to
+                            """{"streams":[{"url":"https://cdn.example.com/1.m3u8","title":"第 1 话",""" +
+                            """"headers":{"Referer":"https://cdn.example.com/"}},{"url":"https://cdn.example.com/2.m3u8"}]}""",
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fetch)
+
+            val sources =
+                repo.resolveTemplate(
+                    url = "https://api.example.com/streams",
+                    headers = mapOf("X-Key" to "abc"),
+                    epNumber = 0f,
+                    siteName = "测试接口",
+                )
+
+            assertEquals(2, sources.size)
+            assertEquals("第 1 话", sources[0].label)
+            assertEquals("https://cdn.example.com/", sources[0].headers["Referer"])
+            // 规则请求头追加在清单条目头之后（与正则路径一致：规则头优先）
+            assertEquals("abc", sources[0].headers["X-Key"])
+            // 无 title 的条目回退为空标签，不编造话数
+            assertEquals("", sources[1].label)
+        }
+
+    @Test
+    fun `空 streams 数组视为接口明确无结果`() =
+        runTest {
+            val fetch =
+                FakePageFetchService(mapOf("https://api.example.com/empty" to """{"streams":[]}"""))
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fetch)
+
+            val sources = repo.resolveTemplate("https://api.example.com/empty")
+
+            assertTrue(sources.isEmpty())
+        }
+
+    @Test
+    fun `无 streams 字段的 JSON 仍走正则抽取`() =
+        runTest {
+            val fetch =
+                FakePageFetchService(
+                    mapOf("https://api.example.com/legacy" to """{"url":"https://cdn.example.com/e/1.m3u8"}"""),
+                )
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fetch)
+
+            val sources = repo.resolveTemplate("https://api.example.com/legacy", epNumber = 1f)
+
+            assertEquals(listOf("https://cdn.example.com/e/1.m3u8"), sources.map { it.url })
+            assertEquals("第 1 话", sources.single().label)
+        }
+
+    @Test
+    fun `清单里非法地址的条目被跳过`() =
+        runTest {
+            val fetch =
+                FakePageFetchService(
+                    mapOf(
+                        "https://api.example.com/mixed" to
+                            """{"streams":[{"url":"ftp://bad.example.com/x.m3u8"},{"url":"https://cdn.example.com/ok.m3u8"}]}""",
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fetch)
+
+            val sources = repo.resolveTemplate("https://api.example.com/mixed")
+
+            assertEquals(listOf("https://cdn.example.com/ok.m3u8"), sources.map { it.url })
+        }
+
+    @Test
     fun `模板接口请求带出自定义头并回传给播放器`() =
         runTest {
             val fetch =

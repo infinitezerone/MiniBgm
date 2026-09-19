@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.CommentUser
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
@@ -86,6 +87,19 @@ class CommunityRepositoryImplTest {
                         TopicReply(id = 2, content = "2楼回帖"),
                     ),
             )
+        }
+
+        override suspend fun setLike(
+            target: CommunityLikeTarget,
+            id: Long,
+            reactionValue: Int,
+        ) {
+        }
+
+        override suspend fun removeLike(
+            target: CommunityLikeTarget,
+            id: Long,
+        ) {
         }
 
         override suspend fun getGroupTopicDetail(topicId: Long): TopicDetail {

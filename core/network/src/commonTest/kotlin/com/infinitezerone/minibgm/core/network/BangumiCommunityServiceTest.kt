@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -281,5 +282,72 @@ class BangumiCommunityServiceTest {
             assertEquals("花样少年少女 第二季", detail.subject?.displayName)
             assertEquals(5.86, detail.subject?.rating?.score)
             assertEquals("楼主主贴内容", detail.mainPost?.content)
+        }
+
+    @Test
+    fun setLike_putsReactionValueToScopePath() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    respond(
+                        content = "{}",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) { json(this@BangumiCommunityServiceTest.json) }
+                }
+            val service = BangumiCommunityServiceImpl(client, baseUrl = "https://next.bgm.tv")
+
+            service.setLike(CommunityLikeTarget.GROUP_POST, 1923517L, 141)
+
+            assertEquals(
+                "/p1/groups/-/posts/1923517/like",
+                engine.requestHistory
+                    .single()
+                    .url.encodedPath,
+            )
+            assertEquals(
+                "PUT",
+                engine.requestHistory
+                    .single()
+                    .method.value,
+            )
+        }
+
+    @Test
+    fun removeLike_deletesScopePath() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    respond(
+                        content = "{}",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) { json(this@BangumiCommunityServiceTest.json) }
+                }
+            val service = BangumiCommunityServiceImpl(client, baseUrl = "https://next.bgm.tv")
+
+            service.removeLike(CommunityLikeTarget.EPISODE_COMMENT, 2038019L)
+
+            assertEquals(
+                "/p1/episodes/-/comments/2038019/like",
+                engine.requestHistory
+                    .single()
+                    .url.encodedPath,
+            )
+            assertEquals(
+                "DELETE",
+                engine.requestHistory
+                    .single()
+                    .method.value,
+            )
         }
 }

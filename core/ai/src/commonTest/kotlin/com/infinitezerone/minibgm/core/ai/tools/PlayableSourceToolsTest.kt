@@ -189,6 +189,29 @@ class PlayableSourceToolsTest {
         }
 
     @Test
+    fun `排期有标题但没有记录来源页时不做站内搜索兜底`() =
+        runTest {
+            scheduleRepository.sendSchedules(
+                weekday = 5,
+                schedules =
+                    listOf(
+                        AirSchedule(
+                            bgmId = 1002L,
+                            title = "测试番剧",
+                            titleCn = "测试番剧",
+                            weekday = 5,
+                        ),
+                    ),
+            )
+            val resolver = FakePlaybackResolverRepository()
+
+            val result = tools(resolver).findPlayableSources(subjectId = 1002L, epNumber = 1)
+
+            assertTrue(result.contains("No playable source found"))
+            assertTrue(resolver.requestedPages.isEmpty())
+        }
+
+    @Test
     fun `只解析出页面时不算可播地址`() =
         runTest {
             sendScheduleWithLinks()

@@ -4,7 +4,6 @@ import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -70,7 +69,7 @@ class PlayableSourceTools(
             return encode(subjectId, title, "第三方接口 · $ruleName", hits)
         }
 
-        val pages = candidatePages(epNumber, title, schedule)
+        val pages = candidatePages(schedule)
         if (pages.isEmpty()) {
             return "No playable source found for subject ID $subjectId: no imported playlist is bound to it " +
                 "and no source page is recorded."
@@ -131,24 +130,19 @@ class PlayableSourceTools(
         return null
     }
 
-    /** 待解析页面：排期记录的来源站优先，没有记录时退到 B 站搜索页 */
-    private fun candidatePages(
-        epNumber: Int,
-        title: String,
-        schedule: AirSchedule?,
-    ): List<String> {
-        val recorded =
-            schedule
-                ?.siteLinks
-                .orEmpty()
-                .filter { it.playUrl.isNotBlank() }
-                .sortedBySitePriority()
-                .map { it.playUrl }
-        if (recorded.isNotEmpty()) return recorded
-        if (title.isBlank()) return emptyList()
-        val keyword = if (epNumber > 0) "$title 第${epNumber}话" else title
-        return listOf(StreamingIntentResolver.buildBilibiliSearchTarget(keyword).webFallbackUrl)
-    }
+    /**
+     * 待解析页面：只取排期记录的来源站。没有记录就明确返回没有结果，
+     * 不做站内搜索兜底——播放站点（如 B 站）的流地址由 JS 运行时向签名接口请求，
+     * 静态页面里不存在可被正则抽出的直链，抓搜索页注定空手而归。
+     * 按标题找源的正解是用户配置的取源接口/源协议（`PlaybackRuleKind.SOURCE`）。
+     */
+    private fun candidatePages(schedule: AirSchedule?): List<String> =
+        schedule
+            ?.siteLinks
+            .orEmpty()
+            .filter { it.playUrl.isNotBlank() }
+            .sortedBySitePriority()
+            .map { it.playUrl }
 
     private fun encode(
         subjectId: Long,

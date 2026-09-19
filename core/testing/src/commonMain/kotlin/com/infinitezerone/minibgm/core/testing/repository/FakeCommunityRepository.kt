@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -93,5 +94,31 @@ class FakeCommunityRepository : CommunityRepository {
         } else {
             AppResult.Error(IllegalArgumentException("Topic $topicId not found in fake"))
         }
+    }
+
+    var setLikeResult: AppResult<Unit>? = null
+    var setLikeCalls: List<Triple<CommunityLikeTarget, Long, Int>> = emptyList()
+        private set
+    var removeLikeResult: AppResult<Unit>? = null
+    var removeLikeCalls: List<Pair<CommunityLikeTarget, Long>> = emptyList()
+        private set
+
+    override suspend fun setLike(
+        target: CommunityLikeTarget,
+        id: Long,
+        reactionValue: Int,
+    ): AppResult<Unit> {
+        setLikeCalls = setLikeCalls + Triple(target, id, reactionValue)
+        setLikeResult?.let { return it }
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun removeLike(
+        target: CommunityLikeTarget,
+        id: Long,
+    ): AppResult<Unit> {
+        removeLikeCalls = removeLikeCalls + (target to id)
+        removeLikeResult?.let { return it }
+        return AppResult.Success(Unit)
     }
 }

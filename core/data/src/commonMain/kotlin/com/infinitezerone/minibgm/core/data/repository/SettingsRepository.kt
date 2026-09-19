@@ -28,6 +28,8 @@ data class UserSettings(
     val airingReminderEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
     val aiConfig: AiConfig = AiConfig(),
+    /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
+    val amoledDarkMode: Boolean = false,
 )
 
 interface SettingsRepository {
@@ -43,6 +45,9 @@ interface SettingsRepository {
 
     /** 每日提醒触发时刻（设备本地时间小时） */
     suspend fun setAiringReminderHour(hour: Int)
+
+    /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
+    suspend fun setAmoledDarkMode(enabled: Boolean)
 
     /** 更新 AI 服务配置 */
     suspend fun setAiConfig(config: AiConfig)
@@ -75,6 +80,21 @@ interface SettingsRepository {
 
     /** 重置全部播放列表（现有数据损坏时的恢复出口） */
     suspend fun clearPlaylists()
+
+    /**
+     * 断点续播位置表（key = 播放地址，value = 上次观看位置毫秒）。
+     * 与 Bangumi 的"看过/在看"打卡是两套独立进度，互不覆盖；最多保留 [MAX_PLAYBACK_POSITIONS] 条最近记录。
+     */
+    val playbackPositions: Flow<Map<String, Long>>
+
+    /** 记录/更新某播放地址的观看位置（0 或负值忽略） */
+    suspend fun savePlaybackPosition(
+        url: String,
+        positionMs: Long,
+    )
+
+    /** 播完或位置失效时清除该地址的续播点 */
+    suspend fun clearPlaybackPosition(url: String)
 }
 
 class SettingsRepositoryImpl(
@@ -100,6 +120,7 @@ class SettingsRepositoryImpl(
                         model = prefs.aiModel,
                         provider = prefs.aiProvider,
                     ),
+                amoledDarkMode = prefs.amoledDarkMode,
             )
         }
 
@@ -137,6 +158,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setAiringReminderHour(hour: Int) {
         userPreferences.setAiringReminderHour(hour)
+    }
+
+    override suspend fun setAmoledDarkMode(enabled: Boolean) {
+        userPreferences.setAmoledDarkMode(enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {
@@ -273,5 +298,69 @@ class SettingsRepositoryImpl(
         playlistsWriteMutex.withLock {
             userPreferences.setPlaylistsJson("")
         }
+    }
+
+    private val playbackPositionsWriteMutex = Mutex()
+
+    override val playbackPositions: Flow<Map<String, Long>> =
+        userPreferences.userPreferences.map { prefs ->
+            if (prefs.playbackPositionsJson.isBlank()) {
+                emptyMap()
+            } else {
+                runCatching { json.decodeFromString<Map<String, Long>>(prefs.playbackPositionsJson) }.getOrDefault(emptyMap())
+            }
+        }
+
+    override suspend fun savePlaybackPosition(
+        url: String,
+        positionMs: Long,
+    ) {
+        if (url.isBlank() || positionMs <= 0L) return
+        playbackPositionsWriteMutex.withLock {
+            val current = playbackPositions.first()
+            userPreferences.setPlaybackPositionsJson(
+                json.encodeToString<Map<String, Long>>(current.withUpdatedPosition(url, positionMs)),
+            )
+        }
+    }
+
+    override suspend fun clearPlaybackPosition(url: String) {
+        if (url.isBlank()) return
+        playbackPositionsWriteMutex.withLock {
+            val current = playbackPositions.first()
+            if (url !in current) return@withLock
+            userPreferences.setPlaybackPositionsJson(
+                json.encodeToString<Map<String, Long>>(current - url),
+            )
+        }
+    }
+
+    companion object {
+        const val MAX_PLAYBACK_POSITIONS = 50
+    }
+}
+
+/**
+ * 位置表更新与淘汰：重插即视为"最近使用"（LinkedHashMap 保序），超上限淘汰最旧的地址。
+ * internal 供测试直接断言淘汰行为。
+ */
+internal fun Map<String, Long>.withUpdatedPosition(
+    url: String,
+    positionMs: Long,
+): Map<String, Long> {
+    val updated = LinkedHashMap<String, Long>(size + 1)
+    for ((key, value) in this) {
+        if (key != url) updated[key] = value
+    }
+    updated[url] = positionMs
+    return if (updated.size > SettingsRepositoryImpl.MAX_PLAYBACK_POSITIONS) {
+        LinkedHashMap(
+            updated
+                .entries
+                .drop(updated.size - SettingsRepositoryImpl.MAX_PLAYBACK_POSITIONS)
+                .associate { it.key to it.value },
+        )
+    } else {
+        updated
     }
 }

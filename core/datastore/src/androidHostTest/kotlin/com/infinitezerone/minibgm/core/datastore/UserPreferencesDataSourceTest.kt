@@ -16,6 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** UserPreferencesDataSource 的账号池读写行为（内存存储，不落盘） */
@@ -149,5 +150,19 @@ class UserPreferencesDataSourceTest {
             assertEquals("", stored.pendingOAuthVerifier)
             assertTrue(stored.isDarkMode)
             assertEquals(30, stored.notifyBeforeAirMinutes)
+        }
+
+    @Test
+    fun `setAmoledDarkMode toggles flag without touching other preferences`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            dataSource.setDarkMode(true)
+
+            dataSource.setAmoledDarkMode(true)
+            assertTrue(dataStore.data.first().amoledDarkMode)
+            assertTrue(dataStore.data.first().isDarkMode, "dark mode must be preserved")
+
+            dataSource.setAmoledDarkMode(false)
+            assertFalse(dataStore.data.first().amoledDarkMode)
         }
 }
