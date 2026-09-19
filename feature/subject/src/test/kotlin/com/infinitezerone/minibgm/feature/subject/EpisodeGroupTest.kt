@@ -55,6 +55,8 @@ class EpisodeGroupTest {
         val epSp = Episode(id = 4, type = 1, ep = 1f, sort = 1f)
 
         assertTrue(isEpisodeNextToWatch(ep1, watchedCount = 0))
+        // 无进度上下文（未登录且未收藏）时不得误标"在看"
+        assertFalse(isEpisodeNextToWatch(ep1, watchedCount = 0, hasProgress = false))
         assertFalse(isEpisodeNextToWatch(ep2, watchedCount = 0))
 
         assertFalse(isEpisodeNextToWatch(ep1, watchedCount = 1))

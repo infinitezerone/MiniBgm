@@ -954,6 +954,7 @@ private fun SubjectDetailContent(
                             EpisodeGrid(
                                 episodes = currentEpisodes,
                                 watchedCount = uiState.collection?.epStatus ?: 0,
+                                hasProgress = uiState.collection != null,
                                 onToggleWatched = onToggleEpisodeWatched,
                                 onEpisodeLongClick = { episode ->
                                     val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
@@ -970,7 +971,8 @@ private fun SubjectDetailContent(
                         items(items = currentEpisodes, key = { it.id }) { episode ->
                             val watchedCount = uiState.collection?.epStatus ?: 0
                             val isWatched = isEpisodeWatched(episode, watchedCount)
-                            val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount)
+                            val isNextToWatch =
+                                isEpisodeNextToWatch(episode, watchedCount, hasProgress = uiState.collection != null)
                             EpisodeListItem(
                                 episode = episode,
                                 isWatched = isWatched,

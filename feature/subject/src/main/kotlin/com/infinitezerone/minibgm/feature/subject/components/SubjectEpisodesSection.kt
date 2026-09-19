@@ -627,6 +627,7 @@ fun EpisodeGrid(
     onEpisodeLongClick: (Episode) -> Unit,
     modifier: Modifier = Modifier,
     columns: Int = 6,
+    hasProgress: Boolean = true,
 ) {
     val columnCount = columns.coerceAtLeast(1)
     Column(
@@ -641,7 +642,7 @@ fun EpisodeGrid(
                 rowEpisodes.forEach { episode ->
                     val isWatched = isEpisodeWatched(episode, watchedCount)
                     val isFuture = isEpisodeFutureAir(episode)
-                    val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount)
+                    val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress)
                     val label =
                         if (episode.type == 0) {
                             val num = if (episode.ep > 0f) episode.ep else episode.sort
@@ -765,12 +766,19 @@ fun isEpisodeWatched(
     return watchedCount >= epNumber && epNumber > 0
 }
 
-/** 辅助方法：判断分集是否为当前待看/在看下一集（仅针对已播出的正篇，未播出的未来分集不可作为在看集） */
+/**
+ * 辅助方法：判断分集是否为当前待看/在看下一集（仅针对已播出的正篇，未播出的未来分集不可作为在看集）。
+ * [hasProgress] 表示存在观看进度上下文（有条目收藏记录或已登录同步过进度）：
+ * 没有任何进度数据（如未登录且未收藏）时，"第 N 话 == watchedCount + 1" 恒对第一话成立，
+ * 会误标"在看"，因此必须显式传入 false。
+ */
 fun isEpisodeNextToWatch(
     episode: Episode,
     watchedCount: Int,
+    hasProgress: Boolean = true,
     nowMillis: Long = TimeUtils.nowEpochMillis(),
 ): Boolean {
+    if (!hasProgress) return false
     if (episode.type != 0) return false
     if (isEpisodeFutureAir(episode, nowMillis)) return false
     val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
