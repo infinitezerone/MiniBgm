@@ -59,6 +59,10 @@ data class SearchUiState(
     val hasMore: Boolean = false,
     val totalCount: Int = 0,
     val results: List<Subject> = emptyList(),
+    /** 本地别名索引命中（06-A）：网络失败时为离线降级结果，成功时为接口未覆盖的别名兜底 */
+    val localMatches: List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> = emptyList(),
+    /** 弱网降级软提示（07-A）：非 null 时展示为可重试的提示条而非全屏错误 */
+    val offlineNotice: String? = null,
     val userCollections: Map<Long, CollectionType> = emptyMap(),
     val showLoginPromptDialog: Boolean = false,
     val userMessage: String? = null,

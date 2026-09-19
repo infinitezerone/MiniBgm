@@ -26,6 +26,9 @@ class FakeScheduleRepository : ScheduleRepository {
             }
     }
 
+    var searchLocalSubjectsResult: List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> = emptyList()
+    val searchLocalSubjectsCalls = mutableListOf<String>()
+
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> = schedulesState.map { it[weekday].orEmpty() }
 
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> = schedulesState.map { it.values.flatten() }
@@ -66,5 +69,13 @@ class FakeScheduleRepository : ScheduleRepository {
 
     override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) {
         scheduleDefaultOnlyWatching = onlyWatching
+    }
+
+    override suspend fun searchLocalSubjects(
+        query: String,
+        limit: Int,
+    ): List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> {
+        searchLocalSubjectsCalls += query
+        return searchLocalSubjectsResult
     }
 }

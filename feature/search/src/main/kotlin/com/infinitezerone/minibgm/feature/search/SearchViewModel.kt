@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -36,6 +37,7 @@ class SearchViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
+    private val scheduleRepository: ScheduleRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SearchUiState())
     val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
@@ -52,6 +54,20 @@ class SearchViewModel(
 
     // 存储未排序的原始搜索数据，方便即时客户端切换排序
     private var rawSearchResults: List<Subject> = emptyList()
+
+    // 06-B：滚动位置在 VM 层记忆（plain 字段，不驱动重组），重建组合时作为初始位置回填
+    var listScrollIndex: Int = 0
+        private set
+    var listScrollOffset: Int = 0
+        private set
+    var gridScrollIndex: Int = 0
+        private set
+    var gridScrollOffset: Int = 0
+        private set
+
+    // 06-B：搜索代数——每次新搜索/切类/切序自增，UI 仅在该值变化时回滚到顶部（返回不触发）
+    var searchGeneration: Int = 0
+        private set
 
     init {
         observeSearchHistory()
@@ -239,10 +255,37 @@ class SearchViewModel(
         }
     }
 
+    /** 列表滚动位置回报（UI 逐帧调用，仅写 plain 字段不触发重组） */
+    fun onListScrollPositionChanged(
+        index: Int,
+        offset: Int,
+    ) {
+        listScrollIndex = index
+        listScrollOffset = offset
+    }
+
+    /** 网格滚动位置回报 */
+    fun onGridScrollPositionChanged(
+        index: Int,
+        offset: Int,
+    ) {
+        gridScrollIndex = index
+        gridScrollOffset = offset
+    }
+
+    private fun resetScrollState() {
+        listScrollIndex = 0
+        listScrollOffset = 0
+        gridScrollIndex = 0
+        gridScrollOffset = 0
+        searchGeneration += 1
+    }
+
     fun clearQuery() {
         searchJob?.cancel()
         loadMoreJob?.cancel()
         rawSearchResults = emptyList()
+        resetScrollState()
         _uiState.update {
             it.copy(
                 query = "",
@@ -253,6 +296,8 @@ class SearchViewModel(
                 totalCount = 0,
                 results = emptyList(),
                 error = null,
+                localMatches = emptyList(),
+                offlineNotice = null,
             )
         }
     }
@@ -316,6 +361,7 @@ class SearchViewModel(
                 searchRepository.addSearchHistory(trimmedQuery)
             }
         }
+        resetScrollState()
         searchJob?.cancel()
         loadMoreJob?.cancel()
         searchJob =
@@ -328,8 +374,12 @@ class SearchViewModel(
                         hasMore = false,
                         totalCount = 0,
                         error = null,
+                        offlineNotice = null,
+                        localMatches = emptyList(),
                     )
                 }
+                // 06-A：先查本地别名词典（Room 缓存窗口内），网络失败时即为离线降级结果
+                val localMatches = scheduleRepository.searchLocalSubjects(trimmedQuery)
                 when (
                     val result =
                         searchRepository.searchSubjects(
@@ -352,16 +402,33 @@ class SearchViewModel(
                                 totalCount = data.total,
                                 hasMore = data.list.isNotEmpty() && data.list.size < data.total,
                                 error = null,
+                                // 别名兜底：本地命中但网络结果未覆盖时补充展示
+                                localMatches = localMatches.filter { m -> data.list.none { it.id == m.bgmId } },
+                                offlineNotice = null,
                             )
                         }
                     }
 
                     is AppResult.Error -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                error = result.message,
-                            )
+                        // 07-A：弱网降级——本地索引命中时降级为软提示 + 离线结果；否则维持全屏错误
+                        val offline = localMatches.take(6)
+                        if (offline.isNotEmpty()) {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    localMatches = offline,
+                                    offlineNotice = result.message.ifBlank { "网络异常，已展示本地索引命中" },
+                                )
+                            }
+                        } else {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    error = result.message,
+                                    localMatches = emptyList(),
+                                    offlineNotice = null,
+                                )
+                            }
                         }
                     }
 

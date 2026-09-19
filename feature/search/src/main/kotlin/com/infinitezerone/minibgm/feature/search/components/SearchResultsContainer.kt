@@ -30,12 +30,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -63,18 +69,38 @@ fun SearchResultsList(
     onLoadMore: () -> Unit,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
+    localMatches: List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> = emptyList(),
+    offlineNotice: String? = null,
+    initialListScrollIndex: Int = 0,
+    initialListScrollOffset: Int = 0,
+    initialGridScrollIndex: Int = 0,
+    initialGridScrollOffset: Int = 0,
+    searchGeneration: Int = 0,
+    onListScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
+    onGridScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
+    onRetrySearch: () -> Unit = {},
 ) {
-    val listState = rememberLazyListState()
-    val gridState = rememberLazyGridState()
+    // 06-B：初始位置来自 VM 记忆，从详情页返回本页时不再被重置到顶部
+    val listState = rememberLazyListState(initialListScrollIndex, initialListScrollOffset)
+    val gridState = rememberLazyGridState(initialGridScrollIndex, initialGridScrollOffset)
 
-    // 切换排序、分类或搜索关键词时，自动重置回到顶部
-    LaunchedEffect(selectedSort, selectedType, query) {
-        if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
+    // 重置只跟随搜索代数：rememberSaveable 记录已应用的代数，返回本页（组合重建）不再误触
+    var appliedResetGeneration by rememberSaveable { mutableIntStateOf(searchGeneration) }
+    LaunchedEffect(searchGeneration) {
+        if (searchGeneration != appliedResetGeneration) {
+            appliedResetGeneration = searchGeneration
             listState.scrollToItem(0)
-        }
-        if (gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0) {
             gridState.scrollToItem(0)
         }
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> onListScrollPositionChange(index, offset) }
+    }
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> onGridScrollPositionChange(index, offset) }
     }
 
     Column(modifier = modifier) {
@@ -146,6 +172,67 @@ fun SearchResultsList(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    // 07-A：弱网降级软提示（可重试）
+                    if (offlineNotice != null) {
+                        item(key = "offline_notice") {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        text = offlineNotice,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(onClick = onRetrySearch) { Text("重试") }
+                                }
+                            }
+                        }
+                    }
+
+                    // 06-A：本地别名词典命中（离线降级结果或别名兜底）
+                    items(localMatches, key = { "local-" + it.bgmId }) { match ->
+                        Surface(
+                            onClick = { onSubjectClick(SubjectDetailRoute(match.bgmId)) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = match.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = "本地索引命中",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Text(
+                                    text = "查看",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+
                     items(results, key = { it.id }) { subject ->
                         SearchResultCard(
                             subject = subject,
