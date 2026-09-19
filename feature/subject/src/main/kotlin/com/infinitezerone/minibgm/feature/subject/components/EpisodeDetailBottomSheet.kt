@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 
@@ -63,6 +65,8 @@ fun EpisodeDetailBottomSheet(
     onMarkWatchedUpTo: (episode: Episode) -> Unit = {},
     onUrlClick: (String) -> Unit = {},
     onPlayClick: (() -> Unit)? = null,
+    currentUserId: Long? = null,
+    onCommentReactionClick: ((EpisodeComment, CommentReaction) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
@@ -405,6 +409,11 @@ fun EpisodeDetailBottomSheet(
                     EpisodeCommentItem(
                         comment = comment,
                         onUrlClick = onUrlClick,
+                        currentUserId = currentUserId,
+                        onReactionClick =
+                            onCommentReactionClick?.let { cb ->
+                                { reaction: CommentReaction -> cb(comment, reaction) }
+                            },
                     )
                 }
             }
@@ -420,6 +429,8 @@ fun EpisodeCommentsSection(
     isLoading: Boolean,
     onUrlClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
+    currentUserId: Long? = null,
+    onCommentReactionClick: ((EpisodeComment, CommentReaction) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -501,6 +512,11 @@ fun EpisodeCommentsSection(
                     EpisodeCommentItem(
                         comment = comment,
                         onUrlClick = onUrlClick,
+                        currentUserId = currentUserId,
+                        onReactionClick =
+                            onCommentReactionClick?.let { cb ->
+                                { reaction: CommentReaction -> cb(comment, reaction) }
+                            },
                     )
                 }
             }
@@ -515,6 +531,8 @@ fun EpisodeCommentItem(
     comment: EpisodeComment,
     onUrlClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
+    currentUserId: Long? = null,
+    onReactionClick: ((CommentReaction) -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -570,21 +588,38 @@ fun EpisodeCommentItem(
                 onUrlClick = onUrlClick,
             )
 
-            // 点赞反应
+            // 点赞反应：已表态类型高亮，点击 toggle 己方表态
             if (comment.reactions.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     comment.reactions.forEach { reaction ->
+                        val mine = currentUserId != null && reaction.users.any { it.id == currentUserId }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color =
+                                if (mine) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHigh
+                                },
+                            modifier =
+                                if (onReactionClick != null) {
+                                    Modifier.clickable { onReactionClick(reaction) }
+                                } else {
+                                    Modifier
+                                },
                         ) {
                             Text(
                                 text = "❤️ ${reaction.count}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color =
+                                    if (mine) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }

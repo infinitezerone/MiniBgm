@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,12 +48,16 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.PlaylistEntryMatch
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.matchesForEpisode
+import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
+import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
 import kotlinx.coroutines.launch
 
 /**
@@ -62,7 +67,7 @@ import kotlinx.coroutines.launch
  * 界面采用简洁克制的现代 Material 3 Expressive 风格，去除突兀描边与花哨徽章，清晰划分为三大区域：
  * 1. 自备片单：用户导入的 JSON 片源（[PlaybackPlaylist]），按话数匹配后直接给出；
  * 2. 内部播放 / AI 找源：应用内解析播放、管理第三方播放规则，或把找源请求交给 AI 助手会话；
- * 3. 外部跳转：外部 App / 网页直达（哔哩哔哩分集搜索、蜜柑计划资源页）。
+ * 3. 外部跳转：外部 App / 网页直达（哔哩哔哩分集搜索、蜜柑计划资源页、mpv / VLC 外部播放器直链）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +125,50 @@ fun EpisodeSourceGuideBottomSheet(
     val mikanUrl =
         remember(mikanId, mikanKeyword) {
             StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = mikanKeyword)
+        }
+
+    val context = LocalContext.current
+
+    // 外部播放器直链候选：仅对流媒体直链（http/https 的 DIRECT 地址）提供，
+    // 片单 DIRECT 直链优先，其次为解析为媒体直链的播放规则
+    val externalPlayerStreamUrl =
+        remember(playlistMatches, enabledRules, displayName, episode, subject.id) {
+            // 外部播放器无法携带 Referer/Cookie 等自定义请求头，带请求头的直链不提供；
+            // kind = SOURCE 的规则地址是取源接口而非流地址，同样排除
+            playlistMatches
+                .map { it.entry }
+                .firstOrNull {
+                    it.kind == PlaylistEntryKind.DIRECT &&
+                        it.headers.isEmpty() &&
+                        StreamingIntentResolver.isHttpStreamUrl(it.url)
+                }?.url
+                ?: enabledRules.firstNotNullOfOrNull { rule ->
+                    if (rule.kind == PlaybackRuleKind.SOURCE) return@firstNotNullOfOrNull null
+                    val rawEpSort = if (episode.ep > 0f) episode.ep else episode.sort
+                    val epStr = if (episode.type == 0) rawEpSort.toEpisodeLabel() else rawEpSort.toInt().toString()
+                    val resolvedUrl =
+                        rule.resolveUrl(
+                            title = displayName,
+                            ep = epStr,
+                            subjectId = subject.id,
+                            episodeId = episode.id,
+                        )
+                    resolvedUrl.takeIf {
+                        StreamingIntentResolver.isHttpStreamUrl(it) && isLikelyMediaStream(resolvedUrl, rule.description)
+                    }
+                }
+        }
+
+    val externalPlayerTargets =
+        remember(externalPlayerStreamUrl) {
+            externalPlayerStreamUrl?.let { StreamingIntentResolver.buildExternalPlayerTargets(it) }.orEmpty()
+        }
+
+    val installedExternalPlayerPackages =
+        remember(context, externalPlayerTargets) {
+            externalPlayerTargets
+                .filter { StreamingAppLauncher.isAppInstalled(context, it.packageName) }
+                .mapTo(mutableSetOf()) { it.packageName }
         }
 
     BgmModalBottomSheet(
@@ -409,6 +458,33 @@ fun EpisodeSourceGuideBottomSheet(
                         }
                     },
                 )
+
+                // 外部播放器（mpv / VLC）：仅流媒体直链可交给系统 ACTION_VIEW 唤起，
+                // 外部播放器无法携带 Referer 等自定义请求头，未安装时在副标题给出降级提示
+                for (target in externalPlayerTargets) {
+                    val installed = target.packageName in installedExternalPlayerPackages
+                    EpisodeSourceActionCard(
+                        title = "用 ${target.appName} 打开",
+                        subtitle =
+                            if (installed) {
+                                "用 ${target.appName} 播放当前直链 · 外部播放无法携带 Referer 等请求头"
+                            } else {
+                                "未检测到 ${target.appName}，安装后可用 · 外部播放无法携带 Referer 等请求头"
+                            },
+                        iconVector = Icons.Filled.PlayCircleOutline,
+                        iconTint =
+                            if (installed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        onClick = {
+                            runAfterDismiss {
+                                context.launchExternalPlayer(target)
+                            }
+                        },
+                    )
+                }
             }
         }
     }
@@ -487,6 +563,8 @@ internal fun PlaylistSourceSection(
                 onClick = {
                     runAfterDismiss {
                         if (playableInApp) {
+                            // 同片单的可播条目按用户书写顺序入队：播放器内支持连播与选集抽屉
+                            val queueEntries = item.playlist.entries.filter { it.kind == PlaylistEntryKind.DIRECT }
                             onInternalPlayClick?.invoke(
                                 PlayerRoute(
                                     subjectId = subject.id,
@@ -497,6 +575,21 @@ internal fun PlaylistSourceSection(
                                     episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
                                     episodeType = episode.type,
                                     requestHeaders = entry.headers,
+                                    queue =
+                                        queueEntries.map { matched ->
+                                            PlayerQueueEntry(
+                                                streamUrl = matched.url,
+                                                label = matched.label,
+                                                episodeName = matched.title,
+                                                episodeSort =
+                                                    matched.label.toFloatOrNull()
+                                                        ?: (if (episode.ep > 0f) episode.ep else episode.sort),
+                                                episodeType = episode.type,
+                                                episodeId = episode.id,
+                                                requestHeaders = matched.headers,
+                                            )
+                                        },
+                                    startIndex = queueEntries.indexOf(entry).coerceAtLeast(0),
                                 ),
                             )
                         } else {

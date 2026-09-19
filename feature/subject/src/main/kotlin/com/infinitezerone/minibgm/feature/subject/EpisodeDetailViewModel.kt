@@ -9,16 +9,21 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,7 +40,16 @@ data class EpisodeDetailUiState(
     val isCommentsLoading: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
+    /** 当前登录用户 id（null = 未登录），用于判定吐槽表态是否为己方 */
+    val currentUserId: Long? = null,
 )
+
+/** 单集详情页一次性单发事件 */
+sealed interface EpisodeDetailUiEvent {
+    data class ShowSnackbar(
+        val message: String,
+    ) : EpisodeDetailUiEvent
+}
 
 /** 单集详情独立 ViewModel */
 class EpisodeDetailViewModel(
@@ -49,6 +63,9 @@ class EpisodeDetailViewModel(
     private val _uiState = MutableStateFlow(EpisodeDetailUiState())
     val uiState: StateFlow<EpisodeDetailUiState> = _uiState.asStateFlow()
 
+    private val _events = Channel<EpisodeDetailUiEvent>(Channel.BUFFERED)
+    val events: Flow<EpisodeDetailUiEvent> = _events.receiveAsFlow()
+
     private val isLoggedIn =
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -56,6 +73,12 @@ class EpisodeDetailViewModel(
     private var refreshJob: Job? = null
 
     init {
+        // 订阅当前登录用户 id（判定表态归属）
+        viewModelScope.launch {
+            authRepository.activeUserId.collect { userId ->
+                _uiState.update { it.copy(currentUserId = userId) }
+            }
+        }
         // 订阅本地分集流与收藏状态流
         viewModelScope.launch {
             combine(
@@ -249,6 +272,38 @@ class EpisodeDetailViewModel(
                 )
             result.onError { _, message ->
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
+            }
+        }
+    }
+
+    /**
+     * 切换自己对某条吐槽某条表情表态的状态：
+     * 未登录提示登录；已在该类型表态过 → 取消；否则以该表情类型加入。成功后刷新吐槽流。
+     */
+    fun toggleCommentReaction(
+        comment: EpisodeComment,
+        reaction: CommentReaction,
+    ) {
+        val userId = _uiState.value.currentUserId
+        if (userId == null) {
+            _events.trySend(EpisodeDetailUiEvent.ShowSnackbar("请先登录后再表态"))
+            return
+        }
+        val reacted = reaction.users.any { it.id == userId }
+        viewModelScope.launch {
+            val result =
+                if (reacted) {
+                    communityRepository.removeLike(CommunityLikeTarget.EPISODE_COMMENT, comment.id)
+                } else {
+                    communityRepository.setLike(CommunityLikeTarget.EPISODE_COMMENT, comment.id, reaction.value)
+                }
+            when (result) {
+                is AppResult.Success -> {
+                    _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(if (reacted) "已取消表态" else "已表态"))
+                    refresh()
+                }
+                is AppResult.Error -> _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                is AppResult.Loading -> Unit
             }
         }
     }

@@ -28,12 +28,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,6 +76,16 @@ fun TopicDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // 表态结果与登录提示
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is TopicDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
+    }
 
     val topic = uiState.topicDetail
     val displayTitle = topic?.title ?: initialTitle.ifBlank { "讨论详情" }
@@ -91,6 +105,7 @@ fun TopicDetailScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
                 title = {
@@ -234,6 +249,8 @@ fun TopicDetailScreen(
                                 reply = reply,
                                 floorNumber = index + 2,
                                 onUrlClick = handleLinkClick,
+                                currentUserId = uiState.currentUserId,
+                                onReactionClick = { reaction -> viewModel.toggleReaction(reply, reaction) },
                             )
                         }
 

@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionParser
 import com.infinitezerone.minibgm.core.ai.PlayableSourcesParser
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
 import kotlinx.coroutines.channels.Channel
@@ -21,6 +22,7 @@ import java.util.UUID
 class AssistantViewModel(
     private val agentService: BgmAiAgentService,
     private val settingsRepository: SettingsRepository,
+    private val failureStore: PlaybackFailureStore? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
@@ -34,6 +36,13 @@ class AssistantViewModel(
         viewModelScope.launch {
             settingsRepository.aiConfig.collect { config ->
                 _uiState.update { it.copy(aiConfig = config) }
+            }
+        }
+        failureStore?.recentFailures?.let { flow ->
+            viewModelScope.launch {
+                flow.collect { failures ->
+                    _uiState.update { it.copy(failedSources = failures) }
+                }
             }
         }
     }

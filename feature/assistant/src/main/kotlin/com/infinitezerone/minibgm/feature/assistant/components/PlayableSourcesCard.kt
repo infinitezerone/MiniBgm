@@ -28,18 +28,21 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 
 /**
  * 找源结果卡片：把工具返回的可播放清单按集数列出。
  *
- * DIRECT 条目点击后进内置播放器（连同解析出的请求头一起传递），PAGE 条目只能外部打开。
+ * DIRECT 条目点击后进内置播放器（连同解析出的请求头一起传递），PAGE 条目只能外部打开；
+ * 最近播放失败（[PlaybackFailureStore] 归因）的地址在行内标出"打不开"与原因，仍可点击重试。
  */
 @Composable
 fun PlayableSourcesCard(
     sources: PlayableEpisodeList,
     onPlaySource: (PlayerRoute) -> Unit,
     modifier: Modifier = Modifier,
+    failedReasons: Map<String, String> = emptyMap(),
 ) {
     val uriHandler = LocalUriHandler.current
 
@@ -82,6 +85,8 @@ fun PlayableSourcesCard(
                 }
                 PlayableSourceRow(
                     episode = episode,
+                    rowNumber = index + 1,
+                    failureReason = failedReasons[episode.url],
                     onClick = {
                         if (episode.kind == PlaylistEntryKind.DIRECT) {
                             onPlaySource(episode.toPlayerRoute(sources))
@@ -98,6 +103,8 @@ fun PlayableSourcesCard(
 @Composable
 private fun PlayableSourceRow(
     episode: PlayableSource,
+    rowNumber: Int,
+    failureReason: String?,
     onClick: () -> Unit,
 ) {
     val playable = episode.kind == PlaylistEntryKind.DIRECT
@@ -114,41 +121,80 @@ private fun PlayableSourceRow(
         Icon(
             imageVector = if (playable) Icons.Filled.PlayArrow else Icons.AutoMirrored.Filled.OpenInNew,
             contentDescription = if (playable) "播放" else "外部打开",
-            tint = if (playable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            tint =
+                when {
+                    failureReason != null -> MaterialTheme.colorScheme.error
+                    playable -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
             modifier = Modifier.size(20.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.label.ifBlank { "第 ${episode.episodeSort.toInt()} 条" },
+                text = episode.label.ifBlank { "第 $rowNumber 条" },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = episode.siteName.ifBlank { hostOf(episode.url) },
+                text = playbackSourceSubtitle(episode.siteName.ifBlank { hostOf(episode.url) }, failureReason),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color =
+                    if (failureReason != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         Text(
-            text = if (playable) "播放" else "打开",
+            text =
+                when {
+                    failureReason != null -> "打不开"
+                    playable -> "播放"
+                    else -> "打开"
+                },
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+            color =
+                if (failureReason != null) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
             modifier = Modifier.width(40.dp),
         )
     }
 }
 
-private fun PlayableSource.toPlayerRoute(sources: PlayableEpisodeList) =
-    PlayerRoute(
+/** 站点名副标题：叠加最近一次播放失败归因（与来源向导的展示口径一致） */
+private fun playbackSourceSubtitle(
+    base: String,
+    failureReason: String?,
+): String = if (failureReason == null) base else "$base · 上次播放失败：$failureReason"
+
+private fun PlayableSource.toPlayerRoute(sources: PlayableEpisodeList): PlayerRoute {
+    val playable = sources.episodes.filter { it.kind == PlaylistEntryKind.DIRECT }
+    return PlayerRoute(
         subjectId = sources.subjectId,
         episodeId = 0L,
         streamUrl = url,
         episodeName = label,
         subjectName = sources.title,
+        episodeSort = if (episodeSort > 0f) episodeSort else 1f,
+        requestHeaders = headers,
+        // 整张清单的可播条目按序入队：播放器内支持连播与选集抽屉
+        queue = playable.map { it.toQueueEntry() },
+        startIndex = playable.indexOf(this).coerceAtLeast(0),
+    )
+}
+
+private fun PlayableSource.toQueueEntry() =
+    PlayerQueueEntry(
+        streamUrl = url,
+        label = label,
         episodeSort = if (episodeSort > 0f) episodeSort else 1f,
         requestHeaders = headers,
     )

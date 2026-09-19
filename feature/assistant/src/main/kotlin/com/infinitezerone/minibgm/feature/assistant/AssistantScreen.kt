@@ -307,6 +307,7 @@ fun AssistantScreenContent(
                     items(uiState.messages, key = { it.id }) { message ->
                         ChatMessageItem(
                             message = message,
+                            failedSources = uiState.failedSources,
                             onApproveAction = onApproveAction,
                             onRejectAction = onRejectAction,
                             onSubjectClick = onSubjectClick,
@@ -412,6 +413,7 @@ private fun EmptyAssistantGuide(
 @Composable
 private fun ChatMessageItem(
     message: AssistantMessage,
+    failedSources: Map<String, String>,
     onApproveAction: (String) -> Unit,
     onRejectAction: (String) -> Unit,
     onSubjectClick: (Long) -> Unit,
@@ -488,6 +490,7 @@ private fun ChatMessageItem(
             Spacer(modifier = Modifier.height(8.dp))
             PlayableSourcesCard(
                 sources = sources,
+                failedReasons = failedSources,
                 onPlaySource = onPlaySource,
                 modifier = Modifier.fillMaxWidth(0.95f),
             )

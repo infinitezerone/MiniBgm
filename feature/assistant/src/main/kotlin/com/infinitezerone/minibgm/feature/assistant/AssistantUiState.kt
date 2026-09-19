@@ -40,6 +40,8 @@ data class AssistantUiState(
     val isLoading: Boolean = false,
     val aiConfig: AiConfig = AiConfig(),
     val showConfigDialog: Boolean = false,
+    /** 播放失败归因（key = 播放地址）：找源卡片据此把打不开的条目标出来 */
+    val failedSources: Map<String, String> = emptyMap(),
 )
 
 sealed interface AssistantUiEvent {

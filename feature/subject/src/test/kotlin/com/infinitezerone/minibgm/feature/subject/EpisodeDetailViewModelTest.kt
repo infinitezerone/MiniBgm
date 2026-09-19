@@ -1,7 +1,11 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.CommentReactionUser
 import com.infinitezerone.minibgm.core.model.CommentUser
+import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleEpisodeList
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
@@ -10,6 +14,8 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,12 +32,13 @@ class EpisodeDetailViewModelTest {
     private val subjectId = sampleSubject.id
     private val episodeId = targetEpisode.id
 
-    private fun EpisodeDetailViewModel(
+    private fun createEpisodeDetailViewModel(
         subjectId: Long,
         episodeId: Long,
         subjectRepository: com.infinitezerone.minibgm.core.data.repository.SubjectRepository,
         collectionRepository: com.infinitezerone.minibgm.core.data.repository.CollectionRepository,
         communityRepository: com.infinitezerone.minibgm.core.data.repository.CommunityRepository,
+        authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
     ): EpisodeDetailViewModel =
         EpisodeDetailViewModel(
             subjectId = subjectId,
@@ -39,7 +46,7 @@ class EpisodeDetailViewModelTest {
             subjectRepository = subjectRepository,
             collectionRepository = collectionRepository,
             communityRepository = communityRepository,
-            authRepository = FakeAuthRepository(initialLoggedIn = true),
+            authRepository = authRepository,
         )
 
     @Test
@@ -56,7 +63,7 @@ class EpisodeDetailViewModelTest {
             val communityRepository = FakeCommunityRepository()
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -82,7 +89,7 @@ class EpisodeDetailViewModelTest {
             val communityRepository = FakeCommunityRepository()
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -112,7 +119,7 @@ class EpisodeDetailViewModelTest {
             val communityRepository = FakeCommunityRepository()
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -148,7 +155,7 @@ class EpisodeDetailViewModelTest {
                 }
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -173,7 +180,7 @@ class EpisodeDetailViewModelTest {
             val communityRepository = FakeCommunityRepository()
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -195,7 +202,7 @@ class EpisodeDetailViewModelTest {
             val authRepository = FakeAuthRepository(initialLoggedIn = false)
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -223,7 +230,7 @@ class EpisodeDetailViewModelTest {
             val authRepository = FakeAuthRepository(initialLoggedIn = false)
 
             val viewModel =
-                EpisodeDetailViewModel(
+                createEpisodeDetailViewModel(
                     subjectId = subjectId,
                     episodeId = episodeId,
                     subjectRepository = subjectRepository,
@@ -240,5 +247,109 @@ class EpisodeDetailViewModelTest {
             val url = viewModel.beginLogin()
             assertTrue(url.isNotBlank())
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
+        }
+
+    private val loggedInUserId = 929189L
+
+    private val sampleComment =
+        EpisodeComment(
+            id = 2038019L,
+            mainId = 1348301L,
+            creatorId = loggedInUserId,
+            content = "这帧数太棒了",
+            user = CommentUser(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+        )
+
+    @Test
+    fun toggleCommentReaction_notReacted_addsLikeWithReactionValue() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+                )
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = authRepository,
+                )
+            advanceUntilIdle()
+
+            val reaction =
+                CommentReaction(value = 141, users = listOf(CommentReactionUser(id = 1L, username = "u1", nickname = "u1")))
+            viewModel.toggleCommentReaction(sampleComment, reaction)
+            advanceUntilIdle()
+
+            val call = communityRepository.setLikeCalls.single()
+            assertEquals(CommunityLikeTarget.EPISODE_COMMENT, call.first)
+            assertEquals(2038019L, call.second)
+            assertEquals(141, call.third)
+        }
+
+    @Test
+    fun toggleCommentReaction_alreadyReacted_removesLike() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+                )
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = authRepository,
+                )
+            advanceUntilIdle()
+
+            val reaction =
+                CommentReaction(
+                    value = 141,
+                    users = listOf(CommentReactionUser(id = loggedInUserId, username = "tester", nickname = "测试用户")),
+                )
+            viewModel.toggleCommentReaction(sampleComment, reaction)
+            advanceUntilIdle()
+
+            val call = communityRepository.removeLikeCalls.single()
+            assertEquals(CommunityLikeTarget.EPISODE_COMMENT, call.first)
+            assertEquals(2038019L, call.second)
+        }
+
+    @Test
+    fun toggleCommentReaction_notLoggedIn_emitsLoginPromptWithoutRepoCall() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = FakeAuthRepository(initialLoggedIn = false),
+                )
+            advanceUntilIdle()
+
+            viewModel.toggleCommentReaction(sampleComment, CommentReaction(value = 141))
+            advanceUntilIdle()
+
+            assertTrue(communityRepository.setLikeCalls.isEmpty())
+            val event = viewModel.events.first()
+            assertTrue(event is EpisodeDetailUiEvent.ShowSnackbar && event.message.contains("登录"))
         }
 }
