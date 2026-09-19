@@ -5,6 +5,8 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.SiteLink
@@ -19,8 +21,11 @@ import kotlin.test.assertTrue
 
 private class FakePlaybackResolverRepository(
     private val results: List<PlayableSource> = emptyList(),
+    private val templateResults: Map<String, List<PlayableSource>> = emptyMap(),
 ) : PlaybackResolverRepository {
     val requestedPages = mutableListOf<String>()
+    val requestedTemplates = mutableListOf<String>()
+    val templateHeaders = mutableMapOf<String, Map<String, String>>()
 
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -29,6 +34,17 @@ private class FakePlaybackResolverRepository(
     ): List<PlayableSource> {
         requestedPages += pageUrls
         return results
+    }
+
+    override suspend fun resolveTemplate(
+        url: String,
+        headers: Map<String, String>,
+        epNumber: Float,
+        siteName: String,
+    ): List<PlayableSource> {
+        requestedTemplates += url
+        templateHeaders[url] = headers
+        return templateResults[url].orEmpty()
     }
 }
 
@@ -121,6 +137,44 @@ class PlayableSourceToolsTest {
             assertEquals(listOf("https://www.bilibili.com/bangumi/media/md99998"), resolver.requestedPages)
             assertEquals("来源站解析", result.source)
             assertEquals("https://cdn.example.com/ep7.m3u8", result.episodes.single().url)
+        }
+
+    @Test
+    fun `配置了第三方取源接口时优先用它并带上规则请求头`() =
+        runTest {
+            sendScheduleWithLinks()
+            settingsRepository.addPlaybackRule(
+                PlaybackSourceRule(
+                    id = "r1",
+                    name = "我的接口",
+                    urlTemplate = "https://api.example.com/play?id={subjectId}&ep={ep}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    headers = mapOf("Referer" to "https://api.example.com/"),
+                ),
+            )
+            val resolver =
+                FakePlaybackResolverRepository(
+                    results = listOf(PlayableSource(url = "https://cdn.example.com/from-page.m3u8")),
+                    templateResults =
+                        mapOf(
+                            "https://api.example.com/play?id=1001&ep=7" to
+                                listOf(
+                                    PlayableSource(
+                                        url = "https://cdn.example.com/from-api.m3u8",
+                                        headers =
+                                            mapOf(
+                                                "Referer" to "https://api.example.com/",
+                                            ),
+                                    ),
+                                ),
+                        ),
+                )
+
+            val result = decode(tools(resolver).findPlayableSources(subjectId = 1001L, epNumber = 7))
+
+            assertEquals("第三方接口 · 我的接口", result.source)
+            assertEquals("https://cdn.example.com/from-api.m3u8", result.episodes.single().url)
+            assertTrue(resolver.requestedPages.isEmpty())
         }
 
     @Test
