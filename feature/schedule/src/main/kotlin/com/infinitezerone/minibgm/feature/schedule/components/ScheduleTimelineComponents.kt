@@ -399,12 +399,7 @@ fun ScheduleTimelineSingleCard(
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                             ) {
                                 Text(
-                                    text =
-                                        if (schedule.nextEpisodeKind == AirEventKind.PREDICTED) {
-                                            "第 ${schedule.nextEpisodeNumber} 话 · 预计"
-                                        } else {
-                                            "第 ${schedule.nextEpisodeNumber} 话"
-                                        },
+                                    text = "第 ${schedule.nextEpisodeNumber} 话",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
                                     fontWeight = FontWeight.Bold,
