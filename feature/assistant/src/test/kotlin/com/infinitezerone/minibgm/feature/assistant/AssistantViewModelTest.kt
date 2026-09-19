@@ -48,12 +48,16 @@ class AssistantViewModelTest {
         override val pendingActionStore: PendingActionStore? = null,
         var executeResult: AppResult<String> = AppResult.Success("AI response"),
     ) : BgmAiAgentService {
+        var fetchModelsResult: AppResult<List<String>> = AppResult.Success(emptyList())
+
         var prompts = mutableListOf<String>()
 
         override suspend fun execute(prompt: String): AppResult<String> {
             prompts.add(prompt)
             return executeResult
         }
+
+        override suspend fun fetchAvailableModels(): AppResult<List<String>> = fetchModelsResult
     }
 
     @Before
