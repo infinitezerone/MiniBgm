@@ -24,7 +24,11 @@ data class FetchedPage(
  * 失败一律返回 null，由上层降级为"没有结果"，不向调用方抛业务异常。
  */
 interface PageFetchService {
-    suspend fun fetchHtml(url: String): FetchedPage?
+    /** [requestHeaders] 来自用户自备的播放规则；含 CR/LF/NUL 的头名或头值会被丢弃（防头注入） */
+    suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String> = emptyMap(),
+    ): FetchedPage?
 }
 
 class PageFetchServiceImpl(
@@ -32,17 +36,25 @@ class PageFetchServiceImpl(
 ) : PageFetchService {
     private val logger = bgmLogger("Bgm/PageFetch")
 
-    override suspend fun fetchHtml(url: String): FetchedPage? {
+    override suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String>,
+    ): FetchedPage? {
         val target = url.trim()
         if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
             return null
         }
+        val safeHeaders =
+            requestHeaders.filter { (name, value) ->
+                name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
+            }
         return try {
             val bytes =
                 client
                     .get(target) {
                         header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
                         header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                        safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
                     }.body<ByteArray>()
             if (bytes.isEmpty()) return null
             FetchedPage(
@@ -57,3 +69,6 @@ class PageFetchServiceImpl(
         }
     }
 }
+
+/** 头名/头值里出现 CR、LF 或 NUL 就能注入额外响应头，直接丢弃该条 */
+private fun String.isSafeHeaderValue(): Boolean = all { it.code != 10 && it.code != 13 && it.code != 0 }

@@ -31,6 +31,14 @@ interface PlaybackResolverRepository {
         epNumber: Float = 0f,
         siteName: String = "",
     ): List<PlayableSource>
+
+    /** 按用户自备的模板接口地址取一次并抽取可播放地址；[headers] 随请求发出并回传给播放器 */
+    suspend fun resolveTemplate(
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        epNumber: Float = 0f,
+        siteName: String = "",
+    ): List<PlayableSource>
 }
 
 class PlaybackResolverRepositoryImpl(
@@ -50,6 +58,18 @@ class PlaybackResolverRepositoryImpl(
                 val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
                 extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
             }.distinctBy { it.url }
+
+    override suspend fun resolveTemplate(
+        url: String,
+        headers: Map<String, String>,
+        epNumber: Float,
+        siteName: String,
+    ): List<PlayableSource> {
+        val fetched = pageFetchService.fetchHtml(url, headers) ?: return emptyList()
+        return extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+            .distinctBy { it.url }
+            .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
+    }
 }
 
 /**

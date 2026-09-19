@@ -2,6 +2,12 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
 
+/** 规则用途：PAGE = 生成给用户跳转的页面；SOURCE = 请求后从响应里取可播放地址 */
+enum class PlaybackRuleKind {
+    PAGE,
+    SOURCE,
+}
+
 /**
  * 自定义番剧播放/跳转规则数据模型。
  *
@@ -10,6 +16,8 @@ import kotlinx.serialization.Serializable
  * - `{ep}`: 分集编号（如 1, 2）
  * - `{subjectId}`: Bangumi 条目 ID
  * - `{episodeId}`: Bangumi 分集 ID
+ *
+ * [kind] 为 SOURCE 时，[headers] 会随模板请求一起发出（Referer / User-Agent 等固定头，不含登录态）。
  */
 @Serializable
 data class PlaybackSourceRule(
@@ -18,6 +26,8 @@ data class PlaybackSourceRule(
     val urlTemplate: String,
     val isEnabled: Boolean = true,
     val description: String = "",
+    val kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
+    val headers: Map<String, String> = emptyMap(),
 ) {
     /**
      * 针对具体分集安全替换占位符并返回解析后的目标 URL。

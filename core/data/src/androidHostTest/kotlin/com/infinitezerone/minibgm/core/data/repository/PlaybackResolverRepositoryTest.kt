@@ -12,9 +12,14 @@ private class FakePageFetchService(
     private val pages: Map<String, String>,
 ) : PageFetchService {
     val requested = mutableListOf<String>()
+    val sentHeaders = mutableMapOf<String, Map<String, String>>()
 
-    override suspend fun fetchHtml(url: String): FetchedPage? {
+    override suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String>,
+    ): FetchedPage? {
         requested += url
+        sentHeaders[url] = requestHeaders
         return pages[url]?.let { FetchedPage(url = url, html = it) }
     }
 }
@@ -116,5 +121,33 @@ class PlaybackResolverRepositoryTest {
             repo.resolvePages((1..30).map { "https://p.example.com/$it.html" })
 
             assertEquals(5, fake.requested.size)
+        }
+
+    @Test
+    fun `模板接口请求带出自定义头并回传给播放器`() =
+        runTest {
+            val fetch =
+                FakePageFetchService(
+                    mapOf("https://api.example.com/x?q=1" to """{"url":"https://cdn.example.com/e/1.m3u8"}"""),
+                )
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fetch)
+
+            val sources =
+                repo.resolveTemplate(
+                    url = "https://api.example.com/x?q=1",
+                    headers = mapOf("Referer" to "https://api.example.com/", "X-Key" to "abc"),
+                    epNumber = 1f,
+                    siteName = "测试接口",
+                )
+
+            assertEquals(
+                mapOf("Referer" to "https://api.example.com/", "X-Key" to "abc"),
+                fetch.sentHeaders["https://api.example.com/x?q=1"],
+            )
+            val source = sources.single()
+            assertEquals("https://cdn.example.com/e/1.m3u8", source.url)
+            assertEquals("测试接口", source.siteName)
+            assertEquals("https://api.example.com/", source.headers["Referer"])
+            assertEquals("abc", source.headers["X-Key"])
         }
 }
