@@ -251,13 +251,12 @@ class SeasonalGuideViewModel(
 
     private fun buildSearchRequest(state: SeasonalGuideUiState): SearchSubjectsRequest {
         val (startDay, endDay) = state.selectedQuarter.getAirDateRange(state.selectedYear)
-        val tag = "${state.selectedYear}年${state.selectedQuarter.month}月"
         return SearchSubjectsRequest(
+            sort = "heat",
             filter =
                 SearchFilter(
                     type = listOf(2),
                     airDate = listOf(">=$startDay", "<=$endDay"),
-                    tag = listOf(tag),
                 ),
         )
     }

@@ -63,9 +63,10 @@ class SeasonalGuideViewModelTest {
 
             assertEquals(1, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
+            assertEquals("heat", request?.sort)
             assertEquals(listOf(2), request?.filter?.type)
             assertEquals(listOf(">=2026-01-01", "<=2026-03-31"), request?.filter?.airDate)
-            assertEquals(listOf("2026年1月"), request?.filter?.tag)
+            assertNull(request?.filter?.tag)
         }
 
     @Test
@@ -86,8 +87,9 @@ class SeasonalGuideViewModelTest {
             assertEquals(SeasonQuarter.SUMMER, state.selectedQuarter)
 
             val request = searchRepository.lastAdvancedRequest
+            assertEquals("heat", request?.sort)
             assertEquals(listOf(">=2024-07-01", "<=2024-09-30"), request?.filter?.airDate)
-            assertEquals(listOf("2024年7月"), request?.filter?.tag)
+            assertNull(request?.filter?.tag)
         }
 
     @Test
@@ -104,8 +106,9 @@ class SeasonalGuideViewModelTest {
             assertEquals(2025, state.selectedYear)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
+            assertEquals("heat", request?.sort)
             assertEquals(listOf(">=2025-01-01", "<=2025-03-31"), request?.filter?.airDate)
-            assertEquals(listOf("2025年1月"), request?.filter?.tag)
+            assertNull(request?.filter?.tag)
         }
 
     @Test
@@ -122,8 +125,9 @@ class SeasonalGuideViewModelTest {
             assertEquals(SeasonQuarter.AUTUMN, state.selectedQuarter)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
+            assertEquals("heat", request?.sort)
             assertEquals(listOf(">=2026-10-01", "<=2026-12-31"), request?.filter?.airDate)
-            assertEquals(listOf("2026年10月"), request?.filter?.tag)
+            assertNull(request?.filter?.tag)
         }
 
     @Test
@@ -143,8 +147,9 @@ class SeasonalGuideViewModelTest {
             assertEquals(SeasonQuarter.SUMMER, state.selectedQuarter)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
+            assertEquals("heat", request?.sort)
             assertEquals(listOf(">=2025-07-01", "<=2025-09-30"), request?.filter?.airDate)
-            assertEquals(listOf("2025年7月"), request?.filter?.tag)
+            assertNull(request?.filter?.tag)
         }
 
     @Test
