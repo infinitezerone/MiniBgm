@@ -54,6 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirEventKind
@@ -689,8 +691,13 @@ fun ScheduleCatchupSection(
                                 )
                             }
 
+                            // 打卡弹性动效：只在点击瞬间缩放，纯绘制层，不影响布局与无障碍
+                            val markWatchedBounce = rememberBounceOnClick()
                             Button(
-                                onClick = { onMarkEpisodeWatched(item.schedule.bgmId, item.targetEp) },
+                                onClick = {
+                                    markWatchedBounce.bounce()
+                                    onMarkEpisodeWatched(item.schedule.bgmId, item.targetEp)
+                                },
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 colors =
@@ -698,7 +705,7 @@ fun ScheduleCatchupSection(
                                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                     ),
-                                modifier = Modifier.height(30.dp),
+                                modifier = Modifier.height(30.dp).bounceOnClick(markWatchedBounce),
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Check,

@@ -39,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientGlow
+import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
 import com.infinitezerone.minibgm.core.designsystem.theme.BadgeClassic
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
@@ -71,6 +73,7 @@ fun ExploreSpotlightCard(
     val rank = rating?.rank ?: 0
     val doingCount = subject.collection?.doing ?: 0
     val imageUrl = subject.images?.bestImage.orEmpty()
+    val ambientGlowState = rememberAmbientDominantColorState()
 
     // 提炼有悬念、吸引人的剧情钩子
     val storyHook =
@@ -111,6 +114,8 @@ fun ExploreSpotlightCard(
                 model = imageUrl,
                 contentDescription = subject.displayName,
                 contentScale = ContentScale.Crop,
+                onSuccess = { success -> ambientGlowState.onImageSuccess(success) },
+                onError = { ambientGlowState.onImageError() },
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -120,7 +125,13 @@ fun ExploreSpotlightCard(
                         ),
             )
 
-            // 2. 纵向暗色渐变遮罩（确保文字在任何明暗背景下都绝对清晰）
+            // 2. 封面主色光晕（Ambient Glow）：从加载完成的封面提取主色铺一层柔和氛围光
+            AmbientGlow(
+                dominantColor = ambientGlowState.dominantColor,
+                modifier = Modifier.matchParentSize(),
+            )
+
+            // 3. 纵向暗色渐变遮罩（确保文字在任何明暗背景下都绝对清晰）
             Box(
                 modifier =
                     Modifier
@@ -129,7 +140,7 @@ fun ExploreSpotlightCard(
                             Brush.verticalGradient(
                                 colors =
                                     listOf(
-                                        Color.Black.copy(alpha = 0.45f),
+                                        Color.Black.copy(alpha = 0.32f),
                                         Color.Black.copy(alpha = 0.65f),
                                         Color.Black.copy(alpha = 0.92f),
                                     ),
@@ -137,7 +148,7 @@ fun ExploreSpotlightCard(
                         ),
             )
 
-            // 3. 内容层
+            // 4. 内容层
             Column(
                 modifier =
                     Modifier

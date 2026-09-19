@@ -40,6 +40,7 @@ data class UserUiState(
     val airingReminderHour: Int = 8,
     val aiConfig: AiConfig = AiConfig(),
     val airDelayOffsetMinutes: Int = 0,
+    val amoledDarkMode: Boolean = false,
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -152,6 +153,7 @@ class UserViewModel(
                 airingReminderHour = sync.settings.airingReminderHour,
                 aiConfig = sync.settings.aiConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
+                amoledDarkMode = sync.settings.amoledDarkMode,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -243,6 +245,13 @@ class UserViewModel(
     fun setAirDelayOffsetMinutes(minutes: Int) {
         viewModelScope.launch {
             settingsRepository.setAirDelayOffsetMinutes(minutes)
+        }
+    }
+
+    /** AMOLED 纯黑模式开关（仅在深色模式下生效，由 :app 宿主读取并传给 MiniBgmTheme） */
+    fun setAmoledDarkMode(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAmoledDarkMode(enabled)
         }
     }
 
