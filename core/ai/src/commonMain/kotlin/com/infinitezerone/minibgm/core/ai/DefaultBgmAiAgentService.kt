@@ -26,9 +26,14 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+
+/** 单次 AI 执行的硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
+const val AI_RUN_TIMEOUT_MS = 180_000L
 
 /**
  * 默认智能体执行服务，利用 JetBrains Koog 框架与 SettingsRepository 提供的 AI 配置进行交互。
@@ -174,10 +179,19 @@ class DefaultBgmAiAgentService(
                 )
             }
         }
+        AiToolActivity.clear()
         return try {
-            val response = agentRunner(config, prompt, toolRegistry)
+            // 推理模型多轮往返较慢（实测 1~3 分钟），但必须有硬上限防挂死
+            val response =
+                withTimeout(AI_RUN_TIMEOUT_MS) {
+                    agentRunner(config, prompt, toolRegistry)
+                }
             AppResult.Success(response)
+        } catch (e: TimeoutCancellationException) {
+            AiToolActivity.clear()
+            AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
         } catch (e: Exception) {
+            AiToolActivity.clear()
             AppResult.Error(e, friendlyAiError(config, e))
         }
     }

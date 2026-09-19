@@ -327,7 +327,7 @@ fun AssistantScreenContent(
 
                     if (uiState.isLoading) {
                         item(key = "loading_indicator") {
-                            AssistantLoadingBubble()
+                            AssistantLoadingBubble(toolActivity = uiState.toolActivity)
                         }
                     }
 
@@ -557,7 +557,10 @@ private fun DeepResolveEntry(
 }
 
 @Composable
-private fun AssistantLoadingBubble(modifier: Modifier = Modifier) {
+private fun AssistantLoadingBubble(
+    toolActivity: String? = null,
+    modifier: Modifier = Modifier,
+) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -577,7 +580,7 @@ private fun AssistantLoadingBubble(modifier: Modifier = Modifier) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "AI 正在思考并检索...",
+                    text = toolActivity ?: "AI 正在思考并检索...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

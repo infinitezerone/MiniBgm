@@ -50,6 +50,8 @@ data class AssistantUiState(
     val failedSources: Map<String, String> = emptyMap(),
     /** 非 null 时界面展示「WebView 深度解析」入口 */
     val deepResolve: DeepResolveState? = null,
+    /** 当前工具调用活动（null = 无），用于 loading 气泡展示过程 */
+    val toolActivity: String? = null,
 )
 
 sealed interface AssistantUiEvent {

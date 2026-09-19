@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.assistant
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionParser
 import com.infinitezerone.minibgm.core.ai.PlayableSourcesParser
@@ -42,6 +43,11 @@ class AssistantViewModel(
         viewModelScope.launch {
             settingsRepository.aiConfig.collect { config ->
                 _uiState.update { it.copy(aiConfig = config) }
+            }
+        }
+        viewModelScope.launch {
+            AiToolActivity.current.collect { activity ->
+                _uiState.update { it.copy(toolActivity = activity) }
             }
         }
         failureStore?.recentFailures?.let { flow ->
