@@ -177,6 +177,18 @@ class UserViewModelTest {
         }
 
     @Test
+    fun setAmoledDarkMode_updatesState() =
+        runTest {
+            val (viewModel, _, settingsRepo) = createViewModel()
+
+            viewModel.setAmoledDarkMode(true)
+
+            val state = viewModel.uiState.first { it.amoledDarkMode }
+            assertTrue(state.amoledDarkMode)
+            assertEquals(1, settingsRepo.setAmoledDarkModeCallCount)
+        }
+
+    @Test
     fun syncBangumiDataNow_triggersScheduleRepository() =
         runTest {
             val scheduleRepo = FakeScheduleRepository()

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -92,6 +93,8 @@ internal fun SettingsSection(
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
     onOpenPlaybackRules: () -> Unit = {},
+    amoledDarkMode: Boolean = false,
+    onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -114,6 +117,40 @@ internal fun SettingsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // Group 0: 外观显示
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                Text(
+                    text = "外观显示",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.DarkMode,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "AMOLED 纯黑模式",
+                    subtitle = "深色模式下使用纯黑表面，更省电更沉浸",
+                    onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
+                    trailing = {
+                        Switch(
+                            checked = amoledDarkMode,
+                            onCheckedChange = onToggleAmoledDarkMode,
+                        )
+                    },
+                )
+            }
+        }
+
         // Group 1: 数据同步与提醒
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -627,6 +664,8 @@ private fun SettingsSectionPreview() {
             onClearCache = {},
             onLogoutCurrentClick = {},
             onLogoutAllClick = {},
+            amoledDarkMode = true,
+            onToggleAmoledDarkMode = {},
         )
     }
 }

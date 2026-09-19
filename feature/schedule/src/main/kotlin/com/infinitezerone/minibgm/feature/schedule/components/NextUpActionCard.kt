@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.model.NextUpAction
 import com.infinitezerone.minibgm.core.model.NextUpUrgency
 
@@ -163,10 +165,15 @@ fun NextUpActionCard(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (action.canMarkWatched) {
+                                // 打卡弹性动效：只在点击瞬间缩放，纯绘制层，不影响布局与无障碍
+                                val markWatchedBounce = rememberBounceOnClick()
                                 FilledTonalButton(
-                                    onClick = { onMarkWatched(action.subjectId, action.episodeNumber) },
+                                    onClick = {
+                                        markWatchedBounce.bounce()
+                                        onMarkWatched(action.subjectId, action.episodeNumber)
+                                    },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp),
+                                    modifier = Modifier.height(28.dp).bounceOnClick(markWatchedBounce),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
