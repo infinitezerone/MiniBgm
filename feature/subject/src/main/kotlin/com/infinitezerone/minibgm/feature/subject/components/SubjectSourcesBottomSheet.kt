@@ -214,7 +214,7 @@ fun SubjectSourcesBottomSheet(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // 分组 1：AI 找源（条目级无具体分集，交由助手会话检索页面链接）
+                // 分组 1：AI 找源（条目级无具体分集，交由助手会话解析可播放清单）
                 Text(
                     text = "AI 找源",
                     style = MaterialTheme.typography.labelMedium,
@@ -225,7 +225,7 @@ fun SubjectSourcesBottomSheet(
 
                 EpisodeSourceActionCard(
                     title = "让 AI 助手找源",
-                    subtitle = "检索可观看页面链接，结果在助手会话中展示",
+                    subtitle = "解析可播放地址与集数，结果在助手会话中展示",
                     iconVector = Icons.Filled.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
                     onClick = { runAfterDismiss(onAiSourceSearch) },

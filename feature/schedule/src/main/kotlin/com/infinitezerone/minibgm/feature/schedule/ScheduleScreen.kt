@@ -351,7 +351,7 @@ fun ScheduleScreen(
             onAiSourceSearch = {
                 val title = schedule.titleCn.ifBlank { schedule.title }
                 onSourceSearch(
-                    "帮我找《$title》的在线观看页面，只给我可以打开观看的网页链接（Bangumi 条目号 ${schedule.bgmId}）",
+                    "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
                 )
             },
         )

@@ -59,7 +59,7 @@ sealed interface SubjectDetailUiEvent {
         val message: String,
     ) : SubjectDetailUiEvent
 
-    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问，仅返回可观看页面链接） */
+    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问，结果为可播放清单） */
     data class OpenSourceSearch(
         val prefillPrompt: String,
     ) : SubjectDetailUiEvent
@@ -143,8 +143,8 @@ class SubjectDetailViewModel(
     }
 
     /**
-     * 把找源请求交接给 AI 助手会话：本页面不做任何检索，只生成显式触发用的提问文案。
-     * 能力边界见 ROADMAP 第 5 节——助手只返回可观看页面链接，不产出媒体直链。
+     * 把找源请求交接给 AI 助手会话：本页面不做任何检索与抓取，只生成显式触发用的提问文案。
+     * 能力边界见 ROADMAP 第 5 节——播放地址只能来自工具返回，模型不生成 URL。
      */
     fun requestSourceSearch(episode: Episode? = null) {
         val title =
@@ -152,7 +152,7 @@ class SubjectDetailViewModel(
                 ?.displayName
                 ?.ifBlank { "本条目" } ?: "本条目"
         val target = if (episode == null) "《$title》" else "《$title》 ${episodeGuideLabel(episode)}"
-        val prompt = "帮我找${target}的在线观看页面，只给我可以打开观看的网页链接（Bangumi 条目号 $subjectId）"
+        val prompt = "帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"
         viewModelScope.launch {
             _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))
         }
