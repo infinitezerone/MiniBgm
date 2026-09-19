@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.forSubject
@@ -24,8 +25,8 @@ import kotlinx.serialization.json.Json
 /**
  * AI 找源 Koog 工具集：产出可以直接喂给播放器的结构化播放数据。
  *
- * 取数顺序固定为「用户自备片单 → 排期记录的来源站页面 → 解析这些页面拿直链」，
- * 每一步都只读已有数据或按给定 URL 取一次页面，不做站点遍历与批量抓取。
+ * 取数顺序固定为「用户自备片单 → 用户配置的第三方取源接口 → 排期记录的来源站页面解析」，
+ * 每一步都只读已有数据或按其 URL 发一次请求，不做站点遍历与批量抓取。
  * 检索一律由用户在会话中显式触发。
  */
 class PlayableSourceTools(
@@ -43,8 +44,8 @@ class PlayableSourceTools(
     @LLMDescription(
         "Resolve playable media for an anime and return structured playback data: for every episode " +
             "a stream URL together with the request headers needed to play it, plus the episode labels. " +
-            "It first uses the playlists the user imported, then the streaming-site pages recorded for the entry, " +
-            "and finally those pages resolved into playable addresses. " +
+            "It first uses the playlists the user imported, then the third-party source APIs the user configured, " +
+            "and finally the streaming-site pages recorded for the entry resolved into playable addresses. " +
             "Use this whenever the user wants to watch something or asks where to watch it. " +
             "Report only what this tool returns — never invent, guess or modify a URL, and if it finds nothing, say so.",
     )
@@ -63,6 +64,10 @@ class PlayableSourceTools(
 
         fromPlaylists(subjectId, episodes)?.let { hits ->
             return encode(subjectId, title, "自备片单", hits)
+        }
+
+        fromRuleSources(subjectId, title, epNumber)?.let { (ruleName, hits) ->
+            return encode(subjectId, title, "第三方接口 · $ruleName", hits)
         }
 
         val pages = candidatePages(epNumber, title, schedule)
@@ -100,6 +105,30 @@ class PlayableSourceTools(
                 .filter { it.second.kind == PlaylistEntryKind.DIRECT }
                 .map { (playlistName, entry) -> entry.toPlayableSource(subjectId, playlistName) }
         return playable.ifEmpty { null }
+    }
+
+    /**
+     * 用户配置的第三方取源接口（`PlaybackSourceRule` 中 kind = SOURCE 的规则）。
+     *
+     * 按启用顺序逐条试，第一条解析到结果就返回；每条规则只按其模板发一次请求。
+     */
+    private suspend fun fromRuleSources(
+        subjectId: Long,
+        title: String,
+        epNumber: Int,
+    ): Pair<String, List<PlayableSource>>? {
+        val rules = settingsRepository.playbackRules.first().filter { it.isEnabled && it.kind == PlaybackRuleKind.SOURCE }
+        for (rule in rules) {
+            val hits =
+                playbackResolverRepository.resolveTemplate(
+                    url = rule.resolveUrl(title = title, ep = if (epNumber > 0) epNumber.toString() else "", subjectId = subjectId),
+                    headers = rule.headers,
+                    epNumber = if (epNumber > 0) epNumber.toFloat() else 0f,
+                    siteName = rule.name,
+                )
+            if (hits.isNotEmpty()) return rule.name to hits
+        }
+        return null
     }
 
     /** 待解析页面：排期记录的来源站优先，没有记录时退到 B 站搜索页 */

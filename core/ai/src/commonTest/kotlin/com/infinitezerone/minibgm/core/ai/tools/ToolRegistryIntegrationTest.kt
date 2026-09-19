@@ -30,6 +30,13 @@ class ToolRegistryIntegrationTest {
                             epNumber: Float,
                             siteName: String,
                         ): List<PlayableSource> = emptyList()
+
+                        override suspend fun resolveTemplate(
+                            url: String,
+                            headers: Map<String, String>,
+                            epNumber: Float,
+                            siteName: String,
+                        ): List<PlayableSource> = emptyList()
                     },
             )
 

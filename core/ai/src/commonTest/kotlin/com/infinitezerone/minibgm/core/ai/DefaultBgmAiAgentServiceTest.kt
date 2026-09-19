@@ -52,6 +52,13 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                                 epNumber: Float,
                                 siteName: String,
                             ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
+
+                            override suspend fun resolveTemplate(
+                                url: String,
+                                headers: Map<String, String>,
+                                epNumber: Float,
+                                siteName: String,
+                            ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
                         }
                     }
                 },
