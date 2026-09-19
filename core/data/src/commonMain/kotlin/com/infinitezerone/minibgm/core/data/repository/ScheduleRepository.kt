@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
+import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
@@ -62,6 +63,16 @@ interface ScheduleRepository {
      * 3) 逐话播出事件同步（AniList 真值 + broadcast 规则推算）并仲裁回写。
      */
     suspend fun syncBangumiData(force: Boolean = false): AppResult<Unit>
+
+    /**
+     * 本地别名词典容错搜索（UX_REMEDIATION 06-A）：
+     * 对 Room 缓存的排期条目（bangumi-data 已同步窗口内）按归一化名称做容错匹配。
+     * 供搜索页离线降级与别名兜底使用。
+     */
+    suspend fun searchLocalSubjects(
+        query: String,
+        limit: Int = 8,
+    ): List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch>
 
     /** 放送时刻表默认筛选：false 为全部，true 为仅展示我追的番 */
     suspend fun getScheduleDefaultOnlyWatching(): Boolean
@@ -273,6 +284,26 @@ class ScheduleRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("同步番组数据"))
         }
+
+    override suspend fun searchLocalSubjects(
+        query: String,
+        limit: Int,
+    ): List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch> {
+        if (query.isBlank()) return emptyList()
+        val entities = scheduleDao.getAllSchedulesList()
+        val index =
+            SearchAliasIndex(
+                entries =
+                    entities.map { entity ->
+                        SearchAliasIndex.Entry(
+                            subjectId = entity.bgmId,
+                            title = entity.title,
+                            titleCn = entity.titleCn,
+                        )
+                    },
+            )
+        return index.search(query, limit)
+    }
 
     private fun enrichExistingEntities(
         existingEntities: List<AirScheduleEntity>,

@@ -159,6 +159,16 @@ fun SearchScreen(
                         onToggleCollection = viewModel::toggleCollection,
                         onLoadMore = viewModel::loadMore,
                         onSubjectClick = onSubjectClick,
+                        localMatches = uiState.localMatches,
+                        offlineNotice = uiState.offlineNotice,
+                        initialListScrollIndex = viewModel.listScrollIndex,
+                        initialListScrollOffset = viewModel.listScrollOffset,
+                        initialGridScrollIndex = viewModel.gridScrollIndex,
+                        initialGridScrollOffset = viewModel.gridScrollOffset,
+                        searchGeneration = viewModel.searchGeneration,
+                        onListScrollPositionChange = viewModel::onListScrollPositionChanged,
+                        onGridScrollPositionChange = viewModel::onGridScrollPositionChanged,
+                        onRetrySearch = { viewModel.search() },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

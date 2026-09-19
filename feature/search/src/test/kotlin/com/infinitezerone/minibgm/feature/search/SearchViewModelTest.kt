@@ -2,12 +2,14 @@ package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.LocalSubjectMatch
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchResult
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,7 +32,8 @@ class SearchViewModelTest {
         searchRepo: FakeSearchRepository = FakeSearchRepository(),
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
         authRepo: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
-    ) = SearchViewModel(searchRepo, collectionRepo, authRepo)
+        scheduleRepo: FakeScheduleRepository = FakeScheduleRepository(),
+    ) = SearchViewModel(searchRepo, collectionRepo, authRepo, scheduleRepo)
 
     @Test
     fun initialStateIsEmptyAndNotLoading() {
@@ -512,5 +515,62 @@ class SearchViewModelTest {
             assertEquals(3, searchRepo.searchCallCount)
             assertEquals(40, searchRepo.lastSearchOffset)
             assertEquals(44, viewModel.uiState.value.results.size)
+        }
+
+    @Test
+    fun offlineFallback_networkErrorShowsLocalMatchesWithSoftNotice() =
+        runTest {
+            val scheduleRepo =
+                FakeScheduleRepository().apply {
+                    searchLocalSubjectsResult = listOf(LocalSubjectMatch(bgmId = 42L, title = "Frieren", titleCn = "葬送的芙莉莲"))
+                }
+            val searchRepo = FakeSearchRepository().apply { searchResult = AppResult.Error(RuntimeException("超时")) }
+            val viewModel = createViewModel(searchRepo = searchRepo, scheduleRepo = scheduleRepo)
+
+            viewModel.search("芙莉莲")
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.error == null)
+            assertTrue(state.offlineNotice != null)
+            assertEquals(listOf(42L), state.localMatches.map { it.bgmId })
+        }
+
+    @Test
+    fun aliasFallback_successResultsMissingLocalExactMatch_supplementsLocalHit() =
+        runTest {
+            val scheduleRepo =
+                FakeScheduleRepository().apply {
+                    searchLocalSubjectsResult = listOf(LocalSubjectMatch(bgmId = 42L, title = "Frieren", titleCn = "葬送的芙莉莲"))
+                }
+            val viewModel = createViewModel(scheduleRepo = scheduleRepo)
+
+            viewModel.search("葬送的芙莉莲")
+            advanceUntilIdle()
+
+            // 网络结果（sampleSubject id != 42）未覆盖本地精确命中 → 别名兜底展示
+            assertTrue(
+                viewModel.uiState.value.localMatches
+                    .any { it.bgmId == 42L },
+            )
+            assertTrue(viewModel.uiState.value.offlineNotice == null)
+        }
+
+    @Test
+    fun scrollPosition_memoryAndResetGeneration() =
+        runTest {
+            val viewModel = createViewModel()
+
+            viewModel.onListScrollPositionChanged(index = 7, offset = 120)
+            assertEquals(7, viewModel.listScrollIndex)
+            assertEquals(120, viewModel.listScrollOffset)
+
+            val generationBefore = viewModel.searchGeneration
+            viewModel.search("某作品")
+            advanceUntilIdle()
+
+            assertEquals(generationBefore + 1, viewModel.searchGeneration)
+            assertEquals(0, viewModel.listScrollIndex)
+            assertEquals(0, viewModel.listScrollOffset)
         }
 }
