@@ -150,32 +150,45 @@ private fun rememberAmbientGlowBrush(
     }
 }
 
-/** 从 Coil 解码结果中提取主色；非位图解码（如 GIF 帧/自定义 Image）返回 null，光晕自然缺省 */
-internal fun Image.toDominantColor(): Color? {
-    val source = (this as? BitmapImage)?.bitmap ?: return null
-    val pixels = source.toDownsampledPixels() ?: return null
-    return extractDominantColor(pixels)?.let(::Color)
-}
+/** 从 Coil 解码结果中提取主色；非位图解码（如 GIF 帧/自定义 Image）返回 null，光晕自然缺省。
+ *  任何位图读取异常一律吞掉降级为 null——光晕是纯装饰，绝不能让页面崩溃。
+ */
+internal fun Image.toDominantColor(): Color? =
+    runCatching {
+        val source = (this as? BitmapImage)?.bitmap ?: return@runCatching null
+        val pixels = source.toDownsampledPixels() ?: return@runCatching null
+        extractDominantColor(pixels)?.let(::Color)
+    }.getOrNull()
 
 private fun Bitmap.toDownsampledPixels(): IntArray? {
     if (width <= 0 || height <= 0) return null
-    val shorterSide = min(width, height)
+    // Coil 在真机上默认解码为 Config#HARDWARE（仅存 GPU，getPixels 不支持），
+    // 需先 copy 成软件位图才能读像素；copy 对硬件位图是合法操作
+    val readable =
+        if (config == Bitmap.Config.HARDWARE) {
+            runCatching { copy(Bitmap.Config.ARGB_8888, false) }.getOrNull() ?: return null
+        } else {
+            this
+        }
+    val shorterSide = min(readable.width, readable.height)
     val scale =
         if (shorterSide > AmbientGlowDefaults.SAMPLE_SHORTER_SIDE_CAP) {
             AmbientGlowDefaults.SAMPLE_SHORTER_SIDE_CAP.toFloat() / shorterSide
         } else {
             1f
         }
-    val targetWidth = max(1, (width * scale).roundToInt())
-    val targetHeight = max(1, (height * scale).roundToInt())
+    val targetWidth = max(1, (readable.width * scale).roundToInt())
+    val targetHeight = max(1, (readable.height * scale).roundToInt())
     val sampled =
-        if (targetWidth == width && targetHeight == height) {
-            this
+        if (targetWidth == readable.width && targetHeight == readable.height) {
+            readable
         } else {
-            Bitmap.createScaledBitmap(this, targetWidth, targetHeight, true)
+            Bitmap.createScaledBitmap(readable, targetWidth, targetHeight, true)
         }
     val pixels = IntArray(targetWidth * targetHeight)
     sampled.getPixels(pixels, 0, targetWidth, 0, 0, targetWidth, targetHeight)
-    if (sampled !== this) sampled.recycle()
+    // 只回收我们自己创建的缩放/拷贝产物，原始位图归 Coil 所有
+    if (sampled !== readable) sampled.recycle()
+    if (readable !== this) readable.recycle()
     return pixels
 }
