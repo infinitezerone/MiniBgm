@@ -45,6 +45,15 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                         com.infinitezerone.minibgm.core.testing.repository
                             .FakeSearchRepository()
                     }
+                    single<com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository> {
+                        object : com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository {
+                            override suspend fun resolvePages(
+                                pageUrls: List<String>,
+                                epNumber: Float,
+                                siteName: String,
+                            ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
+                        }
+                    }
                 },
             )
         }

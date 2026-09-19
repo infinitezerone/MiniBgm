@@ -1,9 +1,12 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
 import ai.koog.agents.core.tools.ToolRegistry
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -15,14 +18,27 @@ class ToolRegistryIntegrationTest {
         val scheduleTools = ScheduleTools(FakeScheduleRepository())
         val subjectTools = SubjectTools(FakeSearchRepository(), FakeSubjectRepository())
         val collectionTools = CollectionTools(FakeCollectionRepository())
-        val sourceSearchTools = SourceSearchTools(FakeScheduleRepository(), FakeSubjectRepository())
+        val playableSourceTools =
+            PlayableSourceTools(
+                scheduleRepository = FakeScheduleRepository(),
+                subjectRepository = FakeSubjectRepository(),
+                settingsRepository = FakeSettingsRepository(),
+                playbackResolverRepository =
+                    object : PlaybackResolverRepository {
+                        override suspend fun resolvePages(
+                            pageUrls: List<String>,
+                            epNumber: Float,
+                            siteName: String,
+                        ): List<PlayableSource> = emptyList()
+                    },
+            )
 
         val registry =
             ToolRegistry {
                 tools(scheduleTools)
                 tools(subjectTools)
                 tools(collectionTools)
-                tools(sourceSearchTools)
+                tools(playableSourceTools)
             }
 
         val toolNames = registry.tools.map { it.name }
@@ -45,11 +61,11 @@ class ToolRegistryIntegrationTest {
         assertNotNull(getScheduleDescriptor)
         assertTrue(getScheduleDescriptor.description.contains("broadcast schedule"))
 
-        // Source search tool：工具描述必须写明"只返回页面链接、绝非媒体直链"
-        assertTrue(toolNames.contains("findWatchPages"))
-        val findWatchPagesDescriptor = registry.getTool("findWatchPages").descriptor
-        assertNotNull(findWatchPagesDescriptor)
-        assertTrue(findWatchPagesDescriptor.description.contains("WEBPAGE"))
-        assertTrue(findWatchPagesDescriptor.description.contains("NEVER direct video file/stream URLs"))
+        // 找源工具：描述必须写明"返回结构化可播数据、且模型只能转述工具结果"
+        assertTrue(toolNames.contains("findPlayableSources"))
+        val playableDescriptor = registry.getTool("findPlayableSources").descriptor
+        assertNotNull(playableDescriptor)
+        assertTrue(playableDescriptor.description.contains("structured playback data"))
+        assertTrue(playableDescriptor.description.contains("never invent"))
     }
 }

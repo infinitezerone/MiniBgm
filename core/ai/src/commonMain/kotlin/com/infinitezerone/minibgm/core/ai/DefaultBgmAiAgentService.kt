@@ -12,8 +12,8 @@ import ai.koog.prompt.llm.LLMCapability
 import ai.koog.prompt.llm.LLMProvider
 import ai.koog.prompt.llm.LLModel
 import com.infinitezerone.minibgm.core.ai.tools.CollectionTools
+import com.infinitezerone.minibgm.core.ai.tools.PlayableSourceTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
-import com.infinitezerone.minibgm.core.ai.tools.SourceSearchTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -29,7 +29,7 @@ class DefaultBgmAiAgentService(
     val scheduleTools: ScheduleTools? = null,
     val subjectTools: SubjectTools? = null,
     val collectionTools: CollectionTools? = null,
-    val sourceSearchTools: SourceSearchTools? = null,
+    val playableSourceTools: PlayableSourceTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
@@ -136,7 +136,7 @@ class DefaultBgmAiAgentService(
         scheduleTools = null,
         subjectTools = null,
         collectionTools = null,
-        sourceSearchTools = null,
+        playableSourceTools = null,
         pendingActionExecutor = null,
         pendingActionStore = null,
         agentRunner = { config, prompt, _ -> agentRunner(config, prompt) },
@@ -147,7 +147,7 @@ class DefaultBgmAiAgentService(
             scheduleTools?.let { tools(it) }
             subjectTools?.let { tools(it) }
             collectionTools?.let { tools(it) }
-            sourceSearchTools?.let { tools(it) }
+            playableSourceTools?.let { tools(it) }
         }
 
     override suspend fun execute(prompt: String): AppResult<String> {
