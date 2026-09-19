@@ -79,7 +79,7 @@ fun extractDominantColor(pixels: IntArray): Int? {
     return normalizeArgbLuminance((0xFF shl 24) or color)
 }
 
-/** ARGB 颜色的相对亮度（Rec. 601 加权，0f..1f，不考虑 alpha） */
+/** ARGB 颜色的相对亮度（Rec. 709 加权 0.2126/0.7152/0.0722，0f..1f，不考虑 alpha） */
 fun argbLuminance(argb: Int): Float {
     val red = (argb shr 16) and 0xFF
     val green = (argb shr 8) and 0xFF
