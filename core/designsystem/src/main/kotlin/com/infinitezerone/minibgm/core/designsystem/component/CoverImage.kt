@@ -16,11 +16,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.ambient.toDominantColor
 
 /**
  * 封面或头像在无有效图片 URL 时的占位语义类型
@@ -47,6 +49,7 @@ fun CoverImage(
     alignment: Alignment = Alignment.Center,
     placeholder: CoverPlaceholder = CoverPlaceholder.Subject,
     fallbackIcon: ImageVector? = null,
+    onDominantColorExtracted: ((Color?) -> Unit)? = null,
 ) {
     val trimmedUrl = remember(url) { url.trim() }
     val resolvedIcon: ImageVector? =
@@ -70,6 +73,10 @@ fun CoverImage(
                 contentDescription = contentDescription,
                 contentScale = contentScale,
                 alignment = alignment,
+                onSuccess = { success ->
+                    onDominantColorExtracted?.invoke(success.result.image.toDominantColor())
+                },
+                onError = { onDominantColorExtracted?.invoke(null) },
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (resolvedIcon != null) {

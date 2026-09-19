@@ -13,9 +13,33 @@ data class StreamingAppTarget(
 )
 
 /**
+ * 外部本地/串流播放器（mpv、VLC 等）的唤起目标描述：
+ * 对应一条 ACTION_VIEW 意图——data 为视频直链 URL、type 为 [mimeType]、setPackage 指定 [packageName]。
+ *
+ * 限制：外部播放器只能通过系统意图接收播放地址，意图无法携带 Referer、Cookie、User-Agent 等
+ * 自定义请求头；若直链依赖这类请求头才能拉流（如部分网盘、解析接口直链），在外部播放器中将无法
+ * 正常播放。需要自定义请求头的场景应使用应用内播放器（PlayerRoute.requestHeaders）。
+ */
+data class ExternalPlayerTarget(
+    val appName: String,
+    val packageName: String,
+    val videoUrl: String,
+    val mimeType: String = "video/*",
+    val action: String = ACTION_VIEW,
+) {
+    companion object {
+        /** 标准查看动作，即 Intent.ACTION_VIEW 的字符串值（commonMain 纯 Kotlin，不引 android 依赖） */
+        const val ACTION_VIEW = "android.intent.action.VIEW"
+    }
+}
+
+/**
  * 播放源 URL 原生 Deep Link 识别与解析分发器
  */
 object StreamingIntentResolver {
+    const val MPV_PACKAGE_NAME = "is.xyz.mpv"
+    const val VLC_PACKAGE_NAME = "org.videolan.vlc"
+
     val BILIBILI_PACKAGE_NAMES =
         listOf(
             "tv.danmaku.bili",
@@ -267,5 +291,30 @@ object StreamingIntentResolver {
             )
         }
         return null
+    }
+
+    /**
+     * 判断是否为可直接交给外部播放器（mpv、VLC）的 http/https 流媒体直链。
+     * 自定义 scheme、本地文件路径等非 http(s) 地址一律不适用外部播放器。
+     */
+    fun isHttpStreamUrl(url: String): Boolean {
+        // scheme 大小写不敏感（RFC 3986），统一转小写后再判断
+        val trimmed = url.trim().lowercase()
+        return trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    }
+
+    /**
+     * 构建 mpv 与 VLC 的 ACTION_VIEW 唤起目标列表：
+     * data = 视频 URL、type 为视频 MIME 类型、setPackage 指定各播放器包名。
+     * 仅接受 http/https 直链，其余（自定义 scheme、空串等）返回空列表。
+     * 注意：外部播放器意图无法携带 Referer 等自定义请求头（见 [ExternalPlayerTarget]）。
+     */
+    fun buildExternalPlayerTargets(videoUrl: String): List<ExternalPlayerTarget> {
+        if (!isHttpStreamUrl(videoUrl)) return emptyList()
+        val url = videoUrl.trim()
+        return listOf(
+            ExternalPlayerTarget(appName = "mpv", packageName = MPV_PACKAGE_NAME, videoUrl = url),
+            ExternalPlayerTarget(appName = "VLC", packageName = VLC_PACKAGE_NAME, videoUrl = url),
+        )
     }
 }
