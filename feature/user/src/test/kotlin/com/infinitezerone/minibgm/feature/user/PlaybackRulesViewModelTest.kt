@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
@@ -58,6 +59,27 @@ class PlaybackRulesViewModelTest {
             val event = viewModel.events.first()
             assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
             assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("Anime1"))
+        }
+
+    @Test
+    fun addRule_asSourceKind_parsesHeaderLines() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.addRule(
+                name = "我的接口",
+                urlTemplate = "https://api.example.com/play?id={subjectId}&ep={ep}",
+                kind = PlaybackRuleKind.SOURCE,
+                headersText = "Referer: https://api.example.com/\n\nBrokenLine\nX-Key: abc",
+            )
+
+            val rule = fakeRepo.playbackRules.first().single()
+            assertEquals(PlaybackRuleKind.SOURCE, rule.kind)
+            assertEquals(
+                mapOf("Referer" to "https://api.example.com/", "X-Key" to "abc"),
+                rule.headers,
+            )
         }
 
     @Test

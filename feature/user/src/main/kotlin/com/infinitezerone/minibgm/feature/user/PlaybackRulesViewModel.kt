@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import kotlinx.coroutines.channels.Channel
@@ -114,6 +115,8 @@ class PlaybackRulesViewModel(
         name: String,
         urlTemplate: String,
         description: String = "",
+        kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
+        headersText: String = "",
     ) {
         val trimmedName = name.trim()
         val trimmedUrl = urlTemplate.trim()
@@ -129,6 +132,8 @@ class PlaybackRulesViewModel(
                     urlTemplate = trimmedUrl,
                     description = description.trim(),
                     isEnabled = true,
+                    kind = kind,
+                    headers = parseHeaderLines(headersText),
                 )
             settingsRepository.addPlaybackRule(rule)
             sendSnackbar("已添加规则：$trimmedName")
@@ -140,6 +145,8 @@ class PlaybackRulesViewModel(
         name: String,
         urlTemplate: String,
         description: String = "",
+        kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
+        headersText: String = "",
     ) {
         val trimmedName = name.trim()
         val trimmedUrl = urlTemplate.trim()
@@ -156,6 +163,8 @@ class PlaybackRulesViewModel(
                     urlTemplate = trimmedUrl,
                     description = description.trim(),
                     isEnabled = existing?.isEnabled ?: true,
+                    kind = kind,
+                    headers = parseHeaderLines(headersText),
                 )
             settingsRepository.updatePlaybackRule(rule)
             sendSnackbar("已更新规则：$trimmedName")
@@ -211,4 +220,16 @@ class PlaybackRulesViewModel(
             _events.send(PlaybackRulesUiEvent.ShowSnackbar(message))
         }
     }
+
+/** 规则编辑器里的请求头按 "Key: Value" 每行一条书写；空行与无冒号的行忽略 */
+    internal fun parseHeaderLines(text: String): Map<String, String> =
+        text
+            .lines()
+            .mapNotNull { line ->
+                val separator = line.indexOf(':')
+                if (separator <= 0) return@mapNotNull null
+                val name = line.substring(0, separator).trim()
+                val value = line.substring(separator + 1).trim()
+                if (name.isEmpty() || value.isEmpty()) null else name to value
+            }.toMap()
 }

@@ -65,6 +65,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import kotlinx.coroutines.Dispatchers
@@ -290,11 +291,11 @@ fun PlaybackRulesScreen(
                 isAddingRule = false
                 ruleToEdit = null
             },
-            onConfirm = { name, url, desc ->
+            onConfirm = { name, url, desc, kind, headersText ->
                 if (target != null) {
-                    viewModel.updateRule(target.id, name, url, desc)
+                    viewModel.updateRule(target.id, name, url, desc, kind, headersText)
                 } else {
-                    viewModel.addRule(name, url, desc)
+                    viewModel.addRule(name, url, desc, kind, headersText)
                 }
                 isAddingRule = false
                 ruleToEdit = null
@@ -781,6 +782,15 @@ private fun PlaybackRuleCard(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
             )
 
+            if (rule.kind == PlaybackRuleKind.SOURCE) {
+                Text(
+                    text = "取源接口 · AI 找源时会请求该地址并抽取可播放地址",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -817,11 +827,21 @@ private fun PlaybackRuleCard(
 private fun RuleEditDialog(
     initialRule: PlaybackSourceRule?,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, url: String, desc: String) -> Unit,
+    onConfirm: (name: String, url: String, desc: String, kind: PlaybackRuleKind, headersText: String) -> Unit,
 ) {
     var name by remember(initialRule) { mutableStateOf(initialRule?.name ?: "") }
     var urlTemplate by remember(initialRule) { mutableStateOf(initialRule?.urlTemplate ?: "") }
     var description by remember(initialRule) { mutableStateOf(initialRule?.description ?: "") }
+    var kind by remember(initialRule) { mutableStateOf(initialRule?.kind ?: PlaybackRuleKind.PAGE) }
+    var headersText by remember(initialRule) {
+        mutableStateOf(
+            initialRule
+                ?.headers
+                .orEmpty()
+                .entries
+                .joinToString("\n") { "${it.key}: ${it.value}" },
+        )
+    }
 
     val isEditing = initialRule != null
 
@@ -863,6 +883,37 @@ private fun RuleEditDialog(
                     }
                 }
 
+                // 规则用途：跳转页面只是给用户一个入口；取源接口会真的发请求并抽取可播放地址
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    PlaybackRuleKind.entries.forEach { option ->
+                        FilterChip(
+                            selected = kind == option,
+                            onClick = { kind = option },
+                            label = {
+                                Text(
+                                    text = if (option == PlaybackRuleKind.SOURCE) "取源接口" else "跳转页面",
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                            },
+                        )
+                    }
+                }
+
+                if (kind == PlaybackRuleKind.SOURCE) {
+                    OutlinedTextField(
+                        value = headersText,
+                        onValueChange = { headersText = it },
+                        label = { Text("请求头（可选，每行 Key: Value）") },
+                        placeholder = { Text("Referer: https://example.com/") },
+                        minLines = 2,
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -874,7 +925,7 @@ private fun RuleEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name, urlTemplate, description) },
+                onClick = { onConfirm(name, urlTemplate, description, kind, headersText) },
                 enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
             ) {
                 Text("保存")
