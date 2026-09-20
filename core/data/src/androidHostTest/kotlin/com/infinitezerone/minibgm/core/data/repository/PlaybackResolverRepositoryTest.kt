@@ -407,4 +407,33 @@ class PlaybackResolverRepositoryTest {
             assertEquals("https://cdn.example.com/2.m3u8", source.url)
             assertEquals("第2集", source.label)
         }
+
+    @Test
+    fun `搜索列表页严格忽略跨域社交外链`() =
+        runTest {
+            val pages =
+                mapOf(
+                    "https://anime1.me/?s=test" to
+                        """
+                        <article>
+                            <a href="https://twitter.com/Anime1Me">Twitter</a>
+                            <a href="https://t.me/anime1notify">Telegram</a>
+                            <h2><a href="https://anime1.me/21133">测试动画 [01]</a></h2>
+                        </article>
+                        """.trimIndent(),
+                    "https://anime1.me/21133" to
+                        """
+                        <video src="https://cdn.example.com/ep1.mp4"></video>
+                        """.trimIndent(),
+                )
+            val fake = FakePageFetchService(pages)
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val sources = repo.resolvePages(listOf("https://anime1.me/?s=test"), epNumber = 1f, siteName = "Anime1")
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/ep1.mp4", sources.single().url)
+            assertTrue("twitter" !in fake.requested.joinToString())
+            assertTrue("t.me" !in fake.requested.joinToString())
+        }
 }
