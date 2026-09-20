@@ -70,9 +70,13 @@ data class ScheduleUiState(
     val schedules: List<AirSchedule>
         get() = weeklySchedules[selectedWeekday].orEmpty()
 
+    /** 本地是否已有时刻表数据（用于本地优先策略，有数据时绝不展示全屏骨架图） */
+    val hasSchedules: Boolean
+        get() = weeklySchedules.values.any { it.isNotEmpty() }
+
     /** 是否处于离线缓存展示状态：有网络错误发生但本地有缓存数据 */
     val isOfflineCache: Boolean
-        get() = error != null && weeklySchedules.values.any { it.isNotEmpty() }
+        get() = error != null && hasSchedules
 
     /** 当前选中星期经过筛选与时间线排序后的条目 */
     val currentDaySchedules: List<AirSchedule>

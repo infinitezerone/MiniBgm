@@ -45,6 +45,7 @@ class DefaultBgmAiAgentService(
     val subjectTools: SubjectTools? = null,
     val collectionTools: CollectionTools? = null,
     val playableSourceTools: PlayableSourceTools? = null,
+    val communityTools: com.infinitezerone.minibgm.core.ai.tools.CommunityTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
@@ -163,6 +164,7 @@ class DefaultBgmAiAgentService(
             subjectTools?.let { tools(it) }
             collectionTools?.let { tools(it) }
             playableSourceTools?.let { tools(it) }
+            communityTools?.let { tools(it) }
         }
 
     override suspend fun execute(prompt: String): AppResult<String> {

@@ -45,20 +45,20 @@ class PlaybackRulesViewModelTest {
             val viewModel = PlaybackRulesViewModel(fakeRepo)
 
             viewModel.addRule(
-                name = "Anime1",
-                urlTemplate = "https://anime1.me/?s={title}",
-                description = "繁体搜索源",
+                name = "自定义规则A",
+                urlTemplate = "https://example.com/?s={title}",
+                description = "测试搜索源",
             )
 
             val rules = fakeRepo.playbackRules.first()
             assertEquals(1, rules.size)
-            assertEquals("Anime1", rules.first().name)
-            assertEquals("https://anime1.me/?s={title}", rules.first().urlTemplate)
+            assertEquals("自定义规则A", rules.first().name)
+            assertEquals("https://example.com/?s={title}", rules.first().urlTemplate)
             assertTrue(rules.first().isEnabled)
 
             val event = viewModel.events.first()
             assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
-            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("Anime1"))
+            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("自定义规则A"))
         }
 
     @Test
@@ -312,5 +312,63 @@ class PlaybackRulesViewModelTest {
 
             viewModel.clearPlaylists()
             assertTrue(fakeRepo.playlists.first().isEmpty())
+        }
+
+    @Test
+    fun startAiDiscovery_success_updatesDiscoveredSourcesAndShowsDialog() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val sampleSources =
+                listOf(
+                    com.infinitezerone.minibgm.core.model.DiscoveredSource(
+                        name = "示例动漫源",
+                        urlTemplate = "https://example.com/search?q={title}",
+                        latencyMs = 150L,
+                        isAlive = true,
+                    ),
+                )
+            fakeRepo.communityDiscoveryResult =
+                com.infinitezerone.minibgm.core.common.AppResult
+                    .Success(sampleSources)
+
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+            viewModel.startAiDiscovery()
+
+            val state = viewModel.uiState.first { it.showDiscoveryDialog }
+            assertFalse(state.isDiscovering)
+            assertEquals(1, state.discoveredSources.size)
+            assertEquals("示例动漫源", state.discoveredSources.first().name)
+
+            viewModel.dismissDiscoveryDialog()
+            val stateAfterDismiss = viewModel.uiState.first { !it.showDiscoveryDialog }
+            assertFalse(stateAfterDismiss.showDiscoveryDialog)
+        }
+
+    @Test
+    fun importDiscoveredSources_convertsAndImportsRules() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            val sampleSources =
+                listOf(
+                    com.infinitezerone.minibgm.core.model.DiscoveredSource(
+                        name = "社区测试源",
+                        urlTemplate = "https://example.com/?s={title}",
+                        latencyMs = 80L,
+                        isAlive = true,
+                    ),
+                )
+
+            viewModel.importDiscoveredSources(sampleSources)
+
+            val rules = fakeRepo.playbackRules.first()
+            assertEquals(1, rules.size)
+            assertEquals("社区测试源", rules.first().name)
+            assertEquals("https://example.com/?s={title}", rules.first().urlTemplate)
+
+            val event = viewModel.events.first()
+            assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
+            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("成功导入 1 条"))
         }
 }

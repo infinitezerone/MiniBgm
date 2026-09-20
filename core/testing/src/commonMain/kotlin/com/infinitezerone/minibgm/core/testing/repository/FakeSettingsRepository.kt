@@ -160,4 +160,14 @@ class FakeSettingsRepository(
     fun setPlaybackPositions(positions: Map<String, Long>) {
         playbackPositionsState.value = positions
     }
+
+    var communityDiscoveryResult:
+        com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>> =
+        com.infinitezerone.minibgm.core.common.AppResult
+            .Success(emptyList())
+
+    override suspend fun discoverCommunityPlaybackSources(
+        customSubscriptionUrl: String?,
+    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>> =
+        communityDiscoveryResult
 }

@@ -47,6 +47,19 @@ sealed interface PendingAction {
         val isWatched: Boolean = true,
         override val description: String,
     ) : PendingAction
+
+    /**
+     * 导入社区播放规则提案。
+     */
+    @Serializable
+    @SerialName("import_playback_rules")
+    data class ImportPlaybackRules(
+        override val actionId: String,
+        override val subjectId: Long = 0L,
+        val sourceName: String,
+        val rules: List<PlaybackSourceRule>,
+        override val description: String,
+    ) : PendingAction
 }
 
 /**

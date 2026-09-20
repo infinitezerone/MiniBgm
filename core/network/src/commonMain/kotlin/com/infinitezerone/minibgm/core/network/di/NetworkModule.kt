@@ -71,4 +71,8 @@ fun networkModule(
         single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }
         single<BilibiliService> { BilibiliServiceImpl(get(named("unauthenticated"))) }
         single<PageFetchService> { PageFetchServiceImpl(get(named("unauthenticated"))) }
+        single<com.infinitezerone.minibgm.core.network.CommunitySubscriptionService> {
+            com.infinitezerone.minibgm.core.network
+                .CommunitySubscriptionServiceImpl(get(named("unauthenticated")))
+        }
     }

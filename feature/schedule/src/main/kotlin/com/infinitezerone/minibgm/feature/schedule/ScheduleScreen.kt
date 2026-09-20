@@ -276,7 +276,7 @@ fun ScheduleScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 when {
-                    uiState.isLoading && uiState.weeklySchedules.isEmpty() -> {
+                    !uiState.hasSchedules && uiState.isLoading && uiState.weeklySchedules.isEmpty() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.TopCenter,
@@ -287,7 +287,7 @@ fun ScheduleScreen(
                         }
                     }
 
-                    uiState.error != null && uiState.weeklySchedules.isEmpty() -> {
+                    !uiState.hasSchedules && uiState.error != null && uiState.weeklySchedules.isEmpty() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center,
