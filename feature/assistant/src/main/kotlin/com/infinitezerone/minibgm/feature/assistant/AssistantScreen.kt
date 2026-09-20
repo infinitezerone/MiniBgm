@@ -130,6 +130,7 @@ fun AssistantScreen(
         onClearConversation = viewModel::clearConversation,
         onToggleConfigDialog = viewModel::toggleConfigDialog,
         onSaveConfig = viewModel::saveAiConfig,
+        onFetchModelsAsync = viewModel::fetchAvailableModels,
         onBackClick = onBackClick,
         modifier = modifier,
     )
