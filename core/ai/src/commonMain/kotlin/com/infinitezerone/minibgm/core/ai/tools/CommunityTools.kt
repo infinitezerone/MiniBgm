@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
@@ -37,8 +38,9 @@ class CommunityTools(
             "Search keywords for anime playback rules, such as 'anime playback rules', 'bangumi rules', or an open-source query.",
         )
         keywords: String = "",
-    ): String =
-        when (val result = settingsRepository.searchCommunitySubscriptions(keywords)) {
+    ): String {
+        AiToolActivity.report("检索社区订阅规则", if (keywords.isBlank()) "热门规则" else keywords)
+        return when (val result = settingsRepository.searchCommunitySubscriptions(keywords)) {
             is AppResult.Success -> {
                 val candidates = result.data
                 if (candidates.isEmpty()) {
@@ -71,20 +73,24 @@ class CommunityTools(
                 "Searching community subscriptions in progress..."
             }
         }
+    }
 
     @OptIn(ExperimentalUuidApi::class)
     @Tool
     @LLMDescription(
-        "Fetch and test any remote subscription JSON URL or candidate rules JSON array, probe connectivity of all rules, and generate an import proposal for user confirmation. (HITL SAFE)",
+        "Fetch and test any remote subscription URL (TVBox / MiniBgm / JSON), single third-party anime website URL, or candidate rules JSON array, probe connectivity of all rules, and generate an import proposal for user confirmation. (HITL SAFE)",
     )
     suspend fun validateAndTestSubscription(
-        @LLMDescription("Remote subscription JSON URL or candidate rules JSON array to validate, probe and import.")
+        @LLMDescription(
+            "Remote subscription URL (TVBox/MiniBgm), single anime site URL, or candidate rules JSON array to validate, probe and import.",
+        )
         subscriptionUrl: String,
     ): String {
         val trimmed = subscriptionUrl.trim()
         if (trimmed.isBlank()) {
             return "Subscription URL must not be blank."
         }
+        AiToolActivity.report("验证并测速规则", trimmed.take(40))
 
         return when (val result = settingsRepository.validateAndTestSubscription(trimmed)) {
             is AppResult.Success -> {
@@ -147,6 +153,7 @@ class CommunityTools(
         if (urlParam != null) {
             return validateAndTestSubscription(urlParam)
         }
+        AiToolActivity.report("发现社区动漫源", "开源社区检索与测速")
 
         return when (val result = settingsRepository.discoverCommunityPlaybackSources(null)) {
             is AppResult.Success -> {

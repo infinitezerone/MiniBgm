@@ -52,6 +52,8 @@ val subjectModule =
                 authRepository = get(),
                 settingsRepository = get(),
                 failureStore = get(),
+                subjectRepository = get(),
+                playbackResolverRepository = get(),
             )
         }
     }

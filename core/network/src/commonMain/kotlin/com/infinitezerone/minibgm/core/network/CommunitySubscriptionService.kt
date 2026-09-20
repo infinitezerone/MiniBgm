@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.network
 import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
+import com.infinitezerone.minibgm.core.model.TvBoxConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -205,10 +206,13 @@ class CommunitySubscriptionServiceImpl(
         val candidateUrls =
             listOf(
                 "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/rules.json",
+                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/tvbox.json",
                 "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/anime-rules.json",
                 "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/sources.json",
                 "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/playback.json",
+                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/custom.json",
                 "https://fastly.jsdelivr.net/gh/${item.full_name}@${item.default_branch}/rules.json",
+                "https://fastly.jsdelivr.net/gh/${item.full_name}@${item.default_branch}/tvbox.json",
                 "https://fastly.jsdelivr.net/gh/${item.full_name}@${item.default_branch}/anime-rules.json",
             )
 
@@ -236,15 +240,36 @@ class CommunitySubscriptionServiceImpl(
         return fetchSourcesFromUrl(target)
     }
 
-    private fun parseSourcesFromText(rawText: String): List<DiscoveredSource> {
+    private fun parseSourcesFromText(
+        rawText: String,
+        pageUrl: String = "",
+    ): List<DiscoveredSource> {
         val trimmed = rawText.trim()
-        return runCatching {
-            if (trimmed.startsWith("[")) {
-                json.decodeFromString<List<DiscoveredSource>>(trimmed)
-            } else {
-                json.decodeFromString<CommunitySubscriptionPackage>(trimmed).sources
-            }
-        }.getOrElse { emptyList() }
+        if (trimmed.isBlank()) return emptyList()
+
+        // 1. 直接解析 MiniBgm 规则数组
+        if (trimmed.startsWith("[")) {
+            val directList = runCatching { json.decodeFromString<List<DiscoveredSource>>(trimmed) }.getOrNull()
+            if (!directList.isNullOrEmpty()) return directList
+        }
+
+        // 2. 解析 MiniBgm 标准订阅包
+        val pkg = runCatching { json.decodeFromString<CommunitySubscriptionPackage>(trimmed) }.getOrNull()
+        if (pkg != null && pkg.sources.isNotEmpty()) {
+            return pkg.sources
+        }
+
+        // 3. 解析 TVBox 标准配置包 {"sites": [...]}
+        val tvBox = runCatching { json.decodeFromString<TvBoxConfig>(trimmed) }.getOrNull()
+        if (tvBox != null && tvBox.sites.isNotEmpty()) {
+            val converted = tvBox.sites.mapNotNull { it.toDiscoveredSource() }
+            if (converted.isNotEmpty()) return converted
+        }
+
+        // 4. 纯 HTML 文本兜底提取
+        extractSourceFromHtml(trimmed, pageUrl)?.let { return listOf(it) }
+
+        return emptyList()
     }
 
     private suspend fun fetchSourcesFromUrl(url: String): List<DiscoveredSource> {
@@ -259,10 +284,88 @@ class CommunitySubscriptionServiceImpl(
             if (!response.status.isSuccess()) return emptyList()
 
             val rawText: String = response.body()
-            parseSourcesFromText(rawText)
+            parseSourcesFromText(rawText, url)
         } catch (_: Throwable) {
             emptyList()
         }
+    }
+
+    internal fun extractSourceFromHtml(
+        html: String,
+        pageUrl: String = "",
+    ): DiscoveredSource? {
+        val trimmed = html.trim()
+        if (!isHtmlContent(trimmed)) return null
+
+        val cleanedTitle = extractCleanedTitle(trimmed, pageUrl)
+        val template = extractSearchTemplate(trimmed, pageUrl)
+
+        return DiscoveredSource(
+            name = cleanedTitle,
+            urlTemplate = template,
+            description = "由客户端运行时动态解析网页提取的搜索规则",
+        )
+    }
+
+    private fun isHtmlContent(trimmed: String): Boolean =
+        trimmed.contains("<html", ignoreCase = true) ||
+            trimmed.contains("<title", ignoreCase = true) ||
+            trimmed.contains("<!DOCTYPE", ignoreCase = true)
+
+    private fun extractCleanedTitle(
+        trimmed: String,
+        pageUrl: String,
+    ): String {
+        val titleMatch = Regex("""<title[^>]*>(.*?)</title>""", RegexOption.IGNORE_CASE).find(trimmed)
+        val rawTitle =
+            titleMatch
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                .orEmpty()
+        return rawTitle
+            .replace(Regex("""[-_|–\s]+(首页|在线看|在线动漫|动漫在线|高清|官方网站|最新更新|ACG|官方|APP).*$""", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .ifBlank {
+                if (pageUrl.isNotBlank()) extractHostName(pageUrl) else "第三方动漫站"
+            }
+    }
+
+    private fun extractSearchTemplate(
+        trimmed: String,
+        pageUrl: String,
+    ): String {
+        val cleanOrigin = if (pageUrl.isNotBlank()) extractBaseHost(pageUrl).trimEnd('/') else ""
+        val formActionMatch = Regex("""<form[^>]*action=["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(trimmed)
+        val rawAction =
+            formActionMatch
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                .orEmpty()
+        val inputNameMatch =
+            Regex(
+                """<input[^>]*name=["'](q|query|wd|keyword|search|s|k|word)["']""",
+                RegexOption.IGNORE_CASE,
+            ).find(trimmed)
+        val inputName = inputNameMatch?.groupValues?.get(1)?.trim() ?: "query"
+
+        return when {
+            rawAction.startsWith("http://", ignoreCase = true) || rawAction.startsWith("https://", ignoreCase = true) -> {
+                if (rawAction.contains("?")) "$rawAction&$inputName={title}" else "$rawAction?$inputName={title}"
+            }
+            rawAction.isNotBlank() && cleanOrigin.isNotBlank() -> {
+                val cleanPath = if (rawAction.startsWith("/")) rawAction else "/$rawAction"
+                if (cleanPath == "/") "$cleanOrigin/?$inputName={title}" else "$cleanOrigin$cleanPath?$inputName={title}"
+            }
+            cleanOrigin.isNotBlank() -> "$cleanOrigin/search?query={title}"
+            else -> "/search?query={title}"
+        }
+    }
+
+    private fun extractHostName(url: String): String {
+        val base = extractBaseHost(url).removePrefix("http://").removePrefix("https://").substringBefore(':')
+        return base.removePrefix("www.").removePrefix("m.")
     }
 
     private suspend fun testSourceConnectivity(source: DiscoveredSource): DiscoveredSource {

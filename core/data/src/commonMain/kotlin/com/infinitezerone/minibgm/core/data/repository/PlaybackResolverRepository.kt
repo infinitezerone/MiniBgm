@@ -24,6 +24,18 @@ private val MEDIA_TAG_REGEX =
 private val IFRAME_TAG_REGEX =
     Regex("""<iframe\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
+private val INVALID_MEDIA_HOSTS = setOf("nflxso.net", "netflix.com", "nflximg.net", "akamaized.net")
+
+private fun isInvalidMediaHost(url: String): Boolean {
+    val host =
+        url
+            .substringAfter("://")
+            .substringBefore('/')
+            .substringBefore(':')
+            .lowercase()
+    return INVALID_MEDIA_HOSTS.any { host.endsWith(it) }
+}
+
 /** 流清单条目：Stremio `/stream` 响应的兼容子集——url 必填，title/headers 可选，未知字段忽略 */
 @Serializable
 internal data class StreamManifestEntry(
@@ -183,6 +195,7 @@ internal fun extractPlayableSources(
             MEDIA_URL_REGEX.findAll(normalized).map { it.value } +
                 MEDIA_TAG_REGEX.findAll(normalized).map { it.groupValues[1] }
         ).mapNotNull { absoluteUrl(it, origin) }
+            .filterNot { isInvalidMediaHost(it) }
             .map { buildSource(it, PlaylistEntryKind.DIRECT) }
             .toList()
 

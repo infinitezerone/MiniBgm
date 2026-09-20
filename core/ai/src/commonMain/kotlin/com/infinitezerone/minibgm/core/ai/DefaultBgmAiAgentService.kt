@@ -187,12 +187,14 @@ class DefaultBgmAiAgentService(
             }
         }
         AiToolActivity.clear()
+        AiToolActivity.reportStatus("AI 正在思考并检索...")
         return try {
             // 推理模型多轮往返较慢（实测 1~3 分钟），但必须有硬上限防挂死
             val response =
                 withTimeout(AI_RUN_TIMEOUT_MS) {
                     agentRunner(config, prompt, toolRegistry)
                 }
+            AiToolActivity.clear()
             AppResult.Success(response)
         } catch (e: TimeoutCancellationException) {
             AiToolActivity.clear()

@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import kotlinx.coroutines.flow.first
@@ -58,6 +59,9 @@ class ScheduleTools(
                 TimeUtils.cstWeekdayOfEpoch(TimeUtils.nowEpochMillis())
             }
 
+        val dayDesc = if (weekday in 1..7) "周$weekday" else "今日排播"
+        AiToolActivity.report("查询放送表", dayDesc)
+
         val schedules = scheduleRepository.getSchedulesByWeekday(targetWeekday).first()
         if (schedules.isEmpty()) {
             return "No broadcast anime scheduled for weekday $targetWeekday."
@@ -90,6 +94,7 @@ class ScheduleTools(
         if (validSubjectIds.isEmpty()) {
             return "No valid subject IDs provided."
         }
+        AiToolActivity.report("查询单集更新时间", "条目 $validSubjectIds")
         val resolvedHours = if (hoursAhead <= 0) 72L else hoursAhead.coerceAtMost(720L)
         val airings =
             scheduleRepository.getUpcomingAiringForSubjects(

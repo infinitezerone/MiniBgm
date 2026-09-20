@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
@@ -51,6 +52,7 @@ class CollectionTools(
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
+        AiToolActivity.report("查询收藏状态", "条目 ID $subjectId")
         return when (val result = collectionRepository.fetchCollection(subjectId)) {
             is AppResult.Success -> {
                 val collection = result.data
@@ -84,6 +86,7 @@ class CollectionTools(
     @Tool
     @LLMDescription("Query list of anime currently being watched by the user (READ OPERATION, auto-executes)")
     suspend fun getWatchingList(): String {
+        AiToolActivity.report("获取在看列表", "当前追番中条目")
         val collections = collectionRepository.getCollectionsByTypeStream(CollectionType.DOING).first()
         if (collections.isEmpty()) {
             return "User has no anime marked as currently watching (DOING)."
@@ -127,6 +130,7 @@ class CollectionTools(
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
+        AiToolActivity.report("生成收藏提案", "条目 $subjectId -> $collectionType")
 
         val trimmedType = collectionType.uppercase().trim()
         val resolvedType =
@@ -196,6 +200,7 @@ class CollectionTools(
         if (episodeNumber <= 0) {
             return "Invalid episode number: $episodeNumber. Episode number must be a positive integer (1-based)."
         }
+        AiToolActivity.report("生成打卡提案", "条目 $subjectId 第 $episodeNumber 集")
 
         val actionId = "act_ep_${TimeUtils.nowEpochMillis()}_${subjectId}_ep$episodeNumber"
         val statusText = if (isWatched) "watched" else "unwatched"

@@ -256,4 +256,33 @@ class PlayableSourceToolsTest {
 
             assertTrue(result.contains("Invalid subject ID"))
         }
+
+    @Test
+    fun `用户配置的第三方动漫站点PAGE规则命中时生成可跳转播放来源`() =
+        runTest {
+            sendScheduleWithLinks()
+            settingsRepository.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(
+                        id = "r_page",
+                        name = "AGE动漫",
+                        urlTemplate = "https://www.agemys.org/search?query={title}",
+                        kind = PlaybackRuleKind.PAGE,
+                        isEnabled = true,
+                    ),
+                ),
+            )
+
+            val result = decode(tools(FakePlaybackResolverRepository()).findPlayableSources(subjectId = 1001L))
+
+            assertTrue(result.source.contains("第三方动漫站点"))
+            assertEquals(1, result.episodes.size)
+            assertTrue(
+                result.episodes
+                    .first()
+                    .url
+                    .contains("agemys.org"),
+            )
+            assertEquals(PlaylistEntryKind.PAGE, result.episodes.first().kind)
+        }
 }
