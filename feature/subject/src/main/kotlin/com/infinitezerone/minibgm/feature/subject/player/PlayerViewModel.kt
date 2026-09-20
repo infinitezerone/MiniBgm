@@ -274,8 +274,16 @@ class PlayerViewModel(
         viewModelScope.launch {
             settingsRepository.playbackRules.collect { rules ->
                 val newSources = buildSources(rules)
+                val targetRuleIndex =
+                    if (route.initialRuleId.isNotBlank()) {
+                        newSources.indexOfFirst { it.rule?.id == route.initialRuleId }.takeIf { it >= 0 }
+                    } else {
+                        null
+                    }
                 _uiState.update { state ->
-                    val newIndex = state.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
+                    val newIndex =
+                        targetRuleIndex
+                            ?: state.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
                     state.copy(
                         sources = newSources,
                         selectedSourceIndex = newIndex,

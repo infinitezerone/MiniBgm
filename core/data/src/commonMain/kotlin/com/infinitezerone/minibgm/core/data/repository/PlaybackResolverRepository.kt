@@ -90,7 +90,21 @@ class PlaybackResolverRepositoryImpl(
             .take(MAX_PAGES)
             .flatMap { page ->
                 val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
-                extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+                val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+                if (extracted.none { it.kind == PlaylistEntryKind.DIRECT }) {
+                    val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
+                    if (iframeCandidate != null && iframeCandidate.url.isNotBlank()) {
+                        val subFetched = pageFetchService.fetchHtml(iframeCandidate.url)
+                        if (subFetched != null) {
+                            val subExtracted =
+                                extractPlayableSources(subFetched.html, subFetched.url, epNumber, siteName)
+                            if (subExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+                                return@flatMap subExtracted
+                            }
+                        }
+                    }
+                }
+                extracted
             }.distinctBy { it.url }
 
     override suspend fun resolveTemplate(
