@@ -33,14 +33,16 @@ class CommunityTools(
         "Search open-source anime playback subscriptions from public platforms (e.g. GitHub) and return verified candidates with alive rule counts and average latency. (READ-ONLY)",
     )
     suspend fun searchCommunitySubscriptions(
-        @LLMDescription("Search keywords such as 'minibgm-rules', 'bangumi-rules', or a repository/query.")
-        keywords: String = "minibgm-rules",
+        @LLMDescription(
+            "Search keywords for anime playback rules, such as 'anime playback rules', 'bangumi rules', or an open-source query.",
+        )
+        keywords: String = "",
     ): String =
         when (val result = settingsRepository.searchCommunitySubscriptions(keywords)) {
             is AppResult.Success -> {
                 val candidates = result.data
                 if (candidates.isEmpty()) {
-                    "No verified community subscriptions found for '$keywords'. Try different keywords or provide a direct JSON URL."
+                    "No verified community subscriptions found for '$keywords'. Try different keywords or provide a direct JSON URL or rules array."
                 } else {
                     val sb = StringBuilder("Found ${candidates.size} verified subscription candidates:\n")
                     candidates.forEachIndexed { index, candidate ->
@@ -73,10 +75,10 @@ class CommunityTools(
     @OptIn(ExperimentalUuidApi::class)
     @Tool
     @LLMDescription(
-        "Fetch and test any remote subscription JSON URL, probe connectivity of all rules, and generate an import proposal for user confirmation. (HITL SAFE)",
+        "Fetch and test any remote subscription JSON URL or candidate rules JSON array, probe connectivity of all rules, and generate an import proposal for user confirmation. (HITL SAFE)",
     )
     suspend fun validateAndTestSubscription(
-        @LLMDescription("Remote subscription JSON URL to validate, probe and import.")
+        @LLMDescription("Remote subscription JSON URL or candidate rules JSON array to validate, probe and import.")
         subscriptionUrl: String,
     ): String {
         val trimmed = subscriptionUrl.trim()

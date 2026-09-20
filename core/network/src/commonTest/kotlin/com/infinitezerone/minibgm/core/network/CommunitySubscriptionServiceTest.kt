@@ -171,4 +171,45 @@ class CommunitySubscriptionServiceTest {
             // 严格遵守零内置原则：远端失败时不注入任何硬编码站点，直接返回空列表
             assertTrue(results.isEmpty())
         }
+
+    @Test
+    fun validateAndTestSubscription_supportsDirectJsonRules() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    val urlStr = request.url.toString()
+                    when {
+                        urlStr.contains("test-a.org") -> respond(content = "OK", status = HttpStatusCode.OK)
+                        urlStr.contains("test-b.org") -> respondError(HttpStatusCode.ServiceUnavailable)
+                        else -> respond(content = "OK", status = HttpStatusCode.OK)
+                    }
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+
+            val report =
+                service.validateAndTestSubscription(
+                    """
+                    [
+                        {"name": "测试动漫站A", "urlTemplate": "https://test-a.org/search?q={title}"},
+                        {"name": "测试动漫站B", "urlTemplate": "https://test-b.org/play/{subjectId}"}
+                    ]
+                    """.trimIndent(),
+                )
+
+            assertTrue(report.isHealthy)
+            assertEquals(2, report.totalRules)
+            assertEquals(1, report.aliveRules)
+            val sourceA = report.sources.first { it.name == "测试动漫站A" }
+            val sourceB = report.sources.first { it.name == "测试动漫站B" }
+            assertTrue(sourceA.isAlive)
+            assertFalse(sourceB.isAlive)
+        }
 }

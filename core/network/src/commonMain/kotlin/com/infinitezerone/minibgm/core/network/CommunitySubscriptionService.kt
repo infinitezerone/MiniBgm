@@ -49,12 +49,12 @@ interface CommunitySubscriptionService {
     /**
      * 在公网平台（如 GitHub 开源索引）动态检索动漫播放源规则订阅，并对候选地址进行可用性初筛。
      */
-    suspend fun searchSubscriptions(keywords: String = "minibgm-rules"): List<DiscoveredSubscriptionCandidate>
+    suspend fun searchSubscriptions(keywords: String = ""): List<DiscoveredSubscriptionCandidate>
 
     /**
-     * 对指定订阅地址进行拉取、格式校验，并对其中的规则进行并发连通性与测速探活。
+     * 对指定订阅地址或规则 JSON 文本进行拉取/解析，并对其中的规则进行端侧并发连通性与测速探活。
      */
-    suspend fun validateAndTestSubscription(url: String): SubscriptionValidationReport
+    suspend fun validateAndTestSubscription(target: String): SubscriptionValidationReport
 
     /**
      * 发现并测速社区开源播放源规则，按响应延迟由低到高排序。
@@ -73,26 +73,11 @@ class CommunitySubscriptionServiceImpl(
 ) : CommunitySubscriptionService {
     override suspend fun searchSubscriptions(keywords: String): List<DiscoveredSubscriptionCandidate> {
         val trimmed = keywords.trim()
-        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
-            val report = validateAndTestSubscription(trimmed)
-            return if (report.isHealthy) {
-                listOf(
-                    DiscoveredSubscriptionCandidate(
-                        name = "自定义规则订阅",
-                        subscriptionUrl = trimmed,
-                        description = "来自指定链接的规则订阅",
-                        sourceCount = report.totalRules,
-                        aliveCount = report.aliveRules,
-                        averageLatencyMs = report.averageLatencyMs,
-                        sampleSources = report.sources.take(3).map { it.name },
-                    ),
-                )
-            } else {
-                emptyList()
-            }
+        if (isDirectInput(trimmed)) {
+            return validateDirectInput(trimmed)
         }
 
-        val query = trimmed.ifBlank { "minibgm-rules" }
+        val query = trimmed.ifBlank { "anime playback rules" }
         return try {
             val response: HttpResponse =
                 client.get("https://api.github.com/search/repositories") {
@@ -128,22 +113,47 @@ class CommunitySubscriptionServiceImpl(
         }
     }
 
-    override suspend fun validateAndTestSubscription(url: String): SubscriptionValidationReport {
-        val trimmedUrl = url.trim()
-        if (trimmedUrl.isBlank()) {
+    private fun isDirectInput(input: String): Boolean =
+        input.startsWith("http://", ignoreCase = true) ||
+            input.startsWith("https://", ignoreCase = true) ||
+            input.startsWith("[") ||
+            input.startsWith("{")
+
+    private suspend fun validateDirectInput(input: String): List<DiscoveredSubscriptionCandidate> {
+        val report = validateAndTestSubscription(input)
+        return if (report.isHealthy) {
+            listOf(
+                DiscoveredSubscriptionCandidate(
+                    name = if (input.startsWith("http")) "自定义规则订阅" else "现场发现的播放源规则",
+                    subscriptionUrl = if (input.startsWith("http")) input else "direct://custom-rules",
+                    description = "经端侧网络测速探活验证的播放源规则",
+                    sourceCount = report.totalRules,
+                    aliveCount = report.aliveRules,
+                    averageLatencyMs = report.averageLatencyMs,
+                    sampleSources = report.sources.take(3).map { it.name },
+                ),
+            )
+        } else {
+            emptyList()
+        }
+    }
+
+    override suspend fun validateAndTestSubscription(target: String): SubscriptionValidationReport {
+        val trimmed = target.trim()
+        if (trimmed.isBlank()) {
             return SubscriptionValidationReport(
                 isHealthy = false,
-                subscriptionUrl = url,
-                errorMessage = "订阅地址为空",
+                subscriptionUrl = target,
+                errorMessage = "订阅地址或规则内容为空",
             )
         }
 
-        val rawSources = fetchSourcesFromUrl(trimmedUrl)
+        val rawSources = resolveSources(trimmed)
         if (rawSources.isEmpty()) {
             return SubscriptionValidationReport(
                 isHealthy = false,
-                subscriptionUrl = trimmedUrl,
-                errorMessage = "无法从该地址获取到有效规则，请检查网络或 JSON 格式",
+                subscriptionUrl = trimmed,
+                errorMessage = "未解析到有效播放源规则，请检查网络连接或规则 JSON 格式",
             )
         }
 
@@ -173,7 +183,7 @@ class CommunitySubscriptionServiceImpl(
 
         return SubscriptionValidationReport(
             isHealthy = aliveList.isNotEmpty(),
-            subscriptionUrl = trimmedUrl,
+            subscriptionUrl = trimmed,
             totalRules = sortedSources.size,
             aliveRules = aliveList.size,
             averageLatencyMs = avgLatency,
@@ -186,7 +196,7 @@ class CommunitySubscriptionServiceImpl(
             return validateAndTestSubscription(customSubscriptionUrl).sources
         }
 
-        val candidates = searchSubscriptions("minibgm-rules")
+        val candidates = searchSubscriptions("anime playback rules")
         val best = candidates.maxByOrNull { it.aliveCount } ?: return emptyList()
         return validateAndTestSubscription(best.subscriptionUrl).sources
     }
@@ -194,8 +204,11 @@ class CommunitySubscriptionServiceImpl(
     private suspend fun inspectRepoCandidate(item: GitHubRepoItem): DiscoveredSubscriptionCandidate? {
         val candidateUrls =
             listOf(
-                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/anime-rules.json",
                 "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/rules.json",
+                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/anime-rules.json",
+                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/sources.json",
+                "https://raw.githubusercontent.com/${item.full_name}/${item.default_branch}/playback.json",
+                "https://fastly.jsdelivr.net/gh/${item.full_name}@${item.default_branch}/rules.json",
                 "https://fastly.jsdelivr.net/gh/${item.full_name}@${item.default_branch}/anime-rules.json",
             )
 
@@ -216,6 +229,24 @@ class CommunitySubscriptionServiceImpl(
         return null
     }
 
+    private suspend fun resolveSources(target: String): List<DiscoveredSource> {
+        if (target.startsWith("[") || target.startsWith("{")) {
+            return parseSourcesFromText(target)
+        }
+        return fetchSourcesFromUrl(target)
+    }
+
+    private fun parseSourcesFromText(rawText: String): List<DiscoveredSource> {
+        val trimmed = rawText.trim()
+        return runCatching {
+            if (trimmed.startsWith("[")) {
+                json.decodeFromString<List<DiscoveredSource>>(trimmed)
+            } else {
+                json.decodeFromString<CommunitySubscriptionPackage>(trimmed).sources
+            }
+        }.getOrElse { emptyList() }
+    }
+
     private suspend fun fetchSourcesFromUrl(url: String): List<DiscoveredSource> {
         return try {
             val response: HttpResponse =
@@ -228,12 +259,7 @@ class CommunitySubscriptionServiceImpl(
             if (!response.status.isSuccess()) return emptyList()
 
             val rawText: String = response.body()
-            val trimmed = rawText.trim()
-            if (trimmed.startsWith("[")) {
-                json.decodeFromString<List<DiscoveredSource>>(trimmed)
-            } else {
-                json.decodeFromString<CommunitySubscriptionPackage>(trimmed).sources
-            }
+            parseSourcesFromText(rawText)
         } catch (_: Throwable) {
             emptyList()
         }
