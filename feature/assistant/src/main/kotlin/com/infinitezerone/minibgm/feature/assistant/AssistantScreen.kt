@@ -36,18 +36,17 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -241,51 +241,74 @@ fun AssistantScreenContent(
                     }
                 }
 
-                // 底部输入框与发送按钮
+                // 悬浮式胶囊输入框（无边框，发送按钮内嵌）
                 Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     shadowElevation = 4.dp,
-                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = 2.dp,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     Row(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedTextField(
+                        TextField(
                             value = uiState.inputText,
                             onValueChange = onInputChanged,
                             placeholder = {
                                 Text(
                                     text = "问问 AI 追番助手...",
                                     style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             },
                             singleLine = false,
                             maxLines = 4,
-                            shape = RoundedCornerShape(20.dp),
                             colors =
-                                OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent,
                                 ),
                             modifier = Modifier.weight(1f),
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        FilledIconButton(
+                        val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
+                        IconButton(
                             onClick = onSendMessage,
-                            enabled = uiState.inputText.isNotBlank() && !uiState.isLoading,
-                            modifier = Modifier.size(44.dp),
+                            enabled = canSend,
+                            modifier =
+                                Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (canSend) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                        },
+                                    ),
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "发送",
-                                modifier = Modifier.size(20.dp),
+                                tint =
+                                    if (canSend) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                    },
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
