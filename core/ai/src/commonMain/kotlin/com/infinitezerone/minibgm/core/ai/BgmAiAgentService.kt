@@ -15,10 +15,14 @@ interface BgmAiAgentService {
     suspend fun execute(prompt: String): AppResult<String>
 
     /**
-     * 拉取当前配置端点上可用的模型 id 列表（OpenAI 兼容 /models 或 Ollama /api/tags）。
+     * 拉取指定端点或当前配置端点上可用的模型 id 列表（OpenAI 兼容 /models 或 Ollama /api/tags）。
      * 供 AI 设置界面提供"拉取模型列表"能力，避免手填已下线的模型名。
      */
-    suspend fun fetchAvailableModels(): AppResult<List<String>>
+    suspend fun fetchAvailableModels(
+        endpoint: String? = null,
+        apiKey: String? = null,
+        provider: String? = null,
+    ): AppResult<List<String>>
 
     /**
      * HITL 待确认写操作执行器（当用户在 UI 侧确认执行智能体生成的写操作提案时调用）。

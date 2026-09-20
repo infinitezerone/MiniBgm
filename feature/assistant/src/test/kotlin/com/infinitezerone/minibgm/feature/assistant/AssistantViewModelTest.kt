@@ -51,13 +51,25 @@ class AssistantViewModelTest {
         var fetchModelsResult: AppResult<List<String>> = AppResult.Success(emptyList())
 
         var prompts = mutableListOf<String>()
+        var lastFetchEndpoint: String? = null
+        var lastFetchApiKey: String? = null
+        var lastFetchProvider: String? = null
 
         override suspend fun execute(prompt: String): AppResult<String> {
             prompts.add(prompt)
             return executeResult
         }
 
-        override suspend fun fetchAvailableModels(): AppResult<List<String>> = fetchModelsResult
+        override suspend fun fetchAvailableModels(
+            endpoint: String?,
+            apiKey: String?,
+            provider: String?,
+        ): AppResult<List<String>> {
+            lastFetchEndpoint = endpoint
+            lastFetchApiKey = apiKey
+            lastFetchProvider = provider
+            return fetchModelsResult
+        }
     }
 
     @Before
@@ -627,5 +639,26 @@ class AssistantViewModelTest {
                 viewModel.uiState.value.messages
                     .last()
             assertEquals(ActionStatus.SUCCESS, updatedMsg.pendingActions[0].status)
+        }
+
+    @Test
+    fun fetchAvailableModels_delegates_to_agentService() =
+        runTest {
+            val agentService = FakeAgentService()
+            agentService.fetchModelsResult = AppResult.Success(listOf("gpt-4o", "gpt-4o-mini"))
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            val result =
+                viewModel.fetchAvailableModels(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "test-key",
+                    provider = "custom",
+                )
+
+            assertIs<AppResult.Success<List<String>>>(result)
+            assertEquals(listOf("gpt-4o", "gpt-4o-mini"), result.data)
+            assertEquals("https://api.openai.com/v1", agentService.lastFetchEndpoint)
+            assertEquals("test-key", agentService.lastFetchApiKey)
+            assertEquals("custom", agentService.lastFetchProvider)
         }
 }

@@ -23,14 +23,18 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** 单次 AI 执行的硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
 const val AI_RUN_TIMEOUT_MS = 180_000L
@@ -48,6 +52,7 @@ class DefaultBgmAiAgentService(
     val communityTools: com.infinitezerone.minibgm.core.ai.tools.CommunityTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
+    httpClient: HttpClient? = null,
     private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
         val client: LLMClient =
             when {
@@ -199,7 +204,7 @@ class DefaultBgmAiAgentService(
     }
 
     private val catalogClient: HttpClient by lazy {
-        HttpClient {
+        httpClient ?: HttpClient {
             install(HttpTimeout) {
                 requestTimeoutMillis = 20_000
                 connectTimeoutMillis = 10_000
@@ -208,26 +213,39 @@ class DefaultBgmAiAgentService(
     }
 
     /** 拉取端点可用模型列表：优先 OpenAI 兼容 /models，兼容 Ollama /api/tags 的 models[].name */
-    override suspend fun fetchAvailableModels(): AppResult<List<String>> {
+    override suspend fun fetchAvailableModels(
+        endpoint: String?,
+        apiKey: String?,
+        provider: String?,
+    ): AppResult<List<String>> {
         val config = settingsRepository.aiConfig.first()
-        val modelsUrl = buildModelsUrl(config.endpoint, config.provider)
+        val target = resolveTargetConfig(config, endpoint, apiKey, provider)
+        val modelsUrl = buildModelsUrl(target.endpoint, target.provider)
+
         return try {
             val response: HttpResponse =
                 catalogClient.get(modelsUrl) {
-                    if (config.apiKey.isNotBlank()) {
-                        header(HttpHeaders.Authorization, "Bearer " + config.apiKey)
+                    header(HttpHeaders.UserAgent, "MiniBgm/1.0 (Android)")
+                    if (target.apiKey.isNotBlank()) {
+                        header(HttpHeaders.Authorization, "Bearer ${target.apiKey}")
+                    }
+                    if (target.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) && target.apiKey.isNotBlank()) {
+                        parameter("key", target.apiKey)
                     }
                 }
             if (!response.status.isSuccess()) {
-                return AppResult.Error(
-                    IllegalStateException("HTTP ${response.status.value}"),
-                    "拉取模型列表失败（HTTP ${response.status.value}），请检查端点与密钥",
-                )
+                val errorMsg = catalogHttpErrorMessage(response.status.value)
+                return AppResult.Error(IllegalStateException("HTTP ${response.status.value}"), errorMsg)
             }
-            parseModelsBody(response.body<String>())?.let { AppResult.Success(it) }
-                ?: AppResult.Error(IllegalStateException("empty model list"), "端点未返回任何模型")
+            val models = parseModelsBody(response.body<String>())
+            if (models != null) {
+                AppResult.Success(models)
+            } else {
+                AppResult.Error(IllegalStateException("empty model list"), "端点未返回任何可用模型，请确认服务已正常运行")
+            }
         } catch (e: Exception) {
-            AppResult.Error(e, friendlyAiError(config, e).ifBlank { "拉取模型列表失败：${e.message}" })
+            val friendly = friendlyAiError(config.copy(endpoint = target.endpoint, provider = target.provider), e)
+            AppResult.Error(e, friendly.ifBlank { "拉取模型列表失败：${e.message}" })
         }
     }
 
@@ -255,6 +273,32 @@ class DefaultBgmAiAgentService(
     }
 }
 
+internal data class TargetModelConfig(
+    val endpoint: String,
+    val apiKey: String,
+    val provider: String,
+)
+
+internal fun resolveTargetConfig(
+    base: AiConfig,
+    endpoint: String?,
+    apiKey: String?,
+    provider: String?,
+): TargetModelConfig {
+    val ep = endpoint?.takeIf { it.isNotBlank() } ?: base.endpoint
+    val key = apiKey ?: base.apiKey
+    val prov = provider?.takeIf { it.isNotBlank() } ?: base.provider
+    return TargetModelConfig(ep, key, prov)
+}
+
+internal fun catalogHttpErrorMessage(status: Int): String =
+    when (status) {
+        401 -> "鉴权失败（HTTP 401）：API 密钥无效或已过期"
+        403 -> "端点拒绝访问（HTTP 403）：请确认密钥权限"
+        404 -> "端点未找到（HTTP 404）：请检查 Base URL 是否正确"
+        else -> "拉取模型列表失败（HTTP $status）"
+    }
+
 /**
  * 模型列表端点：OpenAI 兼容形态保留 /v1 前缀（…/v1/models）；
  * Ollama 用原生 /api/tags。端点若以 /chat/completions 结尾则先剥掉。
@@ -263,36 +307,23 @@ internal fun buildModelsUrl(
     rawEndpoint: String,
     provider: String,
 ): String {
-    val base =
-        rawEndpoint
-            .ifBlank {
-                when (provider) {
-                    AiConfig.PROVIDER_OLLAMA -> "http://localhost:11434"
-                    AiConfig.PROVIDER_GEMINI -> "https://generativelanguage.googleapis.com/v1beta/openai"
-                    else -> "https://api.openai.com/v1"
-                }
-            }.removeSuffix("/chat/completions")
-            .removeSuffix("/chat/completions/")
-            .trimEnd('/')
-    val path = if (provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) "/api/tags" else "/models"
-    return base + path
+    val defaultBase =
+        when (provider.lowercase()) {
+            AiConfig.PROVIDER_OLLAMA -> "http://10.0.2.2:11434"
+            AiConfig.PROVIDER_GEMINI -> "https://generativelanguage.googleapis.com/v1beta/openai"
+            else -> "https://api.openai.com/v1"
+        }
+    var base = rawEndpoint.trim().ifBlank { defaultBase }
+    base = base.trimEnd('/')
+    base = base.removeSuffix("/chat/completions").trimEnd('/')
+
+    val isOllama = provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)
+    return if (isOllama) {
+        base.removeSuffix("/api/tags").trimEnd('/') + "/api/tags"
+    } else {
+        base.removeSuffix("/models").trimEnd('/') + "/models"
+    }
 }
-
-@Serializable
-private data class ModelsResponse(
-    val data: List<ModelIdEntry>? = null,
-    val models: List<ModelNameEntry>? = null,
-)
-
-@Serializable
-private data class ModelIdEntry(
-    val id: String = "",
-)
-
-@Serializable
-private data class ModelNameEntry(
-    val name: String = "",
-)
 
 private val catalogJson =
     Json {
@@ -300,12 +331,68 @@ private val catalogJson =
         isLenient = true
     }
 
-/** 解析 OpenAI 兼容（data[].id）与 Ollama（models[].name）两种形态；解析失败返回 null */
+/**
+ * 解析模型列表：
+ * 兼容 OpenAI（data[].id）、Ollama（models[].name / models[].model）、
+ * Gemini 原生（models[].name 去除 "models/" 前缀）、以及各类代理返回的字符串列表或根数组。
+ * 若无有效模型则返回 null。
+ */
 internal fun parseModelsBody(body: String): List<String>? =
     runCatching {
-        val parsed = catalogJson.decodeFromString<ModelsResponse>(body)
-        buildList {
-            parsed.data?.forEach { if (it.id.isNotBlank()) add(it.id) }
-            parsed.models?.forEach { if (it.name.isNotBlank()) add(it.name) }
-        }.distinct()
+        val root = catalogJson.parseToJsonElement(body)
+        val result = mutableListOf<String>()
+
+        fun addId(raw: String?) {
+            if (raw == null) return
+            val trimmed = raw.trim().removePrefix("models/")
+            if (trimmed.isNotBlank()) {
+                result.add(trimmed)
+            }
+        }
+
+        fun extractFromObject(obj: JsonObject) {
+            val id =
+                obj["id"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
+                    ?: obj["name"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
+                    ?: obj["model"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
+            addId(id)
+        }
+
+        when (root) {
+            is JsonObject -> {
+                root["data"]?.let { dataElement ->
+                    if (dataElement is JsonArray) {
+                        dataElement.forEach { elem ->
+                            when (elem) {
+                                is JsonObject -> extractFromObject(elem)
+                                is JsonPrimitive -> addId(elem.contentOrNull)
+                                else -> Unit
+                            }
+                        }
+                    }
+                }
+                root["models"]?.let { modelsElement ->
+                    if (modelsElement is JsonArray) {
+                        modelsElement.forEach { elem ->
+                            when (elem) {
+                                is JsonObject -> extractFromObject(elem)
+                                is JsonPrimitive -> addId(elem.contentOrNull)
+                                else -> Unit
+                            }
+                        }
+                    }
+                }
+            }
+            is JsonArray -> {
+                root.forEach { elem ->
+                    when (elem) {
+                        is JsonObject -> extractFromObject(elem)
+                        is JsonPrimitive -> addId(elem.contentOrNull)
+                        else -> Unit
+                    }
+                }
+            }
+            else -> Unit
+        }
+        result.distinct().takeIf { it.isNotEmpty() }
     }.getOrNull()

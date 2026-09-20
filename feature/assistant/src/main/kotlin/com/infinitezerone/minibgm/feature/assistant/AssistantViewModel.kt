@@ -295,6 +295,12 @@ class AssistantViewModel(
         }
     }
 
+    suspend fun fetchAvailableModels(
+        endpoint: String,
+        apiKey: String,
+        provider: String,
+    ): AppResult<List<String>> = agentService.fetchAvailableModels(endpoint, apiKey, provider)
+
     /**
      * 用户显式触发的 WebView 深度解析（第 5 档）：对找源工具报告无结果的条目，
      * 用确定性 WebView 会话加载候选来源页并捕获媒体请求；结果以可播放清单卡片追加进会话。

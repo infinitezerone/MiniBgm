@@ -5,6 +5,12 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -179,5 +185,90 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                 msg.contains("Cannot determine proper LLM params"),
                 "Custom OpenAI model must have OpenAIEndpoint.Completions capability: $msg",
             )
+        }
+
+    @Test
+    fun fetchAvailableModels_success_returns_parsed_models() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    assertEquals("Bearer test-key", request.headers[HttpHeaders.Authorization])
+                    assertEquals("MiniBgm/1.0 (Android)", request.headers[HttpHeaders.UserAgent])
+                    respond(
+                        content = """{"data":[{"id":"qwen-2.5-7b"},{"id":"gpt-4o"}]}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                )
+            val result =
+                service.fetchAvailableModels(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "test-key",
+                    provider = "custom",
+                )
+            assertIs<AppResult.Success<List<String>>>(result)
+            assertEquals(listOf("qwen-2.5-7b", "gpt-4o"), result.data)
+        }
+
+    @Test
+    fun fetchAvailableModels_http_401_returns_auth_failure_error() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = """{"error":"unauthorized"}""",
+                        status = HttpStatusCode.Unauthorized,
+                    )
+                }
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                )
+            val result = service.fetchAvailableModels()
+            assertIs<AppResult.Error>(result)
+            assertTrue(result.message.contains("鉴权失败") || result.message.contains("401"))
+        }
+
+    @Test
+    fun fetchAvailableModels_empty_models_returns_error() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = """{"data":[]}""",
+                        status = HttpStatusCode.OK,
+                    )
+                }
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                )
+            val result = service.fetchAvailableModels()
+            assertIs<AppResult.Error>(result)
+            assertTrue(result.message.contains("未返回任何可用模型"))
+        }
+
+    @Test
+    fun fetchAvailableModels_network_exception_translates_friendly_error() =
+        runTest {
+            val engine =
+                MockEngine {
+                    throw IllegalStateException("connection refused")
+                }
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                )
+            val result = service.fetchAvailableModels()
+            assertIs<AppResult.Error>(result)
+            assertTrue(result.message.contains("无法连接"))
         }
 }

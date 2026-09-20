@@ -15,9 +15,22 @@ class ModelCatalogTest {
             "https://api.example.com/v1/models",
             buildModelsUrl("https://api.example.com/v1/chat/completions", "custom"),
         )
+        assertEquals(
+            "https://api.example.com/v1/models",
+            buildModelsUrl("https://api.example.com/v1/models", "custom"),
+        )
+        // Gemini 端点
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/openai/models",
+            buildModelsUrl("", AiConfig.PROVIDER_GEMINI),
+        )
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/openai/models",
+            buildModelsUrl("https://generativelanguage.googleapis.com/v1beta/openai/", AiConfig.PROVIDER_GEMINI),
+        )
         // Ollama：原生 /api/tags
         assertEquals("http://10.0.2.2:11434/api/tags", buildModelsUrl("http://10.0.2.2:11434", AiConfig.PROVIDER_OLLAMA))
-        assertEquals("http://localhost:11434/api/tags", buildModelsUrl("", AiConfig.PROVIDER_OLLAMA))
+        assertEquals("http://10.0.2.2:11434/api/tags", buildModelsUrl("", AiConfig.PROVIDER_OLLAMA))
     }
 
     @Test
@@ -33,8 +46,27 @@ class ModelCatalogTest {
     }
 
     @Test
+    fun parseModelsBody_supportsGeminiNativePrefixAndStringArray() {
+        val geminiBody = """{"models":[{"name":"models/gemini-2.0-flash"},{"name":"models/gemini-1.5-pro"}]}"""
+        assertEquals(listOf("gemini-2.0-flash", "gemini-1.5-pro"), parseModelsBody(geminiBody))
+
+        val stringArrayBody = """{"models":["qwen2.5:7b","deepseek-coder"]}"""
+        assertEquals(listOf("qwen2.5:7b", "deepseek-coder"), parseModelsBody(stringArrayBody))
+    }
+
+    @Test
+    fun parseModelsBody_supportsRootArrays() {
+        val objArray = """[{"id":"gpt-4o"},{"name":"claude-3-5-sonnet"}]"""
+        assertEquals(listOf("gpt-4o", "claude-3-5-sonnet"), parseModelsBody(objArray))
+
+        val strArray = """["model-a","model-b"]"""
+        assertEquals(listOf("model-a", "model-b"), parseModelsBody(strArray))
+    }
+
+    @Test
     fun parseModelsBody_invalidJsonReturnsNull() {
         assertNull(parseModelsBody("<html>not json</html>"))
         assertNull(parseModelsBody(""))
+        assertNull(parseModelsBody("{}"))
     }
 }
