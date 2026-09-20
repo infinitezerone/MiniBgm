@@ -29,11 +29,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.abs
@@ -118,26 +119,58 @@ class ScheduleRepositoryImpl(
         }
 
     /**
-     * 同步闸门：全量刷新管线进行中为 true，对外流扣住不发；
-     * 闸门放开时经 flatMapLatest 重新订阅 DAO 流，确保以管线完成后的最新数据发一次。
+     * 同步闸门：全量刷新管线进行中为 true。
+     * 闸门激活期间仅扣留管线产生的中间态发射；本地首帧（已有缓存）坚决第一时间直发，
+     * 确保冷启动与离线场景 0ms 显示内容，管线放开后以最新状态对外发一次。
      */
     private val scheduleHoldGate = MutableStateFlow(false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> =
-        scheduleHoldGate
-            .flatMapLatest { holding ->
-                if (holding) {
-                    flowOf(null)
-                } else {
-                    scheduleDao.getAllSchedules().map { entities ->
-                        val nowMillis = TimeUtils.nowEpochMillis()
-                        entities
-                            .filter { it.isActiveForSchedule(nowMillis) }
-                            .map { it.toModel(json) }
+        channelFlow {
+            val daoFlow =
+                scheduleDao.getAllSchedules().map { entities ->
+                    val nowMillis = TimeUtils.nowEpochMillis()
+                    entities
+                        .filter { it.isActiveForSchedule(nowMillis) }
+                        .map { it.toModel(json) }
+                }
+
+            var hasEmitted = false
+            var pendingValue: List<AirSchedule>? = null
+            val mutex = Mutex()
+
+            launch {
+                scheduleHoldGate.collect { holding ->
+                    mutex.withLock {
+                        if (!holding && pendingValue != null) {
+                            val toSend = pendingValue!!
+                            pendingValue = null
+                            send(toSend)
+                        }
                     }
                 }
-            }.filterNotNull()
+            }
+
+            daoFlow.collect { list ->
+                mutex.withLock {
+                    val isHolding = scheduleHoldGate.value
+                    if (!hasEmitted) {
+                        // 首帧（本地已有缓存）无论是否处于刷新期，坚决第一时间发给 UI，确保 0ms 离线缓存呈现
+                        hasEmitted = true
+                        pendingValue = null
+                        send(list)
+                    } else if (isHolding) {
+                        // 刷新管线进行中且已有首帧：扣留中间态，待管线放开闸门时一次性发最新状态
+                        pendingValue = list
+                    } else {
+                        // 正常非刷新期：直接发流
+                        pendingValue = null
+                        send(list)
+                    }
+                }
+            }
+        }
 
     override suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,
