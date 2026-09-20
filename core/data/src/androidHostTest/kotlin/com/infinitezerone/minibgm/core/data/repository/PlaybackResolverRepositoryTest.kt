@@ -409,6 +409,26 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `支持解析标准 MacCMS vod_play_url 多播放源分隔符与零填充集数`() =
+        runTest {
+            val html =
+                """
+                {
+                    "vod_name": "测试动画",
+                    "vod_play_url": "第01集${'$'}https://line1.example.com/1.m3u8#第02集${'$'}https://line1.example.com/2.m3u8${'$'}${'$'}${'$'}第01集${'$'}https://line2.example.com/1.m3u8#第02集${'$'}https://line2.example.com/2.m3u8"
+                }
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/v/1" to html)))
+
+            val sources = repo.resolvePages(listOf("https://maccms.example.com/v/1"), epNumber = 2f, siteName = "MacCMS")
+
+            assertEquals(2, sources.size)
+            assertEquals("https://line1.example.com/2.m3u8", sources[0].url)
+            assertEquals("https://line2.example.com/2.m3u8", sources[1].url)
+            assertEquals("第02集", sources[0].label)
+        }
+
+    @Test
     fun `搜索列表页严格忽略跨域社交外链`() =
         runTest {
             val pages =

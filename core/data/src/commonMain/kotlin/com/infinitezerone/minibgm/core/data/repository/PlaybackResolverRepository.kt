@@ -432,7 +432,7 @@ internal suspend fun sniffAnime1Stream(
 }
 
 private val MACCMS_PLAY_URL_REGEX =
-    Regex(""""url"\s*:\s*"([^"]*\$[a-zA-Z0-9_/:.\-%?&=#]+)"""")
+    Regex(""""(?:vod_play_url|url)"\s*:\s*"([^"]*\$[a-zA-Z0-9_/:.\-%?&=#]+)"""")
 
 internal fun extractMacCmsSources(
     html: String,
@@ -442,8 +442,9 @@ internal fun extractMacCmsSources(
 ): List<PlayableSource> {
     val match = MACCMS_PLAY_URL_REGEX.find(html) ?: return emptyList()
     val playListStr = match.groupValues[1].replace("\\/", "/")
-    val entries = playListStr.split('#')
+    val entries = playListStr.split("$$$").flatMap { it.split('#') }
     val targetEpInt = epNumber.toInt()
+    val paddedEp = targetEpInt.toString().padStart(2, '0')
     val results = mutableListOf<PlayableSource>()
     for (entry in entries) {
         val parts = entry.split('$')
@@ -452,9 +453,15 @@ internal fun extractMacCmsSources(
             val mediaUrl = parts[1].trim()
             val isMatch =
                 if (epNumber > 0f) {
-                    title.contains(targetEpInt.toString()) ||
-                        title.contains("第${targetEpInt}集") ||
-                        title.contains("第${targetEpInt}话")
+                    title.contains("第${targetEpInt}集") ||
+                        title.contains("第${paddedEp}集") ||
+                        title.contains("第${targetEpInt}话") ||
+                        title.contains("第${paddedEp}话") ||
+                        title.contains("[$targetEpInt]") ||
+                        title.contains("[$paddedEp]") ||
+                        title == targetEpInt.toString() ||
+                        title == paddedEp ||
+                        Regex("""\b(?:ep|e)?\s*0*$targetEpInt\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
                 } else {
                     true
                 }
