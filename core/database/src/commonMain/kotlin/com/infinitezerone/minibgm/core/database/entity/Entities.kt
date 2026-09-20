@@ -90,3 +90,23 @@ data class UserCollectionEntity(
     val epStatus: Int,
     val updatedAt: String,
 )
+
+/**
+ * AI 追番助手本地会话历史表：
+ * 持久化保存用户的历史提问、智能体回复、HITL 操作提案与找源播放清单。
+ */
+@Entity(
+    tableName = "assistant_messages",
+    indices = [
+        Index(value = ["timestamp"]),
+    ],
+)
+data class AssistantMessageEntity(
+    @PrimaryKey val id: String,
+    val role: String,
+    val content: String,
+    val timestamp: Long,
+    val pendingActionsJson: String? = null,
+    val playableSourcesJson: String? = null,
+    val isError: Boolean = false,
+)

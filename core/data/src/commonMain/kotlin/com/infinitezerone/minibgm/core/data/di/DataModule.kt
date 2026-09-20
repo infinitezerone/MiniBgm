@@ -72,6 +72,7 @@ val dataModule =
         single<PlaybackResolverRepository> {
             PlaybackResolverRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
+                webViewCaptureService = getOrNull(),
             )
         }
         single<SettingsRepository> {
@@ -101,6 +102,11 @@ val dataModule =
                 authConfig = get<BgmAuthConfig>(),
                 apiService = get<BangumiApiService>(),
                 userDataCleaner = get<UserDataCleaner>(),
+            )
+        }
+        single<com.infinitezerone.minibgm.core.data.repository.AssistantRepository> {
+            com.infinitezerone.minibgm.core.data.repository.AssistantRepositoryImpl(
+                assistantMessageDao = get(),
             )
         }
     }

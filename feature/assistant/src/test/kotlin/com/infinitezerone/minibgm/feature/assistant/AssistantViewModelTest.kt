@@ -4,9 +4,13 @@ import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionExecutor
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.ActionCardStatus
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AssistantChatMessage
+import com.infinitezerone.minibgm.core.model.ChatMessageRole
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.testing.repository.FakeAssistantRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeWebViewResolveRepository
 import kotlinx.coroutines.Dispatchers
@@ -55,8 +59,14 @@ class AssistantViewModelTest {
         var lastFetchApiKey: String? = null
         var lastFetchProvider: String? = null
 
-        override suspend fun execute(prompt: String): AppResult<String> {
+        var capturedHistories = mutableListOf<List<Pair<String, String>>>()
+
+        override suspend fun execute(
+            prompt: String,
+            history: List<Pair<String, String>>,
+        ): AppResult<String> {
             prompts.add(prompt)
+            capturedHistories.add(history)
             return executeResult
         }
 
@@ -684,5 +694,221 @@ class AssistantViewModelTest {
                     .last()
             assertTrue(lastMsg.isError)
             assertEquals("❌ 执行出错：模型不可用（服务商提示 model route not found），请更换模型", lastMsg.content)
+        }
+
+    @Test
+    fun sendMessage_passes_recent_history_to_agentService() =
+        runTest {
+            val agentService = FakeAgentService(executeResult = AppResult.Success("回答 1"))
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendMessage("问题 1")
+            advanceUntilIdle()
+
+            agentService.executeResult = AppResult.Success("回答 2")
+            viewModel.sendMessage("问题 2")
+            advanceUntilIdle()
+
+            assertEquals(2, agentService.capturedHistories.size)
+            assertTrue(agentService.capturedHistories[0].isEmpty(), "首轮会话历史为空")
+            val secondHistory = agentService.capturedHistories[1]
+            assertEquals(2, secondHistory.size, "第二轮应包含首轮问答")
+            assertEquals("user" to "问题 1", secondHistory[0])
+            assertEquals("assistant" to "回答 1", secondHistory[1])
+        }
+
+    @Test
+    fun init_restores_messages_from_repository() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            fakeRepo.setMessages(
+                listOf(
+                    AssistantChatMessage(
+                        id = "msg-1",
+                        role = ChatMessageRole.USER,
+                        content = "历史问题",
+                        timestamp = 1000L,
+                    ),
+                    AssistantChatMessage(
+                        id = "msg-2",
+                        role = ChatMessageRole.ASSISTANT,
+                        content = "历史回答",
+                        timestamp = 2000L,
+                    ),
+                ),
+            )
+            val agentService = FakeAgentService()
+            val viewModel =
+                AssistantViewModel(
+                    agentService = agentService,
+                    settingsRepository = fakeSettingsRepository,
+                    assistantRepository = fakeRepo,
+                )
+
+            advanceUntilIdle()
+
+            val stateMessages = viewModel.uiState.value.messages
+            assertEquals(2, stateMessages.size)
+            assertEquals("msg-1", stateMessages[0].id)
+            assertEquals(MessageRole.USER, stateMessages[0].role)
+            assertEquals("历史问题", stateMessages[0].content)
+            assertEquals("msg-2", stateMessages[1].id)
+            assertEquals(MessageRole.ASSISTANT, stateMessages[1].role)
+            assertEquals("历史回答", stateMessages[1].content)
+        }
+
+    @Test
+    fun sendMessage_persists_user_and_assistant_messages() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService = FakeAgentService(executeResult = AppResult.Success("智能体回答"))
+            val viewModel =
+                AssistantViewModel(
+                    agentService = agentService,
+                    settingsRepository = fakeSettingsRepository,
+                    assistantRepository = fakeRepo,
+                )
+
+            viewModel.sendMessage("新问题")
+            advanceUntilIdle()
+
+            val savedMessages = fakeRepo.getMessages().first()
+            assertEquals(2, savedMessages.size)
+            assertEquals(ChatMessageRole.USER, savedMessages[0].role)
+            assertEquals("新问题", savedMessages[0].content)
+            assertEquals(ChatMessageRole.ASSISTANT, savedMessages[1].role)
+            assertEquals("智能体回答", savedMessages[1].content)
+        }
+
+    @Test
+    fun approveAction_updates_persisted_status_to_success() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val executor = FakePendingActionExecutor()
+            val agentService =
+                FakeAgentService(
+                    pendingActionExecutor = executor,
+                    pendingActionStore = actionStore,
+                    executeResult =
+                        AppResult.Success(
+                            """
+                            {
+                              "status": "PENDING_CONFIRMATION",
+                              "message": "Update proposal",
+                              "action": {
+                                "type": "update_episode",
+                                "actionId": "act_persist_test",
+                                "subjectId": 12345,
+                                "subjectTitle": "葬送的芙莉莲",
+                                "episodeNumber": 5,
+                                "isWatched": true,
+                                "description": "Mark ep 5 as watched"
+                              }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+            val viewModel =
+                AssistantViewModel(
+                    agentService = agentService,
+                    settingsRepository = fakeSettingsRepository,
+                    assistantRepository = fakeRepo,
+                )
+
+            viewModel.sendMessage("打卡第5集")
+            advanceUntilIdle()
+
+            val savedMessages = fakeRepo.getMessages().first()
+            assertEquals(2, savedMessages.size)
+            val actionId =
+                savedMessages[1]
+                    .pendingActions
+                    .first()
+                    .action.actionId
+            assertEquals("act_persist_test", actionId)
+
+            viewModel.approveAction(actionId)
+            advanceUntilIdle()
+
+            val updatedMessages = fakeRepo.getMessages().first()
+            assertEquals(ActionCardStatus.SUCCESS, updatedMessages[1].pendingActions.first().status)
+        }
+
+    @Test
+    fun rejectAction_updates_persisted_status_to_rejected() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService =
+                FakeAgentService(
+                    pendingActionStore = actionStore,
+                    executeResult =
+                        AppResult.Success(
+                            """
+                            {
+                              "status": "PENDING_CONFIRMATION",
+                              "message": "Update proposal",
+                              "action": {
+                                "type": "update_episode",
+                                "actionId": "act_reject_persist_test",
+                                "subjectId": 12345,
+                                "subjectTitle": "葬送的芙莉莲",
+                                "episodeNumber": 5,
+                                "isWatched": true,
+                                "description": "Mark ep 5 as watched"
+                              }
+                            }
+                            """.trimIndent(),
+                        ),
+                )
+            val viewModel =
+                AssistantViewModel(
+                    agentService = agentService,
+                    settingsRepository = fakeSettingsRepository,
+                    assistantRepository = fakeRepo,
+                )
+
+            viewModel.sendMessage("打卡第5集")
+            advanceUntilIdle()
+
+            val savedMessages = fakeRepo.getMessages().first()
+            val actionId =
+                savedMessages[1]
+                    .pendingActions
+                    .first()
+                    .action.actionId
+            assertEquals("act_reject_persist_test", actionId)
+
+            viewModel.rejectAction(actionId)
+            advanceUntilIdle()
+
+            val updatedMessages = fakeRepo.getMessages().first()
+            assertEquals(ActionCardStatus.REJECTED, updatedMessages[1].pendingActions.first().status)
+        }
+
+    @Test
+    fun clearConversation_clears_repository_messages() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService = FakeAgentService(executeResult = AppResult.Success("回答"))
+            val viewModel =
+                AssistantViewModel(
+                    agentService = agentService,
+                    settingsRepository = fakeSettingsRepository,
+                    assistantRepository = fakeRepo,
+                )
+
+            viewModel.sendMessage("测试")
+            advanceUntilIdle()
+            assertEquals(2, fakeRepo.getMessages().first().size)
+
+            viewModel.clearConversation()
+            advanceUntilIdle()
+
+            assertTrue(fakeRepo.getMessages().first().isEmpty(), "清空会话后 Repository 应为空")
+            assertTrue(
+                viewModel.uiState.value.messages
+                    .isEmpty(),
+                "清空会话后 UIState 应为空",
+            )
         }
 }

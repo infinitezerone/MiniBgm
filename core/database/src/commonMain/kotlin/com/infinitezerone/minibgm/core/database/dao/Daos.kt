@@ -7,6 +7,7 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
+import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -118,5 +119,23 @@ interface UserCollectionDao {
     suspend fun clearByUserId(userId: Long)
 
     @Query("DELETE FROM user_collections")
+    suspend fun clearAll()
+}
+
+@Dao
+interface AssistantMessageDao {
+    @Query("SELECT * FROM assistant_messages ORDER BY timestamp ASC")
+    fun getAllMessages(): Flow<List<AssistantMessageEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(message: AssistantMessageEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<AssistantMessageEntity>)
+
+    @Query("DELETE FROM assistant_messages WHERE id = :id")
+    suspend fun deleteMessage(id: String)
+
+    @Query("DELETE FROM assistant_messages")
     suspend fun clearAll()
 }

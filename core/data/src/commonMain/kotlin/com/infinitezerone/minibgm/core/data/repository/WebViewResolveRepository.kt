@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.asAppResult
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
+import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
@@ -17,6 +18,19 @@ private const val MAX_DEEP_PAGES = 3
  */
 interface WebViewCaptureService {
     suspend fun capturePlayableSources(pageUrl: String): List<PlayableSource>
+
+    /**
+     * 对目标页面执行动态网络流量审计（运行指定时长，监听所有媒体与 API 调用，注入模拟播放）。
+     */
+    suspend fun auditPageTraffic(
+        pageUrl: String,
+        durationMs: Long = 8000L,
+    ): NetworkAuditTrace =
+        NetworkAuditTrace(
+            pageUrl = pageUrl,
+            isReachable = false,
+            errorMessage = "Not supported in this environment",
+        )
 }
 
 /**

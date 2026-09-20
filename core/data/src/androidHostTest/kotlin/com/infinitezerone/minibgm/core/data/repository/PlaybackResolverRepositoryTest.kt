@@ -556,4 +556,144 @@ class PlaybackResolverRepositoryTest {
             assertEquals("第02集", source.label)
             assertEquals("minibgm", source.headers["X-Source"])
         }
+
+    @Test
+    fun `inspectPage 成功提取 video 属性与 iframe 及 MacCMS`() =
+        runTest {
+            val html =
+                """
+                <!DOCTYPE html>
+                <html>
+                <head><title>测试视频详情页</title></head>
+                <body>
+                    <video src="https://cdn.example.com/play.mp4" data-apireq="sample_val" controls></video>
+                    <iframe src="https://embed.example.com/player?id=123"></iframe>
+                    <script>var player_aaaa = {"flag":"play"};</script>
+                </body>
+                </html>
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://example.com/detail" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val result = repo.inspectPage("https://example.com/detail")
+
+            assertTrue(result.isSuccess)
+            assertEquals("测试视频详情页", result.title)
+            assertTrue(result.hasVideoTag)
+            assertEquals("sample_val", result.videoAttrs["data-apireq"])
+            assertEquals("https://cdn.example.com/play.mp4", result.videoAttrs["src"])
+            assertEquals(listOf("https://embed.example.com/player?id=123"), result.iframeUrls)
+            assertTrue(result.hasMacCmsPattern)
+        }
+
+    @Test
+    fun `inspectPage 对无效 URL 与抓取失败优雅返回错误`() =
+        runTest {
+            val fake = FakePageFetchService(emptyMap())
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val invalid = repo.inspectPage("not-a-url")
+            assertEquals(false, invalid.isSuccess)
+            assertEquals("Invalid URL", invalid.errorMessage)
+
+            val failed = repo.inspectPage("https://example.com/404")
+            assertEquals(false, failed.isSuccess)
+            assertTrue(failed.errorMessage?.contains("Failed to fetch") == true)
+        }
+
+    @Test
+    fun `probeSite 成功探查带搜索框站点与样本播放页`() =
+        runTest {
+            val homeHtml =
+                """
+                <!DOCTYPE html>
+                <html>
+                <head><title>AnimeSite 动漫主页</title></head>
+                <body>
+                    <form action="/search" method="get">
+                        <input type="text" name="keyword" placeholder="搜索番剧" />
+                    </form>
+                    <div class="recent">
+                        <a href="/watch/101">最新连载 01</a>
+                    </div>
+                </body>
+                </html>
+                """.trimIndent()
+            val searchHtml =
+                """
+                <div class="results">
+                    <a href="/watch/202">葬送的芙莉莲 第 1 话</a>
+                </div>
+                """.trimIndent()
+            val fake =
+                FakePageFetchService(
+                    mapOf(
+                        "https://anime.example.com/" to homeHtml,
+                        "https://anime.example.com/search?keyword=%E8%8A%99%E8%8E%89%E8%8E%B2" to searchHtml,
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val probe = repo.probeSite("https://anime.example.com/", "芙莉莲")
+
+            assertTrue(probe.isReachable)
+            assertEquals(false, probe.isAdParking)
+            assertEquals("AnimeSite 动漫主页", probe.title)
+            assertTrue(probe.hasSearchBox)
+            assertEquals("https://anime.example.com/search?keyword={title}", probe.searchUrlPattern)
+            assertEquals("https://anime.example.com/watch/202", probe.sampleEpisodeUrl)
+        }
+
+    @Test
+    fun `probeSite 识别停放域名与不可达站点`() =
+        runTest {
+            val parkingHtml =
+                """
+                <html><head><title>Domain for Sale - 域名出售</title></head><body>This domain is expired.</body></html>
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://parking.example.com" to parkingHtml))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val parking = repo.probeSite("https://parking.example.com")
+            assertTrue(parking.isReachable)
+            assertTrue(parking.isAdParking)
+
+            val unreachable = repo.probeSite("https://down.example.com")
+            assertEquals(false, unreachable.isReachable)
+            assertTrue(unreachable.errorMessage?.contains("Site unreachable") == true)
+        }
+
+    @Test
+    fun `findCandidateEpisodeUrl 忽略带版本号样式表与脚本并优先提取数字详情页`() {
+        val html =
+            """
+            <html>
+            <head>
+              <link rel="stylesheet" href="https://anime1.me/wp-content/themes/twentyten/style.css?ver=20190507" type="text/css" />
+              <script src="https://anime1.me/wp-includes/js/jquery.js?ver=3.7.1"></script>
+            </head>
+            <body>
+              <a href="/category/all">所有动画</a>
+              <a href="/about.html">关于我们</a>
+              <a href="https://anime1.me/30194">葬送的芙莉莲 [01]</a>
+            </body>
+            </html>
+            """.trimIndent()
+
+        val candidate = findCandidateEpisodeUrl(html, "https://anime1.me")
+        assertEquals("https://anime1.me/30194", candidate)
+    }
+
+    @Test
+    fun `findCandidateEpisodeUrl 正确识别 rel 在 href 前方的 bookmark 属性`() {
+        val html =
+            """
+            <article>
+              <h2 class="entry-title"><a rel="bookmark" href="https://anime1.me/30194">葬送的芙莉莲 [01]</a></h2>
+            </article>
+            """.trimIndent()
+
+        val candidate = findCandidateEpisodeUrl(html, "https://anime1.me")
+        assertEquals("https://anime1.me/30194", candidate)
+    }
 }

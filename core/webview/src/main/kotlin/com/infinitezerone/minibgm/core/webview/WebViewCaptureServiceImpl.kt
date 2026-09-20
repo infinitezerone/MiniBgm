@@ -10,6 +10,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.WebViewCaptureService
+import com.infinitezerone.minibgm.core.model.CapturedNetworkCall
+import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -144,4 +146,154 @@ class WebViewCaptureServiceImpl(
         }
 
     private fun hostOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override suspend fun auditPageTraffic(
+        pageUrl: String,
+        durationMs: Long,
+    ): NetworkAuditTrace =
+        suspendCancellableCoroutine { continuation ->
+            val capturedCalls = mutableListOf<CapturedNetworkCall>()
+            val mediaSources = mutableListOf<PlayableSource>()
+            var webview: WebView? = null
+            var settled = false
+            val timeoutMs = durationMs.coerceIn(3000L, 20000L)
+
+            fun settle() {
+                if (settled) return
+                settled = true
+                val finalUrl = webview?.url ?: pageUrl
+                val pageTitle = webview?.title.orEmpty()
+                val rawCookie = runCatching { CookieManager.getInstance().getCookie(finalUrl) }.getOrNull().orEmpty()
+                val cookiesMap =
+                    rawCookie
+                        .split(';')
+                        .mapNotNull {
+                            val parts = it.split('=', limit = 2)
+                            if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+                        }.toMap()
+
+                val trace =
+                    NetworkAuditTrace(
+                        pageUrl = pageUrl,
+                        finalUrl = finalUrl,
+                        isReachable = true,
+                        title = pageTitle,
+                        calls = capturedCalls.take(40),
+                        cookies = cookiesMap,
+                        mediaSources = mediaSources.distinctBy { it.url }.take(MAX_CANDIDATES),
+                    )
+
+                mainHandler.post {
+                    webview?.destroy()
+                    webview = null
+                    if (continuation.isActive) continuation.resume(trace)
+                }
+            }
+
+            mainHandler.post {
+                runCatching {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    CookieManager.getInstance().flush()
+
+                    webview =
+                        WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            settings.mediaPlaybackRequiresUserGesture = false
+                            settings.blockNetworkImage = true
+
+                            webViewClient =
+                                object : WebViewClient() {
+                                    override fun shouldInterceptRequest(
+                                        view: WebView,
+                                        request: WebResourceRequest,
+                                    ): android.webkit.WebResourceResponse? {
+                                        runCatching {
+                                            val reqUrl = request.url.toString()
+                                            val isMedia = MEDIA_REQUEST_URL.matches(reqUrl)
+                                            val isApi =
+                                                reqUrl.contains("/api/", ignoreCase = true) ||
+                                                    reqUrl.contains(".json", ignoreCase = true) ||
+                                                    request.requestHeaders.any {
+                                                        it.key.equals("X-Requested-With", ignoreCase = true)
+                                                    }
+
+                                            val reqHeaders =
+                                                buildMap {
+                                                    request.requestHeaders["Referer"]?.let { put("Referer", it) }
+                                                    request.requestHeaders["User-Agent"]?.let { put("User-Agent", it) }
+                                                    request.requestHeaders["Origin"]?.let { put("Origin", it) }
+                                                    request.requestHeaders["Cookie"]?.let { put("Cookie", it) }
+                                                }
+
+                                            synchronized(capturedCalls) {
+                                                if (capturedCalls.size < 50 && (isMedia || isApi || capturedCalls.size < 15)) {
+                                                    capturedCalls +=
+                                                        CapturedNetworkCall(
+                                                            url = reqUrl,
+                                                            method = request.method,
+                                                            requestHeaders = reqHeaders,
+                                                            isMedia = isMedia,
+                                                            isApi = isApi,
+                                                        )
+                                                }
+                                            }
+
+                                            if (isMedia) {
+                                                synchronized(mediaSources) {
+                                                    mediaSources +=
+                                                        PlayableSource(
+                                                            url = reqUrl,
+                                                            kind = PlaylistEntryKind.DIRECT,
+                                                            label = "",
+                                                            episodeSort = 0f,
+                                                            siteName = hostOf(pageUrl),
+                                                            pageUrl = pageUrl,
+                                                            headers = reqHeaders,
+                                                        )
+                                                }
+                                            }
+                                        }
+                                        return null
+                                    }
+
+                                    override fun onPageFinished(
+                                        view: WebView,
+                                        url: String,
+                                    ) {
+                                        runCatching {
+                                            view.evaluateJavascript(
+                                                """
+                                                (function() {
+                                                    var v = document.querySelector('video');
+                                                    if (v && v.paused) { try { v.play(); } catch(e){} }
+                                                    var btns = document.querySelectorAll('.play, .vjs-play-control, button[class*="play"], [aria-label*="Play"]');
+                                                    btns.forEach(function(b) { try { b.click(); } catch(e){} });
+                                                })();
+                                                """.trimIndent(),
+                                                null,
+                                            )
+                                        }
+                                        mainHandler.postDelayed({ settle() }, AFTER_FINISH_GRACE_MS)
+                                    }
+                                }
+                            loadUrl(pageUrl)
+                        }
+                }.onFailure { e ->
+                    logger.w { "WebView 审计会话创建失败 $pageUrl: ${e.message}" }
+                    settle()
+                }
+            }
+
+            mainHandler.postDelayed({ settle() }, timeoutMs + AFTER_FINISH_GRACE_MS)
+            continuation.invokeOnCancellation {
+                mainHandler.post {
+                    webview?.destroy()
+                    webview = null
+                }
+            }
+        }
 }
