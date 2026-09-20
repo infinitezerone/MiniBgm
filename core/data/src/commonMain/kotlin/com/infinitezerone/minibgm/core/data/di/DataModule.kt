@@ -77,6 +77,7 @@ val dataModule =
         single<SettingsRepository> {
             SettingsRepositoryImpl(
                 userPreferences = get<UserPreferencesDataSource>(),
+                communitySubscriptionService = getOrNull(),
             )
         }
         single {

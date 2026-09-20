@@ -462,13 +462,6 @@ class ScheduleRepositoryImpl(
             airEventDao.insertAirEvents(anilistEvents)
         }
 
-        // 2. Bilibili 逐话真值（针对 AniList 未覆盖但有 B 站源的国创/独播条目）
-        val uncoveredTargets = targets.filter { it.bgmId !in coveredSubjects }
-        val bilibiliEvents = fetchBilibiliAirEvents(uncoveredTargets, nowMillis)
-        if (bilibiliEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(bilibiliEvents)
-        }
-
         // 3. 仲裁回写：next* 字段取未来最近一话（或刚播出的上一话），回补 AniList 高清封面，并剔除已完结僵尸条目
         val allEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
         val entitiesWithCovers =
@@ -570,72 +563,6 @@ class ScheduleRepositoryImpl(
             coveredSubjects += entity.bgmId
         }
         return Triple(anilistEvents, coveredSubjects, coversBySubjectId)
-    }
-
-    private suspend fun fetchBilibiliAirEvents(
-        entities: List<AirScheduleEntity>,
-        nowMillis: Long,
-    ): List<AirEventEntity> {
-        val bilibiliEvents = mutableListOf<AirEventEntity>()
-        for (entity in entities) {
-            val siteId = extractBilibiliSiteId(entity) ?: continue
-            val episodes = runCatching { bilibiliService.getAiringEpisodes(siteId) }.getOrElse { emptyList() }
-            if (episodes.isEmpty()) continue
-
-            for (episode in episodes) {
-                if (episode.episode < 1) continue
-                val airAtMillis = episode.airAtEpochSeconds * 1000
-                val kind = if (airAtMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
-                bilibiliEvents +=
-                    AirEventEntity(
-                        subjectId = entity.bgmId,
-                        episode = episode.episode,
-                        airAtUtc = TimeUtils.isoUtcFromEpochMillis(airAtMillis),
-                        kind = kind,
-                        source = EVENT_SOURCE_BILIBILI,
-                    )
-            }
-        }
-        return bilibiliEvents
-    }
-
-    private fun extractBilibiliSiteId(entity: AirScheduleEntity): String? {
-        val links: List<SiteLink> =
-            try {
-                json.decodeFromString(entity.sitesJson)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        val playUrl = links.firstOrNull { it.siteName.equals(BILIBILI_SITE, ignoreCase = true) }?.playUrl
-        if (playUrl != null) {
-            return when {
-                playUrl.contains("/media/") -> playUrl.substringAfter("/media/").substringBefore("/").substringBefore("?")
-                playUrl.contains("/play/") -> playUrl.substringAfter("/play/").substringBefore("/").substringBefore("?")
-                else -> null
-            }
-        }
-        val rawSites: List<BangumiDataSite> =
-            try {
-                json.decodeFromString(entity.sitesJson)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        val rawSite = rawSites.firstOrNull { it.site.equals(BILIBILI_SITE, ignoreCase = true) } ?: return null
-        return rawSite.id.ifBlank {
-            when {
-                rawSite.url.contains("/media/") ->
-                    rawSite.url
-                        .substringAfter("/media/")
-                        .substringBefore("/")
-                        .substringBefore("?")
-                rawSite.url.contains("/play/") ->
-                    rawSite.url
-                        .substringAfter("/play/")
-                        .substringBefore("/")
-                        .substringBefore("?")
-                else -> null
-            }
-        }
     }
 
     private fun reconcileScheduleEntities(
@@ -896,25 +823,76 @@ class ScheduleRepositoryImpl(
     }
 
     private fun AirScheduleEntity.isActiveForSchedule(nowMillis: Long): Boolean {
-        if (source != AirScheduleEntity.SOURCE_BGM_DATA) return true
         val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
         val nextMillis = TimeUtils.epochMillisOfIso(nextEpisodeAtUtc)
+
+        // 1. 若条目有排期且在当前周或未来：必然处于活跃状态
         if (nextMillis != null && nextMillis >= weekStartMillis) {
             return true
         }
 
-        val beginMillis = TimeUtils.epochMillisOfIso(beginUtc)
-        if (totalEpisodes == 1) {
-            return beginMillis != null && beginMillis >= weekStartMillis
+        val beginMillis =
+            TimeUtils.epochMillisOfIso(beginUtc)
+                ?: TimeUtils.epochMillisOfIso(airDate)
+
+        // 2. 短篇/特别篇（总集数 1..3 话）：播出周期极短，若开播日 + 总集数 * 7天 已经早于当前周，判定为已完结
+        if (isFinishedShortSeries(weekStartMillis, beginMillis)) {
+            return false
         }
-        if (totalEpisodes > 1) {
-            if (nextEpisode >= totalEpisodes && nextMillis != null && nextMillis < weekStartMillis) {
-                return false
+
+        // 3. 已播完最终话：若当前已播集数已达总集数，且最后一集在过去周已播完，判定为已完结
+        if (isFinalEpisodeAlreadyAired(weekStartMillis, nextMillis)) {
+            return false
+        }
+
+        // 4. 若条目最近一集已播完（ACTUAL），且已超过两周没有任何新集数排期：
+        if (isStaleWithoutFutureSchedule(weekStartMillis, nextMillis, beginMillis)) {
+            return false
+        }
+
+        // 5. totalEpisodes <= 0 或暂无排期事件的条目：
+        if (totalEpisodes <= 0) {
+            if (source == AirScheduleEntity.SOURCE_OFFICIAL) {
+                return true // 官方日历长篇连载（如柯南、海贼王）安全保留
             }
-            return beginMillis != null && beginMillis + totalEpisodes * WEEK_MILLIS >= weekStartMillis
+            return beginMillis != null && beginMillis >= weekStartMillis - 14 * DAY_MILLIS
         }
-        // totalEpisodes <= 0
-        return beginMillis != null && beginMillis >= weekStartMillis - 14 * DAY_MILLIS
+
+        // 6. 普通在播季度番，默认在总播映生命周期内保持活跃
+        return beginMillis == null || beginMillis + totalEpisodes * WEEK_MILLIS >= weekStartMillis
+    }
+
+    private fun AirScheduleEntity.isFinishedShortSeries(
+        weekStartMillis: Long,
+        beginMillis: Long?,
+    ): Boolean = totalEpisodes in 1..3 && beginMillis != null && beginMillis + totalEpisodes * WEEK_MILLIS < weekStartMillis
+
+    private fun AirScheduleEntity.isFinalEpisodeAlreadyAired(
+        weekStartMillis: Long,
+        nextMillis: Long?,
+    ): Boolean =
+        totalEpisodes > 0 &&
+            nextEpisode >= totalEpisodes &&
+            nextEpisodeKind == AirEventKind.ACTUAL &&
+            nextMillis != null &&
+            nextMillis < weekStartMillis
+
+    private fun AirScheduleEntity.isStaleWithoutFutureSchedule(
+        weekStartMillis: Long,
+        nextMillis: Long?,
+        beginMillis: Long?,
+    ): Boolean {
+        if (nextEpisodeKind != AirEventKind.ACTUAL || nextMillis == null) return false
+        if (nextMillis >= weekStartMillis - 14 * DAY_MILLIS) return false
+        return !isStillWithinAiringWindow(weekStartMillis, beginMillis)
+    }
+
+    private fun AirScheduleEntity.isStillWithinAiringWindow(
+        weekStartMillis: Long,
+        beginMillis: Long?,
+    ): Boolean {
+        if (totalEpisodes <= 0 || nextEpisode >= totalEpisodes || beginMillis == null) return false
+        return beginMillis + totalEpisodes * WEEK_MILLIS >= weekStartMillis
     }
 
     private companion object {

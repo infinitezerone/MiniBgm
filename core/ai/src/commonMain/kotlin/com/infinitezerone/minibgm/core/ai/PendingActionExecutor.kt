@@ -19,6 +19,7 @@ interface PendingActionExecutor {
 
 class DefaultPendingActionExecutor(
     private val collectionRepository: CollectionRepository,
+    private val settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository? = null,
 ) : PendingActionExecutor {
     override suspend fun execute(action: PendingAction): AppResult<Unit> =
         withContext(NonCancellable) {
@@ -55,6 +56,15 @@ class DefaultPendingActionExecutor(
                             isWatched = action.isWatched,
                             epNumber = action.episodeNumber,
                         )
+                    }
+                    is PendingAction.ImportPlaybackRules -> {
+                        if (action.rules.isEmpty()) {
+                            return@withContext AppResult.Error(
+                                IllegalArgumentException("No playback rules provided to import"),
+                            )
+                        }
+                        settingsRepository?.importPlaybackRules(action.rules)
+                        AppResult.Success(Unit)
                     }
                 }
             } catch (e: CancellationException) {

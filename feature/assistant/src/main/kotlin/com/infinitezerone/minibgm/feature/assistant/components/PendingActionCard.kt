@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.assistant.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -92,7 +93,7 @@ fun PendingActionCard(
                     }
 
                     Text(
-                        text = "确认更新追番进度？",
+                        text = if (action is PendingAction.ImportPlaybackRules) "确认导入社区播放源？" else "确认更新追番进度？",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -184,70 +185,111 @@ fun PendingActionCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val displayTitle =
-                    remember(action.subjectTitle, action.subjectId) {
-                        val clean = action.subjectTitle.trim()
-                        when {
-                            clean.isBlank() -> "条目 #${action.subjectId}"
-                            clean.startsWith("《") && clean.endsWith("》") -> clean
-                            else -> "《$clean》"
+                if (action is PendingAction.ImportPlaybackRules) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.size(42.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(22.dp),
+                            )
                         }
                     }
 
-                CoverImage(
-                    url = action.coverUrl,
-                    contentDescription = displayTitle,
-                    cornerRadius = 8.dp,
-                    aspectRatio = 0.72f,
-                    modifier =
-                        Modifier
-                            .width(40.dp)
-                            .clickable { onSubjectClick(action.subjectId) },
-                )
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = action.sourceName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = displayTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.clickable { onSubjectClick(action.subjectId) },
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        Text(
+                            text = action.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                } else {
+                    val displayTitle =
+                        remember(action.subjectTitle, action.subjectId) {
+                            val clean = action.subjectTitle.trim()
+                            when {
+                                clean.isBlank() -> "条目 #${action.subjectId}"
+                                clean.startsWith("《") && clean.endsWith("》") -> clean
+                                else -> "《$clean》"
+                            }
+                        }
+
+                    CoverImage(
+                        url = action.coverUrl,
+                        contentDescription = displayTitle,
+                        cornerRadius = 8.dp,
+                        aspectRatio = 0.72f,
+                        modifier =
+                            Modifier
+                                .width(40.dp)
+                                .clickable { onSubjectClick(action.subjectId) },
                     )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                    when (action) {
-                        is PendingAction.UpdateEpisode -> {
-                            val statusLabel = if (action.isWatched) "标记为已看" else "标记为未看"
-                            Text(
-                                text = "$statusLabel · 第 ${action.episodeNumber} 话",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        is PendingAction.UpdateCollection -> {
-                            val parts = mutableListOf("标记为${action.collectionType.label}")
-                            action.rating?.let { parts.add("评分：${it}分") }
-                            if (action.isPrivate) parts.add("私密")
-                            Text(
-                                text = parts.joinToString(" · "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (!action.comment.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(2.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { onSubjectClick(action.subjectId) },
+                        )
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        when (action) {
+                            is PendingAction.UpdateEpisode -> {
+                                val statusLabel = if (action.isWatched) "标记为已看" else "标记为未看"
                                 Text(
-                                    text = "短评：\"${action.comment}\"",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                                    text = "$statusLabel · 第 ${action.episodeNumber} 话",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            is PendingAction.UpdateCollection -> {
+                                val parts = mutableListOf("标记为${action.collectionType.label}")
+                                action.rating?.let { parts.add("评分：${it}分") }
+                                if (action.isPrivate) parts.add("私密")
+                                Text(
+                                    text = parts.joinToString(" · "),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (!action.comment.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "短评：\"${action.comment}\"",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            is PendingAction.ImportPlaybackRules -> Unit
                         }
                     }
                 }

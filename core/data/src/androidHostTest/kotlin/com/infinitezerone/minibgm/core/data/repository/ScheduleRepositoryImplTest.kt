@@ -251,13 +251,13 @@ class ScheduleRepositoryImplTest {
     }
 
     private fun createRepository(
-        apiService: FakeBangumiApiService,
-        dataService: FakeBangumiDataService,
-        scheduleDao: FakeAirScheduleDao,
-        airEventDao: FakeAirEventDao,
-        anilistService: FakeAniListService,
+        apiService: FakeBangumiApiService = FakeBangumiApiService(),
+        dataService: FakeBangumiDataService = FakeBangumiDataService(),
+        scheduleDao: FakeAirScheduleDao = FakeAirScheduleDao(),
+        airEventDao: FakeAirEventDao = FakeAirEventDao(),
+        anilistService: FakeAniListService = FakeAniListService(),
         bilibiliService: FakeBilibiliService = FakeBilibiliService(),
-        userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource,
+        userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
         collectionRepository: CollectionRepository? = null,
     ) = ScheduleRepositoryImpl(
         apiService = apiService,
@@ -857,28 +857,9 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
-    fun syncAirEvents_withBilibiliSite_fetchesAndReconcilesBilibiliEvents() =
+    fun syncAirEvents_bypassesBilibiliAndReliesOnAniList() =
         runTest {
-            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
-            val pastEpPubTime = nowSeconds - 8 * 86400 // 8 天前（上周已播）
-            val futureEpPubTime = nowSeconds + 2 * 86400 // 2 天后（本周待播）
-            val bilibiliService =
-                FakeBilibiliService().apply {
-                    episodesBySiteId =
-                        mapOf(
-                            "4315482" to
-                                listOf(
-                                    BilibiliAiringEpisode(
-                                        episode = 1,
-                                        airAtEpochSeconds = pastEpPubTime,
-                                    ),
-                                    BilibiliAiringEpisode(
-                                        episode = 2,
-                                        airAtEpochSeconds = futureEpPubTime,
-                                    ),
-                                ),
-                        )
-                }
+            val bilibiliService = FakeBilibiliService()
             val dao =
                 FakeAirScheduleDao().apply {
                     insertSchedules(
@@ -914,16 +895,86 @@ class ScheduleRepositoryImplTest {
             val result = repo.syncBangumiData(force = true)
 
             assertIs<AppResult.Success<Unit>>(result)
-            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
-            assertEquals(2, storedEvents.size)
-            assertEquals(listOf(1, 2), storedEvents.map { it.episode })
-            assertEquals(AirEventKind.ACTUAL, storedEvents[0].kind)
-            assertEquals(AirEventKind.SCHEDULED, storedEvents[1].kind)
+            // Bilibili API is no longer invoked, preventing slow serial network loops
+            assertTrue(bilibiliService.requestedSiteIds.isEmpty())
+        }
 
-            val updated = dao.getAllSchedulesList().single()
-            assertEquals(2, updated.nextEpisode)
-            assertEquals(AirEventKind.SCHEDULED, updated.nextEpisodeKind)
-            assertEquals(TimeUtils.isoUtcFromEpochMillis(futureEpPubTime * 1000), updated.nextEpisodeAtUtc)
+    @Test
+    fun getAllSchedulesStream_filtersOutFinishedShortAnimeLikeCyborg009() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val twoMonthsAgo = nowMillis - 60L * 24 * 3600 * 1000
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            // 人造人009类：官方来源、7月播完、3集短片、无未来排期
+                            AirScheduleEntity(
+                                bgmId = 571896L,
+                                title = "サイボーグ009 ネメシス",
+                                titleCn = "人造人009 涅墨西斯",
+                                coverUrl = "",
+                                ratingScore = 7.0,
+                                airDate = "2026-07-19",
+                                totalEpisodes = 3,
+                                weekday = 7,
+                                timeCst = "10:00",
+                                timeJst = "11:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                                nextEpisode = 1,
+                                nextEpisodeAtUtc = TimeUtils.isoUtcFromEpochMillis(twoMonthsAgo),
+                                nextEpisodeKind = AirEventKind.ACTUAL,
+                            ),
+                            // 柯南类：长篇官方年番、无未来确切排期、总集数未定 -> 必须安全保留
+                            AirScheduleEntity(
+                                bgmId = 899L,
+                                title = "名探偵コナン",
+                                titleCn = "名侦探柯南",
+                                coverUrl = "",
+                                ratingScore = 8.5,
+                                airDate = "1996-01-08",
+                                totalEpisodes = 0,
+                                weekday = 6,
+                                timeCst = "18:00",
+                                timeJst = "19:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                                nextEpisode = 0,
+                                nextEpisodeAtUtc = "",
+                                nextEpisodeKind = "",
+                            ),
+                            // 当季在播番：本周或未来有排期 -> 正常展示
+                            AirScheduleEntity(
+                                bgmId = 101L,
+                                title = "当季在播番",
+                                titleCn = "当季在播番",
+                                coverUrl = "",
+                                ratingScore = 7.5,
+                                airDate = "2026-07-06",
+                                totalEpisodes = 12,
+                                weekday = 1,
+                                timeCst = "23:00",
+                                timeJst = "24:00",
+                                sitesJson = "[]",
+                                source = AirScheduleEntity.SOURCE_OFFICIAL,
+                                nextEpisode = 10,
+                                nextEpisodeAtUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis + 24 * 3600 * 1000),
+                                nextEpisodeKind = AirEventKind.SCHEDULED,
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    scheduleDao = dao,
+                )
+
+            val schedules = repo.getAllSchedulesStream().first()
+            assertEquals(2, schedules.size)
+            assertTrue(schedules.none { it.bgmId == 571896L }) // 009 被精准剔除
+            assertTrue(schedules.any { it.bgmId == 899L }) // 柯南安全保留
+            assertTrue(schedules.any { it.bgmId == 101L }) // 在播番正常展示
         }
 
     @Test
@@ -1073,7 +1124,7 @@ class ScheduleRepositoryImplTest {
             val nowMillis = TimeUtils.nowEpochMillis()
             val nowSeconds = nowMillis / 1000
             val futureAirEpoch = nowSeconds + 86400 // 明天开播
-            val pastAirEpoch = futureAirEpoch - 7 * 86400 // 上周开播
+            val pastAirEpoch = futureAirEpoch - 14 * 86400 // 两周前已开播（确保在跨周/周末运行时亦稳定属于上周之前）
             val ep1AirDate = TimeUtils.formatEpochSecondsToDate(futureAirEpoch - 10 * 7 * 86400)
 
             val anilist =

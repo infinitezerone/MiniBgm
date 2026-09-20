@@ -6,6 +6,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 
 /** AniList 逐话播出排期节点 */
@@ -80,47 +82,53 @@ class AniListServiceImpl(
     private val client: HttpClient,
     private val chunkSize: Int = 40,
 ) : AniListService {
-    override suspend fun getMediaSchedules(anilistIds: List<Long>): Map<Long, AniListMediaSchedule> {
-        val result = mutableMapOf<Long, AniListMediaSchedule>()
-        anilistIds
-            .distinct()
-            .filter { it > 0 }
-            .chunked(chunkSize)
-            .forEach { chunk ->
-                runCatching {
-                    val aliases =
-                        chunk.mapIndexed { index, id ->
-                            "s$index: Media(id: $id) { coverImage { large } airingSchedule(perPage: 50) { nodes { episode airingAt } } nextAiringEpisode { episode airingAt } }"
-                        }
-                    val response =
-                        client
-                            .post("https://graphql.anilist.co") {
-                                contentType(ContentType.Application.Json)
-                                setBody(mapOf("query" to "query { ${aliases.joinToString(" ")} }"))
-                            }.body<AniListGraphQLResponse>()
-                    chunk.forEachIndexed { index, id ->
-                        val media = response.data?.get("s$index")
-                        val coverUrl = media?.coverImage?.large?.takeIf { it.isNotBlank() }
-                        val nodes = media?.airingSchedule?.nodes.orEmpty()
-                        val next = media?.nextAiringEpisode
-                        val combined =
-                            if (next != null && nodes.none { it.episode == next.episode }) {
-                                nodes + next
-                            } else {
-                                nodes
+    override suspend fun getMediaSchedules(anilistIds: List<Long>): Map<Long, AniListMediaSchedule> =
+        coroutineScope {
+            val validIds = anilistIds.distinct().filter { it > 0 }
+            if (validIds.isEmpty()) return@coroutineScope emptyMap()
+
+            val deferreds =
+                validIds.chunked(chunkSize).map { chunk ->
+                    async {
+                        val chunkResult = mutableMapOf<Long, AniListMediaSchedule>()
+                        runCatching {
+                            val aliases =
+                                chunk.mapIndexed { index, id ->
+                                    "s$index: Media(id: $id) { coverImage { large } airingSchedule(perPage: 50) { nodes { episode airingAt } } nextAiringEpisode { episode airingAt } }"
+                                }
+                            val response =
+                                client
+                                    .post("https://graphql.anilist.co") {
+                                        contentType(ContentType.Application.Json)
+                                        setBody(mapOf("query" to "query { ${aliases.joinToString(" ")} }"))
+                                    }.body<AniListGraphQLResponse>()
+                            chunk.forEachIndexed { index, id ->
+                                val media = response.data?.get("s$index")
+                                val coverUrl = media?.coverImage?.large?.takeIf { it.isNotBlank() }
+                                val nodes = media?.airingSchedule?.nodes.orEmpty()
+                                val next = media?.nextAiringEpisode
+                                val combined =
+                                    if (next != null && nodes.none { it.episode == next.episode }) {
+                                        nodes + next
+                                    } else {
+                                        nodes
+                                    }
+                                val episodes =
+                                    combined
+                                        .map { AniListAiringEpisode(it.episode, it.airingAt) }
+                                        .sortedBy { it.episode }
+                                if (episodes.isNotEmpty() || coverUrl != null) {
+                                    chunkResult[id] = AniListMediaSchedule(episodes = episodes, coverUrl = coverUrl)
+                                }
                             }
-                        val episodes =
-                            combined
-                                .map { AniListAiringEpisode(it.episode, it.airingAt) }
-                                .sortedBy { it.episode }
-                        if (episodes.isNotEmpty() || coverUrl != null) {
-                            result[id] = AniListMediaSchedule(episodes = episodes, coverUrl = coverUrl)
                         }
+                        chunkResult
                     }
                 }
-            }
-        return result
-    }
+            val finalMap = mutableMapOf<Long, AniListMediaSchedule>()
+            deferreds.forEach { finalMap.putAll(it.await()) }
+            finalMap
+        }
 
     override suspend fun getAiringSchedules(anilistIds: List<Long>): Map<Long, List<AniListAiringEpisode>> =
         getMediaSchedules(anilistIds).mapValues { it.value.episodes }

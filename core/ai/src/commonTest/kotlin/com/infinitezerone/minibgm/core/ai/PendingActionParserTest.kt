@@ -163,4 +163,33 @@ class PendingActionParserTest {
         assertEquals(CollectionType.DOING, action.collectionType)
         assertEquals("Watched episode 1 } highly recommended! \"Quote with } inside\"", action.comment)
     }
+
+    @Test
+    fun extractPendingActions_parses_ImportPlaybackRules_correctly() {
+        val rules =
+            listOf(
+                com.infinitezerone.minibgm.core.model.PlaybackSourceRule(
+                    id = "rule-1",
+                    name = "测试动漫源",
+                    urlTemplate = "https://example.com/search?q={title}",
+                ),
+            )
+        val action =
+            PendingAction.ImportPlaybackRules(
+                actionId = "act_import_1",
+                sourceName = "社区源",
+                rules = rules,
+                description = "导入1条规则",
+            )
+        val proposal = ActionProposal(message = "Ready", action = action)
+        val jsonStr = json.encodeToString(proposal)
+        val extracted = PendingActionParser.extractPendingActions(jsonStr)
+
+        assertEquals(1, extracted.size)
+        assertIs<PendingAction.ImportPlaybackRules>(extracted[0])
+        val imported = extracted[0] as PendingAction.ImportPlaybackRules
+        assertEquals("act_import_1", imported.actionId)
+        assertEquals(1, imported.rules.size)
+        assertEquals("测试动漫源", imported.rules[0].name)
+    }
 }

@@ -95,10 +95,18 @@ interface SettingsRepository {
 
     /** 播完或位置失效时清除该地址的续播点 */
     suspend fun clearPlaybackPosition(url: String)
+
+    /**
+     * 自动从开源社区动态发现并测速可用的二次元播放源规则
+     */
+    suspend fun discoverCommunityPlaybackSources(
+        customSubscriptionUrl: String? = null,
+    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>>
 }
 
 class SettingsRepositoryImpl(
     private val userPreferences: UserPreferencesDataSource,
+    private val communitySubscriptionService: com.infinitezerone.minibgm.core.network.CommunitySubscriptionService? = null,
 ) : SettingsRepository {
     private val json =
         Json {
@@ -204,13 +212,14 @@ class SettingsRepositoryImpl(
         userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
     }
 
-    override suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>) {
-        val current = playbackRules.first()
-        val existingIds = current.map { it.id }.toSet()
-        val newRules = rules.filterNot { it.id in existingIds }
-        val updated = current + newRules
-        userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
-    }
+    override suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>) =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val current = playbackRules.first()
+            val existingIds = current.map { it.id }.toSet()
+            val newRules = rules.filterNot { it.id in existingIds }
+            val updated = current + newRules
+            userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+        }
 
     private val playlistsWriteMutex = Mutex()
 
@@ -334,6 +343,24 @@ class SettingsRepositoryImpl(
             )
         }
     }
+
+    override suspend fun discoverCommunityPlaybackSources(
+        customSubscriptionUrl: String?,
+    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>> =
+        try {
+            val service =
+                communitySubscriptionService
+                    ?: return com.infinitezerone.minibgm.core.common.AppResult
+                        .Success(emptyList())
+            val sources = service.fetchAndTestCommunitySources(customSubscriptionUrl)
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Success(sources)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Error(e)
+        }
 
     companion object {
         const val MAX_PLAYBACK_POSITIONS = 50
