@@ -174,7 +174,10 @@ class DefaultBgmAiAgentService(
             playbackRuleDiagnosticsTools?.let { tools(it) }
         }
 
-    override suspend fun execute(prompt: String): AppResult<String> {
+    override suspend fun execute(
+        prompt: String,
+        history: List<Pair<String, String>>,
+    ): AppResult<String> {
         if (prompt.isBlank()) {
             return AppResult.Error(IllegalArgumentException("Prompt must not be blank."))
         }
@@ -188,13 +191,49 @@ class DefaultBgmAiAgentService(
                 )
             }
         }
+
+        val finalPrompt =
+            if (history.isEmpty()) {
+                prompt
+            } else {
+                buildString {
+                    appendLine("以下是先前的会话历史记录（供参考上下文）：")
+                    history.forEach { (role, content) ->
+                        val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
+                        appendLine("[$roleLabel] $content")
+                    }
+                    appendLine("---")
+                    appendLine("用户当前最新输入：")
+                    append(prompt)
+                }
+            }
+
         AiToolActivity.clear()
         AiToolActivity.reportStatus("AI 正在思考并检索...")
         return try {
-            // 推理模型多轮往返较慢（实测 1~3 分钟），但必须有硬上限防挂死
+            // 推理模型多轮往返较慢（实测 1~3 分钟），但必须有硬上限防挂死；支持 429 限流退避重试
             val response =
                 withTimeout(AI_RUN_TIMEOUT_MS) {
-                    agentRunner(config, prompt, toolRegistry)
+                    var lastException: Exception? = null
+                    var result: String? = null
+                    val maxAttempts = 3
+                    for (attempt in 1..maxAttempts) {
+                        try {
+                            result = agentRunner(config, finalPrompt, toolRegistry)
+                            break
+                        } catch (e: Exception) {
+                            lastException = e
+                            val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
+                            val is429 = isRateLimitOrQuota(raw.lowercase())
+                            if (is429 && attempt < maxAttempts) {
+                                AiToolActivity.reportStatus("AI 请求较频繁（429 限流），等待刷新（${attempt * 2}秒）...")
+                                kotlinx.coroutines.delay(attempt * 2000L)
+                            } else {
+                                throw e
+                            }
+                        }
+                    }
+                    result ?: throw (lastException ?: IllegalStateException("Agent execution failed"))
                 }
             AiToolActivity.clear()
             AppResult.Success(response)

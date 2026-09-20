@@ -10,9 +10,13 @@ interface BgmAiAgentService {
     /**
      * 执行智能体推理任务。
      * @param prompt 输入指令或问题
+     * @param history 会话历史列表，每项为 Pair(role, content)，如 ("user", "..."), ("assistant", "...")
      * @return 智能体执行结果
      */
-    suspend fun execute(prompt: String): AppResult<String>
+    suspend fun execute(
+        prompt: String,
+        history: List<Pair<String, String>> = emptyList(),
+    ): AppResult<String>
 
     /**
      * 拉取指定端点或当前配置端点上可用的模型 id 列表（OpenAI 兼容 /models 或 Ollama /api/tags）。

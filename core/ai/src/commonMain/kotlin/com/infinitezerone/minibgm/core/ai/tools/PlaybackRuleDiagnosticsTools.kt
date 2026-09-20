@@ -35,8 +35,42 @@ class PlaybackRuleDiagnosticsTools(
         Json {
             prettyPrint = true
             ignoreUnknownKeys = true
+            encodeDefaults = true
         },
 ) : ToolSet {
+    @Tool
+    @LLMDescription(
+        "Probe a website's health, title, search parameters, and automatically find a sample playable episode page URL. " +
+            "Use this as the FIRST STEP when adapting or reversing a new playback website.",
+    )
+    suspend fun probeSiteAndFindSample(
+        @LLMDescription("The base HTTP/HTTPS URL of the target anime website, e.g. https://anime1.me/")
+        siteUrl: String,
+        @LLMDescription("Sample anime title to search or match, defaults to '芙莉莲'")
+        sampleAnime: String = "芙莉莲",
+    ): String {
+        val result = playbackResolverRepository.probeSite(siteUrl, sampleAnime)
+        return json.encodeToString(result)
+    }
+
+    @Tool
+    @LLMDescription(
+        "Execute dynamic headless network traffic auditing on a playback page URL. " +
+            "Renders the page in an isolated environment, triggers video playback, and captures all video media streams (.m3u8, .mp4) " +
+            "and intermediate XHR/Fetch API calls with their request headers and cookies. " +
+            "Use this to observe what requests the site makes to resolve the actual video stream.",
+    )
+    suspend fun traceNetworkTraffic(
+        @LLMDescription("The absolute URL of the playback episode page to audit")
+        playbackPageUrl: String,
+        @LLMDescription("Audit duration in seconds (defaults to 8, min 3, max 15)")
+        durationSeconds: Int = 8,
+    ): String {
+        val boundedDuration = durationSeconds.coerceIn(3, 15) * 1000L
+        val result = playbackResolverRepository.auditPageTraffic(playbackPageUrl, boundedDuration)
+        return json.encodeToString(result)
+    }
+
     @Tool
     @LLMDescription(
         "Inspect the multimedia structure of a web page (e.g. video tags, custom attributes like data-apireq, " +

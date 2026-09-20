@@ -152,6 +152,68 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         }
 
     @Test
+    fun execute_retries_and_succeeds_on_temporary_429_rate_limit() =
+        runTest {
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "dummy-key",
+                    model = "gpt-4o-mini",
+                    provider = "openai",
+                ),
+            )
+            var attempts = 0
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    agentRunner = { _, prompt ->
+                        attempts++
+                        if (attempts == 1) {
+                            throw IllegalStateException("Status code: 429, inference exceeds tpm/rpm limit")
+                        }
+                        "成功响应: $prompt"
+                    },
+                )
+            val result = service.execute("测试重试")
+            assertIs<AppResult.Success<String>>(result)
+            assertEquals("成功响应: 测试重试", result.data)
+            assertEquals(2, attempts, "应在第 2 次重试后成功")
+        }
+
+    @Test
+    fun execute_passes_conversation_history_in_prompt() =
+        runTest {
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "dummy-key",
+                    model = "gpt-4o-mini",
+                    provider = "openai",
+                ),
+            )
+            var capturedPrompt = ""
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    agentRunner = { _, prompt ->
+                        capturedPrompt = prompt
+                        "ok"
+                    },
+                )
+            val history =
+                listOf(
+                    "user" to "帮我分析 https://anime1.me/",
+                    "assistant" to "正在分析",
+                )
+            val result = service.execute("继续执行", history)
+            assertIs<AppResult.Success<String>>(result)
+            assertTrue(capturedPrompt.contains("以下是先前的会话历史记录"))
+            assertTrue(capturedPrompt.contains("[用户] 帮我分析 https://anime1.me/"))
+            assertTrue(capturedPrompt.contains("[助手] 正在分析"))
+            assertTrue(capturedPrompt.contains("用户当前最新输入：\n继续执行"))
+        }
+
+    @Test
     fun execute_with_default_runner_handles_connection_failure() =
         runTest {
             fakeSettingsRepository.setAiConfig(

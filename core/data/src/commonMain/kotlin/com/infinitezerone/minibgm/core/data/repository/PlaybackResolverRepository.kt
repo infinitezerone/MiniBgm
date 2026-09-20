@@ -1,9 +1,11 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.ProbeSiteOutput
 import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.FetchedPage
@@ -101,11 +103,28 @@ interface PlaybackResolverRepository {
      */
     suspend fun inspectPage(url: String): PageInspectionResult =
         PageInspectionResult(url = url, isSuccess = false, errorMessage = "Not implemented")
+
+    /**
+     * 自主探查目标站点的可用性、标题、搜索参数模式，并尝试寻找样本播放页。
+     */
+    suspend fun probeSite(
+        siteUrl: String,
+        sampleAnime: String = "芙莉莲",
+    ): ProbeSiteOutput = ProbeSiteOutput(siteUrl = siteUrl, isReachable = false, errorMessage = "Not implemented")
+
+    /**
+     * 对指定页面执行动态网络流量审计（运行指定时长，监控所有媒体流与关键 API 调用）。
+     */
+    suspend fun auditPageTraffic(
+        pageUrl: String,
+        durationMs: Long = 8000L,
+    ): NetworkAuditTrace = NetworkAuditTrace(pageUrl = pageUrl, isReachable = false, errorMessage = "Not implemented")
 }
 
 class PlaybackResolverRepositoryImpl(
     private val pageFetchService: PageFetchService,
     private val playbackRuleEngine: PlaybackRuleEngine = PlaybackRuleEngineImpl(pageFetchService),
+    private val webViewCaptureService: WebViewCaptureService? = null,
 ) : PlaybackResolverRepository {
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -220,6 +239,243 @@ class PlaybackResolverRepositoryImpl(
             responseHeaders = fetched.responseHeaders,
         )
     }
+
+    override suspend fun auditPageTraffic(
+        pageUrl: String,
+        durationMs: Long,
+    ): NetworkAuditTrace {
+        val capture =
+            webViewCaptureService
+                ?: return NetworkAuditTrace(
+                    pageUrl = pageUrl,
+                    isReachable = false,
+                    errorMessage = "WebView capture service not available",
+                )
+        return capture.auditPageTraffic(pageUrl, durationMs)
+    }
+
+    override suspend fun probeSite(
+        siteUrl: String,
+        sampleAnime: String,
+    ): ProbeSiteOutput {
+        val fetched =
+            pageFetchService.fetchHtml(siteUrl)
+                ?: return ProbeSiteOutput(
+                    siteUrl = siteUrl,
+                    isReachable = false,
+                    errorMessage = "Site unreachable or request failed",
+                )
+        val html = fetched.html
+        val title =
+            Regex("""<title[^>]*>(.*?)</title>""", RegexOption.IGNORE_CASE)
+                .find(html)
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                .orEmpty()
+
+        val isAdParking = detectAdParking(title, html)
+        val origin = pageOrigin(fetched.url)
+        val (hasSearchBox, searchUrlPattern) = detectSearchUrlPattern(html, siteUrl, origin)
+        val sampleEpisodeUrl = probeSampleEpisodeUrl(searchUrlPattern, sampleAnime, html, origin, pageFetchService)
+
+        return ProbeSiteOutput(
+            siteUrl = fetched.url,
+            isReachable = true,
+            isAdParking = isAdParking,
+            title = title,
+            sampleEpisodeUrl = sampleEpisodeUrl,
+            hasSearchBox = hasSearchBox,
+            searchUrlPattern = searchUrlPattern,
+        )
+    }
+}
+
+private fun detectAdParking(
+    title: String,
+    html: String,
+): Boolean =
+    title.contains("域名出售", ignoreCase = true) ||
+        title.contains("Domain for Sale", ignoreCase = true) ||
+        title.contains("404 Not Found", ignoreCase = true) ||
+        html.contains("该域名已过期", ignoreCase = true) ||
+        (html.length < 200 && title.isEmpty())
+
+private fun detectSearchUrlPattern(
+    html: String,
+    siteUrl: String,
+    origin: String?,
+): Pair<Boolean, String?> {
+    val formMatch =
+        Regex(
+            """<form\b[^>]*action=["']([^"']*)["'][^>]*>(.*?)</form>""",
+            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
+        ).findAll(html)
+            .firstOrNull { form ->
+                val content = form.groupValues[2]
+                content.contains("name=\"s\"", ignoreCase = true) ||
+                    content.contains("name=\"wd\"", ignoreCase = true) ||
+                    content.contains("name=\"keyword\"", ignoreCase = true) ||
+                    content.contains("name=\"search\"", ignoreCase = true) ||
+                    content.contains("name=\"q\"", ignoreCase = true)
+            }
+
+    if (formMatch != null) {
+        val action = formMatch.groupValues[1]
+        val formContent = formMatch.groupValues[2]
+        val inputName =
+            Regex("""<input\b[^>]*name=["']([^"']*)["']""", RegexOption.IGNORE_CASE)
+                .findAll(formContent)
+                .map { it.groupValues[1] }
+                .firstOrNull { name ->
+                    name in listOf("s", "wd", "keyword", "search", "q", "query")
+                } ?: "s"
+
+        val absAction = absoluteUrl(action.ifBlank { "/" }, origin) ?: siteUrl
+        val pattern =
+            if (absAction.contains("?")) {
+                "$absAction&$inputName={title}"
+            } else {
+                "$absAction?$inputName={title}"
+            }
+        return true to pattern
+    }
+
+    if (html.contains("?s=") || html.contains("/search/")) {
+        val pattern =
+            if (html.contains("?s=")) {
+                "${origin ?: siteUrl}?s={title}"
+            } else {
+                "${origin ?: siteUrl}/search/{title}"
+            }
+        return true to pattern
+    }
+
+    return false to null
+}
+
+private val SKIP_SUFFIXES =
+    setOf(
+        ".css",
+        ".js",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".ico",
+        ".svg",
+        ".rss",
+        ".xml",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".map",
+        ".json",
+    )
+private val NON_EPISODE_KEYWORDS =
+    listOf(
+        "/category/",
+        "/tag/",
+        "/page/",
+        "/author/",
+        "/notify/",
+        "关于",
+        "留言板",
+        "login",
+        "register",
+        "cart",
+        "checkout",
+        "account",
+        "/feed",
+    )
+private val PLAY_KEYWORDS = listOf("/watch", "/play", "/video", "/bangumi", "/view", "/anime", "?cat=")
+private val NUMERIC_PAGE_REGEX = Regex("""^(?:https?://[^/]+)?/(?:archives/|p/)?\d+/?$""")
+
+internal data class AnchorCandidate(
+    val href: String,
+    val isBookmark: Boolean,
+    val cleanPath: String,
+)
+
+private suspend fun probeSampleEpisodeUrl(
+    searchUrlPattern: String?,
+    sampleAnime: String,
+    html: String,
+    origin: String?,
+    pageFetchService: PageFetchService,
+): String? {
+    if (searchUrlPattern != null && sampleAnime.isNotBlank()) {
+        val encodedTitle = PlaybackSourceRule.encodeParam(sampleAnime.trim())
+        val testSearchUrl = searchUrlPattern.replace("{title}", encodedTitle)
+        val searchPage = pageFetchService.fetchHtml(testSearchUrl)
+        if (searchPage != null) {
+            val candidate = findCandidateEpisodeUrl(searchPage.html, pageOrigin(searchPage.url))
+            if (candidate != null) return candidate
+        }
+    }
+    return findCandidateEpisodeUrl(html, origin)
+}
+
+internal fun findCandidateEpisodeUrl(
+    html: String,
+    origin: String?,
+): String? {
+    val aTagRegex = Regex("""<a\b([^>]*)>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
+    val hrefRegex = Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+    val relRegex = Regex("""rel=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+
+    val validLinks =
+        aTagRegex
+            .findAll(html)
+            .mapNotNull { match ->
+                val attrs = match.groupValues[1]
+                val href =
+                    hrefRegex
+                        .find(attrs)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.trim() ?: return@mapNotNull null
+                val rel =
+                    relRegex
+                        .find(attrs)
+                        ?.groupValues
+                        ?.get(1)
+                        ?.lowercase()
+                        .orEmpty()
+                val isBookmark = rel.contains("bookmark")
+                val cleanPath =
+                    href
+                        .substringBefore('?')
+                        .substringBefore('#')
+                        .trim()
+                        .lowercase()
+                AnchorCandidate(href = href, isBookmark = isBookmark, cleanPath = cleanPath)
+            }.filter { link ->
+                val clean = link.cleanPath
+                SKIP_SUFFIXES.none { clean.endsWith(it) } &&
+                    NON_EPISODE_KEYWORDS.none { clean.contains(it) } &&
+                    !clean.endsWith("#") &&
+                    (clean.startsWith("/") || clean.startsWith("http"))
+            }.toList()
+
+    val bookmarkMatch = validLinks.firstOrNull { it.isBookmark }
+    if (bookmarkMatch != null) {
+        return absoluteUrl(bookmarkMatch.href, origin)
+    }
+
+    val numericMatch = validLinks.firstOrNull { NUMERIC_PAGE_REGEX.matches(it.cleanPath) }
+    if (numericMatch != null) {
+        return absoluteUrl(numericMatch.href, origin)
+    }
+
+    val playKeywordMatch = validLinks.firstOrNull { link -> PLAY_KEYWORDS.any { link.cleanPath.contains(it) } }
+    if (playKeywordMatch != null) {
+        return absoluteUrl(playKeywordMatch.href, origin)
+    }
+
+    val fallbackMatch = validLinks.firstOrNull { it.cleanPath != "/" && it.cleanPath != origin?.lowercase() }
+    return fallbackMatch?.let { absoluteUrl(it.href, origin) }
 }
 
 /**
@@ -429,65 +685,110 @@ private suspend fun sniffPageOrSubPages(
     siteName: String,
     pageFetchService: PageFetchService,
 ): List<PlayableSource> {
-    // 1. 尝试当前单页专有协议嗅探（Anime1）
-    sniffAnime1Stream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
-        return listOf(it)
+    // 1. 尝试当前页嗅探
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+        return it
     }
 
-    // 2. 尝试当前页 MacCMS 嗅探
-    val macCms = extractMacCmsSources(fetched.html, fetched.url, epNumber, siteName)
-    if (macCms.isNotEmpty()) return macCms
-
-    // 3. 常规直链与 iframe 抽取
+    // 2. 常规直链与 iframe 抽取
     val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
     if (extracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
         return extracted
     }
 
-    // 4. 检查单层 iframe
-    val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
-    if (iframeCandidate != null && iframeCandidate.url.isNotBlank()) {
-        val subFetched = pageFetchService.fetchHtml(iframeCandidate.url)
-        if (subFetched != null) {
-            sniffAnime1Stream(subFetched.html, subFetched.url, epNumber, siteName, pageFetchService)?.let {
-                return listOf(it)
-            }
-            val subMac = extractMacCmsSources(subFetched.html, subFetched.url, epNumber, siteName)
-            if (subMac.isNotEmpty()) return subMac
-            val subExtracted = extractPlayableSources(subFetched.html, subFetched.url, epNumber, siteName)
-            if (subExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
-                return subExtracted
-            }
-        }
+    // 3. 检查单层 iframe
+    sniffSingleIframe(extracted, epNumber, siteName, pageFetchService)?.let {
+        return it
     }
 
-    // 5. 若页面无直接直链且无 iframe，尝试作为搜索列表页/目录页探测分集单集页面
-    val epLinks = extractEpisodeLinks(fetched.html, fetched.url, epNumber)
-    for (epLink in epLinks) {
-        val epFetched = pageFetchService.fetchHtml(epLink) ?: continue
-        sniffAnime1Stream(epFetched.html, epFetched.url, epNumber, siteName, pageFetchService)?.let {
-            return listOf(it)
-        }
-        val epMac = extractMacCmsSources(epFetched.html, epFetched.url, epNumber, siteName)
-        if (epMac.isNotEmpty()) return epMac
-        val epExtracted = extractPlayableSources(epFetched.html, epFetched.url, epNumber, siteName)
-        if (epExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
-            return epExtracted
-        }
-        val epIframe = epExtracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
-        if (epIframe != null && epIframe.url.isNotBlank()) {
-            val epIframeFetched = pageFetchService.fetchHtml(epIframe.url)
-            if (epIframeFetched != null) {
-                val epIframeExtracted =
-                    extractPlayableSources(epIframeFetched.html, epIframeFetched.url, epNumber, siteName)
-                if (epIframeExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
-                    return epIframeExtracted
-                }
-            }
-        }
+    // 4. 若页面无直接直链且无 iframe，尝试作为搜索列表页/目录页探测分集单集页面
+    sniffEpisodeLinks(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+        return it
     }
 
     return extracted
+}
+
+private suspend fun sniffSingleIframe(
+    extracted: List<PlayableSource>,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource>? {
+    val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE } ?: return null
+    if (iframeCandidate.url.isBlank()) return null
+    return sniffPageWithIframe(iframeCandidate.url, epNumber, siteName, pageFetchService)
+}
+
+private suspend fun sniffEpisodeLinks(
+    html: String,
+    url: String,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource>? {
+    val epLinks = extractEpisodeLinks(html, url, epNumber)
+    for (epLink in epLinks) {
+        val result = sniffPageWithIframe(epLink, epNumber, siteName, pageFetchService)
+        if (result != null) return result
+    }
+    return null
+}
+
+private suspend fun sniffPageWithIframe(
+    pageUrl: String,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource>? {
+    val fetched = pageFetchService.fetchHtml(pageUrl) ?: return null
+    val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService)
+    if (direct != null) return direct
+
+    val iframeUrl = extractIframeUrl(fetched.html, fetched.url, epNumber, siteName) ?: return null
+    val iframeFetched = pageFetchService.fetchHtml(iframeUrl) ?: return null
+    return sniffDirectPageStreams(iframeFetched, epNumber, siteName, pageFetchService)
+}
+
+private suspend fun sniffDirectPageStreams(
+    fetched: FetchedPage,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource>? {
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+        return it
+    }
+    val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+    if (extracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+        return extracted
+    }
+    return null
+}
+
+private fun extractIframeUrl(
+    html: String,
+    url: String,
+    epNumber: Float,
+    siteName: String,
+): String? =
+    extractPlayableSources(html, url, epNumber, siteName)
+        .firstOrNull { it.kind == PlaylistEntryKind.PAGE && it.url.isNotBlank() }
+        ?.url
+
+private suspend fun sniffDirectOrProtocolStream(
+    html: String,
+    url: String,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource>? {
+    sniffAnime1Stream(html, url, epNumber, siteName, pageFetchService)?.let {
+        return listOf(it)
+    }
+    val macCms = extractMacCmsSources(html, url, epNumber, siteName)
+    if (macCms.isNotEmpty()) return macCms
+    return null
 }
 
 private val ANIME1_APIREQ_REGEX =

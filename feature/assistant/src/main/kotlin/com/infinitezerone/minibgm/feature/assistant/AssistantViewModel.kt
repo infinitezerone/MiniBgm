@@ -8,9 +8,14 @@ import com.infinitezerone.minibgm.core.ai.PendingActionParser
 import com.infinitezerone.minibgm.core.ai.PlayableSourcesParser
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
+import com.infinitezerone.minibgm.core.data.repository.AssistantRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.WebViewResolveRepository
+import com.infinitezerone.minibgm.core.model.ActionCardStatus
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AssistantChatMessage
+import com.infinitezerone.minibgm.core.model.ChatMessageRole
+import com.infinitezerone.minibgm.core.model.PendingActionCard
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +35,7 @@ class AssistantViewModel(
     private val settingsRepository: SettingsRepository,
     private val failureStore: PlaybackFailureStore? = null,
     private val webviewResolveRepository: WebViewResolveRepository? = null,
+    private val assistantRepository: AssistantRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AssistantUiState())
     val uiState: StateFlow<AssistantUiState> = _uiState.asStateFlow()
@@ -57,6 +63,15 @@ class AssistantViewModel(
                 }
             }
         }
+        assistantRepository?.let { repo ->
+            viewModelScope.launch {
+                repo.getMessages().collect { domainMessages ->
+                    _uiState.update { state ->
+                        state.copy(messages = domainMessages.map { it.toUiModel() })
+                    }
+                }
+            }
+        }
     }
 
     fun onInputChanged(text: String) {
@@ -75,6 +90,15 @@ class AssistantViewModel(
         val trimmed = prompt.trim()
         if (trimmed.isBlank() || _uiState.value.isLoading) return
 
+        val history =
+            _uiState.value.messages
+                .filter { !it.isError && it.content.isNotBlank() }
+                .takeLast(6)
+                .map { msg ->
+                    val role = if (msg.role == MessageRole.USER) "user" else "assistant"
+                    role to msg.content
+                }
+
         val userMessage =
             AssistantMessage(
                 id = UUID.randomUUID().toString(),
@@ -89,9 +113,12 @@ class AssistantViewModel(
                 isLoading = true,
             )
         }
+        viewModelScope.launch {
+            assistantRepository?.saveMessage(userMessage.toDomainModel())
+        }
 
         viewModelScope.launch {
-            when (val result = agentService.execute(trimmed)) {
+            when (val result = agentService.execute(trimmed, history)) {
                 is AppResult.Success -> {
                     val rawContent = result.data
                     val storeActions = agentService.pendingActionStore?.popAll().orEmpty()
@@ -140,6 +167,9 @@ class AssistantViewModel(
                             deepResolve = deepResolve,
                         )
                     }
+                    viewModelScope.launch {
+                        assistantRepository?.saveMessage(assistantMessage.toDomainModel())
+                    }
                 }
                 is AppResult.Error -> {
                     val errorMsg =
@@ -158,6 +188,9 @@ class AssistantViewModel(
                             messages = state.messages + assistantMessage,
                             isLoading = false,
                         )
+                    }
+                    viewModelScope.launch {
+                        assistantRepository?.saveMessage(assistantMessage.toDomainModel())
                     }
                 }
                 is AppResult.Loading -> Unit
@@ -223,6 +256,13 @@ class AssistantViewModel(
                     }
                     agentService.pendingActionStore?.remove(actionId)
                     _events.send(AssistantUiEvent.ShowSnackbar("操作已成功执行并同步至 Bangumi！"))
+                    _uiState.value.messages
+                        .firstOrNull { msg -> msg.pendingActions.any { it.action.actionId == actionId } }
+                        ?.let { msg ->
+                            viewModelScope.launch {
+                                assistantRepository?.saveMessage(msg.toDomainModel())
+                            }
+                        }
                 }
                 is AppResult.Error -> {
                     val err = result.throwable.message ?: "执行操作失败"
@@ -242,6 +282,13 @@ class AssistantViewModel(
                         state.copy(messages = updatedMessages)
                     }
                     _events.send(AssistantUiEvent.ShowSnackbar("执行失败: $err"))
+                    _uiState.value.messages
+                        .firstOrNull { msg -> msg.pendingActions.any { it.action.actionId == actionId } }
+                        ?.let { msg ->
+                            viewModelScope.launch {
+                                assistantRepository?.saveMessage(msg.toDomainModel())
+                            }
+                        }
                 }
                 is AppResult.Loading -> Unit
             }
@@ -276,6 +323,13 @@ class AssistantViewModel(
             state.copy(messages = updatedMessages)
         }
         agentService.pendingActionStore?.remove(actionId)
+        _uiState.value.messages
+            .firstOrNull { msg -> msg.pendingActions.any { it.action.actionId == actionId } }
+            ?.let { msg ->
+                viewModelScope.launch {
+                    assistantRepository?.saveMessage(msg.toDomainModel())
+                }
+            }
         viewModelScope.launch {
             _events.send(AssistantUiEvent.ShowSnackbar("已取消操作提案"))
         }
@@ -284,6 +338,9 @@ class AssistantViewModel(
     fun clearConversation() {
         _uiState.update { it.copy(messages = emptyList()) }
         agentService.pendingActionStore?.clear()
+        viewModelScope.launch {
+            assistantRepository?.clearMessages()
+        }
     }
 
     fun toggleConfigDialog(show: Boolean) {
@@ -338,20 +395,27 @@ class AssistantViewModel(
                             )
                         }
                     _uiState.update { it.copy(messages = it.messages + message) }
+                    viewModelScope.launch {
+                        assistantRepository?.saveMessage(message.toDomainModel())
+                    }
                 }
-                is AppResult.Error ->
+                is AppResult.Error -> {
+                    val errorMessage =
+                        AssistantMessage(
+                            id = UUID.randomUUID().toString(),
+                            role = MessageRole.ASSISTANT,
+                            content = "❌ WebView 深度解析失败：${result.message}",
+                            isError = true,
+                        )
                     _uiState.update {
                         it.copy(
-                            messages =
-                                it.messages +
-                                    AssistantMessage(
-                                        id = UUID.randomUUID().toString(),
-                                        role = MessageRole.ASSISTANT,
-                                        content = "❌ WebView 深度解析失败：${result.message}",
-                                        isError = true,
-                                    ),
+                            messages = it.messages + errorMessage,
                         )
                     }
+                    viewModelScope.launch {
+                        assistantRepository?.saveMessage(errorMessage.toDomainModel())
+                    }
+                }
                 is AppResult.Loading -> Unit
                 null -> Unit
             }
@@ -363,3 +427,61 @@ class AssistantViewModel(
         return match.groupValues[1].toLongOrNull()?.takeIf { it > 0L }
     }
 }
+
+private fun AssistantChatMessage.toUiModel(): AssistantMessage =
+    AssistantMessage(
+        id = id,
+        role =
+            when (role) {
+                ChatMessageRole.USER -> MessageRole.USER
+                ChatMessageRole.ASSISTANT -> MessageRole.ASSISTANT
+            },
+        content = content,
+        timestamp = timestamp,
+        pendingActions =
+            pendingActions.map { card ->
+                PendingActionCardState(
+                    action = card.action,
+                    status =
+                        when (card.status) {
+                            ActionCardStatus.PENDING -> ActionStatus.PENDING
+                            ActionCardStatus.EXECUTING -> ActionStatus.EXECUTING
+                            ActionCardStatus.SUCCESS -> ActionStatus.SUCCESS
+                            ActionCardStatus.REJECTED -> ActionStatus.REJECTED
+                            ActionCardStatus.FAILED -> ActionStatus.FAILED
+                        },
+                    errorMessage = card.errorMessage,
+                )
+            },
+        playableSources = playableSources,
+        isError = isError,
+    )
+
+private fun AssistantMessage.toDomainModel(): AssistantChatMessage =
+    AssistantChatMessage(
+        id = id,
+        role =
+            when (role) {
+                MessageRole.USER -> ChatMessageRole.USER
+                MessageRole.ASSISTANT -> ChatMessageRole.ASSISTANT
+            },
+        content = content,
+        timestamp = timestamp,
+        pendingActions =
+            pendingActions.map { card ->
+                PendingActionCard(
+                    action = card.action,
+                    status =
+                        when (card.status) {
+                            ActionStatus.PENDING -> ActionCardStatus.PENDING
+                            ActionStatus.EXECUTING -> ActionCardStatus.EXECUTING
+                            ActionStatus.SUCCESS -> ActionCardStatus.SUCCESS
+                            ActionStatus.REJECTED -> ActionCardStatus.REJECTED
+                            ActionStatus.FAILED -> ActionCardStatus.FAILED
+                        },
+                    errorMessage = card.errorMessage,
+                )
+            },
+        playableSources = playableSources,
+        isError = isError,
+    )

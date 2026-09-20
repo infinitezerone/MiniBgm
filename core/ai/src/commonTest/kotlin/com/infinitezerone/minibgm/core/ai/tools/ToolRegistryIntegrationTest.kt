@@ -102,6 +102,8 @@ class ToolRegistryIntegrationTest {
         // Diagnostics tools
         assertTrue(toolNames.contains("inspectPageStructure"))
         assertTrue(toolNames.contains("testPlaybackRule"))
+        assertTrue(toolNames.contains("probeSiteAndFindSample"))
+        assertTrue(toolNames.contains("traceNetworkTraffic"))
 
         // 找源工具：描述必须写明"返回结构化可播数据、且模型只能转述工具结果"
         assertTrue(toolNames.contains("findPlayableSources"))

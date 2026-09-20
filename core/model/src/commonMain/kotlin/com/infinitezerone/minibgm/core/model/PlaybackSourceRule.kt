@@ -134,3 +134,45 @@ data class PageInspectionResult(
     val responseHeaders: Map<String, String> = emptyMap(),
     val errorMessage: String? = null,
 )
+
+/**
+ * 捕获到的单次网络请求记录。
+ */
+@Serializable
+data class CapturedNetworkCall(
+    val url: String,
+    val method: String = "GET",
+    val requestHeaders: Map<String, String> = emptyMap(),
+    val isMedia: Boolean = false,
+    val isApi: Boolean = false,
+)
+
+/**
+ * 页面动态网络流量审计轨迹，记录 WebView 渲染期间发生的所有核心调用。
+ */
+@Serializable
+data class NetworkAuditTrace(
+    val pageUrl: String,
+    val finalUrl: String = pageUrl,
+    val isReachable: Boolean = true,
+    val title: String = "",
+    val calls: List<CapturedNetworkCall> = emptyList(),
+    val cookies: Map<String, String> = emptyMap(),
+    val mediaSources: List<PlayableSource> = emptyList(),
+    val errorMessage: String? = null,
+)
+
+/**
+ * 站点健康度探查与播放样本自动定位结果。
+ */
+@Serializable
+data class ProbeSiteOutput(
+    val siteUrl: String,
+    val isReachable: Boolean,
+    val isAdParking: Boolean = false,
+    val title: String = "",
+    val sampleEpisodeUrl: String? = null,
+    val hasSearchBox: Boolean = false,
+    val searchUrlPattern: String? = null,
+    val errorMessage: String? = null,
+)
