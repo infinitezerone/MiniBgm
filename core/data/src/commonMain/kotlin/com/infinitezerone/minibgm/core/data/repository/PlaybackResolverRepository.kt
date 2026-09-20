@@ -513,6 +513,21 @@ internal fun extractEpisodeLinks(
         val fullUrl = absoluteUrl(rawHref, origin) ?: continue
         if (fullUrl == pageUrl) continue
 
+        // 强校验同源 Host，严禁跨域嗅探（防止误抓 Twitter / Telegram 等社交外链）
+        val pageHost =
+            pageUrl
+                .substringAfter("://")
+                .substringBefore('/')
+                .substringBefore(':')
+                .lowercase()
+        val fullHost =
+            fullUrl
+                .substringAfter("://")
+                .substringBefore('/')
+                .substringBefore(':')
+                .lowercase()
+        if (pageHost != fullHost) continue
+
         val pathAfterOrigin = fullUrl.removePrefix(origin ?: "").trim('/')
         if (pathAfterOrigin.isBlank()) continue
         val firstSegment = pathAfterOrigin.substringBefore('/').lowercase()

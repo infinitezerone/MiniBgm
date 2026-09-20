@@ -567,11 +567,31 @@ class PlayerViewModel(
                         }
                     val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
                     val traditionalTitle = ChineseConverter.toTraditional(primaryTitle)
+                    val baseTitles =
+                        if (traditionalTitle != primaryTitle) {
+                            listOf(traditionalTitle, primaryTitle, subjectOriginalName)
+                        } else {
+                            listOf(primaryTitle, subjectOriginalName)
+                        }.filter { it.isNotBlank() }.distinct()
+
                     val queryTitles =
-                        listOf(primaryTitle, traditionalTitle, subjectOriginalName)
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .ifEmpty { listOf("") }
+                        buildList {
+                            if (!rule.urlTemplate.contains("{ep}") && epSort > 0f) {
+                                val padded = epSort.toInt().toString().padStart(2, '0')
+                                // 1. 优先尝试 [标题 + 补零分集]（如 "葬送的芙莉蓮 01"），可在搜索页直接精确命中单集文章
+                                for (title in baseTitles) {
+                                    add("$title $padded")
+                                }
+                                // 2. 尝试 [标题 + 裸分集]（如 "葬送的芙莉蓮 1"）
+                                if (padded != epNumStr) {
+                                    for (title in baseTitles) {
+                                        add("$title $epNumStr")
+                                    }
+                                }
+                            }
+                            // 3. 回退尝试纯标题搜索
+                            addAll(baseTitles)
+                        }.distinct().ifEmpty { listOf("") }
 
                     var playable: com.infinitezerone.minibgm.core.model.PlayableSource? = null
                     for (queryTitle in queryTitles) {
@@ -603,9 +623,6 @@ class PlayerViewModel(
                         if (directCandidate != null && directCandidate.url.isNotBlank()) {
                             playable = directCandidate
                             break
-                        }
-                        if (playable == null) {
-                            playable = candidates.firstOrNull()
                         }
                     }
 
