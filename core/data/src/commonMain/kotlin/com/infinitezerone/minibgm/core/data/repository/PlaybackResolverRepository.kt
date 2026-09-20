@@ -1,7 +1,10 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
@@ -74,10 +77,35 @@ interface PlaybackResolverRepository {
         epNumber: Float = 0f,
         siteName: String = "",
     ): List<PlayableSource>
+
+    /**
+     * 按 [PlaybackSourceRule] 执行取源解析。
+     * 根据规则的 [RuleParserType] 自动分发流水线（PIPELINE）、MacCMS、Stremio 或智能嗅探。
+     */
+    suspend fun resolveRule(
+        rule: PlaybackSourceRule,
+        title: String,
+        epNumber: Float = 0f,
+        subjectId: Long = 0L,
+        episodeId: Long = 0L,
+    ): List<PlayableSource> =
+        resolveTemplate(
+            url = rule.resolveUrl(title, if (epNumber > 0f) epNumber.toInt().toString() else "", subjectId, episodeId),
+            headers = rule.headers,
+            epNumber = epNumber,
+            siteName = rule.name,
+        )
+
+    /**
+     * 探测指定页面的结构特征（是否包含 video 标签、自定义属性、iframe、MacCMS 标记等）。
+     */
+    suspend fun inspectPage(url: String): PageInspectionResult =
+        PageInspectionResult(url = url, isSuccess = false, errorMessage = "Not implemented")
 }
 
 class PlaybackResolverRepositoryImpl(
     private val pageFetchService: PageFetchService,
+    private val playbackRuleEngine: PlaybackRuleEngine = PlaybackRuleEngineImpl(pageFetchService),
 ) : PlaybackResolverRepository {
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -108,6 +136,89 @@ class PlaybackResolverRepositoryImpl(
         return sources
             .distinctBy { it.url }
             .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
+    }
+
+    override suspend fun resolveRule(
+        rule: PlaybackSourceRule,
+        title: String,
+        epNumber: Float,
+        subjectId: Long,
+        episodeId: Long,
+    ): List<PlayableSource> {
+        return when (rule.parserType) {
+            RuleParserType.PIPELINE -> {
+                playbackRuleEngine.executePipeline(rule, title, epNumber, subjectId, episodeId)
+            }
+            RuleParserType.MACCMS -> {
+                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return emptyList()
+                val sources = extractMacCmsSources(fetched.html, fetched.url, epNumber, rule.name)
+                if (rule.headers.isEmpty()) sources else sources.map { it.copy(headers = it.headers + rule.headers) }
+            }
+            RuleParserType.STREMIO -> {
+                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return emptyList()
+                parseStreamManifest(fetched.html, fetched.url, epNumber, rule.name, rule.headers).orEmpty()
+            }
+            RuleParserType.AUTO -> {
+                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                resolveTemplate(url, rule.headers, epNumber, rule.name)
+            }
+        }
+    }
+
+    override suspend fun inspectPage(url: String): PageInspectionResult {
+        val trimmed = url.trim()
+        if (trimmed.isBlank() ||
+            (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true))
+        ) {
+            return PageInspectionResult(url = url, isSuccess = false, errorMessage = "Invalid URL")
+        }
+        val fetched =
+            pageFetchService.fetchHtml(trimmed)
+                ?: return PageInspectionResult(url = url, isSuccess = false, errorMessage = "Failed to fetch page or unreachable")
+
+        val html = fetched.html
+        val titleMatch = Regex("""<title[^>]*>([^<]+)</title>""", RegexOption.IGNORE_CASE).find(html)
+        val title =
+            titleMatch
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
+                .orEmpty()
+
+        val videoMatch = Regex("""<video\b([^>]*)>""", RegexOption.IGNORE_CASE).find(html)
+        val hasVideo = videoMatch != null
+        val videoAttrs = mutableMapOf<String, String>()
+        if (videoMatch != null) {
+            val attrContent = videoMatch.groupValues[1]
+            Regex("""([a-zA-Z0-9_\-]+)\s*=\s*["']([^"']*)["']""").findAll(attrContent).forEach { attr ->
+                videoAttrs[attr.groupValues[1]] = attr.groupValues[2]
+            }
+        }
+
+        val iframes =
+            Regex("""<iframe\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+                .findAll(html)
+                .map { it.groupValues[1] }
+                .take(5)
+                .toList()
+
+        val hasMacCms = html.contains("vod_play_url") || html.contains("player_aaaa")
+
+        return PageInspectionResult(
+            url = fetched.url,
+            isSuccess = true,
+            title = title,
+            hasVideoTag = hasVideo,
+            videoAttrs = videoAttrs,
+            iframeUrls = iframes,
+            hasMacCmsPattern = hasMacCms,
+            responseHeaders = fetched.responseHeaders,
+        )
     }
 }
 

@@ -50,6 +50,7 @@ class DefaultBgmAiAgentService(
     val collectionTools: CollectionTools? = null,
     val playableSourceTools: PlayableSourceTools? = null,
     val communityTools: com.infinitezerone.minibgm.core.ai.tools.CommunityTools? = null,
+    val playbackRuleDiagnosticsTools: com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     httpClient: HttpClient? = null,
@@ -170,6 +171,7 @@ class DefaultBgmAiAgentService(
             collectionTools?.let { tools(it) }
             playableSourceTools?.let { tools(it) }
             communityTools?.let { tools(it) }
+            playbackRuleDiagnosticsTools?.let { tools(it) }
         }
 
     override suspend fun execute(prompt: String): AppResult<String> {
