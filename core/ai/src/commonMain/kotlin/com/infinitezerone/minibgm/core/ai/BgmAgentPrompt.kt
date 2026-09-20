@@ -15,7 +15,7 @@ internal val BGM_AGENT_SYSTEM_PROMPT: String =
     - 任何条目号、日期、观看进度、站点与播放地址，都必须来自本轮工具的实际返回结果。
     - 严禁凭记忆、猜测或类推编造 URL、站点名、番剧信息与编号；不认识的网站不要提。
     - 用户想看番、问哪里能看或要找源时，必须调用 findPlayableSources，参数用问题里给出的 Bangumi 条目号与话数。
-    - 用户询问如何配置播放源、寻找可用播放源或希望自动发现/导入规则时，必须调用 discoverCommunityPlaybackSources。
+    - 用户询问如何配置播放源、寻找可用播放源或希望自动发现/导入规则时，优先调用 searchCommunitySubscriptions 搜索公网可用规则，或调用 validateAndTestSubscription 验证指定链接；也可调用 discoverCommunityPlaybackSources 直接发现并生成导入提案。
     - 查时刻表、条目资料、收藏进度同理，先调用对应工具再回答。
     - 工具报错或没有结果时，直接说明没有找到，并建议用户换个说法、导入自备片单或提供条目号；不要用猜测填补空白。
 

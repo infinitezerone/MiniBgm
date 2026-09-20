@@ -579,4 +579,53 @@ class AssistantViewModelTest {
 
             assertNull(viewModel.uiState.value.deepResolve)
         }
+
+    @Test
+    fun sendMessage_captures_and_approves_ImportPlaybackRules() =
+        runTest {
+            val executor = FakePendingActionExecutor()
+            val rule =
+                com.infinitezerone.minibgm.core.model.PlaybackSourceRule(
+                    id = "rule_1",
+                    name = "示例动漫源",
+                    urlTemplate = "https://example.com/{title}",
+                )
+            val importAction =
+                com.infinitezerone.minibgm.core.model.PendingAction.ImportPlaybackRules(
+                    actionId = "act_import_rules_test",
+                    sourceName = "社区二次元播放源",
+                    rules = listOf(rule),
+                    description = "导入 1 个规则",
+                )
+            val agentService =
+                FakeAgentService(
+                    pendingActionExecutor = executor,
+                    pendingActionStore = actionStore,
+                    executeResult = AppResult.Success("已为您检索到可用规则并完成连通性测速"),
+                )
+            actionStore.add(importAction)
+
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            viewModel.sendMessage("帮我找找播放源规则")
+            advanceUntilIdle()
+
+            val assistantMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertEquals(1, assistantMsg.pendingActions.size)
+            val card = assistantMsg.pendingActions[0]
+            assertEquals(ActionStatus.PENDING, card.status)
+            assertIs<com.infinitezerone.minibgm.core.model.PendingAction.ImportPlaybackRules>(card.action)
+            assertEquals("act_import_rules_test", card.action.actionId)
+
+            viewModel.approveAction("act_import_rules_test")
+            advanceUntilIdle()
+
+            assertEquals(1, executor.executedActions.size)
+            assertEquals("act_import_rules_test", executor.executedActions[0].actionId)
+            val updatedMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertEquals(ActionStatus.SUCCESS, updatedMsg.pendingActions[0].status)
+        }
 }

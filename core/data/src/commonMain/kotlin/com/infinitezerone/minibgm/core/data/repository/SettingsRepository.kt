@@ -102,6 +102,20 @@ interface SettingsRepository {
     suspend fun discoverCommunityPlaybackSources(
         customSubscriptionUrl: String? = null,
     ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>>
+
+    /**
+     * 在公网检索开源社区订阅，并返回经过端侧可用性初筛的候选订阅列表
+     */
+    suspend fun searchCommunitySubscriptions(
+        keywords: String = "minibgm-rules",
+    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate>>
+
+    /**
+     * 对指定订阅地址进行拉取、格式校验与端侧并发测速探活
+     */
+    suspend fun validateAndTestSubscription(
+        url: String,
+    ): com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport>
 }
 
 class SettingsRepositoryImpl(
@@ -355,6 +369,48 @@ class SettingsRepositoryImpl(
             val sources = service.fetchAndTestCommunitySources(customSubscriptionUrl)
             com.infinitezerone.minibgm.core.common.AppResult
                 .Success(sources)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Error(e)
+        }
+
+    override suspend fun searchCommunitySubscriptions(
+        keywords: String,
+    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate>> =
+        try {
+            val service =
+                communitySubscriptionService
+                    ?: return com.infinitezerone.minibgm.core.common.AppResult
+                        .Success(emptyList())
+            val candidates = service.searchSubscriptions(keywords)
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Success(candidates)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Error(e)
+        }
+
+    override suspend fun validateAndTestSubscription(
+        url: String,
+    ): com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport> =
+        try {
+            val service =
+                communitySubscriptionService
+                    ?: return com.infinitezerone.minibgm.core.common.AppResult
+                        .Success(
+                            com.infinitezerone.minibgm.core.model.SubscriptionValidationReport(
+                                isHealthy = false,
+                                subscriptionUrl = url,
+                                errorMessage = "网络服务未就绪",
+                            ),
+                        )
+            val report = service.validateAndTestSubscription(url)
+            com.infinitezerone.minibgm.core.common.AppResult
+                .Success(report)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -25,6 +25,27 @@ class SettingsRepositoryImplTest {
                 ),
             )
 
+        override suspend fun searchSubscriptions(
+            keywords: String,
+        ): List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate> =
+            listOf(
+                com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate(
+                    name = "示例订阅",
+                    subscriptionUrl = "https://example.com/rules.json",
+                    sourceCount = 1,
+                    aliveCount = 1,
+                ),
+            )
+
+        override suspend fun validateAndTestSubscription(url: String): com.infinitezerone.minibgm.core.model.SubscriptionValidationReport =
+            com.infinitezerone.minibgm.core.model.SubscriptionValidationReport(
+                isHealthy = true,
+                subscriptionUrl = url,
+                totalRules = 1,
+                aliveRules = 1,
+                sources = result,
+            )
+
         override suspend fun fetchAndTestCommunitySources(customSubscriptionUrl: String?): List<DiscoveredSource> = result
     }
 
@@ -40,6 +61,34 @@ class SettingsRepositoryImplTest {
             assertIs<AppResult.Success<List<DiscoveredSource>>>(result)
             assertEquals(1, result.data.size)
             assertEquals("示例动漫源", result.data.first().name)
+        }
+
+    @Test
+    fun searchCommunitySubscriptions_delegatesToService() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            val fakeDataStore = createTestUserPreferencesDataSource()
+            val repo = SettingsRepositoryImpl(fakeDataStore, fakeService)
+
+            val result = repo.searchCommunitySubscriptions("test")
+
+            assertIs<AppResult.Success<List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate>>>(result)
+            assertEquals(1, result.data.size)
+            assertEquals("示例订阅", result.data.first().name)
+        }
+
+    @Test
+    fun validateAndTestSubscription_delegatesToService() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            val fakeDataStore = createTestUserPreferencesDataSource()
+            val repo = SettingsRepositoryImpl(fakeDataStore, fakeService)
+
+            val result = repo.validateAndTestSubscription("https://example.com/rules.json")
+
+            assertIs<AppResult.Success<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport>>(result)
+            assertTrue(result.data.isHealthy)
+            assertEquals(1, result.data.aliveRules)
         }
 
     @Test

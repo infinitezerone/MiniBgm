@@ -40,12 +40,18 @@ class ToolRegistryIntegrationTest {
                     },
             )
 
+        val communityTools =
+            CommunityTools(
+                settingsRepository = FakeSettingsRepository(),
+            )
+
         val registry =
             ToolRegistry {
                 tools(scheduleTools)
                 tools(subjectTools)
                 tools(collectionTools)
                 tools(playableSourceTools)
+                tools(communityTools)
             }
 
         val toolNames = registry.tools.map { it.name }
@@ -67,6 +73,11 @@ class ToolRegistryIntegrationTest {
         val getScheduleDescriptor = registry.getTool("getSchedule").descriptor
         assertNotNull(getScheduleDescriptor)
         assertTrue(getScheduleDescriptor.description.contains("broadcast schedule"))
+
+        // Community tools
+        assertTrue(toolNames.contains("searchCommunitySubscriptions"))
+        assertTrue(toolNames.contains("validateAndTestSubscription"))
+        assertTrue(toolNames.contains("discoverCommunityPlaybackSources"))
 
         // 找源工具：描述必须写明"返回结构化可播数据、且模型只能转述工具结果"
         assertTrue(toolNames.contains("findPlayableSources"))
