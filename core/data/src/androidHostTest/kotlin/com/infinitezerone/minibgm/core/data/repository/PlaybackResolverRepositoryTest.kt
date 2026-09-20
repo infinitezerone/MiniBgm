@@ -1,6 +1,11 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.model.PipelineStep
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.StepAction
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.test.runTest
@@ -455,5 +460,100 @@ class PlaybackResolverRepositoryTest {
             assertEquals("https://cdn.example.com/ep1.mp4", sources.single().url)
             assertTrue("twitter" !in fake.requested.joinToString())
             assertTrue("t.me" !in fake.requested.joinToString())
+        }
+
+    @Test
+    fun `通过声明式流水线 PIPELINE 规则提取两步交互直链与捕获 Header`() =
+        runTest {
+            val responses =
+                mapOf(
+                    "https://example.com/watch?t=test&ep=1" to
+                        FetchedPage(
+                            url = "https://example.com/watch?t=test&ep=1",
+                            html = """<div id="player" data-token="secret_token_123"></div>""",
+                        ),
+                    "https://api.example.com/get-stream" to
+                        FetchedPage(
+                            url = "https://api.example.com/get-stream",
+                            html = """{"stream":"https://cdn.example.com/stream/ep1.m3u8"}""",
+                            responseHeaders = mapOf("Set-Cookie" to "auth=xyz789"),
+                        ),
+                )
+            val fake = FakePageFetchService(pages = emptyMap(), responses = responses)
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val pipelineRule =
+                PlaybackSourceRule(
+                    id = "rule_pipeline",
+                    name = "测试流水线源",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    headers = mapOf("Referer" to "https://example.com/"),
+                    pipeline =
+                        listOf(
+                            PipelineStep(
+                                action = StepAction.FETCH,
+                                urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_VARIABLE,
+                                regex = """data-token\s*=\s*["']([^"']+)["']""",
+                                variableName = "token",
+                            ),
+                            PipelineStep(
+                                action = StepAction.FETCH,
+                                method = "POST",
+                                urlTemplate = "https://api.example.com/get-stream",
+                                bodyTemplate = "token={token}",
+                                captureHeaders = listOf("Set-Cookie"),
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"stream"\s*:\s*"([^"]+)"""",
+                            ),
+                        ),
+                )
+
+            val sources = repo.resolveRule(rule = pipelineRule, title = "test", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://cdn.example.com/stream/ep1.m3u8", source.url)
+            assertEquals("第 1 话", source.label)
+            assertEquals("https://example.com/", source.headers["Referer"])
+            assertEquals("auth=xyz789", source.headers["Set-Cookie"])
+        }
+
+    @Test
+    fun `通过 resolveRule 分发 MACCMS 规则并附加规则头`() =
+        runTest {
+            val html =
+                """
+                {
+                    "vod_name": "测试",
+                    "vod_play_url": "第01集${'$'}https://line.example.com/1.m3u8#第02集${'$'}https://line.example.com/2.m3u8"
+                }
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://maccms.example.com/api?title=test" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val macRule =
+                PlaybackSourceRule(
+                    id = "rule_mac",
+                    name = "测试采集",
+                    urlTemplate = "https://maccms.example.com/api?title={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.MACCMS,
+                    headers = mapOf("X-Source" to "minibgm"),
+                )
+
+            val sources = repo.resolveRule(rule = macRule, title = "test", epNumber = 2f)
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://line.example.com/2.m3u8", source.url)
+            assertEquals("第02集", source.label)
+            assertEquals("minibgm", source.headers["X-Source"])
         }
 }

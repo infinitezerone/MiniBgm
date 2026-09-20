@@ -135,11 +135,11 @@ class PlayableSourceTools(
         val sourceRules = rules.filter { it.kind == PlaybackRuleKind.SOURCE }
         for (rule in sourceRules) {
             val hits =
-                playbackResolverRepository.resolveTemplate(
-                    url = rule.resolveUrl(title = title, ep = if (epNumber > 0) epNumber.toString() else "", subjectId = subjectId),
-                    headers = rule.headers,
+                playbackResolverRepository.resolveRule(
+                    rule = rule,
+                    title = title,
                     epNumber = if (epNumber > 0) epNumber.toFloat() else 0f,
-                    siteName = rule.name,
+                    subjectId = subjectId,
                 )
             if (hits.isNotEmpty()) return rule.name to hits
         }

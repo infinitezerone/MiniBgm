@@ -45,6 +45,25 @@ class ToolRegistryIntegrationTest {
                 settingsRepository = FakeSettingsRepository(),
             )
 
+        val diagnosticsTools =
+            PlaybackRuleDiagnosticsTools(
+                playbackResolverRepository =
+                    object : PlaybackResolverRepository {
+                        override suspend fun resolvePages(
+                            pageUrls: List<String>,
+                            epNumber: Float,
+                            siteName: String,
+                        ): List<PlayableSource> = emptyList()
+
+                        override suspend fun resolveTemplate(
+                            url: String,
+                            headers: Map<String, String>,
+                            epNumber: Float,
+                            siteName: String,
+                        ): List<PlayableSource> = emptyList()
+                    },
+            )
+
         val registry =
             ToolRegistry {
                 tools(scheduleTools)
@@ -52,6 +71,7 @@ class ToolRegistryIntegrationTest {
                 tools(collectionTools)
                 tools(playableSourceTools)
                 tools(communityTools)
+                tools(diagnosticsTools)
             }
 
         val toolNames = registry.tools.map { it.name }
@@ -78,6 +98,10 @@ class ToolRegistryIntegrationTest {
         assertTrue(toolNames.contains("searchCommunitySubscriptions"))
         assertTrue(toolNames.contains("validateAndTestSubscription"))
         assertTrue(toolNames.contains("discoverCommunityPlaybackSources"))
+
+        // Diagnostics tools
+        assertTrue(toolNames.contains("inspectPageStructure"))
+        assertTrue(toolNames.contains("testPlaybackRule"))
 
         // 找源工具：描述必须写明"返回结构化可播数据、且模型只能转述工具结果"
         assertTrue(toolNames.contains("findPlayableSources"))

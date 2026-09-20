@@ -31,6 +31,11 @@ val aiModule =
                 pendingActionStore = get<PendingActionStore>(),
             )
         }
+        single {
+            com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools(
+                playbackResolverRepository = get(),
+            )
+        }
         single<PendingActionExecutor> {
             DefaultPendingActionExecutor(
                 collectionRepository = get(),
@@ -46,6 +51,7 @@ val aiModule =
                 collectionTools = getOrNull(),
                 playableSourceTools = getOrNull(),
                 communityTools = getOrNull(),
+                playbackRuleDiagnosticsTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
             )

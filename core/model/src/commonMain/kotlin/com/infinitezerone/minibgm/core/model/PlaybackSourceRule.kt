@@ -8,6 +8,47 @@ enum class PlaybackRuleKind {
     SOURCE,
 }
 
+/** 规则解析器类型 */
+@Serializable
+enum class RuleParserType {
+    AUTO,
+    MACCMS,
+    STREMIO,
+    PIPELINE,
+}
+
+/** 流水线单步操作类型 */
+@Serializable
+enum class StepAction {
+    FETCH,
+    EXTRACT_VARIABLE,
+    EXTRACT_STREAM,
+}
+
+/**
+ * 声明式流水线单步定义。
+ *
+ * - [action]: 操作类型（发起请求、提取变量、提取媒体直链）
+ * - [urlTemplate]: 目标地址模板，支持占位符与上下文变量（如 `{title}`, `{ep}`, `{varName}`）
+ * - [method]: HTTP 方法，"GET" 或 "POST"
+ * - [bodyTemplate]: POST 请求体模板（如 `d={apireq}`）
+ * - [headers]: 附带的固定或动态请求头
+ * - [regex]: 用于从响应文本中抓取变量或直链的正则表达式（第一个捕获组作为提取值）
+ * - [variableName]: 提取到的变量存入上下文的键名（支持以 `{variableName}` 引用）
+ * - [captureHeaders]: 需要从 HTTP 响应头中捕获并透传给播放器的 Header 名称列表（如 "Set-Cookie" 或 "Cookie"）
+ */
+@Serializable
+data class PipelineStep(
+    val action: StepAction,
+    val urlTemplate: String = "",
+    val method: String = "GET",
+    val bodyTemplate: String = "",
+    val headers: Map<String, String> = emptyMap(),
+    val regex: String = "",
+    val variableName: String = "",
+    val captureHeaders: List<String> = emptyList(),
+)
+
 /**
  * 自定义番剧播放/跳转规则数据模型。
  *
@@ -18,9 +59,11 @@ enum class PlaybackRuleKind {
  * - `{episodeId}`: Bangumi 分集 ID
  *
  * [kind] 为 SOURCE 时，[headers] 会随模板请求一起发出（Referer / User-Agent 等固定头，不含登录态）。
- * 响应识别顺序：先尝试结构化流清单 `{"streams":[{"url","title","headers"}]}`
- * （Stremio `/stream` 响应兼容形态，`title` 作分集标注、条目级 `headers` 供播放器携带），
- * 非清单响应回退为页面正则抽取。
+ * 响应识别根据 [parserType] 分发：
+ * - [RuleParserType.PIPELINE]: 按 [pipeline] 声明的多步骤执行
+ * - [RuleParserType.MACCMS]: 按 MacCMS V10 标准接口提取
+ * - [RuleParserType.STREMIO]: 按 Stremio 流清单提取
+ * - [RuleParserType.AUTO]: 自动识别清单、MacCMS 及智能嗅探
  */
 @Serializable
 data class PlaybackSourceRule(
@@ -31,6 +74,8 @@ data class PlaybackSourceRule(
     val description: String = "",
     val kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
     val headers: Map<String, String> = emptyMap(),
+    val parserType: RuleParserType = RuleParserType.AUTO,
+    val pipeline: List<PipelineStep> = emptyList(),
 ) {
     /**
      * 针对具体分集安全替换占位符并返回解析后的目标 URL。
@@ -73,3 +118,19 @@ data class PlaybackSourceRule(
                 code == '~'.code
     }
 }
+
+/**
+ * 网页多媒体结构探测结果，供调试分析与 AI 规则生成使用。
+ */
+@Serializable
+data class PageInspectionResult(
+    val url: String,
+    val isSuccess: Boolean,
+    val title: String = "",
+    val hasVideoTag: Boolean = false,
+    val videoAttrs: Map<String, String> = emptyMap(),
+    val iframeUrls: List<String> = emptyList(),
+    val hasMacCmsPattern: Boolean = false,
+    val responseHeaders: Map<String, String> = emptyMap(),
+    val errorMessage: String? = null,
+)

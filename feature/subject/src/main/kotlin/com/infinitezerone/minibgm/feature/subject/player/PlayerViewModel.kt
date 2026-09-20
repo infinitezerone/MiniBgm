@@ -605,11 +605,12 @@ class PlayerViewModel(
 
                         val candidates =
                             if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                resolver.resolveTemplate(
-                                    url = targetUrl,
-                                    headers = rule.headers,
+                                resolver.resolveRule(
+                                    rule = rule,
+                                    title = queryTitle,
                                     epNumber = epSort,
-                                    siteName = rule.name,
+                                    subjectId = _uiState.value.subjectId,
+                                    episodeId = _uiState.value.episodeId,
                                 )
                             } else {
                                 resolver.resolvePages(
