@@ -142,7 +142,10 @@ class AssistantViewModel(
                     }
                 }
                 is AppResult.Error -> {
-                    val errorMsg = result.throwable.message ?: "智能体执行失败"
+                    val errorMsg =
+                        result.message.ifBlank {
+                            result.throwable.message ?: "智能体执行失败"
+                        }
                     val assistantMessage =
                         AssistantMessage(
                             id = UUID.randomUUID().toString(),

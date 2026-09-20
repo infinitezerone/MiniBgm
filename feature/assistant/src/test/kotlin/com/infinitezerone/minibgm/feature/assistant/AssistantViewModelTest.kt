@@ -661,4 +661,28 @@ class AssistantViewModelTest {
             assertEquals("test-key", agentService.lastFetchApiKey)
             assertEquals("custom", agentService.lastFetchProvider)
         }
+
+    @Test
+    fun sendMessage_error_displays_friendly_message_from_result() =
+        runTest {
+            val agentService =
+                FakeAgentService(
+                    executeResult =
+                        AppResult.Error(
+                            throwable = IllegalStateException("Raw stack trace here"),
+                            message = "模型不可用（服务商提示 model route not found），请更换模型",
+                        ),
+                )
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.onInputChanged("你好")
+            viewModel.sendMessage()
+            advanceUntilIdle()
+
+            val lastMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertTrue(lastMsg.isError)
+            assertEquals("❌ 执行出错：模型不可用（服务商提示 model route not found），请更换模型", lastMsg.content)
+        }
 }

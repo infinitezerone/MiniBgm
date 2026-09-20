@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.assistant
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -55,7 +59,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -63,6 +71,8 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -158,6 +168,9 @@ fun AssistantScreenContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
 
     // 新消息到达时自动滚动到底部
     LaunchedEffect(uiState.messages.size, uiState.isLoading) {
@@ -233,7 +246,11 @@ fun AssistantScreenContent(
                     ) {
                         items(PROMPT_SUGGESTIONS) { prompt ->
                             SuggestionChip(
-                                onClick = { onSendPrompt(prompt) },
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    onSendPrompt(prompt)
+                                },
                                 label = { Text(prompt, style = MaterialTheme.typography.labelMedium) },
                                 enabled = !uiState.isLoading,
                             )
@@ -250,7 +267,13 @@ fun AssistantScreenContent(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                focusRequester.requestFocus()
+                            },
                 ) {
                     Row(
                         modifier =
@@ -271,6 +294,22 @@ fun AssistantScreenContent(
                             },
                             singleLine = false,
                             maxLines = 4,
+                            keyboardOptions =
+                                KeyboardOptions(
+                                    imeAction = ImeAction.Send,
+                                    capitalization = KeyboardCapitalization.Sentences,
+                                ),
+                            keyboardActions =
+                                KeyboardActions(
+                                    onSend = {
+                                        val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
+                                        if (canSend) {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                            onSendMessage()
+                                        }
+                                    },
+                                ),
                             colors =
                                 TextFieldDefaults.colors(
                                     focusedContainerColor = Color.Transparent,
@@ -280,12 +319,19 @@ fun AssistantScreenContent(
                                     unfocusedIndicatorColor = Color.Transparent,
                                     disabledIndicatorColor = Color.Transparent,
                                 ),
-                            modifier = Modifier.weight(1f),
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .focusRequester(focusRequester),
                         )
 
                         val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
                         IconButton(
-                            onClick = onSendMessage,
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                onSendMessage()
+                            },
                             enabled = canSend,
                             modifier =
                                 Modifier
@@ -323,12 +369,23 @@ fun AssistantScreenContent(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                    },
         ) {
             if (uiState.messages.isEmpty()) {
                 // 空状态引导卡片
                 EmptyAssistantGuide(
-                    onSelectPrompt = onSendPrompt,
+                    onSelectPrompt = { prompt ->
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onSendPrompt(prompt)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -336,7 +393,16 @@ fun AssistantScreenContent(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize(),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                            },
                 ) {
                     items(uiState.messages, key = { it.id }) { message ->
                         ChatMessageItem(

@@ -249,27 +249,8 @@ class DefaultBgmAiAgentService(
         }
     }
 
-    private companion object {
-        /** 把常见 LLM 端点异常翻译成用户可直接行动的提示 */
-        fun friendlyAiError(
-            config: AiConfig,
-            e: Exception,
-        ): String {
-            val raw = (e.message ?: "").let { m -> m + (e.cause?.message?.let { " $it" } ?: "") }
-            val lowered = raw.lowercase()
-            return when {
-                "model" in lowered && ("not available" in lowered || "not found" in lowered || "does not exist" in lowered) ->
-                    "模型「${config.model.ifBlank { "（未填写）" }}」在端点上不可用（可能已下线或改名）。请到 AI 设置更换模型——可先点「获取模型列表」查看端点上实际可用的模型。"
-                "404" in lowered && "model" in lowered -> "模型「${config.model}」在端点上不可用（HTTP 404）。请到 AI 设置更换模型。"
-                "401" in lowered || "unauthorized" in lowered || "invalid api key" in lowered || "invalid_api_key" in lowered ->
-                    "鉴权失败：API 密钥无效或已过期，请到 AI 设置更新密钥。"
-                "403" in lowered || "forbidden" in lowered -> "端点拒绝了访问（HTTP 403）：请确认密钥对该模型有权限。"
-                "429" in lowered || "rate limit" in lowered || "quota" in lowered -> "请求过于频繁或额度不足（HTTP 429），请稍后重试。"
-                "timeout" in lowered || "timed out" in lowered -> "AI 端点请求超时：请检查网络，或确认端点地址可达。"
-                "connection" in lowered || "unresolved" in lowered || "refused" in lowered -> "无法连接到 AI 端点：请检查网络与 Base URL 是否可达。"
-                else -> raw.ifBlank { e.toString() }
-            }
-        }
+    companion object {
+        // Internal for unit testing
     }
 }
 
@@ -298,6 +279,78 @@ internal fun catalogHttpErrorMessage(status: Int): String =
         404 -> "端点未找到（HTTP 404）：请检查 Base URL 是否正确"
         else -> "拉取模型列表失败（HTTP $status）"
     }
+
+/** 把常见 LLM 端点异常翻译成用户可直接行动的提示，提取真实底层 JSON 错误说明 */
+internal fun friendlyAiError(
+    config: AiConfig,
+    e: Exception,
+): String {
+    val raw = (e.message ?: "").let { m -> m + (e.cause?.message?.let { " $it" } ?: "") }
+    val lowered = raw.lowercase()
+    return when {
+        isModelRouteNotFound(lowered) ->
+            "模型「${config.model.ifBlank {
+                "（未填写）"
+            }}」不可用（服务商提示 model route not found / HTTP 404，该模型可能已下线或不支持对话路由）。请在 AI 设置中点击「获取可用模型」并选择最新的可用模型。"
+        isModelUnavailable(lowered) ->
+            "模型「${config.model.ifBlank { "（未填写）" }}」在端点上不可用（可能已下线或改名）。请到 AI 设置更换模型——可先点「获取可用模型」查看端点上实际可用的模型。"
+        isRateLimitOrQuota(lowered) ->
+            "请求已被服务商限制（HTTP 429）：服务商提示配额不足或超过并发频率限制（TPM/RPM Limit），请稍后重试或更换模型/端点。"
+        isAuthFailure(lowered) ->
+            "鉴权失败（HTTP 401）：API 密钥无效或已过期，请到 AI 设置更新密钥。"
+        isForbidden(lowered) ->
+            "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
+        isNetworkOrTimeout(lowered) ->
+            "无法连接到 AI 端点或请求超时：请检查网络与 Base URL 是否可达。"
+        else -> {
+            extractJsonErrorMessage(raw)?.let { innerMsg ->
+                "AI 服务商返回错误：$innerMsg"
+            } ?: raw.ifBlank { e.toString() }
+        }
+    }
+}
+
+internal fun isModelRouteNotFound(lower: String): Boolean = "model route not found" in lower || ("404" in lower && "model" in lower)
+
+internal fun isModelUnavailable(lower: String): Boolean =
+    "model" in lower && ("not available" in lower || "not found" in lower || "does not exist" in lower)
+
+internal fun isRateLimitOrQuota(lower: String): Boolean =
+    "tpm/rpm limit" in lower || "insufficient_quota" in lower || "quota" in lower || "rate limit" in lower || "429" in lower
+
+internal fun isAuthFailure(lower: String): Boolean =
+    "401" in lower || "unauthorized" in lower || "invalid api key" in lower || "invalid_api_key" in lower
+
+internal fun isForbidden(lower: String): Boolean = "403" in lower || "forbidden" in lower
+
+internal fun isNetworkOrTimeout(lower: String): Boolean =
+    "timeout" in lower || "timed out" in lower || "connection" in lower || "unresolved" in lower || "refused" in lower
+
+/** 从原始异常文本中尝试提取 JSON 报文里的核心 error.message 避免冗长堆栈暴露给用户 */
+internal fun extractJsonErrorMessage(raw: String): String? {
+    if (!raw.contains("{") || !raw.contains("}")) return null
+    return runCatching {
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        if (start in 0 until end) {
+            val jsonStr = raw.substring(start, end + 1)
+            val element = catalogJson.parseToJsonElement(jsonStr)
+            if (element is JsonObject) {
+                element["error"]?.let { err ->
+                    if (err is JsonObject) {
+                        err["message"]?.let { if (it is JsonPrimitive) return@runCatching it.contentOrNull }
+                    } else if (err is JsonPrimitive) {
+                        return@runCatching err.contentOrNull
+                    }
+                }
+                element["message"]?.let {
+                    if (it is JsonPrimitive) return@runCatching it.contentOrNull
+                }
+            }
+        }
+        null
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+}
 
 /**
  * 模型列表端点：OpenAI 兼容形态保留 /v1 前缀（…/v1/models）；
@@ -335,19 +388,32 @@ private val catalogJson =
  * 解析模型列表：
  * 兼容 OpenAI（data[].id）、Ollama（models[].name / models[].model）、
  * Gemini 原生（models[].name 去除 "models/" 前缀）、以及各类代理返回的字符串列表或根数组。
+ *
+ * 智能过滤：自动过滤纯生图（output_modalities 仅包含 image）、向量 Embedding、语音及 Moderation 等非对话模型。
+ * 智能排序：优先将支持 Chat/Instruct/Flash/Pro 的最新主流对话模型排在前面。
  * 若无有效模型则返回 null。
  */
 internal fun parseModelsBody(body: String): List<String>? =
     runCatching {
         val root = catalogJson.parseToJsonElement(body)
-        val result = mutableListOf<String>()
+        val candidateModels = mutableListOf<String>()
 
-        fun addId(raw: String?) {
-            if (raw == null) return
-            val trimmed = raw.trim().removePrefix("models/")
-            if (trimmed.isNotBlank()) {
-                result.add(trimmed)
-            }
+        fun isNonChatModel(id: String): Boolean {
+            val lower = id.lowercase()
+            return lower.contains("embedding") ||
+                lower.contains("embed") ||
+                lower.startsWith("bge-") ||
+                lower.contains("-rerank") ||
+                lower.contains("rerank") ||
+                lower.contains("whisper") ||
+                lower.contains("tts") ||
+                lower.contains("dall-e") ||
+                lower.contains("flux") ||
+                lower.contains("sdxl") ||
+                lower.contains("stable-diffusion") ||
+                lower.contains("moderation") ||
+                lower.contains("image-generation") ||
+                lower.contains("text-to-image")
         }
 
         fun extractFromObject(obj: JsonObject) {
@@ -355,7 +421,29 @@ internal fun parseModelsBody(body: String): List<String>? =
                 obj["id"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
                     ?: obj["name"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
                     ?: obj["model"]?.let { if (it is JsonPrimitive) it.contentOrNull else null }
-            addId(id)
+            if (id.isNullOrBlank()) return
+            val trimmed = id.trim().removePrefix("models/")
+            if (trimmed.isBlank() || isNonChatModel(trimmed)) return
+
+            // 检查输出模态（例如纯生图模型 output_modalities: ["image"]）
+            val outputModalities = obj["output_modalities"]
+            if (outputModalities is JsonArray) {
+                val hasText =
+                    outputModalities.any {
+                        it is JsonPrimitive && it.contentOrNull?.equals("text", ignoreCase = true) == true
+                    }
+                if (!hasText) return
+            }
+
+            candidateModels.add(trimmed)
+        }
+
+        fun addPrimitiveId(raw: String?) {
+            if (raw == null) return
+            val trimmed = raw.trim().removePrefix("models/")
+            if (trimmed.isNotBlank() && !isNonChatModel(trimmed)) {
+                candidateModels.add(trimmed)
+            }
         }
 
         when (root) {
@@ -365,7 +453,7 @@ internal fun parseModelsBody(body: String): List<String>? =
                         dataElement.forEach { elem ->
                             when (elem) {
                                 is JsonObject -> extractFromObject(elem)
-                                is JsonPrimitive -> addId(elem.contentOrNull)
+                                is JsonPrimitive -> addPrimitiveId(elem.contentOrNull)
                                 else -> Unit
                             }
                         }
@@ -376,7 +464,7 @@ internal fun parseModelsBody(body: String): List<String>? =
                         modelsElement.forEach { elem ->
                             when (elem) {
                                 is JsonObject -> extractFromObject(elem)
-                                is JsonPrimitive -> addId(elem.contentOrNull)
+                                is JsonPrimitive -> addPrimitiveId(elem.contentOrNull)
                                 else -> Unit
                             }
                         }
@@ -387,12 +475,25 @@ internal fun parseModelsBody(body: String): List<String>? =
                 root.forEach { elem ->
                     when (elem) {
                         is JsonObject -> extractFromObject(elem)
-                        is JsonPrimitive -> addId(elem.contentOrNull)
+                        is JsonPrimitive -> addPrimitiveId(elem.contentOrNull)
                         else -> Unit
                     }
                 }
             }
             else -> Unit
         }
-        result.distinct().takeIf { it.isNotEmpty() }
+
+        fun rankModel(id: String): Int {
+            val lower = id.lowercase()
+            var score = 0
+            if (lower.contains("chat") || lower.contains("instruct")) score += 20
+            if (lower.contains("flash") || lower.contains("turbo") || lower.contains("lite")) score += 15
+            if (lower.contains("deepseek") || lower.contains("glm") || lower.contains("qwen") || lower.contains("kimi")) score += 10
+            if (lower.contains("gpt-4") || lower.contains("claude-3") || lower.contains("gemini")) score += 10
+            if (lower.contains("6.8") || lower.contains("2.5") || lower.contains("5.2") || lower.contains("v4")) score += 5
+            return score
+        }
+
+        val distinct = candidateModels.distinct()
+        distinct.sortedByDescending { rankModel(it) }.takeIf { it.isNotEmpty() }
     }.getOrNull()
