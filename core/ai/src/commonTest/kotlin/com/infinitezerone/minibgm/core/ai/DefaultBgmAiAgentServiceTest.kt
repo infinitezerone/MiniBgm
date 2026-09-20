@@ -23,6 +23,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DefaultBgmAiAgentServiceTest : KoinTest {
@@ -271,4 +273,92 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             assertIs<AppResult.Error>(result)
             assertTrue(result.message.contains("无法连接"))
         }
+
+    @Test
+    fun parseModelsBody_filters_non_chat_models_and_ranks_models() {
+        val mockJson =
+            """
+            {
+              "data": [
+                {
+                  "id": "sensenova-u1-fast",
+                  "output_modalities": ["image"]
+                },
+                {
+                  "id": "text-embedding-3-small",
+                  "output_modalities": ["text"]
+                },
+                {
+                  "id": "sensenova-6.7-flash-lite",
+                  "output_modalities": ["text", "image"]
+                },
+                {
+                  "id": "sensenova-6.8-flash-lite",
+                  "output_modalities": ["text", "image"]
+                },
+                {
+                  "id": "dall-e-3",
+                  "output_modalities": ["image"]
+                },
+                {
+                  "id": "deepseek-v4-flash",
+                  "output_modalities": ["text"]
+                }
+              ]
+            }
+            """.trimIndent()
+
+        val parsed = parseModelsBody(mockJson)
+        assertNotNull(parsed)
+        // 非文本与非对话模型被过滤
+        assertFalse(parsed.contains("sensenova-u1-fast"))
+        assertFalse(parsed.contains("text-embedding-3-small"))
+        assertFalse(parsed.contains("dall-e-3"))
+
+        // 对话模型保留
+        assertTrue(parsed.contains("sensenova-6.8-flash-lite"))
+        assertTrue(parsed.contains("sensenova-6.7-flash-lite"))
+        assertTrue(parsed.contains("deepseek-v4-flash"))
+
+        // 6.8 排序应优于 6.7
+        val idx68 = parsed.indexOf("sensenova-6.8-flash-lite")
+        val idx67 = parsed.indexOf("sensenova-6.7-flash-lite")
+        assertTrue(idx68 < idx67, "sensenova-6.8 should be ranked before 6.7")
+    }
+
+    @Test
+    fun friendlyAiError_translates_404_model_route_not_found() {
+        val config = AiConfig(endpoint = "https://token.sensenova.cn/v1", model = "sensenova-6.7-flash-lite")
+        val error =
+            IllegalStateException(
+                "Status code: 404\nError body: {\"error\":{\"message\":\"model route not found\",\"type\":\"not_found_error\",\"code\":\"5\"}}",
+            )
+        val msg = friendlyAiError(config, error)
+        assertTrue(msg.contains("model route not found") || msg.contains("不可用"))
+        assertTrue(msg.contains("sensenova-6.7-flash-lite"))
+    }
+
+    @Test
+    fun friendlyAiError_extracts_inner_json_error_message() {
+        val config = AiConfig(endpoint = "https://example.com/v1", model = "gpt-4o")
+        val error =
+            IllegalStateException(
+                "Status code: 500\nError body: {\"error\":{\"message\":\"Error from provider amd: 503 Service Unavailable\"}}",
+            )
+        val msg = friendlyAiError(config, error)
+        assertTrue(msg.contains("503 Service Unavailable"))
+        assertFalse(msg.contains("Status code: 500"))
+    }
+
+    @Test
+    fun extractJsonErrorMessage_parses_nested_and_flat_formats() {
+        val openAiJson = "Error: {\"error\":{\"message\":\"quota exceeded\"}}"
+        assertEquals("quota exceeded", extractJsonErrorMessage(openAiJson))
+
+        val flatJson = "Failed: {\"message\":\"invalid token\"}"
+        assertEquals("invalid token", extractJsonErrorMessage(flatJson))
+
+        val plainText = "Plain error without json"
+        assertNull(extractJsonErrorMessage(plainText))
+    }
 }
