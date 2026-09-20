@@ -50,7 +50,7 @@ data class WeekdayDateItem(
 /** 「放送」Tab 的单一不可变 UI 状态 */
 @Immutable
 data class ScheduleUiState(
-    val isLoading: Boolean = true,
+    val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
     val selectedWeekday: Int,
@@ -463,7 +463,7 @@ class ScheduleViewModel(
                     val initialToday = currentLocalDate()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
-                        isLoading = true,
+                        isLoading = false,
                         isRefreshing = false,
                         selectedWeekday = initialWeekday,
                         todayWeekday = initialWeekday,

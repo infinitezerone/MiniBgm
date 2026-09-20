@@ -2087,4 +2087,57 @@ class ScheduleRepositoryImplTest {
             // 关键断言 3：对外流与 DAO 最终态一致（不存在更晚的中间态外发）
             assertEquals(emissions.last(), repo.getAllSchedulesStream().first())
         }
+
+    @Test
+    fun getAllSchedulesStream_emitsCachedDataImmediatelyEvenIfRefreshPipelineIsAlreadyRunning() =
+        runTest {
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 3001L,
+                                title = "已有缓存番",
+                                titleCn = "已有缓存番",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = "",
+                                weekday = 7,
+                                timeCst = "",
+                                timeJst = "",
+                                sitesJson = "[]",
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            // 模拟冷启动：先发起异步刷新（拉起闸门）
+            val refreshJob = launch { repo.refreshAllSchedules() }
+
+            // UI 此时才开始订阅 getAllSchedulesStream
+            val emissions = mutableListOf<List<AirSchedule>>()
+            val collector =
+                launch {
+                    repo.getAllSchedulesStream().collect { emissions.add(it) }
+                }
+
+            // 即使管线仍在异步运行，首帧本地缓存也必须立即直发，绝不等待网络
+            runCurrent()
+            assertTrue(emissions.isNotEmpty())
+            assertEquals(1, emissions.first().size)
+            assertEquals(3001L, emissions.first().first().bgmId)
+
+            advanceUntilIdle()
+            refreshJob.join()
+            collector.cancel()
+        }
 }
