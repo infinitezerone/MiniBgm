@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
@@ -565,66 +566,46 @@ class PlayerViewModel(
                             epSort.toString()
                         }
                     val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
-                    val targetUrl =
-                        rule.resolveUrl(
-                            title = primaryTitle,
-                            ep = epNumStr,
-                            subjectId = _uiState.value.subjectId,
-                            episodeId = _uiState.value.episodeId,
-                        )
+                    val traditionalTitle = ChineseConverter.toTraditional(primaryTitle)
+                    val queryTitles =
+                        listOf(primaryTitle, traditionalTitle, subjectOriginalName)
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .ifEmpty { listOf("") }
 
-                    var candidates =
-                        if (rule.kind == PlaybackRuleKind.SOURCE) {
-                            resolver.resolveTemplate(
-                                url = targetUrl,
-                                headers = rule.headers,
-                                epNumber = epSort,
-                                siteName = rule.name,
-                            )
-                        } else {
-                            resolver.resolvePages(
-                                pageUrls = listOf(targetUrl),
-                                epNumber = epSort,
-                                siteName = rule.name,
-                            )
-                        }
-
-                    var playable =
-                        candidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
-                            ?: candidates.firstOrNull()
-
-                    // 若首选用词未命中直链，且存在日文原名/繁体名（且与首选名不同），自动使用原名重试回退检索（例如命中繁体源 Anime1）
-                    if ((playable == null || playable.kind != PlaylistEntryKind.DIRECT) &&
-                        subjectOriginalName.isNotBlank() &&
-                        !subjectOriginalName.equals(primaryTitle, ignoreCase = true)
-                    ) {
-                        val fallbackUrl =
+                    var playable: com.infinitezerone.minibgm.core.model.PlayableSource? = null
+                    for (queryTitle in queryTitles) {
+                        val targetUrl =
                             rule.resolveUrl(
-                                title = subjectOriginalName,
+                                title = queryTitle,
                                 ep = epNumStr,
                                 subjectId = _uiState.value.subjectId,
                                 episodeId = _uiState.value.episodeId,
                             )
-                        val fallbackCandidates =
+
+                        val candidates =
                             if (rule.kind == PlaybackRuleKind.SOURCE) {
                                 resolver.resolveTemplate(
-                                    url = fallbackUrl,
+                                    url = targetUrl,
                                     headers = rule.headers,
                                     epNumber = epSort,
                                     siteName = rule.name,
                                 )
                             } else {
                                 resolver.resolvePages(
-                                    pageUrls = listOf(fallbackUrl),
+                                    pageUrls = listOf(targetUrl),
                                     epNumber = epSort,
                                     siteName = rule.name,
                                 )
                             }
-                        val fallbackPlayable =
-                            fallbackCandidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
-                                ?: fallbackCandidates.firstOrNull()
-                        if (fallbackPlayable != null && (fallbackPlayable.kind == PlaylistEntryKind.DIRECT || playable == null)) {
-                            playable = fallbackPlayable
+
+                        val directCandidate = candidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
+                        if (directCandidate != null && directCandidate.url.isNotBlank()) {
+                            playable = directCandidate
+                            break
+                        }
+                        if (playable == null) {
+                            playable = candidates.firstOrNull()
                         }
                     }
 
