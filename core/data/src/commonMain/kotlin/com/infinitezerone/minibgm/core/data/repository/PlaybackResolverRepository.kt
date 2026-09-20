@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
+import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.serialization.Serializable
 
@@ -90,21 +91,7 @@ class PlaybackResolverRepositoryImpl(
             .take(MAX_PAGES)
             .flatMap { page ->
                 val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
-                val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
-                if (extracted.none { it.kind == PlaylistEntryKind.DIRECT }) {
-                    val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
-                    if (iframeCandidate != null && iframeCandidate.url.isNotBlank()) {
-                        val subFetched = pageFetchService.fetchHtml(iframeCandidate.url)
-                        if (subFetched != null) {
-                            val subExtracted =
-                                extractPlayableSources(subFetched.html, subFetched.url, epNumber, siteName)
-                            if (subExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
-                                return@flatMap subExtracted
-                            }
-                        }
-                    }
-                }
-                extracted
+                sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService)
             }.distinctBy { it.url }
 
     override suspend fun resolveTemplate(
@@ -115,9 +102,10 @@ class PlaybackResolverRepositoryImpl(
     ): List<PlayableSource> {
         val fetched = pageFetchService.fetchHtml(url, headers) ?: return emptyList()
         // 用户配置的取源接口优先识别结构化流清单（兼容 Stremio /stream 形态），
-        // 非清单响应回退到页面正则抽取
+        // 非清单响应回退到页面正则与智能嗅探
         parseStreamManifest(fetched.html, fetched.url, epNumber, siteName, headers)?.let { return it }
-        return extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+        val sources = sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService)
+        return sources
             .distinctBy { it.url }
             .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
     }
@@ -316,4 +304,238 @@ private fun absoluteUrl(
         trimmed.startsWith("/") -> origin.substringBeforeLast("/") + trimmed
         else -> origin + trimmed
     }
+}
+
+/** 针对单页或其子页面（单集页/iframe）执行流探测 */
+private suspend fun sniffPageOrSubPages(
+    fetched: FetchedPage,
+    epNumber: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): List<PlayableSource> {
+    // 1. 尝试当前单页专有协议嗅探（Anime1）
+    sniffAnime1Stream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+        return listOf(it)
+    }
+
+    // 2. 尝试当前页 MacCMS 嗅探
+    val macCms = extractMacCmsSources(fetched.html, fetched.url, epNumber, siteName)
+    if (macCms.isNotEmpty()) return macCms
+
+    // 3. 常规直链与 iframe 抽取
+    val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
+    if (extracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+        return extracted
+    }
+
+    // 4. 检查单层 iframe
+    val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
+    if (iframeCandidate != null && iframeCandidate.url.isNotBlank()) {
+        val subFetched = pageFetchService.fetchHtml(iframeCandidate.url)
+        if (subFetched != null) {
+            sniffAnime1Stream(subFetched.html, subFetched.url, epNumber, siteName, pageFetchService)?.let {
+                return listOf(it)
+            }
+            val subMac = extractMacCmsSources(subFetched.html, subFetched.url, epNumber, siteName)
+            if (subMac.isNotEmpty()) return subMac
+            val subExtracted = extractPlayableSources(subFetched.html, subFetched.url, epNumber, siteName)
+            if (subExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+                return subExtracted
+            }
+        }
+    }
+
+    // 5. 若页面无直接直链且无 iframe，尝试作为搜索列表页/目录页探测分集单集页面
+    val epLinks = extractEpisodeLinks(fetched.html, fetched.url, epNumber)
+    for (epLink in epLinks) {
+        val epFetched = pageFetchService.fetchHtml(epLink) ?: continue
+        sniffAnime1Stream(epFetched.html, epFetched.url, epNumber, siteName, pageFetchService)?.let {
+            return listOf(it)
+        }
+        val epMac = extractMacCmsSources(epFetched.html, epFetched.url, epNumber, siteName)
+        if (epMac.isNotEmpty()) return epMac
+        val epExtracted = extractPlayableSources(epFetched.html, epFetched.url, epNumber, siteName)
+        if (epExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+            return epExtracted
+        }
+        val epIframe = epExtracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE }
+        if (epIframe != null && epIframe.url.isNotBlank()) {
+            val epIframeFetched = pageFetchService.fetchHtml(epIframe.url)
+            if (epIframeFetched != null) {
+                val epIframeExtracted =
+                    extractPlayableSources(epIframeFetched.html, epIframeFetched.url, epNumber, siteName)
+                if (epIframeExtracted.any { it.kind == PlaylistEntryKind.DIRECT }) {
+                    return epIframeExtracted
+                }
+            }
+        }
+    }
+
+    return extracted
+}
+
+private val ANIME1_APIREQ_REGEX =
+    Regex("""data-apireq\s*=\s*["']([^"'>]+)["']""", RegexOption.IGNORE_CASE)
+
+private val ANIME1_SRC_REGEX =
+    Regex(""""src"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
+
+internal suspend fun sniffAnime1Stream(
+    html: String,
+    pageUrl: String,
+    targetEp: Float,
+    siteName: String,
+    pageFetchService: PageFetchService,
+): PlayableSource? {
+    val apireqMatch = ANIME1_APIREQ_REGEX.find(html) ?: return null
+    val rawApireq = apireqMatch.groupValues[1]
+    val decoded = decodeUrlComponent(rawApireq)
+
+    val apiPage =
+        pageFetchService.postForm(
+            url = "https://v.anime1.me/api",
+            formData = mapOf("d" to decoded),
+            requestHeaders = mapOf("Referer" to pageUrl),
+        ) ?: return null
+
+    val srcMatch = ANIME1_SRC_REGEX.find(apiPage.html) ?: return null
+    val rawSrc = srcMatch.groupValues[1].replace("\\/", "/")
+    val streamUrl =
+        when {
+            rawSrc.startsWith("//") -> "https:$rawSrc"
+            rawSrc.startsWith("http://", ignoreCase = true) || rawSrc.startsWith("https://", ignoreCase = true) -> rawSrc
+            else -> "https://v.anime1.me$rawSrc"
+        }
+
+    val streamHeaders = mutableMapOf<String, String>()
+    streamHeaders["Referer"] = "https://anime1.me/"
+    val cookie = apiPage.responseHeaders["Cookie"]
+    if (!cookie.isNullOrBlank()) {
+        streamHeaders["Cookie"] = cookie
+    }
+
+    val label = if (targetEp > 0f) "第 ${targetEp.toInt()} 话" else ""
+    return PlayableSource(
+        url = streamUrl,
+        kind = PlaylistEntryKind.DIRECT,
+        label = label,
+        episodeSort = targetEp,
+        siteName = siteName.ifBlank { "Anime1" },
+        pageUrl = pageUrl,
+        headers = streamHeaders,
+    )
+}
+
+private val MACCMS_PLAY_URL_REGEX =
+    Regex(""""url"\s*:\s*"([^"]*\$[a-zA-Z0-9_/:.\-%?&=#]+)"""")
+
+internal fun extractMacCmsSources(
+    html: String,
+    pageUrl: String,
+    epNumber: Float,
+    siteName: String,
+): List<PlayableSource> {
+    val match = MACCMS_PLAY_URL_REGEX.find(html) ?: return emptyList()
+    val playListStr = match.groupValues[1].replace("\\/", "/")
+    val entries = playListStr.split('#')
+    val targetEpInt = epNumber.toInt()
+    val results = mutableListOf<PlayableSource>()
+    for (entry in entries) {
+        val parts = entry.split('$')
+        if (parts.size >= 2) {
+            val title = parts[0].trim()
+            val mediaUrl = parts[1].trim()
+            val isMatch =
+                if (epNumber > 0f) {
+                    title.contains(targetEpInt.toString()) ||
+                        title.contains("第${targetEpInt}集") ||
+                        title.contains("第${targetEpInt}话")
+                } else {
+                    true
+                }
+            if (isMatch &&
+                (mediaUrl.endsWith(".m3u8", ignoreCase = true) || mediaUrl.endsWith(".mp4", ignoreCase = true))
+            ) {
+                results.add(
+                    PlayableSource(
+                        url = mediaUrl,
+                        kind = PlaylistEntryKind.DIRECT,
+                        label = title,
+                        episodeSort = epNumber,
+                        siteName = siteName,
+                        pageUrl = pageUrl,
+                        headers = pageOrigin(pageUrl)?.let { mapOf("Referer" to it) } ?: emptyMap(),
+                    ),
+                )
+            }
+        }
+    }
+    return results
+}
+
+private val A_TAG_REGEX =
+    Regex("""<a\b[^>]*?\bhref\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""", RegexOption.IGNORE_CASE)
+
+private val IGNORED_LINK_EXTS =
+    setOf(".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2")
+
+internal fun extractEpisodeLinks(
+    html: String,
+    pageUrl: String,
+    targetEp: Float,
+): List<String> {
+    if (targetEp <= 0f) return emptyList()
+    val origin = pageOrigin(pageUrl)
+    val epInt = targetEp.toInt()
+    val candidates = mutableListOf<String>()
+
+    val matches = A_TAG_REGEX.findAll(html).toList()
+    for (match in matches) {
+        val rawHref = match.groupValues[1].trim()
+        val text = match.groupValues[2].replace(Regex("<[^>]+>"), "").trim()
+        if (rawHref.isBlank() || rawHref.startsWith("#") || rawHref.startsWith("javascript:", ignoreCase = true)) {
+            continue
+        }
+        val lowerHref = rawHref.lowercase()
+        if (IGNORED_LINK_EXTS.any { lowerHref.endsWith(it) }) continue
+
+        val fullUrl = absoluteUrl(rawHref, origin) ?: continue
+        if (fullUrl == pageUrl) continue
+
+        val bracketMatch = Regex("""[\[\(【]\s*$epInt(?:\.0)?\s*[\]\)】]""").containsMatchIn(text)
+        val episodeWordMatch = Regex("""第\s*$epInt\s*[集话話]""").containsMatchIn(text)
+        val epTokenMatch = Regex("""(?i)\b(?:ep|e)\s*$epInt\b""").containsMatchIn(text)
+        val pureNumberMatch = text == epInt.toString() || text == targetEp.toString()
+        val urlEpNumber = episodeNumberFromUrl(fullUrl, allowWeak = false)
+
+        if (bracketMatch || episodeWordMatch || epTokenMatch || pureNumberMatch || urlEpNumber == targetEp) {
+            candidates.add(fullUrl)
+        }
+    }
+    return candidates.distinct().take(2)
+}
+
+internal fun decodeUrlComponent(encoded: String): String {
+    val sb = StringBuilder()
+    var i = 0
+    val len = encoded.length
+    while (i < len) {
+        val c = encoded[i]
+        if (c == '%' && i + 2 < len) {
+            val hex = encoded.substring(i + 1, i + 3)
+            val code = hex.toIntOrNull(16)
+            if (code != null) {
+                sb.append(code.toChar())
+                i += 3
+                continue
+            }
+        } else if (c == '+') {
+            sb.append(' ')
+            i++
+            continue
+        }
+        sb.append(c)
+        i++
+    }
+    return sb.toString()
 }
