@@ -103,6 +103,26 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `iframe 内若包含直链则深入一级抽取`() =
+        runTest {
+            val repo =
+                repository(
+                    mapOf(
+                        "https://w.example.com/watch/9" to
+                            """<iframe src="https://player.example.net/embed/9"></iframe>""",
+                        "https://player.example.net/embed/9" to
+                            """<video src="https://cdn.example.com/stream.m3u8"></video>""",
+                    ),
+                )
+
+            val sources = repo.resolvePages(listOf("https://w.example.com/watch/9"))
+
+            val source = sources.single()
+            assertEquals(PlaylistEntryKind.DIRECT, source.kind)
+            assertEquals("https://cdn.example.com/stream.m3u8", source.url)
+        }
+
+    @Test
     fun `抓不到的页面降级为空结果而不是抛错`() =
         runTest {
             val fake = FakePageFetchService(emptyMap())

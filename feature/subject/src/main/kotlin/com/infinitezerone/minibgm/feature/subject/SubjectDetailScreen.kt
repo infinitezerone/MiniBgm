@@ -70,6 +70,7 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
@@ -512,12 +513,52 @@ fun SubjectDetailScreen(
                                     }
                                 },
                                 onPlayEpisode = { episode ->
-                                    selectedEpisodeForSources = episode
-                                    showSourcesBottomSheet = true
+                                    val matchingEntry =
+                                        uiState.playlists
+                                            .matchesForEpisode(subjectId, if (episode.ep > 0f) episode.ep else episode.sort)
+                                            .firstOrNull()
+                                            ?.entry
+                                    val route =
+                                        PlayerRoute(
+                                            subjectId = subjectId,
+                                            episodeId = episode.id,
+                                            streamUrl = matchingEntry?.url.orEmpty(),
+                                            requestHeaders = matchingEntry?.headers.orEmpty(),
+                                            episodeName = episode.nameCn.ifBlank { episode.name },
+                                            subjectName = displaySubject?.displayName.orEmpty(),
+                                            episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                            episodeType = episode.type,
+                                        )
+                                    onPlayClick(route)
                                 },
                                 onOpenSources = {
-                                    selectedEpisodeForSources = null
-                                    showSourcesBottomSheet = true
+                                    val watchedCount = uiState.collection?.epStatus ?: 0
+                                    val targetEp =
+                                        currentEpisodes.firstOrNull {
+                                            isEpisodeNextToWatch(it, watchedCount, hasProgress = uiState.collection != null)
+                                        } ?: currentEpisodes.firstOrNull()
+                                    if (targetEp != null) {
+                                        val matchingEntry =
+                                            uiState.playlists
+                                                .matchesForEpisode(subjectId, if (targetEp.ep > 0f) targetEp.ep else targetEp.sort)
+                                                .firstOrNull()
+                                                ?.entry
+                                        val route =
+                                            PlayerRoute(
+                                                subjectId = subjectId,
+                                                episodeId = targetEp.id,
+                                                streamUrl = matchingEntry?.url.orEmpty(),
+                                                requestHeaders = matchingEntry?.headers.orEmpty(),
+                                                episodeName = targetEp.nameCn.ifBlank { targetEp.name },
+                                                subjectName = displaySubject?.displayName.orEmpty(),
+                                                episodeSort = if (targetEp.ep > 0f) targetEp.ep else targetEp.sort,
+                                                episodeType = targetEp.type,
+                                            )
+                                        onPlayClick(route)
+                                    } else {
+                                        selectedEpisodeForSources = null
+                                        showSourcesBottomSheet = true
+                                    }
                                 },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
@@ -736,6 +777,11 @@ fun SubjectDetailScreen(
                     selectedEpisodeForSources = null
                 },
                 onOpenUrl = handleStreamingUrl,
+                onInternalPlayClick = { route ->
+                    showSourcesBottomSheet = false
+                    selectedEpisodeForSources = null
+                    onPlayClick(route)
+                },
                 onAiSourceSearch = { viewModel.requestSourceSearch() },
                 onManageRules = {
                     showSourcesBottomSheet = false

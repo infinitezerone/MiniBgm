@@ -146,6 +146,7 @@ data class PlayerRoute(
     val requestHeaders: Map<String, String> = emptyMap(),
     val queue: List<PlayerQueueEntry> = emptyList(),
     val startIndex: Int = 0,
+    val initialRuleId: String = "",
 ) : DetailChainRoute
 
 /** 播放队列里的一条分集（与 [PlayerRoute] 同生命周期，仅用于播放器内换集与连播） */

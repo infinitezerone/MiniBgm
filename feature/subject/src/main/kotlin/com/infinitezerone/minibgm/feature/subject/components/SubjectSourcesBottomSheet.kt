@@ -46,6 +46,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.forSubject
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,6 +58,7 @@ fun SubjectSourcesBottomSheet(
     modifier: Modifier = Modifier,
     episode: Episode? = null,
     mikanId: String? = null,
+    onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
     onAiSourceSearch: () -> Unit = {},
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
@@ -71,6 +73,7 @@ fun SubjectSourcesBottomSheet(
             onOpenUrl = onOpenUrl,
             modifier = modifier,
             mikanId = mikanId,
+            onInternalPlayClick = onInternalPlayClick,
             onAiSourceSearch = onAiSourceSearch,
             onManageRules = onManageRules,
             playbackRules = playbackRules,
@@ -211,6 +214,34 @@ fun SubjectSourcesBottomSheet(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                if (onInternalPlayClick != null) {
+                    Text(
+                        text = "应用内播放",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                    EpisodeSourceActionCard(
+                        title = "一体化视频播放器",
+                        subtitle = "多源嗅探 · 分集选集 · 自动连播",
+                        iconVector = Icons.Filled.PlayCircleOutline,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        onClick = {
+                            runAfterDismiss {
+                                val route =
+                                    PlayerRoute(
+                                        subjectId = subject.id,
+                                        episodeId = 0L,
+                                        subjectName = displayName,
+                                    )
+                                onInternalPlayClick(route)
+                            }
+                        },
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 

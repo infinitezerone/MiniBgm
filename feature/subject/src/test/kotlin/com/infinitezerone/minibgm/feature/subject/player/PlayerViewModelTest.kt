@@ -43,12 +43,14 @@ class PlayerViewModelTest {
         streamUrl: String = initialStreamUrl,
         queue: List<PlayerQueueEntry> = emptyList(),
         startIndex: Int = 0,
+        initialRuleId: String = "",
     ) = PlayerRoute(
         subjectId = subjectId,
         episodeId = episodeId,
         streamUrl = streamUrl,
         queue = queue,
         startIndex = startIndex,
+        initialRuleId = initialRuleId,
     )
 
     private fun viewModel(
@@ -466,6 +468,64 @@ class PlayerViewModelTest {
 
             val state = vm.uiState.value
             assertTrue(state.error?.contains("未在【EmptyRule】中嗅探到可播放直链") == true)
+            assertFalse(state.isResolvingSource)
+        }
+
+    @Test
+    fun initialRuleId_automaticallySelectsAndSniffsTargetRule() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule1 =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "Rule 1",
+                    urlTemplate = "https://example.com/1",
+                    isEnabled = true,
+                )
+            val rule2 =
+                PlaybackSourceRule(
+                    id = "rule2",
+                    name = "Rule 2",
+                    urlTemplate = "https://example.com/2",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule1, rule2))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/rule2_stream.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = "", initialRuleId = "rule2"),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("rule2", state.currentSource?.id)
+            assertEquals("https://cdn.example.com/rule2_stream.m3u8", state.streamUrl)
             assertFalse(state.isResolvingSource)
         }
 }

@@ -299,12 +299,12 @@ fun EpisodeSourceGuideBottomSheet(
                             subtitle =
                                 playbackSourceSubtitle(
                                     rule.description.ifBlank {
-                                        if (isMedia) "应用内播放直链" else "打开解析链接"
+                                        if (onInternalPlayClick != null || isMedia) "应用内嗅探与播放" else "打开解析链接"
                                     },
                                     ruleFailure,
                                 ),
                             iconVector =
-                                if (isMedia) {
+                                if (onInternalPlayClick != null || isMedia) {
                                     Icons.Filled.PlayCircleOutline
                                 } else {
                                     Icons.AutoMirrored.Filled.OpenInNew
@@ -312,19 +312,19 @@ fun EpisodeSourceGuideBottomSheet(
                             iconTint =
                                 when {
                                     ruleFailure != null -> MaterialTheme.colorScheme.error
-                                    isMedia -> MaterialTheme.colorScheme.primary
+                                    onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                             trailingContent = {
                                 val trailingIcon =
-                                    if (isMedia) {
+                                    if (onInternalPlayClick != null || isMedia) {
                                         Icons.AutoMirrored.Filled.KeyboardArrowRight
                                     } else {
                                         Icons.AutoMirrored.Filled.OpenInNew
                                     }
                                 Icon(
                                     imageVector = trailingIcon,
-                                    contentDescription = if (isMedia) "播放" else "打开",
+                                    contentDescription = if (onInternalPlayClick != null || isMedia) "播放" else "打开",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(18.dp),
                                 )
@@ -332,16 +332,17 @@ fun EpisodeSourceGuideBottomSheet(
                             onClick = {
                                 coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                                     onDismissRequest()
-                                    if (isMedia && onInternalPlayClick != null) {
+                                    if (onInternalPlayClick != null) {
                                         val route =
                                             PlayerRoute(
                                                 subjectId = subject.id,
                                                 episodeId = episode.id,
-                                                streamUrl = resolvedUrl,
+                                                streamUrl = if (isMedia) resolvedUrl else "",
                                                 episodeName = episode.nameCn.ifBlank { episode.name },
                                                 subjectName = displayName,
                                                 episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
                                                 episodeType = episode.type,
+                                                initialRuleId = rule.id,
                                             )
                                         onInternalPlayClick(route)
                                     } else {
