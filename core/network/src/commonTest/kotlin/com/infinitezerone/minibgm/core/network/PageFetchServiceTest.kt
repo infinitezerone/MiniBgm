@@ -119,4 +119,45 @@ class PageFetchServiceTest {
             assertEquals("https://final.example.com/e/1", page?.url)
             assertEquals("<html>moved</html>", page?.html)
         }
+
+    @Test
+    fun `postForm 正常发送表单并聚合 SetCookie 为 Cookie 响应头`() =
+        runTest {
+            var capturedParamD: String? = null
+            val impl =
+                PageFetchServiceImpl(
+                    HttpClient(
+                        MockEngine { request ->
+                            capturedHeaders.add(request.headers)
+                            val form = request.body as? io.ktor.client.request.forms.FormDataContent
+                            capturedParamD = form?.formData?.get("d")
+                            respond(
+                                content = """{"status":"ok"}""",
+                                status = HttpStatusCode.OK,
+                                headers =
+                                    headersOf(
+                                        HttpHeaders.ContentType to listOf("application/json"),
+                                        HttpHeaders.SetCookie to
+                                            listOf(
+                                                "e=123; path=/; domain=.example.com",
+                                                "p=abc; path=/",
+                                            ),
+                                    ),
+                            )
+                        },
+                    ),
+                )
+
+            val page =
+                impl.postForm(
+                    url = "https://api.example.com/stream",
+                    formData = mapOf("d" to "payload123"),
+                    requestHeaders = mapOf("Referer" to "https://site.example.com/"),
+                )
+
+            assertEquals("https://api.example.com/stream", page?.url)
+            assertEquals("""{"status":"ok"}""", page?.html)
+            assertEquals("e=123; p=abc", page?.responseHeaders?.get("Cookie"))
+            assertEquals("payload123", capturedParamD)
+        }
 }

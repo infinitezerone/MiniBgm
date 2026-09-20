@@ -10,9 +10,11 @@ import kotlin.test.assertTrue
 
 private class FakePageFetchService(
     private val pages: Map<String, String>,
+    private val responses: Map<String, FetchedPage> = emptyMap(),
 ) : PageFetchService {
     val requested = mutableListOf<String>()
     val sentHeaders = mutableMapOf<String, Map<String, String>>()
+    val sentForms = mutableMapOf<String, Map<String, String>>()
 
     override suspend fun fetchHtml(
         url: String,
@@ -20,7 +22,18 @@ private class FakePageFetchService(
     ): FetchedPage? {
         requested += url
         sentHeaders[url] = requestHeaders
-        return pages[url]?.let { FetchedPage(url = url, html = it) }
+        return responses[url] ?: pages[url]?.let { FetchedPage(url = url, html = it) }
+    }
+
+    override suspend fun postForm(
+        url: String,
+        formData: Map<String, String>,
+        requestHeaders: Map<String, String>,
+    ): FetchedPage? {
+        requested += url
+        sentForms[url] = formData
+        sentHeaders[url] = requestHeaders
+        return responses[url] ?: pages[url]?.let { FetchedPage(url = url, html = it) }
     }
 }
 
@@ -312,5 +325,86 @@ class PlaybackResolverRepositoryTest {
             assertEquals("测试接口", source.siteName)
             assertEquals("https://api.example.com/", source.headers["Referer"])
             assertEquals("abc", source.headers["X-Key"])
+        }
+
+    @Test
+    fun `搜索列表页含目标分集链接时自动深入分集页抽取直链`() =
+        runTest {
+            val pages =
+                mapOf(
+                    "https://anime1.me/?s=test" to
+                        """
+                        <article>
+                            <h2><a href="https://anime1.me/1001">测试动画 [1]</a></h2>
+                            <h2><a href="https://anime1.me/1002">测试动画 [2]</a></h2>
+                        </article>
+                        """.trimIndent(),
+                    "https://anime1.me/1002" to
+                        """
+                        <div class="video-container">
+                            <video src="https://cdn.example.com/anime/ep2.mp4"></video>
+                        </div>
+                        """.trimIndent(),
+                )
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = FakePageFetchService(pages))
+
+            val sources = repo.resolvePages(listOf("https://anime1.me/?s=test"), epNumber = 2f, siteName = "Anime1")
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals(PlaylistEntryKind.DIRECT, source.kind)
+            assertEquals("https://cdn.example.com/anime/ep2.mp4", source.url)
+            assertEquals("第 2 话", source.label)
+        }
+
+    @Test
+    fun `单集页含 Anime1 协议时自动请求 API 并携带 Cookie 与 Referer`() =
+        runTest {
+            val responses =
+                mapOf(
+                    "https://anime1.me/30193" to
+                        FetchedPage(
+                            url = "https://anime1.me/30193",
+                            html = """<video id="vjs" data-apireq="%7B%22c%22%3A%221949%22%2C%22e%22%3A%2211%22%7D"></video>""",
+                        ),
+                    "https://v.anime1.me/api" to
+                        FetchedPage(
+                            url = "https://v.anime1.me/api",
+                            html = """{"s":[{"src":"//nazuna.v.anime1.me/1949/11.mp4","type":"video/mp4"}]}""",
+                            responseHeaders = mapOf("Cookie" to "e=auth123; p=sig456"),
+                        ),
+                )
+            val fakeFetch = FakePageFetchService(pages = emptyMap(), responses = responses)
+            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fakeFetch)
+
+            val sources = repo.resolvePages(listOf("https://anime1.me/30193"), epNumber = 11f, siteName = "Anime1")
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals(PlaylistEntryKind.DIRECT, source.kind)
+            assertEquals("https://nazuna.v.anime1.me/1949/11.mp4", source.url)
+            assertEquals("https://anime1.me/", source.headers["Referer"])
+            assertEquals("e=auth123; p=sig456", source.headers["Cookie"])
+            assertEquals("第 11 话", source.label)
+        }
+
+    @Test
+    fun `支持解析 MacCMS vod_play_url 剧集列表并提取目标集直链`() =
+        runTest {
+            val html =
+                """
+                var player_aaaa = {
+                    "flag": "play",
+                    "url": "第1集${'$'}https://cdn.example.com/1.m3u8#第2集${'$'}https://cdn.example.com/2.m3u8"
+                };
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/v/1" to html)))
+
+            val sources = repo.resolvePages(listOf("https://maccms.example.com/v/1"), epNumber = 2f, siteName = "MacCMS")
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://cdn.example.com/2.m3u8", source.url)
+            assertEquals("第2集", source.label)
         }
 }

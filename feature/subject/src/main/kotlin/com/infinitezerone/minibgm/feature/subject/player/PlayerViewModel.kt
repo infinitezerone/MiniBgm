@@ -173,6 +173,8 @@ class PlayerViewModel(
 
     private var progressTicksSinceSave = 0
 
+    private var subjectOriginalName: String = ""
+
     private var resolveJob: Job? = null
 
     private fun initialEpisodes(): List<PlayerEpisodeItem> =
@@ -303,6 +305,7 @@ class PlayerViewModel(
             viewModelScope.launch {
                 subjectRepository?.getSubjectStream(route.subjectId)?.collect { subject ->
                     if (subject != null) {
+                        subjectOriginalName = subject.name
                         _uiState.update { current ->
                             if (current.subjectName.isBlank()) {
                                 current.copy(subjectName = subject.displayName)
@@ -561,15 +564,16 @@ class PlayerViewModel(
                         } else {
                             epSort.toString()
                         }
+                    val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
                     val targetUrl =
                         rule.resolveUrl(
-                            title = _uiState.value.subjectName.ifBlank { route.subjectName },
+                            title = primaryTitle,
                             ep = epNumStr,
                             subjectId = _uiState.value.subjectId,
                             episodeId = _uiState.value.episodeId,
                         )
 
-                    val candidates =
+                    var candidates =
                         if (rule.kind == PlaybackRuleKind.SOURCE) {
                             resolver.resolveTemplate(
                                 url = targetUrl,
@@ -585,9 +589,44 @@ class PlayerViewModel(
                             )
                         }
 
-                    val playable =
+                    var playable =
                         candidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
                             ?: candidates.firstOrNull()
+
+                    // 若首选用词未命中直链，且存在日文原名/繁体名（且与首选名不同），自动使用原名重试回退检索（例如命中繁体源 Anime1）
+                    if ((playable == null || playable.kind != PlaylistEntryKind.DIRECT) &&
+                        subjectOriginalName.isNotBlank() &&
+                        !subjectOriginalName.equals(primaryTitle, ignoreCase = true)
+                    ) {
+                        val fallbackUrl =
+                            rule.resolveUrl(
+                                title = subjectOriginalName,
+                                ep = epNumStr,
+                                subjectId = _uiState.value.subjectId,
+                                episodeId = _uiState.value.episodeId,
+                            )
+                        val fallbackCandidates =
+                            if (rule.kind == PlaybackRuleKind.SOURCE) {
+                                resolver.resolveTemplate(
+                                    url = fallbackUrl,
+                                    headers = rule.headers,
+                                    epNumber = epSort,
+                                    siteName = rule.name,
+                                )
+                            } else {
+                                resolver.resolvePages(
+                                    pageUrls = listOf(fallbackUrl),
+                                    epNumber = epSort,
+                                    siteName = rule.name,
+                                )
+                            }
+                        val fallbackPlayable =
+                            fallbackCandidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
+                                ?: fallbackCandidates.firstOrNull()
+                        if (fallbackPlayable != null && (fallbackPlayable.kind == PlaylistEntryKind.DIRECT || playable == null)) {
+                            playable = fallbackPlayable
+                        }
+                    }
 
                     if (playable != null && playable.url.isNotBlank()) {
                         _uiState.update {
