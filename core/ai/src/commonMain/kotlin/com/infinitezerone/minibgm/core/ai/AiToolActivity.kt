@@ -31,6 +31,10 @@ object AiToolActivity {
             }
     }
 
+    fun reportStatus(status: String) {
+        _current.value = status
+    }
+
     fun clear() {
         _current.value = null
     }

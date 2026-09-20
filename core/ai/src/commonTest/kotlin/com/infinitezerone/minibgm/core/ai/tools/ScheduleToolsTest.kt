@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
@@ -100,5 +101,14 @@ class ScheduleToolsTest {
             fakeScheduleRepository.upcomingAiring = emptyList()
             val noAiringResult = scheduleTools.getNextEpisodeAiring(subjectIds = listOf(9999L), hoursAhead = -10)
             assertTrue(noAiringResult.contains("No upcoming air events found"))
+        }
+
+    @Test
+    fun getSchedule_reports_ai_tool_activity() =
+        runTest {
+            AiToolActivity.clear()
+            fakeScheduleRepository.sendSchedules(3, emptyList())
+            scheduleTools.getSchedule(weekday = 3)
+            assertEquals("正在调用工具：查询放送表（周3）", AiToolActivity.current.value)
         }
 }

@@ -59,3 +59,72 @@ data class SubscriptionValidationReport(
     val sources: List<DiscoveredSource> = emptyList(),
     val errorMessage: String? = null,
 )
+
+/**
+ * 社区开源 TVBox 订阅结构兼容定义。
+ */
+@Serializable
+data class TvBoxConfig(
+    val sites: List<TvBoxSite> = emptyList(),
+)
+
+/**
+ * TVBox 站点条目。
+ */
+@Serializable
+data class TvBoxSite(
+    val key: String? = null,
+    val name: String = "",
+    val type: Int? = null,
+    val api: String? = null,
+    val ext: String? = null,
+    val searchable: Int? = 1,
+) {
+    /**
+     * 将 TVBox 站点转换为 MiniBgm 规范的 [DiscoveredSource]。
+     */
+    fun toDiscoveredSource(): DiscoveredSource? {
+        val siteName = resolveSiteName() ?: return null
+        val targetUrl = resolveTargetUrl() ?: return null
+        val template = resolveUrlTemplate(targetUrl)
+        val desc = resolveDescription()
+
+        return DiscoveredSource(
+            name = siteName,
+            urlTemplate = template,
+            description = desc,
+        )
+    }
+
+    private fun resolveSiteName(): String? {
+        val n = name.trim()
+        if (n.isNotBlank()) return n
+        val k = key?.trim().orEmpty()
+        return k.ifBlank { null }
+    }
+
+    private fun resolveTargetUrl(): String? {
+        val primary = api?.trim().orEmpty()
+        val candidate = primary.ifBlank { ext?.trim().orEmpty() }
+        val isHttp =
+            candidate.startsWith("http://", ignoreCase = true) ||
+                candidate.startsWith("https://", ignoreCase = true)
+        return if (isHttp) candidate else null
+    }
+
+    private fun resolveUrlTemplate(targetUrl: String): String =
+        when {
+            type == 1 -> if (targetUrl.contains("?")) "$targetUrl&ac=detail&wd={title}" else "$targetUrl?ac=detail&wd={title}"
+            targetUrl.contains("{wd}", ignoreCase = true) -> targetUrl.replace("{wd}", "{title}", ignoreCase = true)
+            targetUrl.contains("{title}", ignoreCase = true) -> targetUrl
+            targetUrl.contains("?") -> "$targetUrl&wd={title}"
+            else -> "$targetUrl/search?query={title}"
+        }
+
+    private fun resolveDescription(): String =
+        when (type) {
+            1 -> "TVBox MacCMS 采集源"
+            3 -> "TVBox 爬虫/扩展源"
+            else -> "TVBox 动漫源"
+        }
+}

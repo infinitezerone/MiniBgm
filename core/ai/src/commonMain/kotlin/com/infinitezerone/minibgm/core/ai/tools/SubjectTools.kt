@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -67,6 +68,7 @@ class SubjectTools(
         if (query.isBlank()) {
             return "Search query must not be empty."
         }
+        AiToolActivity.report("搜索动画条目", "关键词：$query")
         val resolvedLimit = if (limit <= 0) 10 else limit.coerceAtMost(50)
         return when (val result = searchRepository.searchSubjects(query = query.trim(), type = 2, limit = resolvedLimit)) {
             is AppResult.Success -> {
@@ -106,6 +108,7 @@ class SubjectTools(
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
+        AiToolActivity.report("获取条目详情", "条目 ID $subjectId")
         return when (val result = subjectRepository.fetchSubjectDetail(subjectId)) {
             is AppResult.Success -> {
                 val subject = result.data
@@ -140,6 +143,7 @@ class SubjectTools(
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
+        AiToolActivity.report("获取剧集列表", "条目 ID $subjectId")
         return when (val result = subjectRepository.fetchEpisodes(subjectId)) {
             is AppResult.Success -> {
                 val episodes =

@@ -1,12 +1,17 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -16,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
@@ -282,5 +288,184 @@ class PlayerViewModelTest {
             advanceUntilIdle()
 
             assertEquals(45_000L, settings.playbackPositions.first()[initialStreamUrl])
+        }
+
+    @Test
+    fun sources_populatedFromSettingsRules() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(
+                        id = "rule1",
+                        name = "Anime1",
+                        urlTemplate = "https://anime1.me/?s={title}",
+                        isEnabled = true,
+                    ),
+                ),
+            )
+            val vm = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+
+            val sources = vm.uiState.value.sources
+            assertEquals(2, sources.size)
+            assertTrue(sources[0].isDirect)
+            assertEquals("Anime1", sources[1].name)
+        }
+
+    @Test
+    fun selectSource_triggersStreamSniffing() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "TestRule",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/resolved_ep${epNumber.toInt()}.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                                label = "第 ${epNumber.toInt()} 话",
+                                headers = mapOf("Referer" to "https://example.com"),
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            // 切换到外部源 (因 streamUrl 为空，rule1 位于 index 0)
+            vm.selectSource(0)
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("https://cdn.example.com/resolved_ep1.m3u8", state.streamUrl)
+            assertEquals("https://example.com", state.requestHeaders["Referer"])
+            assertFalse(state.isResolvingSource)
+            assertEquals(null, state.error)
+        }
+
+    @Test
+    fun selectEpisode_switchesEpisodeAndSniffsStream() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "TestRule",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/resolved_ep${epNumber.toInt()}.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            // 选中第 3 话
+            vm.selectEpisode(PlayerEpisodeItem(id = 3003L, sort = 3f, name = "第三话"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals(3f, state.episodeSort)
+            assertEquals("https://cdn.example.com/resolved_ep3.m3u8", state.streamUrl)
+        }
+
+    @Test
+    fun episodeSniffing_noStreamFound_setsError() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "EmptyRule",
+                    urlTemplate = "https://example.com/empty",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertTrue(state.error?.contains("未在【EmptyRule】中嗅探到可播放直链") == true)
+            assertFalse(state.isResolvingSource)
         }
 }

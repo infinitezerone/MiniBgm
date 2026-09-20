@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.forSubject
@@ -58,7 +59,7 @@ class PlayableSourceTools(
         if (subjectId <= 0L) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
-        AiToolActivity.report("findPlayableSources", "条目 $subjectId，检查自备片单")
+        AiToolActivity.report("解析播放源", "条目 $subjectId，检查自备片单")
         val schedule = scheduleRepository.getAllSchedulesStream().first().firstOrNull { it.bgmId == subjectId }
         val title = resolveTitle(schedule, subjectId)
         val episodes = if (epNumber > 0) epNumber.toFloat() else 0f
@@ -67,12 +68,12 @@ class PlayableSourceTools(
             return encode(subjectId, title, "自备片单", hits)
         }
 
-        AiToolActivity.report("findPlayableSources", "条目 $subjectId，尝试用户配置的取源接口")
+        AiToolActivity.report("解析播放源", "条目 $subjectId，尝试用户配置的取源接口")
         fromRuleSources(subjectId, title, epNumber)?.let { (ruleName, hits) ->
             return encode(subjectId, title, "第三方接口 · $ruleName", hits)
         }
 
-        AiToolActivity.report("findPlayableSources", "条目 $subjectId，解析来源站页面")
+        AiToolActivity.report("解析播放源", "条目 $subjectId，解析来源站页面")
         val pages = candidatePages(schedule)
         if (pages.isEmpty()) {
             return "No playable source found for subject ID $subjectId: no imported playlist is bound to it " +
@@ -120,8 +121,19 @@ class PlayableSourceTools(
         title: String,
         epNumber: Int,
     ): Pair<String, List<PlayableSource>>? {
-        val rules = settingsRepository.playbackRules.first().filter { it.isEnabled && it.kind == PlaybackRuleKind.SOURCE }
-        for (rule in rules) {
+        val rules = settingsRepository.playbackRules.first().filter { it.isEnabled }
+        fromDirectSourceRules(rules, subjectId, title, epNumber)?.let { return it }
+        return fromPageRules(rules, subjectId, title, epNumber)
+    }
+
+    private suspend fun fromDirectSourceRules(
+        rules: List<PlaybackSourceRule>,
+        subjectId: Long,
+        title: String,
+        epNumber: Int,
+    ): Pair<String, List<PlayableSource>>? {
+        val sourceRules = rules.filter { it.kind == PlaybackRuleKind.SOURCE }
+        for (rule in sourceRules) {
             val hits =
                 playbackResolverRepository.resolveTemplate(
                     url = rule.resolveUrl(title = title, ep = if (epNumber > 0) epNumber.toString() else "", subjectId = subjectId),
@@ -132,6 +144,33 @@ class PlayableSourceTools(
             if (hits.isNotEmpty()) return rule.name to hits
         }
         return null
+    }
+
+    private fun fromPageRules(
+        rules: List<PlaybackSourceRule>,
+        subjectId: Long,
+        title: String,
+        epNumber: Int,
+    ): Pair<String, List<PlayableSource>>? {
+        if (title.isBlank()) return null
+        val pageRules = rules.filter { it.kind == PlaybackRuleKind.PAGE }
+        if (pageRules.isEmpty()) return null
+        val epStr = if (epNumber > 0) epNumber.toString() else ""
+        val epFloat = if (epNumber > 0) epNumber.toFloat() else 0f
+        val sources =
+            pageRules.map { rule ->
+                val resolvedUrl = rule.resolveUrl(title = title, ep = epStr, subjectId = subjectId)
+                PlayableSource(
+                    url = resolvedUrl,
+                    kind = PlaylistEntryKind.PAGE,
+                    label = if (epNumber > 0) "第 $epNumber 话" else "直达播放页",
+                    episodeSort = epFloat,
+                    siteName = rule.name,
+                    pageUrl = resolvedUrl,
+                    headers = rule.headers,
+                )
+            }
+        return "第三方动漫站点" to sources
     }
 
     /**

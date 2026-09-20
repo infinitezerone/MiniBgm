@@ -212,4 +212,109 @@ class CommunitySubscriptionServiceTest {
             assertTrue(sourceA.isAlive)
             assertFalse(sourceB.isAlive)
         }
+
+    @Test
+    fun validateAndTestSubscription_supportsTvBoxConfiguration() =
+        runTest {
+            val tvBoxJson =
+                """
+                {
+                    "sites": [
+                        {
+                            "key": "age_anime",
+                            "name": "AGE动漫",
+                            "type": 0,
+                            "api": "https://m.agemys.org/search?query={title}",
+                            "searchable": 1
+                        },
+                        {
+                            "key": "maccms_demo",
+                            "name": "樱花采集站",
+                            "type": 1,
+                            "api": "https://api.yhdm.com/provide/vod",
+                            "searchable": 1
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+            val engine =
+                MockEngine { request ->
+                    val urlStr = request.url.toString()
+                    when {
+                        urlStr.contains("agemys.org") -> respond(content = "OK", status = HttpStatusCode.OK)
+                        urlStr.contains("yhdm.com") -> respond(content = "OK", status = HttpStatusCode.OK)
+                        else -> respond(content = "OK", status = HttpStatusCode.OK)
+                    }
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+            val report = service.validateAndTestSubscription(tvBoxJson)
+
+            assertTrue(report.isHealthy)
+            assertEquals(2, report.totalRules)
+            assertEquals(2, report.aliveRules)
+            val age = report.sources.first { it.name == "AGE动漫" }
+            assertEquals("https://m.agemys.org/search?query={title}", age.urlTemplate)
+            val maccms = report.sources.first { it.name == "樱花采集站" }
+            assertEquals("https://api.yhdm.com/provide/vod?ac=detail&wd={title}", maccms.urlTemplate)
+        }
+
+    @Test
+    fun validateAndTestSubscription_supportsRuntimeHtmlWebpageSniffing() =
+        runTest {
+            val htmlContent =
+                """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Anime1.me 动画线上看 - 官方网站</title>
+                </head>
+                <body>
+                    <form action="/" method="get">
+                        <input type="text" name="s" placeholder="搜索动画..." />
+                    </form>
+                </body>
+                </html>
+                """.trimIndent()
+
+            val engine =
+                MockEngine { request ->
+                    val urlStr = request.url.toString()
+                    when {
+                        urlStr == "https://anime1.me/" || urlStr == "https://anime1.me" -> {
+                            respond(
+                                content = htmlContent,
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                            )
+                        }
+                        else -> respond(content = "OK", status = HttpStatusCode.OK)
+                    }
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+            val report = service.validateAndTestSubscription("https://anime1.me")
+
+            assertTrue(report.isHealthy)
+            assertEquals(1, report.totalRules)
+            val source = report.sources.first()
+            assertEquals("Anime1.me 动画线上看", source.name)
+            assertEquals("https://anime1.me/?s={title}", source.urlTemplate)
+            assertTrue(source.isAlive)
+        }
 }
