@@ -102,6 +102,7 @@ class ToolRegistryIntegrationTest {
         // Diagnostics tools
         assertTrue(toolNames.contains("inspectPageStructure"))
         assertTrue(toolNames.contains("testPlaybackRule"))
+        assertTrue(toolNames.contains("proposePlaybackRule"))
         assertTrue(toolNames.contains("probeSiteAndFindSample"))
         assertTrue(toolNames.contains("traceNetworkTraffic"))
 

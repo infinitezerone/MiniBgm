@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PlaybackSourceRuleTest {
@@ -60,5 +61,34 @@ class PlaybackSourceRuleTest {
         val withSpace = "Hello World"
         val encoded = PlaybackSourceRule.encodeParam(withSpace)
         assertEquals("Hello%20World", encoded)
+    }
+
+    @Test
+    fun isResolvable_只有取源侧的专用解析器才算有效组合() {
+        fun rule(
+            kind: PlaybackRuleKind,
+            parserType: RuleParserType,
+            steps: List<PipelineStep> = emptyList(),
+        ) = PlaybackSourceRule(
+            id = "r",
+            name = "n",
+            urlTemplate = "https://example.com/s?q={title}",
+            kind = kind,
+            parserType = parserType,
+            pipeline = steps,
+        )
+
+        val fetchStep = listOf(PipelineStep(action = StepAction.FETCH))
+
+        // AUTO 靠智能嗅探，两种 kind 都有执行路径
+        assertTrue(rule(PlaybackRuleKind.PAGE, RuleParserType.AUTO).isResolvable)
+        assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.AUTO).isResolvable)
+        // 专用解析器只在 SOURCE 下被分发
+        assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.MACCMS).isResolvable)
+        assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.PIPELINE, fetchStep).isResolvable)
+        assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.PIPELINE, fetchStep).isResolvable)
+        assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.STREMIO).isResolvable)
+        // 给了 pipeline 却没声明 PIPELINE 解析器，步骤同样会被丢掉
+        assertFalse(rule(PlaybackRuleKind.SOURCE, RuleParserType.AUTO, fetchStep).isResolvable)
     }
 }
