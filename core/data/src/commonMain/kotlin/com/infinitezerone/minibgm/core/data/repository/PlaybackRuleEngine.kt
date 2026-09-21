@@ -7,6 +7,8 @@ import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.StepAction
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 声明式播放源规则执行引擎。
@@ -43,111 +45,115 @@ class PlaybackRuleEngineImpl(
         epNumber: Float,
         subjectId: Long,
         episodeId: Long,
-    ): List<PlayableSource> {
-        if (rule.pipeline.isEmpty()) return emptyList()
+    ): List<PlayableSource> =
+        withContext(Dispatchers.Default) {
+            if (rule.pipeline.isEmpty()) return@withContext emptyList()
+            // 步骤由规则自带，但请求总数仍要设上限：额度用尽即判这次解析无结果
+            val budget = FetchBudget()
 
-        val epInt = epNumber.toInt()
-        val epStr = if (epNumber > 0f) epInt.toString() else ""
-        val paddedEp = if (epNumber > 0f) epInt.toString().padStart(2, '0') else ""
+            val epInt = epNumber.toInt()
+            val epStr = if (epNumber > 0f) epInt.toString() else ""
+            val paddedEp = if (epNumber > 0f) epInt.toString().padStart(2, '0') else ""
 
-        val variables =
-            mutableMapOf(
-                "title" to PlaybackSourceRule.encodeParam(title),
-                "rawTitle" to title,
-                "ep" to epStr,
-                "paddedEp" to paddedEp,
-                "subjectId" to subjectId.toString(),
-                "episodeId" to episodeId.toString(),
-            )
+            val variables =
+                mutableMapOf(
+                    "title" to PlaybackSourceRule.encodeParam(title),
+                    "rawTitle" to title,
+                    "ep" to epStr,
+                    "paddedEp" to paddedEp,
+                    "subjectId" to subjectId.toString(),
+                    "episodeId" to episodeId.toString(),
+                )
 
-        var lastHtml = ""
-        var lastUrl = ""
-        val capturedHeaders = mutableMapOf<String, String>()
+            var lastHtml = ""
+            var lastUrl = ""
+            val capturedHeaders = mutableMapOf<String, String>()
 
-        for (step in rule.pipeline) {
-            when (step.action) {
-                StepAction.FETCH -> {
-                    val rawUrl = if (step.urlTemplate.isNotBlank()) step.urlTemplate else rule.urlTemplate
-                    val resolvedUrl = replacePlaceholders(rawUrl, variables)
-                    if (resolvedUrl.isBlank()) return emptyList()
+            for (step in rule.pipeline) {
+                when (step.action) {
+                    StepAction.FETCH -> {
+                        if (!budget.take()) return@withContext emptyList()
+                        val rawUrl = if (step.urlTemplate.isNotBlank()) step.urlTemplate else rule.urlTemplate
+                        val resolvedUrl = replacePlaceholders(rawUrl, variables)
+                        if (resolvedUrl.isBlank()) return@withContext emptyList()
 
-                    val stepHeaders = step.headers.mapValues { replacePlaceholders(it.value, variables) }
-                    val mergedRequestHeaders = rule.headers + stepHeaders
+                        val stepHeaders = step.headers.mapValues { replacePlaceholders(it.value, variables) }
+                        val mergedRequestHeaders = rule.headers + stepHeaders
 
-                    val fetchedPage: FetchedPage? =
-                        if (step.method.equals("POST", ignoreCase = true)) {
-                            val body = replacePlaceholders(step.bodyTemplate, variables)
-                            val formMap = parseFormData(body)
-                            pageFetchService.postForm(
-                                url = resolvedUrl,
-                                formData = formMap,
-                                requestHeaders = mergedRequestHeaders,
-                            )
-                        } else {
-                            pageFetchService.fetchHtml(
-                                url = resolvedUrl,
-                                requestHeaders = mergedRequestHeaders,
-                            )
-                        }
+                        val fetchedPage: FetchedPage? =
+                            if (step.method.equals("POST", ignoreCase = true)) {
+                                val body = replacePlaceholders(step.bodyTemplate, variables)
+                                val formMap = parseFormData(body)
+                                pageFetchService.postForm(
+                                    url = resolvedUrl,
+                                    formData = formMap,
+                                    requestHeaders = mergedRequestHeaders,
+                                )
+                            } else {
+                                pageFetchService.fetchHtml(
+                                    url = resolvedUrl,
+                                    requestHeaders = mergedRequestHeaders,
+                                )
+                            }
 
-                    if (fetchedPage == null) return emptyList()
+                        if (fetchedPage == null) return@withContext emptyList()
 
-                    lastHtml = fetchedPage.html
-                    lastUrl = fetchedPage.url
-                    variables["pageUrl"] = lastUrl
+                        lastHtml = fetchedPage.html
+                        lastUrl = fetchedPage.url
+                        variables["pageUrl"] = lastUrl
 
-                    for (headerName in step.captureHeaders) {
-                        val matchedValue =
-                            fetchedPage.responseHeaders.entries
-                                .firstOrNull { it.key.equals(headerName, ignoreCase = true) }
-                                ?.value
-                        if (!matchedValue.isNullOrBlank()) {
-                            capturedHeaders[headerName] = matchedValue
-                            variables[headerName] = matchedValue
+                        for (headerName in step.captureHeaders) {
+                            val matchedValue =
+                                fetchedPage.responseHeaders.entries
+                                    .firstOrNull { it.key.equals(headerName, ignoreCase = true) }
+                                    ?.value
+                            if (!matchedValue.isNullOrBlank()) {
+                                capturedHeaders[headerName] = matchedValue
+                                variables[headerName] = matchedValue
+                            }
                         }
                     }
-                }
 
-                StepAction.EXTRACT_VARIABLE -> {
-                    if (step.regex.isBlank() || step.variableName.isBlank()) continue
-                    val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
-                    val match = regex.find(lastHtml) ?: return emptyList()
-                    val rawValue = if (match.groupValues.size > 1) match.groupValues[1] else match.value
-                    val finalValue = if (rawValue.contains('%')) decodeUrlComponent(rawValue) else rawValue
-                    variables[step.variableName] = finalValue
-                }
+                    StepAction.EXTRACT_VARIABLE -> {
+                        if (step.regex.isBlank() || step.variableName.isBlank()) continue
+                        val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
+                        val match = regex.find(lastHtml) ?: return@withContext emptyList()
+                        val rawValue = if (match.groupValues.size > 1) match.groupValues[1] else match.value
+                        val finalValue = if (rawValue.contains('%')) decodeUrlComponent(rawValue) else rawValue
+                        variables[step.variableName] = finalValue
+                    }
 
-                StepAction.EXTRACT_STREAM -> {
-                    if (step.regex.isBlank()) return emptyList()
-                    val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
-                    val match = regex.find(lastHtml) ?: return emptyList()
-                    val rawStream = (if (match.groupValues.size > 1) match.groupValues[1] else match.value).replace("\\/", "/")
+                    StepAction.EXTRACT_STREAM -> {
+                        if (step.regex.isBlank()) return@withContext emptyList()
+                        val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
+                        val match = regex.find(lastHtml) ?: return@withContext emptyList()
+                        val rawStream = (if (match.groupValues.size > 1) match.groupValues[1] else match.value).replace("\\/", "/")
 
-                    val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return emptyList()
+                        val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return@withContext emptyList()
 
-                    val finalHeaders = mutableMapOf<String, String>()
-                    finalHeaders.putAll(rule.headers)
-                    finalHeaders.putAll(step.headers.mapValues { replacePlaceholders(it.value, variables) })
-                    finalHeaders.putAll(capturedHeaders)
+                        val finalHeaders = mutableMapOf<String, String>()
+                        finalHeaders.putAll(rule.headers)
+                        finalHeaders.putAll(step.headers.mapValues { replacePlaceholders(it.value, variables) })
+                        finalHeaders.putAll(capturedHeaders)
 
-                    val label = if (epNumber > 0f) "第 $epInt 话" else ""
-                    return listOf(
-                        PlayableSource(
-                            url = streamUrl,
-                            kind = PlaylistEntryKind.DIRECT,
-                            label = label,
-                            episodeSort = epNumber,
-                            siteName = rule.name,
-                            pageUrl = lastUrl,
-                            headers = finalHeaders,
-                        ),
-                    )
+                        val label = if (epNumber > 0f) "第 $epInt 话" else ""
+                        return@withContext listOf(
+                            PlayableSource(
+                                url = streamUrl,
+                                kind = PlaylistEntryKind.DIRECT,
+                                label = label,
+                                episodeSort = epNumber,
+                                siteName = rule.name,
+                                pageUrl = lastUrl,
+                                headers = finalHeaders,
+                            ),
+                        )
+                    }
                 }
             }
-        }
 
-        return emptyList()
-    }
+            return@withContext emptyList()
+        }
 
     private fun replacePlaceholders(
         template: String,
