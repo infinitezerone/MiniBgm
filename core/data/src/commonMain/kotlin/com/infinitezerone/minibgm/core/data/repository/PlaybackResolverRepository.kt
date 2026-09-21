@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
@@ -66,10 +67,12 @@ internal data class StreamManifest(
  * 由上层降级为"没有可用结果"。
  */
 interface PlaybackResolverRepository {
+    /** [title] 为要的那部番的片名，列表页下探时用它排除撞号跳错番；留空则跳过该校验 */
     suspend fun resolvePages(
         pageUrls: List<String>,
         epNumber: Float = 0f,
         siteName: String = "",
+        title: String = "",
     ): List<PlayableSource>
 
     /** 按用户自备的模板接口地址取一次并抽取可播放地址；[headers] 随请求发出并回传给播放器 */
@@ -78,6 +81,7 @@ interface PlaybackResolverRepository {
         headers: Map<String, String> = emptyMap(),
         epNumber: Float = 0f,
         siteName: String = "",
+        title: String = "",
     ): List<PlayableSource>
 
     /**
@@ -96,6 +100,7 @@ interface PlaybackResolverRepository {
             headers = rule.headers,
             epNumber = epNumber,
             siteName = rule.name,
+            title = title,
         )
 
     /**
@@ -130,6 +135,7 @@ class PlaybackResolverRepositoryImpl(
         pageUrls: List<String>,
         epNumber: Float,
         siteName: String,
+        title: String,
     ): List<PlayableSource> =
         pageUrls
             .map { it.trim() }
@@ -138,7 +144,7 @@ class PlaybackResolverRepositoryImpl(
             .take(MAX_PAGES)
             .flatMap { page ->
                 val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
-                sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService)
+                sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title)
             }.distinctBy { it.url }
 
     override suspend fun resolveTemplate(
@@ -146,12 +152,13 @@ class PlaybackResolverRepositoryImpl(
         headers: Map<String, String>,
         epNumber: Float,
         siteName: String,
+        title: String,
     ): List<PlayableSource> {
         val fetched = pageFetchService.fetchHtml(url, headers) ?: return emptyList()
         // 用户配置的取源接口优先识别结构化流清单（兼容 Stremio /stream 形态），
         // 非清单响应回退到页面正则与智能嗅探
         parseStreamManifest(fetched.html, fetched.url, epNumber, siteName, headers)?.let { return it }
-        val sources = sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService)
+        val sources = sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title)
         return sources
             .distinctBy { it.url }
             .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
@@ -184,7 +191,7 @@ class PlaybackResolverRepositoryImpl(
             RuleParserType.AUTO -> {
                 val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
                 val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
-                resolveTemplate(url, rule.headers, epNumber, rule.name)
+                resolveTemplate(url, rule.headers, epNumber, rule.name, title)
             }
         }
     }
@@ -684,6 +691,7 @@ private suspend fun sniffPageOrSubPages(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    title: String = "",
 ): List<PlayableSource> {
     // 1. 尝试当前页嗅探
     sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
@@ -702,7 +710,7 @@ private suspend fun sniffPageOrSubPages(
     }
 
     // 4. 若页面无直接直链且无 iframe，尝试作为搜索列表页/目录页探测分集单集页面
-    sniffEpisodeLinks(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+    sniffEpisodeLinks(fetched.html, fetched.url, epNumber, siteName, pageFetchService, title)?.let {
         return it
     }
 
@@ -726,10 +734,11 @@ private suspend fun sniffEpisodeLinks(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    title: String,
 ): List<PlayableSource>? {
     val epLinks = extractEpisodeLinks(html, url, epNumber)
     for (epLink in epLinks) {
-        val result = sniffPageWithIframe(epLink, epNumber, siteName, pageFetchService)
+        val result = sniffPageWithIframe(epLink, epNumber, siteName, pageFetchService, title)
         if (result != null) return result
     }
     return null
@@ -740,15 +749,63 @@ private suspend fun sniffPageWithIframe(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    title: String = "",
 ): List<PlayableSource>? {
     val fetched = pageFetchService.fetchHtml(pageUrl) ?: return null
+    if (!pageBelongsToTitle(fetched.html, title)) return null
     val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService)
     if (direct != null) return direct
 
+    // 内嵌播放器常是"在线播放"这类通用标题，不对它做归属校验，否则会把正常站点拦死
     val iframeUrl = extractIframeUrl(fetched.html, fetched.url, epNumber, siteName) ?: return null
     val iframeFetched = pageFetchService.fetchHtml(iframeUrl) ?: return null
     return sniffDirectPageStreams(iframeFetched, epNumber, siteName, pageFetchService)
 }
+
+private val PAGE_TITLE_REGEX =
+    Regex("""<title[^>]*>([^<]+)</title>""", RegexOption.IGNORE_CASE)
+
+private val PAGE_H1_REGEX =
+    Regex("""<h1\b[^>]*>(.*?)</h1>""", RegexOption.IGNORE_CASE)
+
+internal fun pageTitleOf(html: String): String? {
+    val raw =
+        PAGE_TITLE_REGEX.find(html)?.groupValues?.get(1)
+            ?: PAGE_H1_REGEX
+                .find(html)
+                ?.groupValues
+                ?.get(1)
+                ?.replace(Regex("<[^>]+>"), "")
+    return raw?.trim()?.takeIf { it.isNotBlank() }
+}
+
+/**
+ * 列表页下探到的这一页是不是还要的那部番。
+ *
+ * 只按话数匹配链接一定会撞号：搜索无结果时站点常回落到"最新番剧"列表，
+ * 那里的 `MAO摩緒 [25]` 对第 25 话同样命中，于是"成功"播出了另一部片子。
+ * 站点标题普遍带季号与话数后缀，所以按归一化后的包含关系比，退让到
+ * 查询片名过半数字符出现在页面标题里；任一侧拿不到标题就不拦，
+ * 这一版只针对"跳错番"，不承担标题改名匹配。
+ */
+internal fun pageBelongsToTitle(
+    html: String,
+    title: String,
+): Boolean {
+    if (title.isBlank()) return true
+    val pageTitle = pageTitleOf(html) ?: return true
+    val page = normalizeTitleForMatch(pageTitle)
+    val wanted = normalizeTitleForMatch(title)
+    if (page.isEmpty() || wanted.isEmpty()) return true
+    if (page.contains(wanted) || wanted.contains(page)) return true
+    return page.toSet().intersect(wanted.toSet()).size * 2 >= wanted.length
+}
+
+private fun normalizeTitleForMatch(text: String): String =
+    ChineseConverter
+        .toTraditional(text)
+        .lowercase()
+        .filter { it.isLetterOrDigit() }
 
 private suspend fun sniffDirectPageStreams(
     fetched: FetchedPage,

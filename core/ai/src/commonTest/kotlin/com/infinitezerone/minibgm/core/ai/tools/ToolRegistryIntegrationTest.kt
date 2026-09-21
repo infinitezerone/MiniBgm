@@ -29,6 +29,7 @@ class ToolRegistryIntegrationTest {
                             pageUrls: List<String>,
                             epNumber: Float,
                             siteName: String,
+                            title: String,
                         ): List<PlayableSource> = emptyList()
 
                         override suspend fun resolveTemplate(
@@ -36,6 +37,7 @@ class ToolRegistryIntegrationTest {
                             headers: Map<String, String>,
                             epNumber: Float,
                             siteName: String,
+                            title: String,
                         ): List<PlayableSource> = emptyList()
                     },
             )
@@ -53,6 +55,7 @@ class ToolRegistryIntegrationTest {
                             pageUrls: List<String>,
                             epNumber: Float,
                             siteName: String,
+                            title: String,
                         ): List<PlayableSource> = emptyList()
 
                         override suspend fun resolveTemplate(
@@ -60,6 +63,7 @@ class ToolRegistryIntegrationTest {
                             headers: Map<String, String>,
                             epNumber: Float,
                             siteName: String,
+                            title: String,
                         ): List<PlayableSource> = emptyList()
                     },
             )

@@ -25,4 +25,17 @@ object ChineseConverter {
         }
         return sb.toString()
     }
+
+    /**
+     * 第三方站点检索用的片名候选：原名与它的繁体形式。
+     *
+     * 港台站点的片名常只写繁体，用简体名搜不到时它们会回落到无关的默认列表，
+     * 而 Bangumi 侧给到的常是简体名，所以两个都得试一次。
+     */
+    fun queryVariants(vararg titles: String): List<String> =
+        titles
+            .flatMap { listOf(it, toTraditional(it)) }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
 }

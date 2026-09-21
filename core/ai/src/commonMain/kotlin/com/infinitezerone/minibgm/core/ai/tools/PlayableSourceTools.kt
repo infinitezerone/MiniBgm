@@ -5,6 +5,7 @@ import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -79,7 +80,7 @@ class PlayableSourceTools(
             return "No playable source found for subject ID $subjectId: no imported playlist is bound to it " +
                 "and no source page is recorded."
         }
-        val resolved = playbackResolverRepository.resolvePages(pages, episodes)
+        val resolved = playbackResolverRepository.resolvePages(pages, episodes, title = title)
         val playable = resolved.filter { it.kind == PlaylistEntryKind.DIRECT }
         if (playable.isEmpty()) {
             return "No playable address resolved for subject ID $subjectId after checking ${pages.size} source page(s)."
@@ -133,15 +134,19 @@ class PlayableSourceTools(
         epNumber: Int,
     ): Pair<String, List<PlayableSource>>? {
         val sourceRules = rules.filter { it.kind == PlaybackRuleKind.SOURCE }
+        // 港台站常只认繁体片名，简体名搜不到时会回落到无关列表，所以每条规则都要把片名变体试完
+        val queryTitles = ChineseConverter.queryVariants(title).ifEmpty { listOf("") }
         for (rule in sourceRules) {
-            val hits =
-                playbackResolverRepository.resolveRule(
-                    rule = rule,
-                    title = title,
-                    epNumber = if (epNumber > 0) epNumber.toFloat() else 0f,
-                    subjectId = subjectId,
-                )
-            if (hits.isNotEmpty()) return rule.name to hits
+            for (queryTitle in queryTitles) {
+                val hits =
+                    playbackResolverRepository.resolveRule(
+                        rule = rule,
+                        title = queryTitle,
+                        epNumber = if (epNumber > 0) epNumber.toFloat() else 0f,
+                        subjectId = subjectId,
+                    )
+                if (hits.isNotEmpty()) return rule.name to hits
+            }
         }
         return null
     }

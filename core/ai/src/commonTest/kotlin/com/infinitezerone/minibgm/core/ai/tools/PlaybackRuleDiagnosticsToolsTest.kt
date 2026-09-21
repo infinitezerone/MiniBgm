@@ -36,6 +36,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -43,6 +44,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun inspectPage(url: String): PageInspectionResult =
@@ -82,6 +84,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -89,6 +92,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveRule(
@@ -138,6 +142,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -145,6 +150,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
                 }
 
@@ -165,6 +171,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -172,6 +179,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun probeSite(
@@ -208,6 +216,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -215,6 +224,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun auditPageTraffic(
@@ -350,6 +360,7 @@ class PlaybackRuleDiagnosticsToolsTest {
             pageUrls: List<String>,
             epNumber: Float,
             siteName: String,
+            title: String,
         ): List<PlayableSource> = emptyList()
 
         override suspend fun resolveTemplate(
@@ -357,6 +368,7 @@ class PlaybackRuleDiagnosticsToolsTest {
             headers: Map<String, String>,
             epNumber: Float,
             siteName: String,
+            title: String,
         ): List<PlayableSource> = emptyList()
 
         override suspend fun resolveRule(

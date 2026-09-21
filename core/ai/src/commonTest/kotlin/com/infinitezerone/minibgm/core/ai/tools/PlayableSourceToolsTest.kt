@@ -22,17 +22,22 @@ import kotlin.test.assertTrue
 private class FakePlaybackResolverRepository(
     private val results: List<PlayableSource> = emptyList(),
     private val templateResults: Map<String, List<PlayableSource>> = emptyMap(),
+    private val hitTitle: String = "",
+    private val hitResults: List<PlayableSource> = emptyList(),
 ) : PlaybackResolverRepository {
     val requestedPages = mutableListOf<String>()
     val requestedTemplates = mutableListOf<String>()
+    val requestedTitles = mutableListOf<String>()
     val templateHeaders = mutableMapOf<String, Map<String, String>>()
 
     override suspend fun resolvePages(
         pageUrls: List<String>,
         epNumber: Float,
         siteName: String,
+        title: String,
     ): List<PlayableSource> {
         requestedPages += pageUrls
+        requestedTitles += title
         return results
     }
 
@@ -41,9 +46,12 @@ private class FakePlaybackResolverRepository(
         headers: Map<String, String>,
         epNumber: Float,
         siteName: String,
+        title: String,
     ): List<PlayableSource> {
         requestedTemplates += url
+        requestedTitles += title
         templateHeaders[url] = headers
+        if (hitTitle.isNotEmpty() && title == hitTitle) return hitResults
         return templateResults[url].orEmpty()
     }
 }
@@ -137,6 +145,39 @@ class PlayableSourceToolsTest {
             assertEquals(listOf("https://www.bilibili.com/bangumi/media/md99998"), resolver.requestedPages)
             assertEquals("来源站解析", result.source)
             assertEquals("https://cdn.example.com/ep7.m3u8", result.episodes.single().url)
+        }
+
+    @Test
+    fun `取源规则简体搜不到时会用繁体片名重试`() =
+        runTest {
+            sendScheduleWithLinks()
+            settingsRepository.addPlaybackRule(
+                PlaybackSourceRule(
+                    id = "r-search",
+                    name = "示例搜索站",
+                    urlTemplate = "https://search.example.tv/?q={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                ),
+            )
+            val resolver =
+                FakePlaybackResolverRepository(
+                    hitTitle = "葬送的芙莉蓮",
+                    hitResults =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.tv/1833/38.mp4",
+                                kind = PlaylistEntryKind.DIRECT,
+                                label = "第 38 话",
+                                episodeSort = 38f,
+                            ),
+                        ),
+                )
+
+            val result = decode(tools(resolver).findPlayableSources(subjectId = 1001L, epNumber = 38))
+
+            assertEquals(listOf("葬送的芙莉莲", "葬送的芙莉蓮"), resolver.requestedTitles)
+            assertEquals("第三方接口 · 示例搜索站", result.source)
+            assertEquals("https://cdn.example.tv/1833/38.mp4", result.episodes.single().url)
         }
 
     @Test
