@@ -334,6 +334,7 @@ class PlayerViewModelTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> =
                         listOf(
                             PlayableSource(
@@ -349,6 +350,7 @@ class PlayerViewModelTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
                 }
 
@@ -392,6 +394,7 @@ class PlayerViewModelTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> =
                         listOf(
                             PlayableSource(
@@ -405,6 +408,7 @@ class PlayerViewModelTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
                 }
 
@@ -446,6 +450,7 @@ class PlayerViewModelTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
 
                     override suspend fun resolveTemplate(
@@ -453,6 +458,7 @@ class PlayerViewModelTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
                 }
 
@@ -497,6 +503,7 @@ class PlayerViewModelTest {
                         pageUrls: List<String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> =
                         listOf(
                             PlayableSource(
@@ -510,6 +517,7 @@ class PlayerViewModelTest {
                         headers: Map<String, String>,
                         epNumber: Float,
                         siteName: String,
+                        title: String,
                     ): List<PlayableSource> = emptyList()
                 }
 

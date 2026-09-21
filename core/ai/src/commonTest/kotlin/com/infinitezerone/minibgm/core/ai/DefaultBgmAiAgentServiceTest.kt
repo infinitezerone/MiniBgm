@@ -59,6 +59,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                                 pageUrls: List<String>,
                                 epNumber: Float,
                                 siteName: String,
+                                title: String,
                             ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
 
                             override suspend fun resolveTemplate(
@@ -66,6 +67,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                                 headers: Map<String, String>,
                                 epNumber: Float,
                                 siteName: String,
+                                title: String,
                             ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
                         }
                     }

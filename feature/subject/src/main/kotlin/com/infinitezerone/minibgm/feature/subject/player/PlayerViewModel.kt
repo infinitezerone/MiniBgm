@@ -617,6 +617,7 @@ class PlayerViewModel(
                                     pageUrls = listOf(targetUrl),
                                     epNumber = epSort,
                                     siteName = rule.name,
+                                    title = queryTitle,
                                 )
                             }
 
