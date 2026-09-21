@@ -11,10 +11,95 @@ import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 /** 单次请求解析的页面数上限，避免一次找源退化成批量抓取 */
 private const val MAX_PAGES = 5
+
+/**
+ * 一次解析调用允许发起的抓取总数上限。
+ *
+ * 下探是树状的（页面 → iframe → 分集链接 → 每条再进一层 iframe），只按层数或页数限制挡不住
+ * 扇出：五个页面各自展开到底能到二十几次请求。额度用尽即停止下探，不再展开新的分支。
+ */
+internal const val MAX_FETCHES_PER_RESOLUTION = 12
+
+/** 一次解析内共享的抓取额度 */
+internal class FetchBudget(
+    private val max: Int = MAX_FETCHES_PER_RESOLUTION,
+) {
+    var used: Int = 0
+        private set
+
+    /** 取到额度返回 true；用尽后调用方应放弃继续下探 */
+    fun take(): Boolean {
+        if (used >= max) return false
+        used++
+        return true
+    }
+}
+
+/**
+ * 判断两个地址是否属于同一个注册域（eTLD+1）。
+ *
+ * 用于分集/目录链接的下探选择：iframe 跟进不设域限制（内嵌播放器常跨注册域），
+ * 但列表页挑链接必须留在本注册域内。
+ * 视频常托管在另一个 CDN 域，卡相等域名会误杀正常站点。
+ * 无法判定（拿不到 host）时放行：这一版只拦"顺着链接跑到别的站点"。
+ */
+internal fun sameRegistrableDomain(
+    firstUrl: String,
+    secondUrl: String,
+): Boolean {
+    val first = registrableDomainOf(firstUrl) ?: return true
+    val second = registrableDomainOf(secondUrl) ?: return true
+    return first == second
+}
+
+private val TWO_LEVEL_SUFFIXES =
+    setOf(
+        "com.cn",
+        "net.cn",
+        "org.cn",
+        "gov.cn",
+        "edu.cn",
+        "com.tw",
+        "com.hk",
+        "com.mo",
+        "co.uk",
+        "org.uk",
+        "ac.uk",
+        "gov.uk",
+        "co.jp",
+        "or.jp",
+        "ne.jp",
+        "ac.jp",
+        "co.kr",
+        "com.br",
+        "com.au",
+        "com.ru",
+        "com.ua",
+        "co.in",
+        "com.sg",
+        "com.my",
+    )
+
+private fun registrableDomainOf(url: String): String? {
+    val host =
+        url
+            .substringAfter("://", "")
+            .substringBefore('/')
+            .substringBefore(':')
+            .trim('.')
+            .lowercase()
+    if (host.isBlank() || host.count { it == '.' } < 1) return null
+    val labels = host.split('.')
+    val suffixLength =
+        if (labels.size >= 3 && labels.takeLast(2).joinToString(".") in TWO_LEVEL_SUFFIXES) 3 else 2
+    return labels.takeLast(suffixLength).joinToString(".")
+}
 
 /** 单个页面最多采纳的候选来源数 */
 private const val MAX_CANDIDATES_PER_PAGE = 12
@@ -137,15 +222,20 @@ class PlaybackResolverRepositoryImpl(
         siteName: String,
         title: String,
     ): List<PlayableSource> =
-        pageUrls
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .take(MAX_PAGES)
-            .flatMap { page ->
-                val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
-                sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title)
-            }.distinctBy { it.url }
+        // 正则要扫最大 512 KB 的正文，调用方常在主线程，整段挪到 Default
+        withContext(Dispatchers.Default) {
+            val budget = FetchBudget()
+            pageUrls
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(MAX_PAGES)
+                .flatMap { page ->
+                    if (!budget.take()) return@flatMap emptyList()
+                    val fetched = pageFetchService.fetchHtml(page) ?: return@flatMap emptyList()
+                    sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title, budget)
+                }.distinctBy { it.url }
+        }
 
     override suspend fun resolveTemplate(
         url: String,
@@ -153,16 +243,21 @@ class PlaybackResolverRepositoryImpl(
         epNumber: Float,
         siteName: String,
         title: String,
-    ): List<PlayableSource> {
-        val fetched = pageFetchService.fetchHtml(url, headers) ?: return emptyList()
-        // 用户配置的取源接口优先识别结构化流清单（兼容 Stremio /stream 形态），
-        // 非清单响应回退到页面正则与智能嗅探
-        parseStreamManifest(fetched.html, fetched.url, epNumber, siteName, headers)?.let { return it }
-        val sources = sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title)
-        return sources
-            .distinctBy { it.url }
-            .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
-    }
+    ): List<PlayableSource> =
+        withContext(Dispatchers.Default) {
+            val budget = FetchBudget()
+            val fetched = pageFetchService.fetchHtml(url, headers) ?: return@withContext emptyList()
+            budget.take()
+            // 用户配置的取源接口优先识别结构化流清单（兼容 Stremio /stream 形态），
+            // 非清单响应回退到页面正则与智能嗅探
+            parseStreamManifest(fetched.html, fetched.url, epNumber, siteName, headers)?.let {
+                return@withContext it
+            }
+            val sources = sniffPageOrSubPages(fetched, epNumber, siteName, pageFetchService, title, budget)
+            sources
+                .distinctBy { it.url }
+                .map { source -> if (headers.isEmpty()) source else source.copy(headers = source.headers + headers) }
+        }
 
     override suspend fun resolveRule(
         rule: PlaybackSourceRule,
@@ -170,31 +265,32 @@ class PlaybackResolverRepositoryImpl(
         epNumber: Float,
         subjectId: Long,
         episodeId: Long,
-    ): List<PlayableSource> {
-        return when (rule.parserType) {
-            RuleParserType.PIPELINE -> {
-                playbackRuleEngine.executePipeline(rule, title, epNumber, subjectId, episodeId)
-            }
-            RuleParserType.MACCMS -> {
-                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
-                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
-                val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return emptyList()
-                val sources = extractMacCmsSources(fetched.html, fetched.url, epNumber, rule.name)
-                if (rule.headers.isEmpty()) sources else sources.map { it.copy(headers = it.headers + rule.headers) }
-            }
-            RuleParserType.STREMIO -> {
-                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
-                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
-                val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return emptyList()
-                parseStreamManifest(fetched.html, fetched.url, epNumber, rule.name, rule.headers).orEmpty()
-            }
-            RuleParserType.AUTO -> {
-                val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
-                val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
-                resolveTemplate(url, rule.headers, epNumber, rule.name, title)
+    ): List<PlayableSource> =
+        withContext(Dispatchers.Default) {
+            when (rule.parserType) {
+                RuleParserType.PIPELINE -> {
+                    playbackRuleEngine.executePipeline(rule, title, epNumber, subjectId, episodeId)
+                }
+                RuleParserType.MACCMS -> {
+                    val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                    val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                    val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return@withContext emptyList()
+                    val sources = extractMacCmsSources(fetched.html, fetched.url, epNumber, rule.name)
+                    if (rule.headers.isEmpty()) sources else sources.map { it.copy(headers = it.headers + rule.headers) }
+                }
+                RuleParserType.STREMIO -> {
+                    val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                    val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                    val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return@withContext emptyList()
+                    parseStreamManifest(fetched.html, fetched.url, epNumber, rule.name, rule.headers).orEmpty()
+                }
+                RuleParserType.AUTO -> {
+                    val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
+                    val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
+                    resolveTemplate(url, rule.headers, epNumber, rule.name, title)
+                }
             }
         }
-    }
 
     override suspend fun inspectPage(url: String): PageInspectionResult {
         val trimmed = url.trim()
@@ -692,9 +788,10 @@ private suspend fun sniffPageOrSubPages(
     siteName: String,
     pageFetchService: PageFetchService,
     title: String = "",
+    budget: FetchBudget = FetchBudget(),
 ): List<PlayableSource> {
     // 1. 尝试当前页嗅探
-    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService, budget)?.let {
         return it
     }
 
@@ -705,12 +802,12 @@ private suspend fun sniffPageOrSubPages(
     }
 
     // 3. 检查单层 iframe
-    sniffSingleIframe(extracted, epNumber, siteName, pageFetchService)?.let {
+    sniffSingleIframe(extracted, epNumber, siteName, pageFetchService, budget, title)?.let {
         return it
     }
 
     // 4. 若页面无直接直链且无 iframe，尝试作为搜索列表页/目录页探测分集单集页面
-    sniffEpisodeLinks(fetched.html, fetched.url, epNumber, siteName, pageFetchService, title)?.let {
+    sniffEpisodeLinks(fetched.html, fetched.url, epNumber, siteName, pageFetchService, title, budget)?.let {
         return it
     }
 
@@ -722,10 +819,12 @@ private suspend fun sniffSingleIframe(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    budget: FetchBudget,
+    title: String,
 ): List<PlayableSource>? {
     val iframeCandidate = extracted.firstOrNull { it.kind == PlaylistEntryKind.PAGE } ?: return null
     if (iframeCandidate.url.isBlank()) return null
-    return sniffPageWithIframe(iframeCandidate.url, epNumber, siteName, pageFetchService)
+    return sniffPageWithIframe(iframeCandidate.url, epNumber, siteName, pageFetchService, title, budget)
 }
 
 private suspend fun sniffEpisodeLinks(
@@ -735,10 +834,11 @@ private suspend fun sniffEpisodeLinks(
     siteName: String,
     pageFetchService: PageFetchService,
     title: String,
+    budget: FetchBudget,
 ): List<PlayableSource>? {
     val epLinks = extractEpisodeLinks(html, url, epNumber)
     for (epLink in epLinks) {
-        val result = sniffPageWithIframe(epLink, epNumber, siteName, pageFetchService, title)
+        val result = sniffPageWithIframe(epLink, epNumber, siteName, pageFetchService, title, budget)
         if (result != null) return result
     }
     return null
@@ -750,16 +850,20 @@ private suspend fun sniffPageWithIframe(
     siteName: String,
     pageFetchService: PageFetchService,
     title: String = "",
+    budget: FetchBudget = FetchBudget(),
 ): List<PlayableSource>? {
+    if (!budget.take()) return null
     val fetched = pageFetchService.fetchHtml(pageUrl) ?: return null
     if (!pageBelongsToTitle(fetched.html, title)) return null
-    val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService)
+    val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService, budget)
     if (direct != null) return direct
 
     // 内嵌播放器常是"在线播放"这类通用标题，不对它做归属校验，否则会把正常站点拦死
+    // 内嵌播放器常在另一个注册域下，跟进不受域约束（媒体地址本来就常托管在 CDN）
     val iframeUrl = extractIframeUrl(fetched.html, fetched.url, epNumber, siteName) ?: return null
+    if (!budget.take()) return null
     val iframeFetched = pageFetchService.fetchHtml(iframeUrl) ?: return null
-    return sniffDirectPageStreams(iframeFetched, epNumber, siteName, pageFetchService)
+    return sniffDirectPageStreams(iframeFetched, epNumber, siteName, pageFetchService, budget)
 }
 
 private val PAGE_TITLE_REGEX =
@@ -812,8 +916,9 @@ private suspend fun sniffDirectPageStreams(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    budget: FetchBudget = FetchBudget(),
 ): List<PlayableSource>? {
-    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService)?.let {
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService, budget)?.let {
         return it
     }
     val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
@@ -839,8 +944,9 @@ private suspend fun sniffDirectOrProtocolStream(
     epNumber: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    budget: FetchBudget = FetchBudget(),
 ): List<PlayableSource>? {
-    sniffAnime1Stream(html, url, epNumber, siteName, pageFetchService)?.let {
+    sniffAnime1Stream(html, url, epNumber, siteName, pageFetchService, budget)?.let {
         return listOf(it)
     }
     val macCms = extractMacCmsSources(html, url, epNumber, siteName)
@@ -860,10 +966,13 @@ internal suspend fun sniffAnime1Stream(
     targetEp: Float,
     siteName: String,
     pageFetchService: PageFetchService,
+    budget: FetchBudget? = null,
 ): PlayableSource? {
     val apireqMatch = ANIME1_APIREQ_REGEX.find(html) ?: return null
     val rawApireq = apireqMatch.groupValues[1]
     val decoded = decodeUrlComponent(rawApireq)
+
+    if (budget != null && !budget.take()) return null
 
     val apiPage =
         pageFetchService.postForm(
@@ -989,20 +1098,9 @@ internal fun extractEpisodeLinks(
         val fullUrl = absoluteUrl(rawHref, origin) ?: continue
         if (fullUrl == pageUrl) continue
 
-        // 强校验同源 Host，严禁跨域嗅探（防止误抓 Twitter / Telegram 等社交外链）
-        val pageHost =
-            pageUrl
-                .substringAfter("://")
-                .substringBefore('/')
-                .substringBefore(':')
-                .lowercase()
-        val fullHost =
-            fullUrl
-                .substringAfter("://")
-                .substringBefore('/')
-                .substringBefore(':')
-                .lowercase()
-        if (pageHost != fullHost) continue
+        // 只在本注册域内下探，挡住 Twitter / Telegram 这类社交外链；
+        // 主站与 m./v. 子站分属不同 host 但同域，按 host 相等会误杀
+        if (!sameRegistrableDomain(pageUrl, fullUrl)) continue
 
         val pathAfterOrigin = fullUrl.removePrefix(origin ?: "").trim('/')
         if (pathAfterOrigin.isBlank()) continue
