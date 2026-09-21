@@ -1,14 +1,20 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
+import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.ActionProposal
 import com.infinitezerone.minibgm.core.model.CapturedNetworkCall
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
+import com.infinitezerone.minibgm.core.model.PendingAction
+import com.infinitezerone.minibgm.core.model.PipelineStep
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.ProbeSiteOutput
+import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.StepAction
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -252,4 +258,123 @@ class PlaybackRuleDiagnosticsToolsTest {
             val media = obj["mediaSources"]?.toString() ?: ""
             assertTrue(media.contains("https://v.anime1.me/123.mp4"))
         }
+
+    @Test
+    fun `testPlaybackRule 拒绝没有执行路径的规则组合`() =
+        runTest {
+            val resolver = RecordingResolver()
+            val tools = PlaybackRuleDiagnosticsTools(resolver)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_page_pipeline",
+                    name = "跳转页配流水线",
+                    urlTemplate = "https://example.com/search?q={title}",
+                    kind = PlaybackRuleKind.PAGE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline = listOf(PipelineStep(action = StepAction.FETCH)),
+                )
+
+            val output = tools.testPlaybackRule(Json.encodeToString(rule), "芙莉莲", 1)
+            val obj = json.parseToJsonElement(output).jsonObject
+
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+            assertEquals(0, resolver.resolveRuleCalls, "无执行路径的规则不该进沙箱")
+        }
+
+    @Test
+    fun `proposePlaybackRule 生成待确认提案并原样保留流水线`() =
+        runTest {
+            val store = PendingActionStore()
+            val tools = PlaybackRuleDiagnosticsTools(RecordingResolver(), pendingActionStore = store)
+            val rule =
+                PlaybackSourceRule(
+                    id = "ai-draft",
+                    name = "示例站流水线",
+                    urlTemplate = "https://search.example.tv/?q={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_VARIABLE,
+                                regex = "data-player-req=\"([^\"]+)\"",
+                                variableName = "playerReq",
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = "\"src\"\\s*:\\s*\"([^\"]+)\"",
+                            ),
+                        ),
+                )
+
+            val output = tools.proposePlaybackRule(Json.encodeToString(rule))
+            val proposal = json.decodeFromString<ActionProposal>(output)
+            val action = proposal.action as PendingAction.ImportPlaybackRules
+            val stored = action.rules.single()
+
+            assertEquals("PENDING_CONFIRMATION", proposal.status)
+            assertEquals(rule.pipeline, stored.pipeline)
+            assertEquals(PlaybackRuleKind.SOURCE, stored.kind)
+            assertTrue(stored.id != "ai-draft", "提案必须换发新 ID，避免与草稿撞号")
+            assertEquals(listOf<PendingAction>(action), store.actions.value)
+        }
+
+    @Test
+    fun `proposePlaybackRule 拒绝对不可执行的规则`() =
+        runTest {
+            val store = PendingActionStore()
+            val tools = PlaybackRuleDiagnosticsTools(RecordingResolver(), pendingActionStore = store)
+            val rule =
+                PlaybackSourceRule(
+                    id = "bad",
+                    name = "坏组合",
+                    urlTemplate = "https://example.com/s?q={title}",
+                    kind = PlaybackRuleKind.PAGE,
+                    parserType = RuleParserType.MACCMS,
+                )
+
+            val output = tools.proposePlaybackRule(Json.encodeToString(rule))
+            val obj = json.parseToJsonElement(output).jsonObject
+
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+            assertTrue(store.actions.value.isEmpty(), "被拒绝的规则不该进待确认队列")
+        }
+
+    /** 只记录取源分发是否发生，其余解析路径留空 */
+    private class RecordingResolver : PlaybackResolverRepository {
+        var resolveRuleCalls: Int = 0
+            private set
+
+        override suspend fun resolvePages(
+            pageUrls: List<String>,
+            epNumber: Float,
+            siteName: String,
+        ): List<PlayableSource> = emptyList()
+
+        override suspend fun resolveTemplate(
+            url: String,
+            headers: Map<String, String>,
+            epNumber: Float,
+            siteName: String,
+        ): List<PlayableSource> = emptyList()
+
+        override suspend fun resolveRule(
+            rule: PlaybackSourceRule,
+            title: String,
+            epNumber: Float,
+            subjectId: Long,
+            episodeId: Long,
+        ): List<PlayableSource> {
+            resolveRuleCalls++
+            return listOf(
+                PlayableSource(
+                    url = "https://cdn.example.com/1.mp4",
+                    kind = PlaylistEntryKind.DIRECT,
+                    label = "第 1 话",
+                    siteName = rule.name,
+                ),
+            )
+        }
+    }
 }

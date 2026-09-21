@@ -92,6 +92,21 @@ data class PlaybackSourceRule(
             .replace("{subjectId}", subjectId.toString())
             .replace("{episodeId}", episodeId.toString())
 
+    /**
+     * 规则里配置的解析方式是否真有执行路径。
+     *
+     * 解析器分发只发生在取源侧（[PlaybackRuleKind.SOURCE]）；[PlaybackRuleKind.PAGE] 规则会被当作
+     * 跳转页候选处理，[pipeline] 与 [parserType] 到那时已经被丢掉。把非 AUTO 解析器写在 PAGE 规则上
+     * （或给了 [pipeline] 却没声明 [RuleParserType.PIPELINE]）不会报错，只会静默降级成智能嗅探，
+     * 因此这类组合不该被导入。
+     */
+    val isResolvable: Boolean
+        get() =
+            when {
+                pipeline.isNotEmpty() -> kind == PlaybackRuleKind.SOURCE && parserType == RuleParserType.PIPELINE
+                else -> parserType == RuleParserType.AUTO || kind == PlaybackRuleKind.SOURCE
+            }
+
     companion object {
         fun encodeParam(value: String): String =
             buildString {

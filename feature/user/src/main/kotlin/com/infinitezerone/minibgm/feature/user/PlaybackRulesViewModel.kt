@@ -241,8 +241,15 @@ class PlaybackRulesViewModel(
                 if (importedList.isEmpty()) {
                     sendSnackbar("未解析到有效规则")
                 } else {
-                    settingsRepository.importPlaybackRules(importedList)
-                    sendSnackbar("成功导入 ${importedList.size} 条规则")
+                    // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探
+                    val (accepted, rejected) = importedList.partition { it.isResolvable }
+                    if (accepted.isEmpty()) {
+                        sendSnackbar("规则组合无效：专用解析器只能配在取源(SOURCE)规则上")
+                    } else {
+                        settingsRepository.importPlaybackRules(accepted)
+                        val dropped = if (rejected.isEmpty()) "" else "，已跳过 ${rejected.size} 条无效组合"
+                        sendSnackbar("成功导入 ${accepted.size} 条规则$dropped")
+                    }
                 }
             }.onFailure {
                 sendSnackbar("规则解析失败，请检查 JSON 格式")
