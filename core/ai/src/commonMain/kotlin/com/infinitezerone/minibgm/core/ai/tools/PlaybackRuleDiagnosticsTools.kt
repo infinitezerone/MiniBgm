@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 import ai.koog.agents.core.tools.annotations.LLMDescription
 import ai.koog.agents.core.tools.annotations.Tool
 import ai.koog.agents.core.tools.reflect.ToolSet
+import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
@@ -122,6 +123,7 @@ class PlaybackRuleDiagnosticsTools(
         @LLMDescription("Episode number substituted as {ep}; pass 0 to omit")
         sampleEp: Int = 1,
     ): String {
+        AiToolActivity.report("录制规则骨架", "归纳审计到的真实请求序列")
         val trace =
             try {
                 json.decodeFromString<NetworkAuditTrace>(traceJson)
@@ -148,12 +150,50 @@ class PlaybackRuleDiagnosticsTools(
     }
 
     /** 站名只从本轮观测到的 URL 里取，不内置任何站点清单 */
-    private fun ruleNameFromTrace(trace: NetworkAuditTrace): String =
-        trace.finalUrl
-            .ifBlank { trace.pageUrl }
+    private fun ruleNameFromTrace(trace: NetworkAuditTrace): String = ruleNameFromUrl(trace.finalUrl.ifBlank { trace.pageUrl })
+
+    private fun ruleNameFromUrl(url: String): String =
+        url
             .substringAfter("://", "")
             .substringBefore('/')
             .ifBlank { "录制规则" }
+
+    @Tool
+    @LLMDescription(
+        "Induce a playback rule skeleton by reading the STATIC page source of a playback page URL " +
+            "(one plain HTTP fetch, no browser). If the media URL (.m3u8/.mp4/...) is present in the " +
+            "HTML, the draft carries the exact source-code context around it — write the EXTRACT_STREAM " +
+            "regex against that context, do not invent field names. TRY THIS FIRST for ordinary sites: " +
+            "it is much cheaper and faster than traceNetworkTraffic. Fall back to traceNetworkTraffic " +
+            "only when the draft notes say the page is JS-rendered or the stream only appears at runtime. " +
+            "After filling the regex, run testPlaybackRule.",
+    )
+    suspend fun recordPlaybackRuleFromStaticPage(
+        @LLMDescription("The absolute URL of the playback episode page")
+        playbackPageUrl: String,
+        @LLMDescription("The anime title used during recording; substituted as {title} in the skeleton")
+        sampleTitle: String,
+        @LLMDescription("Episode number substituted as {ep}; pass 0 to omit")
+        sampleEp: Int = 1,
+    ): String {
+        AiToolActivity.report("静态页录制", "直读播放页源码归纳规则")
+        val draft =
+            playbackResolverRepository.recordRuleFromStaticPage(
+                pageUrl = playbackPageUrl,
+                ruleName = ruleNameFromUrl(playbackPageUrl),
+                sampleTitle = sampleTitle,
+                sampleEp = if (sampleEp > 0) sampleEp.toString() else "",
+            ) ?: return json.encodeToString(
+                RuleTestOutput(
+                    success = false,
+                    ruleName = ruleNameFromUrl(playbackPageUrl),
+                    errorMessage =
+                        "Static fetch failed (unreachable, rejected, or empty body). " +
+                            "Fall back to traceNetworkTraffic.",
+                ),
+            )
+        return json.encodeToString(draft)
+    }
 
     @Tool
     @LLMDescription(
@@ -258,6 +298,7 @@ class PlaybackRuleDiagnosticsTools(
         @LLMDescription("Sample episode number to substitute into {ep}, e.g. 1")
         sampleEp: Int = 1,
     ): String {
+        AiToolActivity.report("生成导入提案", "重跑验证后等待用户确认")
         val rule =
             try {
                 json.decodeFromString<PlaybackSourceRule>(ruleJson)

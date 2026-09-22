@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.data.repository.ApiResponseSample
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleSampleReplayer
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
+import com.infinitezerone.minibgm.core.data.repository.RecordedRuleDraft
 import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
 import com.infinitezerone.minibgm.core.model.CapturedNetworkCall
@@ -461,6 +462,80 @@ class PlaybackRuleDiagnosticsToolsTest {
                     .orEmpty()
                     .contains("vod_play_url"),
                 "样本要原样交给模型，正则才可能照着真实字段写而不是猜字段名",
+            )
+        }
+
+    @Test
+    fun `recordPlaybackRuleFromStaticPage 返回静态直读草案`() =
+        runTest {
+            val tools =
+                PlaybackRuleDiagnosticsTools(
+                    object : PlaybackResolverRepository {
+                        override suspend fun resolvePages(
+                            pageUrls: List<String>,
+                            epNumber: Float,
+                            siteName: String,
+                            title: String,
+                        ): List<PlayableSource> = emptyList()
+
+                        override suspend fun resolveTemplate(
+                            url: String,
+                            headers: Map<String, String>,
+                            epNumber: Float,
+                            siteName: String,
+                            title: String,
+                        ): List<PlayableSource> = emptyList()
+
+                        override suspend fun recordRuleFromStaticPage(
+                            pageUrl: String,
+                            ruleName: String,
+                            sampleTitle: String,
+                            sampleEp: String,
+                        ): RecordedRuleDraft =
+                            RecordedRuleDraft(
+                                ruleName = ruleName,
+                                pageUrl = pageUrl,
+                                steps =
+                                    listOf(
+                                        PipelineStep(action = StepAction.FETCH),
+                                        PipelineStep(action = StepAction.EXTRACT_STREAM),
+                                    ),
+                                mediaUrl = "https://cdn.example.tv/1.m3u8",
+                                notes = listOf("静态页源码里直接抽到了媒体地址"),
+                            )
+                    },
+                )
+
+            val output =
+                tools.recordPlaybackRuleFromStaticPage(
+                    playbackPageUrl = "https://site.example.tv/play/1",
+                    sampleTitle = "某番",
+                    sampleEp = 1,
+                )
+
+            val obj = json.parseToJsonElement(output).jsonObject
+            assertEquals("site.example.tv", obj["ruleName"]?.jsonPrimitive?.content, "站名只从本轮 URL 里取")
+            assertEquals("https://site.example.tv/play/1", obj["pageUrl"]?.jsonPrimitive?.content)
+            assertEquals("https://cdn.example.tv/1.m3u8", obj["mediaUrl"]?.jsonPrimitive?.content)
+        }
+
+    @Test
+    fun `recordPlaybackRuleFromStaticPage 抓取失败时指向网络审计`() =
+        runTest {
+            val tools = PlaybackRuleDiagnosticsTools(EmptyResolver())
+
+            val output =
+                tools.recordPlaybackRuleFromStaticPage(playbackPageUrl = "https://site.example.tv/play/1", sampleTitle = "某番")
+
+            val obj = json.parseToJsonElement(output).jsonObject
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+            assertTrue(
+                obj["errorMessage"]
+                    ?.jsonPrimitive
+                    ?.content
+                    .orEmpty()
+                    .contains("traceNetworkTraffic"),
+                "静态路径失败要给出明确出路，而不是让模型原地重试",
             )
         }
 
