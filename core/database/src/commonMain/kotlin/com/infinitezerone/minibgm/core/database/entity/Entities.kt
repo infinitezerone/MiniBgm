@@ -109,4 +109,15 @@ data class AssistantMessageEntity(
     val pendingActionsJson: String? = null,
     val playableSourcesJson: String? = null,
     val isError: Boolean = false,
+    /** 所属会话；多会话引入前的历史消息随破坏性升级整体丢弃 */
+    val sessionId: String = "default",
+)
+
+/** 追番助手会话：多会话管理的元数据行；消息正文在 assistant_messages 表按 sessionId 归组 */
+@Entity(tableName = "assistant_sessions")
+data class AssistantSessionEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
