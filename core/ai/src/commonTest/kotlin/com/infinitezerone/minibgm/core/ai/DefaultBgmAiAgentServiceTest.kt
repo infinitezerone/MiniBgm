@@ -21,6 +21,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -230,6 +231,24 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val service = DefaultBgmAiAgentService(fakeSettingsRepository)
             val result = service.execute("Recommend an anime")
             assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun execute_cancellation_propagates_instead_of_becoming_error() =
+        runTest {
+            // 用户点"停止"时 Job 被取消：取消必须向上传播。
+            // 若被 catch(Exception) 吞掉，"已停止"会伪装成一条错误消息进会话（真机实测踩过）
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(endpoint = "http://localhost:11434/v1", provider = "ollama"),
+            )
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    agentRunner = { _, _, _ -> throw kotlinx.coroutines.CancellationException("用户停止") },
+                )
+            assertFailsWith<kotlinx.coroutines.CancellationException> {
+                service.execute("任意输入")
+            }
         }
 
     @Test
