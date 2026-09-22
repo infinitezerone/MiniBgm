@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import kotlinx.coroutines.launch
 
 /** 根据输入的 Base URL 自动解析并匹配协议提供商 */
@@ -70,6 +71,29 @@ internal fun providerDisplayName(provider: String): String =
         else -> "OpenAI 兼容协议"
     }
 
+/** 方案默认名：服务商（自定义取端点主机名）+ 模型，用户可改 */
+internal fun defaultProfileName(
+    provider: String,
+    model: String,
+    endpoint: String,
+): String {
+    val base =
+        when (provider) {
+            AiConfig.PROVIDER_GEMINI -> "Gemini"
+            AiConfig.PROVIDER_OLLAMA -> "Ollama"
+            else -> {
+                val host =
+                    runCatching { java.net.URI(endpoint.trim()).host }
+                        .getOrNull()
+                        ?.removePrefix("www.")
+                        .orEmpty()
+                host.ifBlank { "自定义端点" }
+            }
+        }
+    val modelPart = model.trim().ifBlank { defaultModelFor(provider) }
+    return "$base · $modelPart"
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssistantConfigDialog(
@@ -77,8 +101,16 @@ fun AssistantConfigDialog(
     onSaveConfig: (AiConfig) -> Unit,
     onDismiss: () -> Unit,
     onFetchModels: suspend (endpoint: String, apiKey: String, provider: String) -> AppResult<List<String>>,
+    aiProfiles: List<AiConfigProfile> = emptyList(),
+    activeProfileId: String = "",
+    onActivateProfile: (String) -> Unit = {},
+    onSaveProfile: (profileId: String?, name: String, config: AiConfig) -> Unit = { _, _, _ -> },
+    onDeleteProfile: (String) -> Unit = {},
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
+    // 当前编辑中的方案：null 表示"尚不对应任何已存方案"，保存时按名称新建
+    var editingProfileId by remember { mutableStateOf<String?>(null) }
+    var profileName by remember { mutableStateOf("") }
     var endpoint by remember {
         mutableStateOf(currentConfig.endpoint.ifBlank { "https://generativelanguage.googleapis.com/v1beta/openai/" })
     }
@@ -94,6 +126,18 @@ fun AssistantConfigDialog(
     var availableModels by remember { mutableStateOf<List<String>?>(null) }
     var isFetchingModels by remember { mutableStateOf(false) }
     var modelsError by remember { mutableStateOf<String?>(null) }
+
+    fun loadProfile(profile: AiConfigProfile) {
+        editingProfileId = profile.id
+        profileName = profile.name
+        endpoint = profile.config.endpoint
+        selectedProvider = profile.config.provider
+        apiKey = profile.config.apiKey
+        model = profile.config.model
+        availableModels = null
+        modelsError = null
+    }
+
     val dialogScope = rememberCoroutineScope()
 
     AlertDialog(
@@ -126,6 +170,58 @@ fun AssistantConfigDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 if (selectedTab == 0) {
+                    // 已保存的配置方案池：点选即启用（写回生效配置并载入表单），长按操作见下方删除入口
+                    if (aiProfiles.isNotEmpty()) {
+                        Text(
+                            text = "配置方案",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            aiProfiles.forEach { profile ->
+                                FilterChip(
+                                    selected = profile.id == editingProfileId || profile.id == activeProfileId,
+                                    onClick = {
+                                        loadProfile(profile)
+                                        onActivateProfile(profile.id)
+                                    },
+                                    label = {
+                                        Text(
+                                            text = profile.name,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        editingProfileId?.let { currentId ->
+                            TextButton(onClick = {
+                                onDeleteProfile(currentId)
+                                editingProfileId = null
+                                profileName = ""
+                            }) {
+                                Text("删除当前方案", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    OutlinedTextField(
+                        value = profileName,
+                        onValueChange = { profileName = it },
+                        label = { Text("方案名称") },
+                        placeholder = { Text(defaultProfileName(selectedProvider, model, endpoint)) },
+                        supportingText = { Text("保存时按此名称入池；与已存方案同名则覆盖更新") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     OutlinedTextField(
                         value = endpoint,
                         onValueChange = {
@@ -257,17 +353,19 @@ fun AssistantConfigDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSaveConfig(
+                    val newConfig =
                         AiConfig(
                             endpoint = endpoint.trim().ifBlank { "https://generativelanguage.googleapis.com/v1beta/openai/" },
                             apiKey = apiKey.trim(),
                             model = model.trim().ifBlank { defaultModelFor(selectedProvider) },
                             provider = selectedProvider,
-                        ),
-                    )
+                        )
+                    onSaveConfig(newConfig)
+                    val name = profileName.trim().ifBlank { defaultProfileName(selectedProvider, newConfig.model, newConfig.endpoint) }
+                    onSaveProfile(editingProfileId, name, newConfig)
                 },
             ) {
-                Text("保存配置")
+                Text("保存并启用")
             }
         },
         dismissButton = {

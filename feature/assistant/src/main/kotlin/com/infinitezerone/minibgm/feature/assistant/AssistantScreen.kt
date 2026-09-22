@@ -33,17 +33,27 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
@@ -56,7 +66,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,12 +96,16 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.assistant.components.AssistantConfigDialog
 import com.infinitezerone.minibgm.feature.assistant.components.PendingActionCard
 import com.infinitezerone.minibgm.feature.assistant.components.PlayableSourcesCard
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 private val PROMPT_SUGGESTIONS =
     listOf(
@@ -133,8 +150,18 @@ fun AssistantScreen(
         onInputChanged = viewModel::onInputChanged,
         onSendMessage = { viewModel.sendMessage() },
         onSendPrompt = { prompt -> viewModel.sendMessage(prompt) },
+        onStopGeneration = viewModel::stopGeneration,
         onApproveAction = viewModel::approveAction,
         onRejectAction = viewModel::rejectAction,
+        onRetryMessage = viewModel::retryAfterError,
+        onActivateProfile = viewModel::activateAiProfile,
+        onSaveProfile = viewModel::saveAiProfile,
+        onDeleteProfile = viewModel::deleteAiProfile,
+        onToggleSessionSwitcher = viewModel::toggleSessionSwitcher,
+        onSwitchSession = viewModel::switchSession,
+        onCreateSession = viewModel::createNewSession,
+        onDeleteSession = viewModel::deleteSession,
+        onRenameSession = viewModel::renameSession,
         onSubjectClick = { subjectId -> onSubjectClick(SubjectDetailRoute(subjectId)) },
         onPlaySource = onPlaySource,
         deepResolve = uiState.deepResolve,
@@ -156,8 +183,18 @@ fun AssistantScreenContent(
     onInputChanged: (String) -> Unit,
     onSendMessage: () -> Unit,
     onSendPrompt: (String) -> Unit,
+    onStopGeneration: () -> Unit = {},
     onApproveAction: (String) -> Unit,
     onRejectAction: (String) -> Unit,
+    onRetryMessage: (String) -> Unit = { },
+    onActivateProfile: (String) -> Unit = {},
+    onSaveProfile: (profileId: String?, name: String, config: AiConfig) -> Unit = { _, _, _ -> },
+    onDeleteProfile: (String) -> Unit = {},
+    onToggleSessionSwitcher: (Boolean) -> Unit = {},
+    onSwitchSession: (String) -> Unit = {},
+    onCreateSession: () -> Unit = {},
+    onDeleteSession: (String) -> Unit = {},
+    onRenameSession: (String, String) -> Unit = { _, _ -> },
     onSubjectClick: (Long) -> Unit,
     onClearConversation: () -> Unit,
     onToggleConfigDialog: (Boolean) -> Unit,
@@ -211,6 +248,12 @@ fun AssistantScreenContent(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { onToggleSessionSwitcher(true) }) {
+                        Icon(
+                            imageVector = Icons.Filled.ChatBubble,
+                            contentDescription = "会话列表",
+                        )
+                    }
                     IconButton(onClick = { onToggleConfigDialog(true) }) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
@@ -327,37 +370,60 @@ fun AssistantScreenContent(
                                     .focusRequester(focusRequester),
                         )
 
-                        val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
-                        IconButton(
-                            onClick = {
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                                onSendMessage()
-                            },
-                            enabled = canSend,
-                            modifier =
-                                Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(
+                        if (uiState.isLoading) {
+                            // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
+                            IconButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    onStopGeneration()
+                                },
+                                modifier =
+                                    Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.errorContainer),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Stop,
+                                    contentDescription = "停止生成",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        } else {
+                            val canSend = uiState.inputText.isNotBlank()
+                            IconButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    onSendMessage()
+                                },
+                                enabled = canSend,
+                                modifier =
+                                    Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (canSend) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                            },
+                                        ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "发送",
+                                    tint =
                                         if (canSend) {
-                                            MaterialTheme.colorScheme.primary
+                                            MaterialTheme.colorScheme.onPrimary
                                         } else {
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                         },
-                                    ),
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "发送",
-                                tint =
-                                    if (canSend) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                    },
-                                modifier = Modifier.size(18.dp),
-                            )
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -406,20 +472,35 @@ fun AssistantScreenContent(
                                 keyboardController?.hide()
                             },
                 ) {
+                    // 重试入口只挂在"最后一条且之后没有成功回复"的错误上：
+                    // 已有成功回答的问题不值得重试，重试成功后错误气泡会被整体移除
+                    val lastErrorId = uiState.messages.lastOrNull { it.isError }?.id
+                    val successAfterLastError =
+                        lastErrorId?.let { id ->
+                            val errorIndex = uiState.messages.indexOfFirst { it.id == id }
+                            uiState.messages
+                                .drop(errorIndex + 1)
+                                .any { it.role == MessageRole.ASSISTANT && !it.isError }
+                        } ?: false
                     items(uiState.messages, key = { it.id }) { message ->
                         ChatMessageItem(
                             message = message,
                             failedSources = uiState.failedSources,
+                            showRetry = message.isError && message.id == lastErrorId && !successAfterLastError,
                             onApproveAction = onApproveAction,
                             onRejectAction = onRejectAction,
                             onSubjectClick = onSubjectClick,
                             onPlaySource = onPlaySource,
+                            onRetryMessage = onRetryMessage,
                         )
                     }
 
                     if (uiState.isLoading) {
                         item(key = "loading_indicator") {
-                            AssistantLoadingBubble(toolActivity = uiState.toolActivity)
+                            AssistantLoadingBubble(
+                                toolActivity = uiState.toolActivity,
+                                activityStepCount = uiState.activityEvents.size,
+                            )
                         }
                     }
 
@@ -439,10 +520,164 @@ fun AssistantScreenContent(
     if (uiState.showConfigDialog) {
         AssistantConfigDialog(
             currentConfig = uiState.aiConfig,
+            aiProfiles = uiState.aiProfiles,
+            activeProfileId = uiState.activeProfileId,
             onSaveConfig = onSaveConfig,
+            onActivateProfile = onActivateProfile,
+            onSaveProfile = onSaveProfile,
+            onDeleteProfile = onDeleteProfile,
             onDismiss = { onToggleConfigDialog(false) },
             onFetchModels = onFetchModelsAsync,
         )
+    }
+
+    if (uiState.showSessionSwitcher) {
+        SessionSwitcherSheet(
+            sessions = uiState.sessions,
+            activeSessionId = uiState.activeSessionId,
+            onSwitch = onSwitchSession,
+            onCreate = onCreateSession,
+            onDelete = onDeleteSession,
+            onRename = onRenameSession,
+            onDismiss = { onToggleSessionSwitcher(false) },
+        )
+    }
+}
+
+/** 会话切换底部面板：列出全部会话（最近更新在前），支持切换、新建、重命名与删除 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionSwitcherSheet(
+    sessions: List<AssistantSession>,
+    activeSessionId: String,
+    onSwitch: (String) -> Unit,
+    onCreate: () -> Unit,
+    onDelete: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
+    var renamingSession by remember { mutableStateOf<AssistantSession?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "会话记录",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onCreate, enabled = true) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("新会话")
+                }
+            }
+            HorizontalDivider()
+            if (sessions.isEmpty()) {
+                Text(
+                    text = "暂无历史会话",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(20.dp),
+                )
+            }
+            sessions.forEach { session ->
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onSwitch(session.id) }
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = if (session.id == activeSessionId) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubble,
+                        contentDescription = null,
+                        tint =
+                            if (session.id == activeSessionId) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = session.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (session.id == activeSessionId) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = dateFormat.format(java.util.Date(session.updatedAt)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = {
+                        renamingSession = session
+                        renameText = session.title
+                    }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "重命名会话",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { onDelete(session.id) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "删除会话",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        renamingSession?.let { session ->
+            AlertDialog(
+                onDismissRequest = { renamingSession = null },
+                title = { Text("重命名会话") },
+                text = {
+                    OutlinedTextField(
+                        value = renameText,
+                        onValueChange = { renameText = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onRename(session.id, renameText)
+                            renamingSession = null
+                        },
+                        enabled = renameText.trim().isNotBlank(),
+                    ) {
+                        Text("保存")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renamingSession = null }) {
+                        Text("取消")
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -526,10 +761,12 @@ private fun EmptyAssistantGuide(
 private fun ChatMessageItem(
     message: AssistantMessage,
     failedSources: Map<String, String>,
+    showRetry: Boolean,
     onApproveAction: (String) -> Unit,
     onRejectAction: (String) -> Unit,
     onSubjectClick: (Long) -> Unit,
     onPlaySource: (PlayerRoute) -> Unit,
+    onRetryMessage: (String) -> Unit = { },
     modifier: Modifier = Modifier,
 ) {
     val isUser = message.role == MessageRole.USER
@@ -576,6 +813,17 @@ private fun ChatMessageItem(
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
+            }
+        }
+
+        // 错误回复：给一键重试入口（取该错误之前最近一条用户输入原样重发）。
+        // 仅最新一条错误显示——重试成功后该气泡会被整体移除
+        if (showRetry) {
+            TextButton(
+                onClick = { onRetryMessage(message.id) },
+                modifier = Modifier.padding(top = 2.dp),
+            ) {
+                Text("重试", style = MaterialTheme.typography.labelLarge)
             }
         }
 
@@ -651,8 +899,18 @@ private fun DeepResolveEntry(
 @Composable
 private fun AssistantLoadingBubble(
     toolActivity: String? = null,
+    activityStepCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
+    // 本次运行已等待的秒数：多轮工具调用（每轮 12~30s）期间给用户可感知的时间进度
+    var elapsedSeconds by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            elapsedSeconds++
+        }
+    }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -671,16 +929,29 @@ private fun AssistantLoadingBubble(
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                AnimatedContent(
-                    targetState = toolActivity ?: "AI 正在思考并检索...",
-                    label = "ToolActivityTransition",
-                ) { targetText ->
+                Column {
+                    AnimatedContent(
+                        targetState = toolActivity ?: "AI 正在思考并检索...",
+                        label = "ToolActivityTransition",
+                    ) { targetText ->
+                        Text(
+                            text = targetText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
-                        text = targetText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        text =
+                            buildString {
+                                append("已思考 ${elapsedSeconds.coerceAtLeast(0)} 秒")
+                                if (activityStepCount > 0) {
+                                    append(" · 第 $activityStepCount 步")
+                                }
+                            },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                 }
             }
