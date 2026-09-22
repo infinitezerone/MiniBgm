@@ -197,6 +197,23 @@ class PlaybackRuleRecorderTest {
     }
 
     @Test
+    fun `静态页直链是百分号编码时解码后再归纳`() {
+        val plain = "https://play.xfvod.pro:8088/Z/01.mp4"
+        val html = """<script>var player_aaaa = {"url":"${PlaybackSourceRule.encodeParam(plain)}"};</script>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/ep/1",
+                html = html,
+                ruleName = "示例站",
+                title = "某番",
+            )
+
+        assertEquals(plain, draft.mediaUrl, "MacCMS 播放器配置的编码直链解码后应能命中（实测 moonci 类站点的形态）")
+        assertTrue(draft.notes.any { it.contains("百分号编码") }, "要说明直链来自解码，正则才照明文形态写")
+    }
+
+    @Test
     fun `静态页没有直链时明确指向网络审计而不是让调用方重试`() {
         val html = """<html><body><div id="app"></div><script src="/app.js"></script></body></html>"""
 
