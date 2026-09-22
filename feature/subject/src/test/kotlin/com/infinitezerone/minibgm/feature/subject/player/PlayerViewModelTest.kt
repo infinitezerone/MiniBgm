@@ -153,6 +153,30 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun playbackFailure_isCountedAgainstTheSelectedSource() =
+        runTest {
+            val failureStore = PlaybackFailureStore()
+            val viewModel = viewModel(failureStore = failureStore)
+
+            viewModel.onPlaybackError("网络不可达")
+            viewModel.onPlaybackError("网络不可达")
+
+            // 初始只有一个源（默认直链），失败按源累计，选源界面据此弱化它
+            val counts = viewModel.uiState.first { it.sourceFailureCounts.isNotEmpty() }.sourceFailureCounts
+            assertEquals(2, counts["direct"])
+            assertEquals(2, failureStore.sourceHealth.value["direct"]?.consecutiveFailures)
+
+            // 一旦播成功就归零：否则一个已经修好的源会一直背着"打不开"的标签
+            viewModel.onPlaybackReady()
+            assertFalse(
+                viewModel.uiState
+                    .first { it.sourceFailureCounts.isEmpty() }
+                    .sourceFailureCounts
+                    .containsKey("direct"),
+            )
+        }
+
+    @Test
     fun queuePlayback_onPlaybackEnded_advancesToNextEpisodeAndResetsWatchState() {
         val viewModel =
             viewModel(
