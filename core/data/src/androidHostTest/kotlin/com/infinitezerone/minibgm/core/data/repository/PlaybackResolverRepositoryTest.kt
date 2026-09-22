@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PipelineStep
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -11,6 +13,8 @@ import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private class FakePageFetchService(
@@ -43,6 +47,80 @@ private class FakePageFetchService(
 }
 
 class PlaybackResolverRepositoryTest {
+    @Test
+    fun `macCms 探测候选地址只取主机名且 https 优先`() {
+        assertEquals(
+            listOf(
+                "https://example.com/api.php/provide/vod/?ac=list",
+                "http://example.com/api.php/provide/vod/?ac=list",
+            ),
+            macCmsProbeCandidates("example.com"),
+        )
+        // 贴整条模板/接口地址也只看主机名——接口路径是约定值，不靠用户填
+        assertEquals(
+            macCmsProbeCandidates("example.com")[0],
+            macCmsProbeCandidates("https://example.com/api.php/provide/vod/?ac=detail&wd={title}")[0],
+        )
+        assertTrue(macCmsProbeCandidates("http://example.com")[0].startsWith("http://"))
+        // 认不出主机名时不发无谓请求
+        assertTrue(macCmsProbeCandidates("   ").isEmpty())
+    }
+
+    @Test
+    fun `countMacCmsListItems 只认 list 数组`() {
+        assertEquals(2, countMacCmsListItems("""{"code":1,"list":[{"vod_id":1},{"vod_id":2}]}"""))
+        // 空数组也算接口存在：接口在但当前没内容是常态
+        assertEquals(0, countMacCmsListItems("""{"code":1,"list":[]}"""))
+        // 反爬 HTML / 结构不符 / 空体一律不算命中
+        assertNull(countMacCmsListItems("<!DOCTYPE html><html><body>hi</body></html>"))
+        assertNull(countMacCmsListItems("""{"code":1,"data":[]}"""))
+        assertNull(countMacCmsListItems(""))
+    }
+
+    @Test
+    fun `probeMacCmsEndpoint 命中即给出取源模板`() =
+        runTest {
+            val repo =
+                PlaybackResolverRepositoryImpl(
+                    pageFetchService =
+                        FakePageFetchService(
+                            mapOf(
+                                "https://cms.example.tv/api.php/provide/vod/?ac=list" to
+                                    """{"code":1,"msg":"数据列表","list":[{"vod_id":1}]}""",
+                            ),
+                        ),
+                )
+            val result = repo.probeMacCmsEndpoint("cms.example.tv")
+            assertIs<AppResult.Success<MacCmsProbeResult>>(result)
+            val probed = result.data
+            assertEquals("https://cms.example.tv/api.php/provide/vod/", probed.endpointUrl)
+            // 探测用 ac=list，落库模板必须是 ac=detail&wd={title}
+            assertEquals(
+                "https://cms.example.tv/api.php/provide/vod/?ac=detail&wd={title}",
+                probed.ruleTemplate,
+            )
+            assertEquals("cms.example.tv", probed.siteName)
+            assertEquals(1, probed.sampleCount)
+        }
+
+    @Test
+    fun `probeMacCmsEndpoint 探不到时如实说探不到`() =
+        runTest {
+            val repo =
+                PlaybackResolverRepositoryImpl(
+                    pageFetchService =
+                        FakePageFetchService(
+                            mapOf(
+                                "https://blog.example.com/api.php/provide/vod/?ac=list" to
+                                    "<!DOCTYPE html><html><body>hi</body></html>",
+                            ),
+                        ),
+                )
+            val result = repo.probeMacCmsEndpoint("blog.example.com")
+            assertIs<AppResult.Error>(result)
+            assertTrue(result.message.contains("不是采集站"), result.message)
+        }
+
     private fun repository(pages: Map<String, String>) =
         PlaybackResolverRepositoryImpl(
             pageFetchService = FakePageFetchService(pages),
