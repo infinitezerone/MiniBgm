@@ -8,6 +8,7 @@ import androidx.room3.Transaction
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
+import com.infinitezerone.minibgm.core.database.entity.AssistantSessionEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -124,8 +125,8 @@ interface UserCollectionDao {
 
 @Dao
 interface AssistantMessageDao {
-    @Query("SELECT * FROM assistant_messages ORDER BY timestamp ASC")
-    fun getAllMessages(): Flow<List<AssistantMessageEntity>>
+    @Query("SELECT * FROM assistant_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
+    fun getMessagesBySession(sessionId: String): Flow<List<AssistantMessageEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: AssistantMessageEntity)
@@ -136,6 +137,36 @@ interface AssistantMessageDao {
     @Query("DELETE FROM assistant_messages WHERE id = :id")
     suspend fun deleteMessage(id: String)
 
+    @Query("DELETE FROM assistant_messages WHERE sessionId = :sessionId")
+    suspend fun clearSession(sessionId: String)
+
     @Query("DELETE FROM assistant_messages")
     suspend fun clearAll()
+}
+
+@Dao
+interface AssistantSessionDao {
+    @Query("SELECT * FROM assistant_sessions ORDER BY updatedAt DESC")
+    fun observeSessions(): Flow<List<AssistantSessionEntity>>
+
+    @Query("SELECT * FROM assistant_sessions WHERE id = :sessionId")
+    suspend fun getSession(sessionId: String): AssistantSessionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSession(session: AssistantSessionEntity)
+
+    @Query("UPDATE assistant_sessions SET title = :title WHERE id = :sessionId")
+    suspend fun renameSession(
+        sessionId: String,
+        title: String,
+    )
+
+    @Query("UPDATE assistant_sessions SET updatedAt = :updatedAt WHERE id = :sessionId")
+    suspend fun touchSession(
+        sessionId: String,
+        updatedAt: Long,
+    )
+
+    @Query("DELETE FROM assistant_sessions WHERE id = :sessionId")
+    suspend fun deleteSession(sessionId: String)
 }

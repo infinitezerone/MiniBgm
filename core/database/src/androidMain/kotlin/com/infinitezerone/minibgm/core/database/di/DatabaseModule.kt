@@ -21,4 +21,5 @@ val databaseModule =
         single { get<BgmDatabase>().userCollectionDao() }
         single { get<BgmDatabase>().airEventDao() }
         single { get<BgmDatabase>().assistantMessageDao() }
+        single { get<BgmDatabase>().assistantSessionDao() }
     }

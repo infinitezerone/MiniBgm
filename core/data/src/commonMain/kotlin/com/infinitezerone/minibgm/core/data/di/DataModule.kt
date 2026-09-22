@@ -117,6 +117,7 @@ val dataModule =
         single<com.infinitezerone.minibgm.core.data.repository.AssistantRepository> {
             com.infinitezerone.minibgm.core.data.repository.AssistantRepositoryImpl(
                 assistantMessageDao = get(),
+                assistantSessionDao = get(),
             )
         }
     }
