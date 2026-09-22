@@ -91,6 +91,8 @@ data class PlayerUiState(
     val resumePositionMs: Long = 0L,
     /** 播放源标签列表（包含自备片单与外部规则源） */
     val sources: List<PlayerSourceTab> = emptyList(),
+    /** 源标识 → 本次会话内的连续失败次数；用于在选源界面弱化屡试屡败的源 */
+    val sourceFailureCounts: Map<String, Int> = emptyMap(),
     val selectedSourceIndex: Int = 0,
     /** 全部分集列表（由条目详情持续同步） */
     val episodes: List<PlayerEpisodeItem> = emptyList(),
@@ -301,7 +303,19 @@ class PlayerViewModel(
             }
         }
 
-        // 3. 若有 subjectId，加载番剧详情（补充标题）与全部分集列表
+        // 3. 订阅源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
+        //    selectedSourceIndex 有位置语义，重排会让选中项错位）
+        if (failureStore != null) {
+            viewModelScope.launch {
+                failureStore.sourceHealth.collect { health ->
+                    _uiState.update { state ->
+                        state.copy(sourceFailureCounts = health.mapValues { it.value.consecutiveFailures })
+                    }
+                }
+            }
+        }
+
+        // 4. 若有 subjectId，加载番剧详情（补充标题）与全部分集列表
         if (route.subjectId > 0) {
             viewModelScope.launch {
                 subjectRepository?.getSubjectStream(route.subjectId)?.collect { subject ->
@@ -672,13 +686,16 @@ class PlayerViewModel(
         }
     }
 
-    /** 播放成功建立（STATE_READY）：清除该地址的失败标记 */
+    /** 播放成功建立（STATE_READY）：清除该地址的失败标记，并把当前源的连续失败计数归零 */
     fun onPlaybackReady() {
-        failureStore?.markPlayable(_uiState.value.streamUrl)
+        failureStore?.markPlayable(_uiState.value.streamUrl, currentSourceId())
     }
 
     fun onPlaybackError(message: String) {
         _uiState.update { it.copy(error = message) }
-        failureStore?.markFailed(_uiState.value.streamUrl, message)
+        failureStore?.markFailed(_uiState.value.streamUrl, message, currentSourceId())
     }
+
+    /** 当前选中源的标识；拿不到就返回 null（计数只记到能认出来的源上） */
+    private fun currentSourceId(): String? = _uiState.value.let { state -> state.sources.getOrNull(state.selectedSourceIndex)?.id }
 }

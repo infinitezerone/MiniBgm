@@ -438,6 +438,7 @@ fun PlayerScreen(
                 episodes = uiState.episodes,
                 selectedEpisodeSort = uiState.episodeSort,
                 sources = uiState.sources,
+                sourceFailureCounts = uiState.sourceFailureCounts,
                 selectedSourceIndex = uiState.selectedSourceIndex,
                 autoNextEnabled = uiState.autoNextEnabled,
                 onToggleAutoNext = viewModel::toggleAutoNext,
@@ -732,6 +733,7 @@ fun PlayerScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 PlayerSourceSelector(
                                     sources = uiState.sources,
+                                    sourceFailureCounts = uiState.sourceFailureCounts,
                                     selectedIndex = uiState.selectedSourceIndex,
                                     onSelectSource = viewModel::selectSource,
                                     onRequestOpenSources = onRequestOpenSources,
@@ -846,11 +848,30 @@ private fun PlayerHeaderInfo(
 }
 
 /**
+ * 屡试屡败的源提示。
+ *
+ * 只做标记与弱化，**不动列表顺序**：选中项按位置判定，重排会让选中错位。
+ * 计数是本次会话内的**连续**失败次数，任何一次成功即清零——它说的是"这个源现在不灵"，
+ * 而不是"它历史上错过几次"。
+ */
+@Composable
+private fun SourceFailureHint(failureCount: Int) {
+    if (failureCount <= 0) return
+    Spacer(modifier = Modifier.width(6.dp))
+    Text(
+        text = "$failureCount 次打不开",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+/**
  * 播放源切换选择器
  */
 @Composable
 private fun PlayerSourceSelector(
     sources: List<PlayerSourceTab>,
+    sourceFailureCounts: Map<String, Int>,
     selectedIndex: Int,
     onSelectSource: (Int) -> Unit,
     onRequestOpenSources: (() -> Unit)?,
@@ -899,10 +920,13 @@ private fun PlayerSourceSelector(
                     selected = isSelected,
                     onClick = { onSelectSource(index) },
                     label = {
-                        Text(
-                            text = source.name,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = source.name,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            )
+                            SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
+                        }
                     },
                     leadingIcon = {
                         Icon(
@@ -1046,6 +1070,7 @@ private fun PlayerEpisodeQueueDrawer(
     episodes: List<PlayerEpisodeItem>,
     selectedEpisodeSort: Float,
     sources: List<PlayerSourceTab>,
+    sourceFailureCounts: Map<String, Int>,
     selectedSourceIndex: Int,
     autoNextEnabled: Boolean,
     onToggleAutoNext: () -> Unit,
@@ -1093,7 +1118,12 @@ private fun PlayerEpisodeQueueDrawer(
                         FilterChip(
                             selected = isSelected,
                             onClick = { onSelectSource(index) },
-                            label = { Text(source.name) },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(source.name)
+                                    SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
+                                }
+                            },
                             colors =
                                 FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
