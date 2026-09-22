@@ -51,7 +51,7 @@ class PlaybackRuleDiagnosticsTools(
             "Use this as the FIRST STEP when adapting or reversing a new playback website.",
     )
     suspend fun probeSiteAndFindSample(
-        @LLMDescription("The base HTTP/HTTPS URL of the target anime website, e.g. https://anime1.me/")
+        @LLMDescription("The base HTTP/HTTPS URL of the target anime website, e.g. https://example.com/")
         siteUrl: String,
         @LLMDescription("Sample anime title to search or match, defaults to '芙莉莲'")
         sampleAnime: String = "芙莉莲",

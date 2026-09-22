@@ -948,7 +948,7 @@ private fun RuleEditDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("规则名称") },
-                    placeholder = { Text("例如：AGE动漫") },
+                    placeholder = { Text("例如：我的采集源") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
