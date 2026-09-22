@@ -111,4 +111,44 @@ class PlaybackRuleRecorderTest {
             "要指向纯被动观察这个结构性限制，而不是让调用方反复重试",
         )
     }
+
+    @Test
+    fun `有响应样本时提示照样本写正则并带上样本`() {
+        val trace =
+            NetworkAuditTrace(
+                pageUrl = "https://s.example.tv/ep/1",
+                calls = listOf(CapturedNetworkCall(url = "https://api.example.tv/vod?wd=x", isApi = true)),
+            )
+        val samples =
+            listOf(
+                ApiResponseSample(url = "https://api.example.tv/vod?wd=x", ok = true, bodyExcerpt = """{"vod_play_url":"…"}"""),
+            )
+
+        val draft =
+            PlaybackRuleRecorder.recordFromTrace(trace, ruleName = "示例站", title = "某番", ep = "1", apiSamples = samples)
+
+        assertEquals(samples, draft.apiSamples)
+        assertTrue(
+            draft.notes.any { it.contains("照着片段") },
+            "有样本就该要求照样本写，而不是继续留着'审计看不到响应正文'那句",
+        )
+        assertTrue(draft.notes.none { it.contains("没有可用响应样本") })
+    }
+
+    @Test
+    fun `样本全部重放失败时说明原因而不是让调用方重试`() {
+        val trace =
+            NetworkAuditTrace(
+                pageUrl = "https://s.example.tv/ep/1",
+                calls = listOf(CapturedNetworkCall(url = "https://api.example.tv/vod?wd=x", isApi = true)),
+            )
+        val samples =
+            listOf(ApiResponseSample(url = "https://api.example.tv/vod?wd=x", ok = false, note = "被拒绝"))
+
+        val draft =
+            PlaybackRuleRecorder.recordFromTrace(trace, ruleName = "示例站", title = "某番", ep = "1", apiSamples = samples)
+
+        assertTrue(draft.notes.any { it.contains("没取到响应") })
+        assertTrue(draft.notes.none { it.contains("照着片段") })
+    }
 }
