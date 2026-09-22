@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.ChineseConverter
+import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
@@ -14,6 +16,9 @@ import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 
 /** 单次请求解析的页面数上限，避免一次找源退化成批量抓取 */
 private const val MAX_PAGES = 5
@@ -201,6 +206,19 @@ interface PlaybackResolverRepository {
         siteUrl: String,
         sampleAnime: String = "芙莉莲",
     ): ProbeSiteOutput = ProbeSiteOutput(siteUrl = siteUrl, isReachable = false, errorMessage = "Not implemented")
+
+    /**
+     * 探测给定域名/接口地址是否为**标准 MacCMS V10 采集接口**，并给出可直接落库的取源规则。
+     *
+     * 这是一条**确定性快路径**：标准采集站占这类源的大头，`/api.php/provide/vod/` 上的
+     * `{"code":…,"list":[…]}` 是可判定的信号，不需要模型参与。探不到就是探不到，
+     * 调用方据此引导用户改走手填或助手探查，而不是降级成嗅探。
+     *
+     * 判定只看两件事：响应体能解析成 JSON 且含 `list` 数组。**不校验条目内容**——
+     * 采集站返回的内容与本应用无关，这里回答的只是"接口在不在"。
+     */
+    suspend fun probeMacCmsEndpoint(input: String): AppResult<MacCmsProbeResult> =
+        AppResult.Error(IllegalStateException("Not implemented"), "站点探测不可用")
 
     /**
      * 对指定页面执行动态网络流量审计（运行指定时长，监控所有媒体流与关键 API 调用）。
@@ -423,6 +441,85 @@ class PlaybackResolverRepositoryImpl(
             searchUrlPattern = searchUrlPattern,
         )
     }
+
+    override suspend fun probeMacCmsEndpoint(input: String): AppResult<MacCmsProbeResult> {
+        val candidates = macCmsProbeCandidates(input)
+        if (candidates.isEmpty()) {
+            return AppResult.Error(
+                IllegalArgumentException("unrecognized host: $input"),
+                "没能从「$input」里认出站点域名。填域名（如 example.com）或接口地址即可。",
+            )
+        }
+        for (candidate in candidates) {
+            val fetched = pageFetchService.fetchHtml(candidate) ?: continue
+            val sampleCount = countMacCmsListItems(fetched.html) ?: continue
+            val endpointUrl = candidate.substringBefore('?')
+            return AppResult.Success(
+                MacCmsProbeResult(
+                    endpointUrl = endpointUrl,
+                    ruleTemplate = "$endpointUrl?ac=detail&wd={title}",
+                    siteName = candidate.substringAfter("://").substringBefore('/'),
+                    sampleCount = sampleCount,
+                ),
+            )
+        }
+        return AppResult.Error(
+            IllegalStateException("no maccms endpoint at $input"),
+            "已试过 ${candidates.size} 个标准接口地址，都没有 MacCMS 响应。该站可能不是采集站——" +
+                "可改用「添加」手填，或交给助手探查。",
+        )
+    }
+}
+
+/**
+ * 由用户输入推导待探测的标准 MacCMS 接口地址。
+ *
+ * 用户可能贴 `example.com`、`https://example.com`、甚至一整条规则模板——一律只取主机名，
+ * 再按 MacCMS V10 的约定路径拼候选。https 优先、明文 http 回退（不少采集站只有 http，
+ * 本应用已显式放开明文）。
+ */
+internal fun macCmsProbeCandidates(input: String): List<String> {
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return emptyList()
+    val withScheme =
+        if (trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        ) {
+            trimmed
+        } else {
+            "https://$trimmed"
+        }
+    val rest = withScheme.substringAfter("://", "")
+    val host =
+        rest
+            .substringBefore('/')
+            .substringBefore('?')
+            .trim()
+            .trimEnd('.')
+    if (host.isBlank()) return emptyList()
+
+    val preferHttps = withScheme.startsWith("https://", ignoreCase = true)
+    val schemes = if (preferHttps) listOf("https", "http") else listOf("http", "https")
+    return schemes.map { "$it://$host/api.php/provide/vod/?ac=list" }
+}
+
+private val probeJson =
+    Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+/**
+ * 判定响应体是否是 MacCMS 列表响应，并返回条目数；不是则返回 null。
+ *
+ * 只认 `{"list":[…]}` 这一结构（MacCMS V10 的固定约定）。**空数组也算命中**——
+ * 接口存在但当前没内容是常态，跟"这里没有接口"是两回事，不能混为一谈。
+ */
+internal fun countMacCmsListItems(body: String): Int? {
+    val trimmed = body.trim()
+    if (trimmed.isEmpty() || trimmed.first() != '{') return null
+    val root = runCatching { probeJson.parseToJsonElement(trimmed) }.getOrNull() as? JsonObject ?: return null
+    return (root["list"] as? JsonArray)?.size
 }
 
 private fun detectAdParking(
