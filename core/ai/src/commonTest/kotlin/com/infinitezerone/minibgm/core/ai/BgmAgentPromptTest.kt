@@ -27,4 +27,16 @@ class BgmAgentPromptTest {
             "提示词必须交代待确认提案的交付方式",
         )
     }
+
+    /**
+     * SOP 必须先静态直读再动态审计：动态渲染一次 30 秒级成本，
+     * 静态站（模板站大头）不该为它买单；写进测试防止后续改提示词时把顺序改回去。
+     */
+    @Test
+    fun `system prompt instructs static-first recording before dynamic audit`() {
+        val prompt = BGM_AGENT_SYSTEM_PROMPT
+        val staticPos = prompt.indexOf("recordPlaybackRuleFromStaticPage")
+        val tracePos = prompt.indexOf("traceNetworkTraffic")
+        assertTrue(staticPos in 0 until tracePos, "SOP 必须先静态直读（recordPlaybackRuleFromStaticPage），动态审计（traceNetworkTraffic）只是兜底")
+    }
 }
