@@ -521,6 +521,8 @@ class PlayerViewModelTest {
             advanceUntilIdle()
 
             assertTrue("应发出关键词尝试：$capturedTitles", capturedTitles.isNotEmpty())
+            // 原样（简体）必须排第一：实测 3 站 × 4 番，简体 11/12、繁体 5/12、日文原名 2/12
+            assertEquals("葬送的芙莉莲", capturedTitles.first())
             val leadingPlain = capturedTitles.takeWhile { !it.contains(" 0") && !it.endsWith(" 1") }
             assertTrue("纯标题应排在带集号关键词之前：$capturedTitles", leadingPlain.size >= 2)
             assertTrue("带集号关键词应作为回退保留：$capturedTitles", capturedTitles.any { it.endsWith(" 01") })
@@ -581,7 +583,7 @@ class PlayerViewModelTest {
             advanceUntilIdle()
 
             assertTrue("应发出关键词尝试：$capturedTitles", capturedTitles.isNotEmpty())
-            assertEquals("葬送的芙莉蓮 01", capturedTitles.first())
+            assertEquals("葬送的芙莉莲 01", capturedTitles.first())
         }
 
     @Test

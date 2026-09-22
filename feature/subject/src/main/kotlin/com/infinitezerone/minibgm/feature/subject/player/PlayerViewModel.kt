@@ -601,13 +601,11 @@ class PlayerViewModel(
                             epSort.toString()
                         }
                     val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
-                    val traditionalTitle = ChineseConverter.toTraditional(primaryTitle)
-                    val baseTitles =
-                        if (traditionalTitle != primaryTitle) {
-                            listOf(traditionalTitle, primaryTitle, subjectOriginalName)
-                        } else {
-                            listOf(primaryTitle, subjectOriginalName)
-                        }.filter { it.isNotBlank() }.distinct()
+                    // 片名候选与助手侧同源（queryVariants：原样优先、繁体兜底），不再各拼一套。
+                    // 顺序有实测依据——3 个采集站 × 4 部番的命中数：
+                    // 原样（简体）11/12、繁体 5/12、日文原名 2/12，其中两个站是**纯简体**（繁体 0 命中）。
+                    // 所以「原样」必须排第一：把繁体排前面等于每轮固定白费一发请求。
+                    val baseTitles = ChineseConverter.queryVariants(primaryTitle, subjectOriginalName)
 
                     // 关键词策略按规则形态分流——两者的搜索语义完全不同：
                     // - SOURCE（取源接口）：`wd=` 多为**标题模糊搜索**，一次就返回整部片子（含全部分集），
