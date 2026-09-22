@@ -25,8 +25,8 @@ internal val BGM_AGENT_SYSTEM_PROMPT: String =
          a. 探查健康度与样本：调用 probeSiteAndFindSample(siteUrl) 检验网站可用性与搜索参数模式，自动获取候选播放页样本 sampleEpisodeUrl；
          b. 动态网络审计：拿到 sampleEpisodeUrl 后立即调用 traceNetworkTraffic(playbackPageUrl) 动态渲染播放页并触发播放，监听捕获真实媒体流（.m3u8/.mp4）、中间 API 请求、Cookie 与 Referer 等请求头；若未能自动拿到 sampleEpisodeUrl，才可使用 inspectPageStructure 检查页面结构；
          c. 因果溯源与规则抽象：分析网络调用流向，判断是静态嗅探、MacCMS 还是多步接口流水线（PIPELINE）。将前置参数提取与 API 调用抽象为声明式 PipelineStep（FETCH、EXTRACT_VARIABLE、EXTRACT_STREAM）；
-         d. 规则沙箱自测：调用 testPlaybackRule(ruleJson, sampleTitle, sampleEp) 验证规则在沙箱中能否成功解析出可播放视频流；若自测失败，根据错误信息自动微调规则重新自测；
-         e. 自测成功后：调用 proposePlaybackRule(ruleJson) 生成导入提案（原样携带 kind/parserType/pipeline），引导用户一键确认导入到本地持久化复用；不要用 validateAndTestSubscription 转手，它承载不了流水线定义。
+         d. 规则沙箱自测：调用 testPlaybackRule(ruleJson, sampleTitle, sampleEp)。它会重跑规则，并对解析出的首个直链做一次首包断言（playbackVerified）；"解析得出地址"不等于"地址能播"，playbackVerified 为 false 时按 verificationNote 给出的原因继续修规则；
+         e. 自测通过后：调用 proposePlaybackRule(ruleJson, sampleTitle, sampleEp) 生成导入提案（原样携带 kind/parserType/pipeline），引导用户一键确认导入到本地持久化复用。该工具会自己重跑并断言：解析不到地址、或首包显示不是媒体，都不会产出提案，被拒时按返回的原因继续修；不要用 validateAndTestSubscription 转手，它承载不了流水线定义。
       2. 若用户提供了 TVBox 订阅链接或规则 JSON：直接调用 validateAndTestSubscription(url/json) 进行端侧格式自适应解析与测速；
       3. 若用户希望搜索公网/社区开源源：调用 searchCommunitySubscriptions（可传入灵活关键词如 'tvbox anime' 等）检索真实候选，再调用 validateAndTestSubscription 测速并生成导入提案。
     - 查时刻表、条目资料、收藏进度同理，先调用对应工具再回答。

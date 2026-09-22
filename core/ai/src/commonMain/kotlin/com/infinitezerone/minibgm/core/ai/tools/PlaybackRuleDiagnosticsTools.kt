@@ -6,10 +6,14 @@ import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
+import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PendingAction
+import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -23,6 +27,9 @@ internal data class RuleTestOutput(
     val streamCount: Int = 0,
     val streams: List<StreamOutput> = emptyList(),
     val errorMessage: String? = null,
+    /** 首包断言结论——"解析跑通"不等于"地址能播"，这一项才是能播的证据 */
+    val playbackVerified: Boolean = false,
+    val verificationNote: String? = null,
 )
 
 @Serializable
@@ -44,6 +51,7 @@ class PlaybackRuleDiagnosticsTools(
             encodeDefaults = true
         },
     private val pendingActionStore: PendingActionStore? = null,
+    private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
 ) : ToolSet {
     @Tool
     @LLMDescription(
@@ -138,6 +146,7 @@ class PlaybackRuleDiagnosticsTools(
                     epNumber = if (sampleEp > 0) sampleEp.toFloat() else 0f,
                 )
             if (sources.isNotEmpty()) {
+                val verification = verifyFirstPlayable(sources)
                 json.encodeToString(
                     RuleTestOutput(
                         success = true,
@@ -151,6 +160,8 @@ class PlaybackRuleDiagnosticsTools(
                                     headers = it.headers,
                                 )
                             },
+                        playbackVerified = verification is StreamVerification.Playable,
+                        verificationNote = verification.note(),
                     ),
                 )
             } else {
@@ -177,13 +188,19 @@ class PlaybackRuleDiagnosticsTools(
     @Tool
     @LLMDescription(
         "Propose a PlaybackSourceRule for the user to import into their local playback rules. " +
-            "Call this ONLY for a rule that testPlaybackRule just resolved successfully, passing the same ruleJson. " +
-            "This does NOT store anything: it returns a PENDING_CONFIRMATION proposal, and the rule reaches the " +
-            "user's settings only if they approve the card.",
+            "REQUIRES sampleTitle/sampleEp: this tool re-runs the rule itself and probes the resolved " +
+            "stream's first response, so the proposal carries real evidence rather than your claim. " +
+            "If it resolves nothing, or the address turns out not to be playable, NO proposal is created — " +
+            "fix the rule and try again. This does NOT store anything: it returns a PENDING_CONFIRMATION " +
+            "proposal, and the rule reaches the user's settings only if they approve the card.",
     )
     suspend fun proposePlaybackRule(
-        @LLMDescription("Serialized JSON string of the tested PlaybackSourceRule to propose for import")
+        @LLMDescription("Serialized JSON string of the PlaybackSourceRule to propose for import")
         ruleJson: String,
+        @LLMDescription("Sample anime title to substitute into {title} while re-running the rule")
+        sampleTitle: String,
+        @LLMDescription("Sample episode number to substitute into {ep}, e.g. 1")
+        sampleEp: Int = 1,
     ): String {
         val rule =
             try {
@@ -210,6 +227,52 @@ class PlaybackRuleDiagnosticsTools(
             )
         }
 
+        // 提案必须自带证据：不采信"我刚才测过了"这种说法，这里自己重跑一遍
+        val sources =
+            runCatching {
+                playbackResolverRepository.resolveRule(
+                    rule = rule,
+                    title = sampleTitle,
+                    epNumber = if (sampleEp > 0) sampleEp.toFloat() else 0f,
+                )
+            }.getOrElse { e ->
+                return json.encodeToString(
+                    RuleTestOutput(
+                        success = false,
+                        ruleName = rule.name,
+                        errorMessage = "Re-running the rule failed: ${e.message}",
+                    ),
+                )
+            }
+
+        if (sources.isEmpty()) {
+            return json.encodeToString(
+                RuleTestOutput(
+                    success = false,
+                    ruleName = rule.name,
+                    errorMessage =
+                        "Re-run resolved no playable stream for sample \"$sampleTitle\" ep $sampleEp. " +
+                            "Fix the rule, or pick a sample that actually exists on the site, then retry.",
+                ),
+            )
+        }
+
+        val verification = verifyFirstPlayable(sources)
+        if (verification is StreamVerification.NotPlayable) {
+            return json.encodeToString(
+                RuleTestOutput(
+                    success = false,
+                    ruleName = rule.name,
+                    streamCount = sources.size,
+                    playbackVerified = false,
+                    verificationNote = verification.reason,
+                    errorMessage =
+                        "The rule does resolve an address, but the first response says it is not playable: " +
+                            "${verification.reason}. Fix the rule and re-run testPlaybackRule.",
+                ),
+            )
+        }
+
         val action =
             PendingAction.ImportPlaybackRules(
                 actionId = "act_rules_${TimeUtils.nowEpochMillis()}",
@@ -224,11 +287,33 @@ class PlaybackRuleDiagnosticsTools(
                 description = "导入规则【${rule.name}】（解析器 ${rule.parserType}）",
             )
         pendingActionStore?.add(action)
+        val evidence =
+            if (verification is StreamVerification.Playable) {
+                "规则已重跑，首包断言通过（响应正常且类型为媒体）"
+            } else {
+                "规则已重跑并解析出 ${sources.size} 个候选；首包未能探测（当前环境不支持），未做可播性断言"
+            }
         return json.encodeToString(
             ActionProposal(
-                message = "规则已在沙箱中验证可用，等待用户确认后写入本地播放源。",
+                message = "$evidence，等待用户确认后写入本地播放源。",
                 action = action,
             ),
         )
     }
+
+    /** 对解析结果里首个直链做首包断言；没有直链候选或未接入验证器时返回 null（按"未验证"处理） */
+    private suspend fun verifyFirstPlayable(sources: List<PlayableSource>): StreamVerification? {
+        val verifier = playbackSourceVerifier ?: return null
+        val first = sources.firstOrNull { it.kind == PlaylistEntryKind.DIRECT } ?: return null
+        return verifier.verify(first)
+    }
 }
+
+/** 首包断言的说明文案：通过则无需解释，未探测或不通过都要说清原因 */
+private fun StreamVerification?.note(): String? =
+    when (this) {
+        null, StreamVerification.Unverified ->
+            "首包未探测（当前环境不支持），导入前建议先手动试播一次"
+        StreamVerification.Playable -> null
+        is StreamVerification.NotPlayable -> reason
+    }
