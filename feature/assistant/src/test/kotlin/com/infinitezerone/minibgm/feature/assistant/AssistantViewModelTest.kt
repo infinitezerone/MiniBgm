@@ -61,12 +61,25 @@ class AssistantViewModelTest {
 
         var capturedHistories = mutableListOf<List<Pair<String, String>>>()
 
+        /** 非 null 时 execute 挂起等待，用于模拟长时间运行的取消场景 */
+        var executeGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+        /** execute 被取消时置 true */
+        var wasCancelled = false
+            private set
+
         override suspend fun execute(
             prompt: String,
             history: List<Pair<String, String>>,
         ): AppResult<String> {
             prompts.add(prompt)
             capturedHistories.add(history)
+            try {
+                executeGate?.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                wasCancelled = true
+                throw e
+            }
             return executeResult
         }
 
@@ -673,6 +686,419 @@ class AssistantViewModelTest {
         }
 
     @Test
+    fun stopGeneration_cancels_run_and_appends_stopped_message() =
+        runTest {
+            val agentService = FakeAgentService()
+            agentService.executeGate = kotlinx.coroutines.CompletableDeferred()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendMessage("卡住的请求")
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.isLoading)
+
+            viewModel.stopGeneration()
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isLoading)
+            assertTrue(agentService.wasCancelled, "取消应传导到智能体执行")
+            val lastMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertEquals("⏹ 已停止生成。", lastMsg.content)
+            assertEquals(MessageRole.ASSISTANT, lastMsg.role)
+            assertFalse(lastMsg.isError)
+        }
+
+    @Test
+    fun stopGeneration_isNoOp_whenIdle() =
+        runTest {
+            val agentService = FakeAgentService(executeResult = AppResult.Success("回答"))
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendMessage("问题")
+            advanceUntilIdle()
+
+            viewModel.stopGeneration()
+            advanceUntilIdle()
+
+            // 空闲时停止不应追加消息
+            assertEquals(2, viewModel.uiState.value.messages.size)
+            assertFalse(viewModel.uiState.value.isLoading)
+        }
+
+    @Test
+    fun retryAfterError_resends_last_user_prompt_without_new_user_bubble() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService =
+                FakeAgentService(
+                    executeResult = AppResult.Error(IllegalStateException("boom"), message = "请求失败"),
+                )
+            val viewModel =
+                AssistantViewModel(agentService, fakeSettingsRepository, assistantRepository = fakeRepo)
+
+            viewModel.sendMessage("问题 1")
+            advanceUntilIdle()
+
+            val errorMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertTrue(errorMsg.isError)
+
+            agentService.executeResult = AppResult.Success("重试后的回答")
+            viewModel.retryAfterError(errorMsg.id)
+            advanceUntilIdle()
+
+            assertEquals(listOf("问题 1", "问题 1"), agentService.prompts, "重试应原样重发上一条用户输入")
+            val messages = viewModel.uiState.value.messages
+            // 用户消息不重复追加，且重试成功后错误气泡被移除：user, assistant(重试成功)
+            assertEquals(2, messages.size)
+            assertEquals(MessageRole.ASSISTANT, messages[1].role)
+            assertEquals("重试后的回答", messages[1].content)
+            assertFalse(viewModel.uiState.value.isLoading)
+        }
+
+    @Test
+    fun retryAfterError_removes_error_from_persisted_history_on_success() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService =
+                FakeAgentService(
+                    executeResult = AppResult.Error(IllegalStateException("boom"), message = "请求失败"),
+                )
+            val viewModel =
+                AssistantViewModel(agentService, fakeSettingsRepository, assistantRepository = fakeRepo)
+
+            viewModel.sendMessage("问题")
+            advanceUntilIdle()
+            assertEquals(2, fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first().size, "user + error 均已持久化")
+
+            val errorMsgId =
+                viewModel.uiState.value.messages
+                    .last()
+                    .id
+            agentService.executeResult = AppResult.Success("重试成功")
+            viewModel.retryAfterError(errorMsgId)
+            advanceUntilIdle()
+
+            val saved = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
+            assertEquals(2, saved.size, "持久化历史 = user + 重试成功的新回答（错误消息已删）")
+            assertTrue(saved.none { it.id == errorMsgId })
+        }
+
+    @Test
+    fun retryAfterError_keeps_error_when_retry_fails_again() =
+        runTest {
+            val agentService =
+                FakeAgentService(
+                    executeResult = AppResult.Error(IllegalStateException("boom"), message = "请求失败"),
+                )
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendMessage("问题")
+            advanceUntilIdle()
+            val firstError =
+                viewModel.uiState.value.messages
+                    .last()
+
+            agentService.executeResult = AppResult.Error(IllegalStateException("still bad"), message = "仍然失败")
+            viewModel.retryAfterError(firstError.id)
+            advanceUntilIdle()
+
+            val messages = viewModel.uiState.value.messages
+            assertEquals(3, messages.size, "重试再失败：原错误保留 + 新错误追加")
+            assertTrue(messages[1].isError)
+            assertTrue(messages[2].isError)
+            assertEquals("❌ 执行出错：仍然失败", messages[2].content)
+        }
+
+    @Test
+    fun retryAfterError_ignores_nonError_or_unknown_message() =
+        runTest {
+            val agentService = FakeAgentService(executeResult = AppResult.Success("回答"))
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.sendMessage("问题")
+            advanceUntilIdle()
+
+            val normalMsg =
+                viewModel.uiState.value.messages
+                    .last()
+            assertFalse(normalMsg.isError)
+            viewModel.retryAfterError(normalMsg.id)
+            advanceUntilIdle()
+            viewModel.retryAfterError("不存在的 id")
+            advanceUntilIdle()
+
+            assertEquals(1, agentService.prompts.size, "非错误消息与未知 id 不应触发重试")
+        }
+
+    @Test
+    fun saveAiProfile_creates_and_activates_profile() =
+        runTest {
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            val config =
+                AiConfig(
+                    endpoint = "https://api.example.com/v1",
+                    apiKey = "key-a",
+                    model = "model-a",
+                    provider = AiConfig.PROVIDER_CUSTOM,
+                )
+            viewModel.saveAiProfile(profileId = null, name = " 端点A ", config = config)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(1, state.aiProfiles.size)
+            assertEquals("端点A", state.aiProfiles[0].name)
+            assertEquals(state.aiProfiles[0].id, state.activeProfileId, "保存后应立即启用")
+            assertEquals(config, viewModel.uiState.value.aiConfig)
+        }
+
+    @Test
+    fun saveAiProfile_withExistingId_updatesInPlace() =
+        runTest {
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            val original =
+                AiConfig(endpoint = "https://old.example.com/v1", apiKey = "k1", model = "m1", provider = AiConfig.PROVIDER_CUSTOM)
+            viewModel.saveAiProfile(profileId = null, name = "方案一", config = original)
+            advanceUntilIdle()
+            val savedId =
+                viewModel.uiState.value.aiProfiles
+                    .single()
+                    .id
+
+            val updated = original.copy(apiKey = "k2")
+            viewModel.saveAiProfile(profileId = savedId, name = "方案一", config = updated)
+            advanceUntilIdle()
+
+            val profiles = viewModel.uiState.value.aiProfiles
+            assertEquals(1, profiles.size, "同 id 保存应覆盖而非追加")
+            assertEquals("k2", profiles.single().config.apiKey)
+            assertEquals(savedId, viewModel.uiState.value.activeProfileId)
+        }
+
+    @Test
+    fun saveAiProfile_ignores_blank_name() =
+        runTest {
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            viewModel.saveAiProfile(profileId = null, name = "   ", config = AiConfig())
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.aiProfiles
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun activateAiProfile_switches_active_config() =
+        runTest {
+            val configA = AiConfig(endpoint = "https://a.example.com/v1", apiKey = "ka", model = "ma", provider = AiConfig.PROVIDER_CUSTOM)
+            val configB = AiConfig(endpoint = "https://b.example.com/v1", apiKey = "kb", model = "mb", provider = AiConfig.PROVIDER_CUSTOM)
+            fakeSettingsRepository.setAiProfiles(
+                listOf(
+                    com.infinitezerone.minibgm.core.model
+                        .AiConfigProfile(id = "prof-a", name = "A", config = configA),
+                    com.infinitezerone.minibgm.core.model
+                        .AiConfigProfile(id = "prof-b", name = "B", config = configB),
+                ),
+            )
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            viewModel.activateAiProfile("prof-b")
+            advanceUntilIdle()
+
+            assertEquals(configB, viewModel.uiState.value.aiConfig, "启用方案应切换生效配置")
+            assertEquals("prof-b", viewModel.uiState.value.activeProfileId)
+        }
+
+    @Test
+    fun activateAiProfile_unknown_id_isNoOp() =
+        runTest {
+            val configA = AiConfig(endpoint = "https://a.example.com/v1", apiKey = "ka", model = "ma", provider = AiConfig.PROVIDER_CUSTOM)
+            fakeSettingsRepository.setAiProfiles(
+                listOf(
+                    com.infinitezerone.minibgm.core.model
+                        .AiConfigProfile(id = "prof-a", name = "A", config = configA),
+                ),
+            )
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            viewModel.activateAiProfile("不存在的 id")
+            advanceUntilIdle()
+
+            assertEquals("", viewModel.uiState.value.activeProfileId)
+        }
+
+    @Test
+    fun deleteAiProfile_removes_and_clears_active_marker() =
+        runTest {
+            val configA = AiConfig(endpoint = "https://a.example.com/v1", apiKey = "ka", model = "ma", provider = AiConfig.PROVIDER_CUSTOM)
+            fakeSettingsRepository.setAiProfiles(
+                listOf(
+                    com.infinitezerone.minibgm.core.model
+                        .AiConfigProfile(id = "prof-a", name = "A", config = configA),
+                ),
+            )
+            val agentService = FakeAgentService()
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+            advanceUntilIdle()
+
+            viewModel.activateAiProfile("prof-a")
+            advanceUntilIdle()
+            viewModel.deleteAiProfile("prof-a")
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.aiProfiles
+                    .isEmpty(),
+            )
+            assertEquals("", viewModel.uiState.value.activeProfileId, "删除启用中的方案应清除启用标记")
+        }
+
+    @Test
+    fun switchSession_loads_that_sessions_messages() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService = FakeAgentService()
+            val viewModel =
+                AssistantViewModel(agentService, fakeSettingsRepository, assistantRepository = fakeRepo)
+            advanceUntilIdle()
+            val firstId = viewModel.uiState.value.activeSessionId
+            assertTrue(firstId.isNotBlank())
+
+            agentService.executeResult = AppResult.Success("第一会话回答")
+            viewModel.sendMessage("第一会话的问题")
+            advanceUntilIdle()
+
+            viewModel.createNewSession()
+            advanceUntilIdle()
+            val secondId = viewModel.uiState.value.activeSessionId
+            assertTrue(secondId != firstId, "新建后应切到新会话")
+            assertTrue(
+                viewModel.uiState.value.messages
+                    .isEmpty(),
+                "新会话应从空消息开始",
+            )
+
+            viewModel.switchSession(firstId)
+            advanceUntilIdle()
+            assertEquals(firstId, viewModel.uiState.value.activeSessionId)
+            assertTrue(
+                viewModel.uiState.value.messages
+                    .any { it.content == "第一会话的问题" },
+                "切回应恢复原会话消息",
+            )
+        }
+
+    @Test
+    fun createNewSession_skips_when_current_session_is_empty() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val viewModel =
+                AssistantViewModel(FakeAgentService(), fakeSettingsRepository, assistantRepository = fakeRepo)
+            advanceUntilIdle()
+            val before = viewModel.uiState.value.sessions.size
+
+            viewModel.createNewSession()
+            advanceUntilIdle()
+
+            assertEquals(before, viewModel.uiState.value.sessions.size, "空会话下不应堆积新会话")
+        }
+
+    @Test
+    fun deleteSession_active_self_heals_to_remaining_session() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val viewModel =
+                AssistantViewModel(FakeAgentService(), fakeSettingsRepository, assistantRepository = fakeRepo)
+            advanceUntilIdle()
+            val firstId = viewModel.uiState.value.activeSessionId
+
+            viewModel.sendMessage("第一会话的问题")
+            advanceUntilIdle()
+            viewModel.createNewSession()
+            advanceUntilIdle()
+            val secondId = viewModel.uiState.value.activeSessionId
+            assertTrue(secondId != firstId)
+
+            viewModel.switchSession(firstId)
+            advanceUntilIdle()
+            viewModel.deleteSession(firstId)
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.sessions
+                    .none { it.id == firstId },
+            )
+            assertEquals(secondId, viewModel.uiState.value.activeSessionId, "删除激活会话应自愈到剩余会话")
+        }
+
+    @Test
+    fun first_user_message_renames_new_session() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val agentService = FakeAgentService()
+            val viewModel =
+                AssistantViewModel(agentService, fakeSettingsRepository, assistantRepository = fakeRepo)
+            advanceUntilIdle()
+
+            agentService.executeResult = AppResult.Success("回答")
+            viewModel.sendMessage("帮我找芙莉莲的播放源")
+            advanceUntilIdle()
+
+            val sessions = fakeRepo.getSessions().first()
+            assertEquals(1, sessions.size)
+            assertEquals("帮我找芙莉莲的播放源", sessions.first().title, "首条提问应自动命名会话")
+        }
+
+    @Test
+    fun renameSession_updates_title_and_ignores_blank() =
+        runTest {
+            val fakeRepo = FakeAssistantRepository()
+            val viewModel =
+                AssistantViewModel(FakeAgentService(), fakeSettingsRepository, assistantRepository = fakeRepo)
+            advanceUntilIdle()
+            val sessionId = viewModel.uiState.value.activeSessionId
+
+            viewModel.renameSession(sessionId, "  我的找源记录  ")
+            advanceUntilIdle()
+            assertEquals(
+                "我的找源记录",
+                fakeRepo
+                    .getSessions()
+                    .first()
+                    .first()
+                    .title,
+            )
+
+            // 空白标题被忽略
+            viewModel.renameSession(sessionId, "   ")
+            advanceUntilIdle()
+            assertEquals(
+                "我的找源记录",
+                fakeRepo
+                    .getSessions()
+                    .first()
+                    .first()
+                    .title,
+            )
+        }
+
+    @Test
     fun sendMessage_error_displays_friendly_message_from_result() =
         runTest {
             val agentService =
@@ -772,7 +1198,7 @@ class AssistantViewModelTest {
             viewModel.sendMessage("新问题")
             advanceUntilIdle()
 
-            val savedMessages = fakeRepo.getMessages().first()
+            val savedMessages = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
             assertEquals(2, savedMessages.size)
             assertEquals(ChatMessageRole.USER, savedMessages[0].role)
             assertEquals("新问题", savedMessages[0].content)
@@ -818,7 +1244,7 @@ class AssistantViewModelTest {
             viewModel.sendMessage("打卡第5集")
             advanceUntilIdle()
 
-            val savedMessages = fakeRepo.getMessages().first()
+            val savedMessages = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
             assertEquals(2, savedMessages.size)
             val actionId =
                 savedMessages[1]
@@ -830,7 +1256,7 @@ class AssistantViewModelTest {
             viewModel.approveAction(actionId)
             advanceUntilIdle()
 
-            val updatedMessages = fakeRepo.getMessages().first()
+            val updatedMessages = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
             assertEquals(ActionCardStatus.SUCCESS, updatedMessages[1].pendingActions.first().status)
         }
 
@@ -870,7 +1296,7 @@ class AssistantViewModelTest {
             viewModel.sendMessage("打卡第5集")
             advanceUntilIdle()
 
-            val savedMessages = fakeRepo.getMessages().first()
+            val savedMessages = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
             val actionId =
                 savedMessages[1]
                     .pendingActions
@@ -881,7 +1307,7 @@ class AssistantViewModelTest {
             viewModel.rejectAction(actionId)
             advanceUntilIdle()
 
-            val updatedMessages = fakeRepo.getMessages().first()
+            val updatedMessages = fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first()
             assertEquals(ActionCardStatus.REJECTED, updatedMessages[1].pendingActions.first().status)
         }
 
@@ -899,12 +1325,12 @@ class AssistantViewModelTest {
 
             viewModel.sendMessage("测试")
             advanceUntilIdle()
-            assertEquals(2, fakeRepo.getMessages().first().size)
+            assertEquals(2, fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first().size)
 
             viewModel.clearConversation()
             advanceUntilIdle()
 
-            assertTrue(fakeRepo.getMessages().first().isEmpty(), "清空会话后 Repository 应为空")
+            assertTrue(fakeRepo.getMessages(FakeAssistantRepository.DEFAULT_SESSION_ID).first().isEmpty(), "清空会话后 Repository 应为空")
             assertTrue(
                 viewModel.uiState.value.messages
                     .isEmpty(),
