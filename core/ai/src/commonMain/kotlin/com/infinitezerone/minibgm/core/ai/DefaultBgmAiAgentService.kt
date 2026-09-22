@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.ai
 import ai.koog.agents.core.agent.AIAgent
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.http.client.ktor.KtorKoogHttpClient
+import ai.koog.prompt.executor.clients.ConnectionTimeoutConfig
 import ai.koog.prompt.executor.clients.LLMClient
 import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
 import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
@@ -16,11 +17,15 @@ import com.infinitezerone.minibgm.core.ai.tools.PlayableSourceTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logger
+import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -38,6 +43,52 @@ import kotlinx.serialization.json.contentOrNull
 
 /** 单次 AI 执行的硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
 const val AI_RUN_TIMEOUT_MS = 180_000L
+
+/**
+ * 单轮模型请求的超时。koog 的 [ConnectionTimeoutConfig] 默认 requestTimeout 是 900 秒（15 分钟），
+ * 端点不响应时会一直挂到外层 [AI_RUN_TIMEOUT_MS] 兜底——用户面对的是整整 3 分钟的无反馈等待。
+ * 单轮给 60 秒：正常推理远用不满，死端点则快速失败并给出可读错误。
+ */
+const val AI_REQUEST_TIMEOUT_MS = 60_000L
+
+/** 单轮模型请求的超时配置：见 [AI_REQUEST_TIMEOUT_MS] 的说明 */
+private val aiTimeoutConfig =
+    ConnectionTimeoutConfig(
+        requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS,
+        connectTimeoutMillis = 15_000,
+        socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS,
+    )
+
+/**
+ * koog 与模型端点通信用的 HTTP client 工厂。
+ *
+ * 必须显式构造 baseClient 并装上 Logging：koog 自带的内部日志走 kotlin-logging，
+ * 在没有 SLF4J 后端的 Android 上会静默丢弃——不装这个，"第二轮请求发出去了没有、端点回了什么"
+ * 在 logcat 里完全不可见（排查过一次 3 分钟黑洞，全部日志只有一句 TimeoutCancellationException）。
+ * LogLevel.INFO 只记录请求生命周期与状态码，不含 header 与 body，不会泄漏 API key。
+ */
+private val koogClientFactory: KtorKoogHttpClient.Factory by lazy {
+    KtorKoogHttpClient.Factory(
+        baseClient =
+            HttpClient {
+                val httpLogger = bgmLogger("Bgm/AiHttp")
+                install(Logging) {
+                    logger =
+                        object : Logger {
+                            override fun log(message: String) {
+                                httpLogger.d { message }
+                            }
+                        }
+                    level = LogLevel.INFO
+                }
+                install(HttpTimeout) {
+                    requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS
+                    connectTimeoutMillis = 15_000
+                    socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS
+                }
+            },
+    )
+}
 
 /**
  * 默认智能体执行服务，利用 JetBrains Koog 框架与 SettingsRepository 提供的 AI 配置进行交互。
@@ -59,7 +110,7 @@ class DefaultBgmAiAgentService(
             when {
                 config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true) -> {
                     OllamaClient(
-                        httpClientFactory = KtorKoogHttpClient.Factory(),
+                        httpClientFactory = koogClientFactory,
                         baseUrl = config.endpoint.ifBlank { OllamaClient.DEFAULT_BASE_URL },
                     )
                 }
@@ -76,8 +127,9 @@ class DefaultBgmAiAgentService(
                             OpenAIClientSettings(
                                 baseUrl = rawEndpoint,
                                 chatCompletionsPath = "chat/completions",
+                                timeoutConfig = aiTimeoutConfig,
                             ),
-                        httpClientFactory = KtorKoogHttpClient.Factory(),
+                        httpClientFactory = koogClientFactory,
                     )
                 }
                 else -> {
@@ -99,8 +151,9 @@ class DefaultBgmAiAgentService(
                             OpenAIClientSettings(
                                 baseUrl = baseUrl,
                                 chatCompletionsPath = chatCompletionsPath,
+                                timeoutConfig = aiTimeoutConfig,
                             ),
-                        httpClientFactory = KtorKoogHttpClient.Factory(),
+                        httpClientFactory = koogClientFactory,
                     )
                 }
             }
