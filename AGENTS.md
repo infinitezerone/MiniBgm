@@ -85,7 +85,22 @@ No inventory here — `settings.gradle.kts` and the directory tree are authorita
 - One commit = one purpose: don't mix unrelated reformatting or churn into a functional change.
 - **This repo is colocated with jj** (`.jj/` shares the same working copy; Git cannot see it, so never add `.jj` to `.gitignore`). Never run mutating Git commands here — `git commit`, `git rebase`, `git reset`, `git checkout` bypass jj's operation log and can leave the working-copy commit pointing at a stale parent, making changes look lost. Use `jj` for history (`jj commit -m`, `jj describe -m`, `jj bookmark set main -r @`, `jj undo`) and `git` only for clone / tags / CI.
 - **Reading state (the part that gets misreported)**: `git HEAD` is permanently detached onto jj's working-copy commit — that is the normal state, not breakage. Never report "detached HEAD needs fixing" and never "fix" it with `git switch`; a `git log` or IDE Git panel that still shows the parent commit is the same artifact (only bookmarks are exported to `refs/heads`). `jj st`'s `Working copy changes:` is the commit's own diff against its parent, not unsaved leftovers, and a bookmark printed with `*` is merely ahead of its `@origin`. Also: "back on a branch" means `jj bookmark set <bookmark> -r @`, not a checkout. Cite revisions by jj change id — git hashes change on every rewrite.
-- **Writing state — `@` is a commit, so editing right after a push rewrites that pushed commit**: the local chain diverges silently (an already-pushed revision ends up *above* the new work, or drops off the chain entirely) and the next push stops being a fast-forward. Run `jj new -m "<next intent>"` (or `jj commit`) as soon as a push lands, before touching files. `jj split` rewrites history the same way, and it does not put the selected paths where you might expect — after any `split`/`rebase`, re-read `jj log --no-graph` and check `git merge-base --is-ancestor <pushed-hash> HEAD`. If a pushed commit got amended, `jj rebase -s <first-diverged-commit> -d '<bookmark>@origin'` restores a fast-forwardable chain.
+- **Writing state — `@` is a commit, so editing right after a push rewrites that pushed commit**: the local chain diverges silently (an already-pushed revision ends up *above* the new work, or drops off the chain entirely) and the next push stops being a fast-forward. Make the intent explicit in the command itself, so it cannot be forgotten:
+
+  ```bash
+  jj git push --bookmark <name> && jj new -m "<next intent>"
+  ```
+
+  `jj split` rewrites history the same way and does not put the selected paths where you might expect — after any `split`/`rebase`, re-read `jj log --no-graph` (selected paths typically land in the **parent** position, `-m` describes them). To recover when a pushed commit was amended, **do not reach for `jj rebase`**: it refreshes the committer date, so the pushed hash can never be reproduced and the push stays non-fast-forward. Move the work onto a commit that is a direct child of the pushed one instead:
+
+  ```bash
+  jj new '<bookmark>@origin' -m "<intent>"
+  jj restore --from '<diverged-change-id>/0' --to @ <paths...>
+  jj bookmark set <bookmark> -r @ --allow-backwards
+  jj abandon '<diverged-change-id>/0'
+  ```
+
+  A diverged change id has multiple visible instances and `jj restore --from <id>` silently picks one of them — always spell it `<change-id>/<offset>` (check both with `jj diff -r '<id>/0' --stat` before restoring, or the restore will quietly revert your files).
 - **Content gates are unaffected by the VCS**: `spotlessCheck` / `crapCheck` / `:core:testing:testAndroid` / the per-module test tasks / `assembleDebug` all validate file content, not history. Keep running `./gradlew spotlessApply` before committing — CI runs them regardless of which client made the commit.
 
 ## Release Process
