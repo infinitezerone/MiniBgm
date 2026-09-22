@@ -192,26 +192,6 @@ class FakeSettingsRepository(
         playbackPositionsState.value = positions
     }
 
-    var communityDiscoveryResult:
-        com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>> =
-        com.infinitezerone.minibgm.core.common.AppResult
-            .Success(emptyList())
-
-    override suspend fun discoverCommunityPlaybackSources(
-        customSubscriptionUrl: String?,
-    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSource>> =
-        communityDiscoveryResult
-
-    var communitySearchResult:
-        com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate>> =
-        com.infinitezerone.minibgm.core.common.AppResult
-            .Success(emptyList())
-
-    override suspend fun searchCommunitySubscriptions(
-        keywords: String,
-    ): com.infinitezerone.minibgm.core.common.AppResult<List<com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate>> =
-        communitySearchResult
-
     var validationReportResult:
         com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport> =
         com.infinitezerone.minibgm.core.common.AppResult.Success(
