@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  允许明文 HTTP 传输。
+
+  原因：播放源规则来自社区/用户自建采集站，其中相当一部分的接口页与媒体直链就是 http；
+  播放器沿用平台 HttpURLConnection（media3 DefaultHttpDataSource），会被 cleartext 策略直接拦截，
+  表现为"嗅探到了直链但无法起播"，且失败信息无法指向真实原因。
+
+  边界（刻意保持）：
+  - 只放开明文传输，不放宽 TLS 校验——仍只信任系统 CA，不信任用户导入的 CA
+  - 凭据类流量（Bangumi OAuth / AniList）固定走 https 常量端点，与本次放开无关
+  - 嗅探层走 Ktor CIO（不查本策略），放开后播放器与其行为一致，消除"能解析却不能播"的割裂
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
