@@ -6,9 +6,11 @@ import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleRecorder
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
+import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.core.model.PlayableSource
@@ -98,6 +100,55 @@ class PlaybackRuleDiagnosticsTools(
         val result: PageInspectionResult = playbackResolverRepository.inspectPage(url)
         return json.encodeToString(result)
     }
+
+    @Tool
+    @LLMDescription(
+        "Turn a network audit trace (what traceNetworkTraffic just returned) into a rule skeleton. " +
+            "It extracts the REAL request sequence (page -> API calls -> media) with the exact URLs, methods " +
+            "and replayable headers that were observed, substituting {title}/{ep} into them. " +
+            "Call this INSTEAD OF inventing an interface URL from scratch. " +
+            "The skeleton's EXTRACT_STREAM regex is deliberately left empty because an audit cannot see " +
+            "response bodies — fill it yourself from the real response, then run testPlaybackRule. " +
+            "Read the returned notes: they list what the audit could NOT capture (POST bodies, requests that " +
+            "only fire after a click), so you can tell a structural gap from something worth retrying.",
+    )
+    suspend fun recordPlaybackRuleFromTrace(
+        @LLMDescription("JSON string previously returned by traceNetworkTraffic")
+        traceJson: String,
+        @LLMDescription("The anime title used during tracing; substituted as {title} in the skeleton")
+        sampleTitle: String,
+        @LLMDescription("Episode number substituted as {ep}; pass 0 to omit")
+        sampleEp: Int = 1,
+    ): String {
+        val trace =
+            try {
+                json.decodeFromString<NetworkAuditTrace>(traceJson)
+            } catch (e: Exception) {
+                return json.encodeToString(
+                    RuleTestOutput(
+                        success = false,
+                        ruleName = "Unknown",
+                        errorMessage = "Failed to parse traceJson: ${e.message}",
+                    ),
+                )
+            }
+        val draft =
+            PlaybackRuleRecorder.recordFromTrace(
+                trace = trace,
+                ruleName = ruleNameFromTrace(trace),
+                title = sampleTitle,
+                ep = if (sampleEp > 0) sampleEp.toString() else "",
+            )
+        return json.encodeToString(draft)
+    }
+
+    /** 站名只从本轮观测到的 URL 里取，不内置任何站点清单 */
+    private fun ruleNameFromTrace(trace: NetworkAuditTrace): String =
+        trace.finalUrl
+            .ifBlank { trace.pageUrl }
+            .substringAfter("://", "")
+            .substringBefore('/')
+            .ifBlank { "录制规则" }
 
     @Tool
     @LLMDescription(

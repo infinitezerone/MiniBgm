@@ -20,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.StepAction
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -351,6 +352,69 @@ class PlaybackRuleDiagnosticsToolsTest {
 
             assertEquals("false", obj["success"]?.jsonPrimitive?.content)
             assertTrue(store.actions.value.isEmpty(), "被拒绝的规则不该进待确认队列")
+        }
+
+    @Test
+    fun `recordPlaybackRuleFromTrace 用真实审计归纳骨架并参数化片名话数`() =
+        runTest {
+            val tools = PlaybackRuleDiagnosticsTools(RecordingResolver())
+            val title = "葬送的芙莉莲"
+            val encoded = PlaybackSourceRule.encodeParam(title)
+            val trace =
+                NetworkAuditTrace(
+                    pageUrl = "https://site.example.tv/search?q=$encoded",
+                    calls =
+                        listOf(
+                            CapturedNetworkCall(
+                                url = "https://api.example.tv/vod?wd=$encoded&ep=2",
+                                isApi = true,
+                                requestHeaders = mapOf("Referer" to "https://site.example.tv/"),
+                            ),
+                        ),
+                )
+
+            val output =
+                tools.recordPlaybackRuleFromTrace(
+                    Json.encodeToString(trace),
+                    sampleTitle = title,
+                    sampleEp = 2,
+                )
+
+            val obj = json.parseToJsonElement(output).jsonObject
+            assertEquals("site.example.tv", obj["ruleName"]?.jsonPrimitive?.content, "站名只从本轮 URL 里取")
+            val steps = obj["steps"]?.jsonArray.orEmpty()
+            assertEquals(3, steps.size)
+            val apiTemplate =
+                steps[1]
+                    .jsonObject["urlTemplate"]
+                    ?.jsonPrimitive
+                    ?.content
+                    .orEmpty()
+            assertTrue(apiTemplate.contains("{title}"), "片名要参数化，否则规则绑死在这一部番上")
+            assertTrue(
+                obj["notes"]?.jsonArray?.any { it.jsonPrimitive.content.contains("{ep}") } == true,
+                "集数不让代码猜，但必须明确要求调用方自行替换",
+            )
+            assertEquals(
+                "https://site.example.tv/",
+                steps[1]
+                    .jsonObject["headers"]
+                    ?.jsonObject
+                    ?.get("Referer")
+                    ?.jsonPrimitive
+                    ?.content,
+            )
+        }
+
+    @Test
+    fun `recordPlaybackRuleFromTrace 对无法解析的审计输入返回可读错误`() =
+        runTest {
+            val tools = PlaybackRuleDiagnosticsTools(RecordingResolver())
+
+            val output = tools.recordPlaybackRuleFromTrace("not-json", sampleTitle = "某番")
+            val obj = json.parseToJsonElement(output).jsonObject
+
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
         }
 
     @Test
