@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
@@ -12,6 +13,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -456,6 +458,203 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun sourceRule_probesPlainTitlesBeforeEpisodeSuffixedKeywords() =
+        runTest {
+            // 取源接口形态：wd= 是标题模糊搜索，一次就返回整部片子（含全部分集），
+            // 集号由解析器在结果里本地匹配，把集号写进关键词反而匹配不上
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "接口站",
+                    urlTemplate = "https://api.example.tv/provide/vod/?ac=detail&wd={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val capturedTitles = mutableListOf<String>()
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveRule(
+                        rule: PlaybackSourceRule,
+                        title: String,
+                        epNumber: Float,
+                        subjectId: Long,
+                        episodeId: Long,
+                    ): List<PlayableSource> {
+                        capturedTitles += title
+                        return emptyList()
+                    }
+                }
+
+            PlayerViewModel(
+                route =
+                    PlayerRoute(
+                        subjectId = subjectId,
+                        episodeId = episodeId,
+                        streamUrl = "",
+                        subjectName = "葬送的芙莉莲",
+                        episodeSort = 1f,
+                        initialRuleId = "rule1",
+                    ),
+                collectionRepository = FakeCollectionRepository(),
+                authRepository = FakeAuthRepository(initialLoggedIn = true),
+                settingsRepository = settings,
+                playbackResolverRepository = fakeResolver,
+            )
+            advanceUntilIdle()
+
+            assertTrue("应发出关键词尝试：$capturedTitles", capturedTitles.isNotEmpty())
+            val leadingPlain = capturedTitles.takeWhile { !it.contains(" 0") && !it.endsWith(" 1") }
+            assertTrue("纯标题应排在带集号关键词之前：$capturedTitles", leadingPlain.size >= 2)
+            assertTrue("带集号关键词应作为回退保留：$capturedTitles", capturedTitles.any { it.endsWith(" 01") })
+        }
+
+    @Test
+    fun pageRule_keepsEpisodeSuffixedKeywordFirst() =
+        runTest {
+            // 网页搜索页的文章以「标题 集号」命名，带集号能直接命中单集页，故仍集号优先
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "页面站",
+                    urlTemplate = "https://example.tv/?s={title}",
+                    kind = PlaybackRuleKind.PAGE,
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val capturedTitles = mutableListOf<String>()
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> {
+                        capturedTitles += title
+                        return emptyList()
+                    }
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            PlayerViewModel(
+                route =
+                    PlayerRoute(
+                        subjectId = subjectId,
+                        episodeId = episodeId,
+                        streamUrl = "",
+                        subjectName = "葬送的芙莉莲",
+                        episodeSort = 1f,
+                        initialRuleId = "rule1",
+                    ),
+                collectionRepository = FakeCollectionRepository(),
+                authRepository = FakeAuthRepository(initialLoggedIn = true),
+                settingsRepository = settings,
+                playbackResolverRepository = fakeResolver,
+            )
+            advanceUntilIdle()
+
+            assertTrue("应发出关键词尝试：$capturedTitles", capturedTitles.isNotEmpty())
+            assertEquals("葬送的芙莉蓮 01", capturedTitles.first())
+        }
+
+    @Test
+    fun resolveRule_givesUpAfterTotalTimeoutAndSaysSo() =
+        runTest {
+            // 串行试探必须有个总闸：单次请求卡住时也要能收手并如实告知，
+            // 而不是让用户对着"嗅探中"干等
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "慢站",
+                    urlTemplate = "https://slow.example.tv/provide/vod/?ac=detail&wd={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveRule(
+                        rule: PlaybackSourceRule,
+                        title: String,
+                        epNumber: Float,
+                        subjectId: Long,
+                        episodeId: Long,
+                    ): List<PlayableSource> {
+                        // 挂着不返回：只有真正会打断请求的超时才能收手
+                        delay(60_000)
+                        return emptyList()
+                    }
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            initialRuleId = "rule1",
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertFalse(state.isResolvingSource)
+            assertTrue("超时文案应说明已尝试次数：${state.error}", state.error?.contains("超时") == true)
+            assertEquals(0, state.resolveAttempt)
+        }
+
+    @Test
     fun episodeSniffing_noStreamFound_setsError() =
         runTest {
             val settings = FakeSettingsRepository()
@@ -497,7 +696,7 @@ class PlayerViewModelTest {
             advanceUntilIdle()
 
             val state = vm.uiState.value
-            assertTrue(state.error?.contains("未在【EmptyRule】中嗅探到可播放直链") == true)
+            assertTrue(state.error?.contains("未在【EmptyRule】中解析到") == true)
             assertFalse(state.isResolvingSource)
         }
 

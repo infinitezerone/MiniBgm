@@ -496,7 +496,11 @@ fun PlayerScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else if (uiState.isResolvingSource) {
-                        PlayerResolvingView(sourceName = uiState.currentSource?.name ?: "播放源")
+                        PlayerResolvingView(
+                            sourceName = uiState.currentSource?.name ?: "播放源",
+                            attempt = uiState.resolveAttempt,
+                            attemptTotal = uiState.resolveAttemptTotal,
+                        )
                     } else {
                         PlayerEmptyView(
                             subjectName = uiState.subjectName.ifBlank { route.subjectName },
@@ -623,7 +627,11 @@ fun PlayerScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else if (uiState.isResolvingSource) {
-                            PlayerResolvingView(sourceName = uiState.currentSource?.name ?: "播放源")
+                            PlayerResolvingView(
+                                sourceName = uiState.currentSource?.name ?: "播放源",
+                                attempt = uiState.resolveAttempt,
+                                attemptTotal = uiState.resolveAttemptTotal,
+                            )
                         } else {
                             PlayerEmptyView(
                                 subjectName = uiState.subjectName.ifBlank { route.subjectName },
@@ -770,6 +778,8 @@ fun PlayerScreen(
 @Composable
 private fun PlayerResolvingView(
     sourceName: String,
+    attempt: Int = 0,
+    attemptTotal: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -787,7 +797,13 @@ private fun PlayerResolvingView(
                 modifier = Modifier.size(40.dp),
             )
             Text(
-                text = "正在从【$sourceName】嗅探视频直链...",
+                // 关键词是逐个串行试探的，把进度亮出来——否则用户只看到转圈，不知道在等第几步
+                text =
+                    if (attemptTotal > 0) {
+                        "正在从【$sourceName】嗅探视频直链...（第 $attempt/$attemptTotal 次尝试）"
+                    } else {
+                        "正在从【$sourceName】嗅探视频直链..."
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White,
             )
