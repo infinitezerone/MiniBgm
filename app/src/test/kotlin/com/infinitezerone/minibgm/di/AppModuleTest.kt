@@ -99,7 +99,8 @@ class AppModuleTest : KoinTest {
                         single<SearchRepository> { fakeSearch }
                         single<CollectionRepository> { FakeCollectionRepository() }
                         single<AuthRepository> { FakeAuthRepository() }
-                        single { SearchViewModel(get(), get(), get()) }
+                        single<ScheduleRepository> { FakeScheduleRepository() }
+                        single { SearchViewModel(get(), get(), get(), get()) }
                     },
                 )
             }
