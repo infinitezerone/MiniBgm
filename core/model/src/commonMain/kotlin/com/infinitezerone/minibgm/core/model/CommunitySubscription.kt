@@ -33,20 +33,6 @@ data class DiscoveredSource(
 }
 
 /**
- * 公网检索发现的候选订阅信息。
- */
-@Serializable
-data class DiscoveredSubscriptionCandidate(
-    val name: String,
-    val subscriptionUrl: String,
-    val description: String = "",
-    val sourceCount: Int = 0,
-    val aliveCount: Int = 0,
-    val averageLatencyMs: Long = 0L,
-    val sampleSources: List<String> = emptyList(),
-)
-
-/**
  * 订阅校验与连通性探活报告。
  */
 @Serializable
