@@ -70,6 +70,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -88,6 +89,7 @@ fun PlaybackRulesScreen(
     viewModel: PlaybackRulesViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val siteProbeState by viewModel.siteProbe.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -283,6 +285,9 @@ fun PlaybackRulesScreen(
                             trailing = {
                                 if (showAdvancedRules) {
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
+                                            Text("探测")
+                                        }
                                         TextButton(onClick = { isImportingRuleJson = true }) {
                                             Text("导入")
                                         }
@@ -343,11 +348,11 @@ fun PlaybackRulesScreen(
                 isAddingRule = false
                 ruleToEdit = null
             },
-            onConfirm = { name, url, desc, kind, headersText ->
+            onConfirm = { name, url, desc, kind, parserType, headersText ->
                 if (target != null) {
-                    viewModel.updateRule(target.id, name, url, desc, kind, headersText)
+                    viewModel.updateRule(target.id, name, url, desc, kind, parserType, headersText)
                 } else {
-                    viewModel.addRule(name, url, desc, kind, headersText)
+                    viewModel.addRule(name, url, desc, kind, parserType, headersText)
                 }
                 isAddingRule = false
                 ruleToEdit = null
@@ -363,6 +368,17 @@ fun PlaybackRulesScreen(
                 viewModel.importRulesFromJson(json)
                 isImportingRuleJson = false
             },
+        )
+    }
+
+    // 站点探测对话框：贴域名 → 试标准 MacCMS 接口 → 命中即落成取源规则
+    if (siteProbeState.isVisible) {
+        SiteProbeDialog(
+            state = siteProbeState,
+            onInputChanged = viewModel::onProbeInputChanged,
+            onProbe = viewModel::startSiteProbe,
+            onConfirm = viewModel::addProbedRule,
+            onDismiss = viewModel::closeSiteProbe,
         )
     }
 
@@ -902,12 +918,20 @@ private fun PlaybackRuleCard(
 private fun RuleEditDialog(
     initialRule: PlaybackSourceRule?,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, url: String, desc: String, kind: PlaybackRuleKind, headersText: String) -> Unit,
+    onConfirm: (
+        name: String,
+        url: String,
+        desc: String,
+        kind: PlaybackRuleKind,
+        parserType: RuleParserType,
+        headersText: String,
+    ) -> Unit,
 ) {
     var name by remember(initialRule) { mutableStateOf(initialRule?.name ?: "") }
     var urlTemplate by remember(initialRule) { mutableStateOf(initialRule?.urlTemplate ?: "") }
     var description by remember(initialRule) { mutableStateOf(initialRule?.description ?: "") }
     var kind by remember(initialRule) { mutableStateOf(initialRule?.kind ?: PlaybackRuleKind.PAGE) }
+    var parserType by remember(initialRule) { mutableStateOf(initialRule?.parserType ?: RuleParserType.AUTO) }
     var headersText by remember(initialRule) {
         mutableStateOf(
             initialRule
@@ -978,6 +1002,33 @@ private fun RuleEditDialog(
                 }
 
                 if (kind == PlaybackRuleKind.SOURCE) {
+                    // 解析器决定播放时走哪条抽取路径。选错不会报错，只会静默降级成页面嗅探，
+                    // 所以这里让人显式选，而不是一律 AUTO（「探测」入口不走这条，它永落 MACCMS）。
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "解析器",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            RuleParserType.entries.forEach { option ->
+                                FilterChip(
+                                    selected = parserType == option,
+                                    onClick = { parserType = option },
+                                    label = {
+                                        Text(
+                                            text = parserTypeLabel(option),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = headersText,
                         onValueChange = { headersText = it },
@@ -1000,7 +1051,7 @@ private fun RuleEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name, urlTemplate, description, kind, headersText) },
+                onClick = { onConfirm(name, urlTemplate, description, kind, parserType, headersText) },
                 enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
             ) {
                 Text("保存")
@@ -1065,6 +1116,112 @@ private fun RuleImportDialog(
     )
 }
 
+/**
+ * 站点探测对话框：贴域名 → 试标准 MacCMS 采集接口 → 命中即落成取源规则。
+ *
+ * 这里**不给形态选择**——探到的只可能是接口端点，落库必然是 `SOURCE + MACCMS`。
+ * 让用户在"跳转页面 / 取源接口"之间选反而可能选错，选成页面会让专用解析器在播放时被丢掉。
+ */
+@Composable
+private fun SiteProbeDialog(
+    state: SiteProbeUiState,
+    onInputChanged: (String) -> Unit,
+    onProbe: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("探测站点") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "填入站点域名，会试它是否符合标准采集接口（/api.php/provide/vod/）。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = state.input,
+                    onValueChange = onInputChanged,
+                    singleLine = true,
+                    enabled = !state.isProbing,
+                    placeholder = {
+                        Text("example.com", style = MaterialTheme.typography.bodySmall)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (state.isProbing) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("正在探测…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                state.result?.let { result ->
+                    Surface(
+                        shape = BgmShapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(12.dp),
+                        ) {
+                            Text(
+                                text = "✓ 识别为 MacCMS 采集接口",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Text(
+                                text = "接口当前返回 ${result.sampleCount} 条内容，规则将以「取源接口」形态添加",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Text(
+                                text = result.ruleTemplate,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                            )
+                        }
+                    }
+                }
+
+                state.errorMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (state.result != null) {
+                Button(onClick = onConfirm) {
+                    Text("添加规则")
+                }
+            } else {
+                Button(
+                    onClick = onProbe,
+                    enabled = !state.isProbing && state.input.isNotBlank(),
+                ) {
+                    Text("探测")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
+}
+
 /** 续播记录单条：展示主机名与上次观看位置，可单条清除 */
 @Composable
 private fun PlaybackPositionRow(
@@ -1113,6 +1270,15 @@ private fun PlaybackPositionRow(
         }
     }
 }
+
+/** 解析器选项的短标签：四个 chip 要排在一行，长名字排不下 */
+private fun parserTypeLabel(type: RuleParserType): String =
+    when (type) {
+        RuleParserType.AUTO -> "自动"
+        RuleParserType.MACCMS -> "MacCMS"
+        RuleParserType.STREMIO -> "Stremio"
+        RuleParserType.PIPELINE -> "流水线"
+    }
 
 private fun hostLabelOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
 
