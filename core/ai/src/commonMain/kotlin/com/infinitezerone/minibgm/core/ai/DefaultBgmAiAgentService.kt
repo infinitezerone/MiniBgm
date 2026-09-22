@@ -293,6 +293,11 @@ class DefaultBgmAiAgentService(
         } catch (e: TimeoutCancellationException) {
             AiToolActivity.clear()
             AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 用户主动停止（或外层作用域取消）：取消必须继续传播，
+            // 吞掉它会破坏结构化并发，还会把"已停止"伪装成一条错误消息追加进会话（真机实测踩过）
+            AiToolActivity.clear()
+            throw e
         } catch (e: Exception) {
             AiToolActivity.clear()
             AppResult.Error(e, friendlyAiError(config, e))
