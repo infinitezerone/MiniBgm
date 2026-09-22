@@ -35,6 +35,7 @@ val aiModule =
             com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools(
                 playbackResolverRepository = get(),
                 pendingActionStore = get<PendingActionStore>(),
+                playbackSourceVerifier = getOrNull(),
             )
         }
         single<PendingActionExecutor> {

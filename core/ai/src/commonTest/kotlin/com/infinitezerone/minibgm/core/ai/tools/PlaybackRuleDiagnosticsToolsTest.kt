@@ -2,6 +2,8 @@ package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
+import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
 import com.infinitezerone.minibgm.core.model.CapturedNetworkCall
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
@@ -190,20 +192,20 @@ class PlaybackRuleDiagnosticsToolsTest {
                             siteUrl = siteUrl,
                             isReachable = true,
                             isAdParking = false,
-                            title = "Anime1 动画",
-                            sampleEpisodeUrl = "https://anime1.me/12345",
+                            title = "示例站 动画",
+                            sampleEpisodeUrl = "https://example.tv/12345",
                             hasSearchBox = true,
-                            searchUrlPattern = "https://anime1.me/?s={title}",
+                            searchUrlPattern = "https://example.tv/?s={title}",
                         )
                 }
 
             val tools = PlaybackRuleDiagnosticsTools(fakeRepo)
-            val output = tools.probeSiteAndFindSample("https://anime1.me/", "芙莉莲")
+            val output = tools.probeSiteAndFindSample("https://example.tv/", "芙莉莲")
             val obj = json.parseToJsonElement(output).jsonObject
 
             assertEquals("true", obj["isReachable"]?.jsonPrimitive?.content)
-            assertEquals("Anime1 动画", obj["title"]?.jsonPrimitive?.content)
-            assertEquals("https://anime1.me/12345", obj["sampleEpisodeUrl"]?.jsonPrimitive?.content)
+            assertEquals("示例站 动画", obj["title"]?.jsonPrimitive?.content)
+            assertEquals("https://example.tv/12345", obj["sampleEpisodeUrl"]?.jsonPrimitive?.content)
             assertEquals("true", obj["hasSearchBox"]?.jsonPrimitive?.content)
         }
 
@@ -239,34 +241,34 @@ class PlaybackRuleDiagnosticsToolsTest {
                             calls =
                                 listOf(
                                     CapturedNetworkCall(
-                                        url = "https://v.anime1.me/api",
+                                        url = "https://v.example.tv/api",
                                         method = "POST",
-                                        requestHeaders = mapOf("Referer" to "https://anime1.me/"),
+                                        requestHeaders = mapOf("Referer" to "https://example.tv/"),
                                         isApi = true,
                                     ),
                                 ),
                             mediaSources =
                                 listOf(
                                     PlayableSource(
-                                        url = "https://v.anime1.me/123.mp4",
+                                        url = "https://v.example.tv/123.mp4",
                                         kind = PlaylistEntryKind.DIRECT,
                                         label = "Direct Stream",
-                                        headers = mapOf("Referer" to "https://anime1.me/"),
+                                        headers = mapOf("Referer" to "https://example.tv/"),
                                     ),
                                 ),
                         )
                 }
 
             val tools = PlaybackRuleDiagnosticsTools(fakeRepo)
-            val output = tools.traceNetworkTraffic("https://anime1.me/12345", 5)
+            val output = tools.traceNetworkTraffic("https://example.tv/12345", 5)
             val obj = json.parseToJsonElement(output).jsonObject
 
             assertEquals("true", obj["isReachable"]?.jsonPrimitive?.content)
-            assertEquals("https://anime1.me/12345", obj["pageUrl"]?.jsonPrimitive?.content)
+            assertEquals("https://example.tv/12345", obj["pageUrl"]?.jsonPrimitive?.content)
             val calls = obj["calls"]?.toString() ?: ""
-            assertTrue(calls.contains("https://v.anime1.me/api"))
+            assertTrue(calls.contains("https://v.example.tv/api"))
             val media = obj["mediaSources"]?.toString() ?: ""
-            assertTrue(media.contains("https://v.anime1.me/123.mp4"))
+            assertTrue(media.contains("https://v.example.tv/123.mp4"))
         }
 
     @Test
@@ -318,7 +320,7 @@ class PlaybackRuleDiagnosticsToolsTest {
                         ),
                 )
 
-            val output = tools.proposePlaybackRule(Json.encodeToString(rule))
+            val output = tools.proposePlaybackRule(Json.encodeToString(rule), sampleTitle = "测试动画")
             val proposal = json.decodeFromString<ActionProposal>(output)
             val action = proposal.action as PendingAction.ImportPlaybackRules
             val stored = action.rules.single()
@@ -344,12 +346,114 @@ class PlaybackRuleDiagnosticsToolsTest {
                     parserType = RuleParserType.MACCMS,
                 )
 
-            val output = tools.proposePlaybackRule(Json.encodeToString(rule))
+            val output = tools.proposePlaybackRule(Json.encodeToString(rule), sampleTitle = "测试动画")
             val obj = json.parseToJsonElement(output).jsonObject
 
             assertEquals("false", obj["success"]?.jsonPrimitive?.content)
             assertTrue(store.actions.value.isEmpty(), "被拒绝的规则不该进待确认队列")
         }
+
+    @Test
+    fun `proposePlaybackRule 在重跑解析不到地址时不出提案`() =
+        runTest {
+            val store = PendingActionStore()
+            val tools = PlaybackRuleDiagnosticsTools(EmptyResolver(), pendingActionStore = store)
+
+            val output = tools.proposePlaybackRule(Json.encodeToString(pipelineRule()), sampleTitle = "测试动画")
+            val obj = json.parseToJsonElement(output).jsonObject
+
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+            assertTrue(
+                obj["errorMessage"]
+                    ?.jsonPrimitive
+                    ?.content
+                    .orEmpty()
+                    .contains("no playable stream"),
+                "被拒时要说清是「重跑没解析出地址」，否则模型不知道该改哪儿",
+            )
+            assertTrue(store.actions.value.isEmpty(), "解析不到地址的规则不该进待确认队列")
+        }
+
+    @Test
+    fun `proposePlaybackRule 在首包断言不通过时不出提案`() =
+        runTest {
+            val store = PendingActionStore()
+            val tools =
+                PlaybackRuleDiagnosticsTools(
+                    RecordingResolver(),
+                    pendingActionStore = store,
+                    playbackSourceVerifier = NotPlayableVerifier(),
+                )
+
+            val output = tools.proposePlaybackRule(Json.encodeToString(pipelineRule()), sampleTitle = "测试动画")
+            val obj = json.parseToJsonElement(output).jsonObject
+
+            assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+            assertEquals("false", obj["playbackVerified"]?.jsonPrimitive?.content)
+            assertTrue(
+                obj["verificationNote"]
+                    ?.jsonPrimitive
+                    ?.content
+                    .orEmpty()
+                    .contains("HTTP 403"),
+                "断言失败的原因要原样回给模型，它才能针对性修规则",
+            )
+            assertTrue(store.actions.value.isEmpty(), "首包断言不通过的规则不该进待确认队列")
+        }
+
+    /** 提案重跑所用的可执行规则：形状合法，且 fake 能解析出候选 */
+    private fun pipelineRule(): PlaybackSourceRule =
+        PlaybackSourceRule(
+            id = "ai-draft",
+            name = "示例站流水线",
+            urlTemplate = "https://search.example.tv/?q={title}",
+            kind = PlaybackRuleKind.SOURCE,
+            parserType = RuleParserType.PIPELINE,
+            pipeline =
+                listOf(
+                    PipelineStep(action = StepAction.FETCH),
+                    PipelineStep(
+                        action = StepAction.EXTRACT_VARIABLE,
+                        regex = "data-player-req=\"([^\"]+)\"",
+                        variableName = "playerReq",
+                    ),
+                    PipelineStep(
+                        action = StepAction.EXTRACT_STREAM,
+                        regex = "\"src\"\\s*:\\s*\"([^\"]+)\"",
+                    ),
+                ),
+        )
+
+    /** 解析一律返回空，模拟"规则跑得通但抽不到地址" */
+    private class EmptyResolver : PlaybackResolverRepository {
+        override suspend fun resolvePages(
+            pageUrls: List<String>,
+            epNumber: Float,
+            siteName: String,
+            title: String,
+        ): List<PlayableSource> = emptyList()
+
+        override suspend fun resolveTemplate(
+            url: String,
+            headers: Map<String, String>,
+            epNumber: Float,
+            siteName: String,
+            title: String,
+        ): List<PlayableSource> = emptyList()
+
+        override suspend fun resolveRule(
+            rule: PlaybackSourceRule,
+            title: String,
+            epNumber: Float,
+            subjectId: Long,
+            episodeId: Long,
+        ): List<PlayableSource> = emptyList()
+    }
+
+    /** 首包断言固定判死，模拟"地址抽得到但打不开" */
+    private class NotPlayableVerifier : PlaybackSourceVerifier {
+        override suspend fun verify(source: PlayableSource): StreamVerification = StreamVerification.NotPlayable("首包返回 HTTP 403")
+    }
 
     /** 只记录取源分发是否发生，其余解析路径留空 */
     private class RecordingResolver : PlaybackResolverRepository {

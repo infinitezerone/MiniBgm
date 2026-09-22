@@ -9,6 +9,8 @@ import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
+import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifierImpl
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
@@ -74,6 +76,9 @@ val dataModule =
                 pageFetchService = get<PageFetchService>(),
                 webViewCaptureService = getOrNull(),
             )
+        }
+        single<PlaybackSourceVerifier> {
+            PlaybackSourceVerifierImpl(pageFetchService = get<PageFetchService>())
         }
         single<SettingsRepository> {
             SettingsRepositoryImpl(

@@ -24,6 +24,28 @@ data class FetchedPage(
 )
 
 /**
+ * 直链首包探测结论。
+ *
+ * 与 [FetchedPage] 的区别：探测**不读正文**，只取响应头（状态码 + Content-Type），
+ * 用于回答"抽到的地址是不是真的能播"，而不是"页面里有什么"。
+ */
+sealed interface StreamProbe {
+    /** 拿到响应：状态码与非纯文本的 Content-Type（已去掉 `;charset=` 之后的部分） */
+    data class Responded(
+        val status: Int,
+        val contentType: String?,
+    ) : StreamProbe
+
+    /** 请求失败（不可达 / 被拒绝 / 超时） */
+    data class Failed(
+        val reason: String,
+    ) : StreamProbe
+
+    /** 该 PageFetchService 实现不支持探测（测试替身等），调用方不应据此下结论 */
+    data object Unsupported : StreamProbe
+}
+
+/**
  * 第三方页面正文抓取（播放源解析用）。
  *
  * 只按调用方给定的单个 URL 取一次，不跟踪站点、不做批量爬取；
@@ -43,6 +65,17 @@ interface PageFetchService {
         formData: Map<String, String>,
         requestHeaders: Map<String, String> = emptyMap(),
     ): FetchedPage?
+
+    /**
+     * 直链首包探测：只取响应头，`Range: bytes=0-2047` 顺带限制服务端回包体积。
+     *
+     * 默认返回 [StreamProbe.Unsupported]，这样测试替身与不需要该能力的实现不必被迫实现，
+     * 调用方也能区分"探测不了"与"探测到不能播"。
+     */
+    suspend fun probeStream(
+        url: String,
+        requestHeaders: Map<String, String> = emptyMap(),
+    ): StreamProbe = StreamProbe.Unsupported
 }
 
 class PageFetchServiceImpl(
@@ -113,6 +146,41 @@ class PageFetchServiceImpl(
         } catch (e: Exception) {
             logger.w { "表单提交失败 $target: ${e.message}" }
             null
+        }
+    }
+
+    override suspend fun probeStream(
+        url: String,
+        requestHeaders: Map<String, String>,
+    ): StreamProbe {
+        val target = url.trim()
+        if (!target.startsWith("http://", ignoreCase = true) &&
+            !target.startsWith("https://", ignoreCase = true)
+        ) {
+            return StreamProbe.Failed("不是 http(s) 地址")
+        }
+        val safeHeaders =
+            requestHeaders.filter { (name, value) ->
+                name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
+            }
+        return try {
+            client
+                .prepareGet(target) {
+                    // 探测的是媒体直链，Accept 不能沿用 text/html，否则 CDN 可能回一个错误页
+                    header(HttpHeaders.Accept, "*/*")
+                    header(HttpHeaders.Range, "bytes=0-2047")
+                    safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
+                }.execute { response ->
+                    StreamProbe.Responded(
+                        status = response.status.value,
+                        contentType = response.headers[HttpHeaders.ContentType]?.substringBefore(';')?.trim(),
+                    )
+                }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.w { "首包探测失败 $target: ${e.message}" }
+            StreamProbe.Failed(e.message ?: "探测请求异常")
         }
     }
 
