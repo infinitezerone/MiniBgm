@@ -8,8 +8,24 @@
 
   边界（刻意保持）：
   - 只放开明文传输，不放宽 TLS 校验——仍只信任系统 CA，不信任用户导入的 CA
-  - 凭据类流量（Bangumi OAuth / AniList）固定走 https 常量端点，与本次放开无关
+  - 凭据类流量（Bangumi OAuth）固定走 https 常量端点，由代码层保证
   - 嗅探层走 Ktor CIO（不查本策略），放开后播放器与其行为一致，消除"能解析却不能播"的割裂
+
+  ⚠️ 不要给凭据域加 domain-config（曾试过，已回退）
+  （以下为曾尝试过的方案与回退原因）
+  本意是"即使将来代码里出现 http 的凭据请求，也在平台层拒掉"，于是在这里为
+  bgm.tv / bangumi.tv 写了 `<domain-config cleartextTrafficPermitted="false">`。
+  结果**直接打断了 Bangumi API**：
+
+    java.security.cert.CertificateException: Domain specific configurations require that
+    hostname aware checkServerTrusted(X509Certificate[], String, String) is used
+
+  原因是只要某个域存在 domain-config，平台就要求调用方使用 hostname-aware 的
+  checkServerTrusted 三参重载；而本项目的网络栈是 Ktor CIO，走的是两参版本，于是全部 TLS 握手失败。
+
+  ⇒ 需要"凭据永不明文"时，只能在代码层约束（凭据端点现在是 https 常量，
+    见 BangumiApiService 的 baseUrl），不要试图用 NSC 的 domain 级例外来实现——
+    它与当前网络栈不兼容。
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
