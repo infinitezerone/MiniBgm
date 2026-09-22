@@ -315,60 +315,17 @@ class PlaybackRulesViewModelTest {
         }
 
     @Test
-    fun startAiDiscovery_success_updatesDiscoveredSourcesAndShowsDialog() =
+    fun requestAiSourceSearch_emitsEventAskingAssistantToFindSources() =
         runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val sampleSources =
-                listOf(
-                    com.infinitezerone.minibgm.core.model.DiscoveredSource(
-                        name = "示例动漫源",
-                        urlTemplate = "https://example.com/search?q={title}",
-                        latencyMs = 150L,
-                        isAlive = true,
-                    ),
-                )
-            fakeRepo.communityDiscoveryResult =
-                com.infinitezerone.minibgm.core.common.AppResult
-                    .Success(sampleSources)
+            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository())
 
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-            viewModel.startAiDiscovery()
-
-            val state = viewModel.uiState.first { it.showDiscoveryDialog }
-            assertFalse(state.isDiscovering)
-            assertEquals(1, state.discoveredSources.size)
-            assertEquals("示例动漫源", state.discoveredSources.first().name)
-
-            viewModel.dismissDiscoveryDialog()
-            val stateAfterDismiss = viewModel.uiState.first { !it.showDiscoveryDialog }
-            assertFalse(stateAfterDismiss.showDiscoveryDialog)
-        }
-
-    @Test
-    fun importDiscoveredSources_convertsAndImportsRules() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            val sampleSources =
-                listOf(
-                    com.infinitezerone.minibgm.core.model.DiscoveredSource(
-                        name = "社区测试源",
-                        urlTemplate = "https://example.com/?s={title}",
-                        latencyMs = 80L,
-                        isAlive = true,
-                    ),
-                )
-
-            viewModel.importDiscoveredSources(sampleSources)
-
-            val rules = fakeRepo.playbackRules.first()
-            assertEquals(1, rules.size)
-            assertEquals("社区测试源", rules.first().name)
-            assertEquals("https://example.com/?s={title}", rules.first().urlTemplate)
+            viewModel.requestAiSourceSearch()
 
             val event = viewModel.events.first()
-            assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
-            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("成功导入 1 条"))
+            assertTrue(event is PlaybackRulesUiEvent.OpenAiSourceSearch)
+            // 这个页面没有站点上下文，prompt 只能交代意图、并要求助手先问到地址，
+            // 否则助手没有可探查的目标
+            val prompt = (event as PlaybackRulesUiEvent.OpenAiSourceSearch).prompt
+            assertTrue(prompt.contains("站点地址"))
         }
 }
