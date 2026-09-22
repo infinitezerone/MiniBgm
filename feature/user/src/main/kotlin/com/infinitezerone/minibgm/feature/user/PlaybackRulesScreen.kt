@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -67,7 +65,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
-import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -87,6 +84,7 @@ import org.koin.androidx.compose.koinViewModel
 fun PlaybackRulesScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onAiSourceSearch: (String) -> Unit = {},
     viewModel: PlaybackRulesViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -132,6 +130,9 @@ fun PlaybackRulesScreen(
                 is PlaybackRulesUiEvent.ShowSnackbar -> {
                     snackbarHostState.showSnackbar(event.message)
                 }
+                is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
+                    onAiSourceSearch(event.prompt)
+                }
             }
         }
     }
@@ -149,23 +150,12 @@ fun PlaybackRulesScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.startAiDiscovery() },
-                        enabled = !uiState.isDiscovering,
-                    ) {
-                        if (uiState.isDiscovering) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
-                                contentDescription = "AI 智能搜源",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                    IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = "让 AI 助手找源",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
                     }
                     IconButton(onClick = { isImportingPlaylistJson = true }) {
                         Icon(
@@ -477,15 +467,6 @@ fun PlaybackRulesScreen(
                     Text("取消")
                 }
             },
-        )
-    }
-
-    // 社区源发现与测速确认对话框
-    if (uiState.showDiscoveryDialog) {
-        DiscoveredSourcesDialog(
-            sources = uiState.discoveredSources,
-            onDismiss = { viewModel.dismissDiscoveryDialog() },
-            onConfirm = { selected -> viewModel.importDiscoveredSources(selected) },
         )
     }
 }
@@ -1141,129 +1122,4 @@ private fun formatPlaybackPosition(ms: Long): String {
     val m = (totalSeconds % 3600) / 60
     val sec = totalSeconds % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
-}
-
-/**
- * 社区源发现与测速确认对话框
- */
-@Composable
-private fun DiscoveredSourcesDialog(
-    sources: List<DiscoveredSource>,
-    onDismiss: () -> Unit,
-    onConfirm: (List<DiscoveredSource>) -> Unit,
-) {
-    var selectedSources by remember(sources) {
-        val alive = sources.filter { it.isAlive }
-        mutableStateOf(if (alive.isNotEmpty()) alive.toSet() else sources.toSet())
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("发现社区二次元源")
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "AI 已为您完成连通性探活与延迟测速，请勾选需要导入的站点：",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(sources) { source ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(
-                                    checked = source in selectedSources,
-                                    onCheckedChange = { checked ->
-                                        selectedSources =
-                                            if (checked) {
-                                                selectedSources + source
-                                            } else {
-                                                selectedSources - source
-                                            }
-                                    },
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Text(
-                                            text = source.name,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.Medium,
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color =
-                                                if (source.isAlive) {
-                                                    MaterialTheme.colorScheme.secondaryContainer
-                                                } else {
-                                                    MaterialTheme.colorScheme.errorContainer
-                                                },
-                                        ) {
-                                            Text(
-                                                text = if (source.isAlive) "${source.latencyMs}ms" else "不可达",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color =
-                                                    if (source.isAlive) {
-                                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                                    } else {
-                                                        MaterialTheme.colorScheme.onErrorContainer
-                                                    },
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                            )
-                                        }
-                                    }
-                                    if (source.description.isNotBlank()) {
-                                        Text(
-                                            text = source.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedSources.toList()) },
-                enabled = selectedSources.isNotEmpty(),
-            ) {
-                Text("一键导入并启用 (${selectedSources.size})")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        },
-    )
 }

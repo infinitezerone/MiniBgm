@@ -62,11 +62,13 @@ fun EntryProviderScope<NavKey>.settingsEntry(
 /** 自定义「播放规则管理」二级页面条目 */
 fun EntryProviderScope<NavKey>.playbackRulesEntry(
     onBackClick: () -> Unit = {},
+    onAiSourceSearch: (String) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<PlaybackRulesRoute>(metadata = metadata) {
         PlaybackRulesScreen(
             onBackClick = onBackClick,
+            onAiSourceSearch = onAiSourceSearch,
         )
     }
 }

@@ -4,21 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
-import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.uuid.ExperimentalUuidApi
@@ -33,9 +29,6 @@ data class PlaybackRulesUiState(
     val isLoading: Boolean = false,
     /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
     val playbackPositions: Map<String, Long> = emptyMap(),
-    val isDiscovering: Boolean = false,
-    val discoveredSources: List<DiscoveredSource> = emptyList(),
-    val showDiscoveryDialog: Boolean = false,
 )
 
 /**
@@ -44,6 +37,11 @@ data class PlaybackRulesUiState(
 sealed interface PlaybackRulesUiEvent {
     data class ShowSnackbar(
         val message: String,
+    ) : PlaybackRulesUiEvent
+
+    /** 请求打开助手会话并带上找源意图；导航由上层完成（feature 之间不互相依赖） */
+    data class OpenAiSourceSearch(
+        val prompt: String,
     ) : PlaybackRulesUiEvent
 }
 
@@ -62,29 +60,17 @@ class PlaybackRulesViewModel(
     private val _events = Channel<PlaybackRulesUiEvent>(Channel.BUFFERED)
     val events: Flow<PlaybackRulesUiEvent> = _events.receiveAsFlow()
 
-    private data class DiscoveryState(
-        val isDiscovering: Boolean = false,
-        val discoveredSources: List<DiscoveredSource> = emptyList(),
-        val showDiscoveryDialog: Boolean = false,
-    )
-
-    private val discoveryState = MutableStateFlow(DiscoveryState())
-
     val uiState: StateFlow<PlaybackRulesUiState> =
         combine(
             settingsRepository.playbackRules,
             settingsRepository.playlists,
             settingsRepository.playbackPositions,
-            discoveryState,
-        ) { rules, playlists, positions, discovery ->
+        ) { rules, playlists, positions ->
             PlaybackRulesUiState(
                 rules = rules,
                 playlists = playlists,
                 playbackPositions = positions,
                 isLoading = false,
-                isDiscovering = discovery.isDiscovering,
-                discoveredSources = discovery.discoveredSources,
-                showDiscoveryDialog = discovery.showDiscoveryDialog,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -257,50 +243,19 @@ class PlaybackRulesViewModel(
         }
     }
 
-    fun startAiDiscovery(customSubscriptionUrl: String? = null) {
-        if (discoveryState.value.isDiscovering) return
-        discoveryState.update { it.copy(isDiscovering = true) }
+    /**
+     * 请求 AI 助手接手找源。
+     *
+     * 这个页面没有站点上下文，所以只交代意图，由助手先问地址，再走既有的
+     * 「探查 → 网络审计 → 录制骨架 → 沙箱自测 → 可导入提案」流程。
+     *
+     * 之所以不再由本页自己发起社区检索：那条路径的搜索词在 GitHub 上零命中，
+     * 点下去只会得到「未检索到可用规则」，留着比没有更糟。
+     */
+    fun requestAiSourceSearch() {
+        val prompt = "我想把一个第三方站点适配成播放源规则：先问我要站点地址，再推导并生成可导入的规则提案"
         viewModelScope.launch {
-            when (val result = settingsRepository.discoverCommunityPlaybackSources(customSubscriptionUrl)) {
-                is AppResult.Success -> {
-                    val sources = result.data
-                    discoveryState.update {
-                        it.copy(
-                            isDiscovering = false,
-                            discoveredSources = sources,
-                            showDiscoveryDialog = sources.isNotEmpty(),
-                        )
-                    }
-                    if (sources.isEmpty()) {
-                        sendSnackbar("未从社区检索到可用规则")
-                    }
-                }
-                is AppResult.Error -> {
-                    discoveryState.update { it.copy(isDiscovering = false) }
-                    sendSnackbar("社区规则检索失败：${result.throwable.message ?: "网络异常"}")
-                }
-                is AppResult.Loading -> {
-                    // 已由 isDiscovering 状态处理
-                }
-            }
-        }
-    }
-
-    fun dismissDiscoveryDialog() {
-        discoveryState.update { it.copy(showDiscoveryDialog = false) }
-    }
-
-    @OptIn(ExperimentalUuidApi::class)
-    fun importDiscoveredSources(sources: List<DiscoveredSource>) {
-        if (sources.isEmpty()) return
-        viewModelScope.launch {
-            val newRules =
-                sources.map {
-                    it.toPlaybackSourceRule(id = Uuid.random().toString())
-                }
-            settingsRepository.importPlaybackRules(newRules)
-            discoveryState.update { it.copy(showDiscoveryDialog = false) }
-            sendSnackbar("成功导入 ${newRules.size} 条社区规则")
+            _events.send(PlaybackRulesUiEvent.OpenAiSourceSearch(prompt))
         }
     }
 
