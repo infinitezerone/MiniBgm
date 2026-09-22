@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -98,10 +99,16 @@ class ToolRegistryIntegrationTest {
         assertNotNull(getScheduleDescriptor)
         assertTrue(getScheduleDescriptor.description.contains("broadcast schedule"))
 
-        // Community tools
-        assertTrue(toolNames.contains("searchCommunitySubscriptions"))
+        // Community tools：只允许"验证用户给出的地址"，不得存在任何自行检索社区的入口
         assertTrue(toolNames.contains("validateAndTestSubscription"))
-        assertTrue(toolNames.contains("discoverCommunityPlaybackSources"))
+        assertFalse(
+            toolNames.contains("searchCommunitySubscriptions"),
+            "模型不得自行检索社区源（目录属社区、机制属 App）",
+        )
+        assertFalse(
+            toolNames.contains("discoverCommunityPlaybackSources"),
+            "不得存在无参动态发现入口，缺地址时只能向用户索要",
+        )
 
         // Diagnostics tools
         assertTrue(toolNames.contains("inspectPageStructure"))

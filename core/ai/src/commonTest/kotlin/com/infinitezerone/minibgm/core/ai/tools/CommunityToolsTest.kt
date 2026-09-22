@@ -3,8 +3,9 @@ package com.infinitezerone.minibgm.core.ai.tools
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.DiscoveredSource
-import com.infinitezerone.minibgm.core.model.DiscoveredSubscriptionCandidate
 import com.infinitezerone.minibgm.core.model.PendingAction
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import kotlinx.coroutines.test.runTest
@@ -21,42 +22,6 @@ class CommunityToolsTest {
             settingsRepository = fakeSettingsRepository,
             pendingActionStore = pendingActionStore,
         )
-
-    @Test
-    fun searchCommunitySubscriptions_returns_message_when_candidates_empty() =
-        runTest {
-            fakeSettingsRepository.communitySearchResult = AppResult.Success(emptyList())
-
-            val result = communityTools.searchCommunitySubscriptions("test")
-
-            assertTrue(result.contains("No verified community subscriptions found"))
-        }
-
-    @Test
-    fun searchCommunitySubscriptions_returns_formatted_list_when_candidates_exist() =
-        runTest {
-            fakeSettingsRepository.communitySearchResult =
-                AppResult.Success(
-                    listOf(
-                        DiscoveredSubscriptionCandidate(
-                            name = "bangumi-rules",
-                            subscriptionUrl = "https://example.com/rules.json",
-                            description = "开源番剧规则",
-                            sourceCount = 3,
-                            aliveCount = 2,
-                            averageLatencyMs = 150L,
-                            sampleSources = listOf("源A", "源B"),
-                        ),
-                    ),
-                )
-
-            val result = communityTools.searchCommunitySubscriptions("bangumi-rules")
-
-            assertTrue(result.contains("Found 1 verified subscription candidates"))
-            assertTrue(result.contains("bangumi-rules"))
-            assertTrue(result.contains("Live rules: 2/3"))
-            assertTrue(result.contains("Avg latency: 150ms"))
-        }
 
     @Test
     fun validateAndTestSubscription_creates_proposal_when_healthy() =
@@ -100,6 +65,43 @@ class CommunityToolsTest {
         }
 
     @Test
+    fun validateAndTestSubscription_reports_skipped_sites_in_proposal() =
+        runTest {
+            val report =
+                SubscriptionValidationReport(
+                    isHealthy = true,
+                    subscriptionUrl = "https://example.com/tvbox.json",
+                    totalRules = 1,
+                    aliveRules = 1,
+                    averageLatencyMs = 80L,
+                    sources =
+                        listOf(
+                            DiscoveredSource(
+                                name = "可用采集站",
+                                urlTemplate = "https://good.tv/provide/vod?ac=detail&wd={title}",
+                                kind = PlaybackRuleKind.SOURCE,
+                                parserType = RuleParserType.MACCMS,
+                            ),
+                        ),
+                    skippedUnsupportedSites = 3,
+                    skippedMalformedSites = 1,
+                )
+            fakeSettingsRepository.validationReportResult = AppResult.Success(report)
+
+            val result = communityTools.validateAndTestSubscription("https://example.com/tvbox.json")
+
+            assertTrue(result.contains("另有 3 条为爬虫/扩展源，本应用不支持"), result)
+            assertTrue(result.contains("1 条条目信息不完整"), result)
+
+            val action = pendingActionStore.actions.value.single()
+            assertIs<PendingAction.ImportPlaybackRules>(action)
+            val rule = action.rules.single()
+            // 接口端点必须落成取源规则，否则播放时专用解析器会被丢掉
+            assertEquals(PlaybackRuleKind.SOURCE, rule.kind)
+            assertEquals(RuleParserType.MACCMS, rule.parserType)
+        }
+
+    @Test
     fun validateAndTestSubscription_returns_failure_when_unhealthy() =
         runTest {
             val report =
@@ -114,69 +116,5 @@ class CommunityToolsTest {
 
             assertTrue(result.contains("Subscription validation failed: HTTP 404 Not Found"))
             assertTrue(pendingActionStore.actions.value.isEmpty())
-        }
-
-    @Test
-    fun discoverCommunityPlaybackSources_returns_message_when_sources_empty() =
-        runTest {
-            fakeSettingsRepository.communityDiscoveryResult = AppResult.Success(emptyList())
-
-            val result = communityTools.discoverCommunityPlaybackSources()
-
-            assertEquals("No community anime playback sources found or all endpoints are unreachable.", result)
-            assertTrue(pendingActionStore.actions.value.isEmpty())
-        }
-
-    @Test
-    fun discoverCommunityPlaybackSources_creates_proposal_when_sources_available() =
-        runTest {
-            val sources =
-                listOf(
-                    DiscoveredSource(
-                        name = "示例动漫源A",
-                        urlTemplate = "https://example-a.org/search?q={title}",
-                        isAlive = true,
-                    ),
-                    DiscoveredSource(
-                        name = "示例动漫源B",
-                        urlTemplate = "https://example-b.org/search?q={title}",
-                        isAlive = false,
-                    ),
-                )
-            fakeSettingsRepository.communityDiscoveryResult = AppResult.Success(sources)
-
-            val result = communityTools.discoverCommunityPlaybackSources()
-
-            assertTrue(result.contains("import_playback_rules"))
-            assertTrue(result.contains("示例动漫源A"))
-
-            val actions = pendingActionStore.actions.value
-            assertEquals(1, actions.size)
-            val action = actions.first()
-            assertIs<PendingAction.ImportPlaybackRules>(action)
-            assertEquals("社区二次元播放源", action.sourceName)
-            assertEquals(1, action.rules.size)
-            assertEquals("示例动漫源A", action.rules.first().name)
-        }
-
-    @Test
-    fun discoverCommunityPlaybackSources_handles_error_result() =
-        runTest {
-            fakeSettingsRepository.communityDiscoveryResult =
-                AppResult.Error(IllegalStateException("Network timeout"))
-
-            val result = communityTools.discoverCommunityPlaybackSources()
-
-            assertTrue(result.contains("Failed to discover community playback sources: Network timeout"))
-        }
-
-    @Test
-    fun discoverCommunityPlaybackSources_handles_loading_result() =
-        runTest {
-            fakeSettingsRepository.communityDiscoveryResult = AppResult.Loading
-
-            val result = communityTools.discoverCommunityPlaybackSources()
-
-            assertEquals("Community sources discovery in progress...", result)
         }
 }
