@@ -204,13 +204,13 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                 )
             val history =
                 listOf(
-                    "user" to "帮我分析 https://anime1.me/",
+                    "user" to "帮我分析 https://example.tv/",
                     "assistant" to "正在分析",
                 )
             val result = service.execute("继续执行", history)
             assertIs<AppResult.Success<String>>(result)
             assertTrue(capturedPrompt.contains("以下是先前的会话历史记录"))
-            assertTrue(capturedPrompt.contains("[用户] 帮我分析 https://anime1.me/"))
+            assertTrue(capturedPrompt.contains("[用户] 帮我分析 https://example.tv/"))
             assertTrue(capturedPrompt.contains("[助手] 正在分析"))
             assertTrue(capturedPrompt.contains("用户当前最新输入：\n继续执行"))
         }

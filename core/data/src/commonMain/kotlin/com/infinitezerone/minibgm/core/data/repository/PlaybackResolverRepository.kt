@@ -275,7 +275,7 @@ class PlaybackResolverRepositoryImpl(
                     val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
                     val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
                     val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return@withContext emptyList()
-                    val sources = extractMacCmsSources(fetched.html, fetched.url, epNumber, rule.name)
+                    val sources = extractMacCmsSources(fetched.html, fetched.url, epNumber, rule.name, title)
                     if (rule.headers.isEmpty()) sources else sources.map { it.copy(headers = it.headers + rule.headers) }
                 }
                 RuleParserType.STREMIO -> {
@@ -790,8 +790,8 @@ private suspend fun sniffPageOrSubPages(
     title: String = "",
     budget: FetchBudget = FetchBudget(),
 ): List<PlayableSource> {
-    // 1. 尝试当前页嗅探
-    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService, budget)?.let {
+    // 1. 先试条目级采集接口的剧集串（MacCMS 形态）
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, title)?.let {
         return it
     }
 
@@ -855,7 +855,9 @@ private suspend fun sniffPageWithIframe(
     if (!budget.take()) return null
     val fetched = pageFetchService.fetchHtml(pageUrl) ?: return null
     if (!pageBelongsToTitle(fetched.html, title)) return null
-    val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService, budget)
+    // 条目级采集接口的响应是 JSON，没有 <title>，页面级校验对它恒为通过，
+    // 所以片名要靠 MacCMS 层自己的 vod_name 复核（这里是唯一防线）
+    val direct = sniffDirectPageStreams(fetched, epNumber, siteName, pageFetchService, budget, title)
     if (direct != null) return direct
 
     // 内嵌播放器常是"在线播放"这类通用标题，不对它做归属校验，否则会把正常站点拦死
@@ -898,11 +900,24 @@ internal fun pageBelongsToTitle(
 ): Boolean {
     if (title.isBlank()) return true
     val pageTitle = pageTitleOf(html) ?: return true
-    val page = normalizeTitleForMatch(pageTitle)
-    val wanted = normalizeTitleForMatch(title)
-    if (page.isEmpty() || wanted.isEmpty()) return true
-    if (page.contains(wanted) || wanted.contains(page)) return true
-    return page.toSet().intersect(wanted.toSet()).size * 2 >= wanted.length
+    return titleMatches(pageTitle, title)
+}
+
+/**
+ * 归一化后的片名比对：包含关系优先，退让到"目标片名过半数字符出现在候选里"。
+ *
+ * 任一侧为空视为不可判定，返回 true（不拦），这一版只负责拦"明确是另一部片"。
+ */
+internal fun titleMatches(
+    candidate: String,
+    wanted: String,
+): Boolean {
+    if (candidate.isBlank() || wanted.isBlank()) return true
+    val page = normalizeTitleForMatch(candidate)
+    val target = normalizeTitleForMatch(wanted)
+    if (page.isEmpty() || target.isEmpty()) return true
+    if (page.contains(target) || target.contains(page)) return true
+    return page.toSet().intersect(target.toSet()).size * 2 >= target.length
 }
 
 private fun normalizeTitleForMatch(text: String): String =
@@ -917,8 +932,9 @@ private suspend fun sniffDirectPageStreams(
     siteName: String,
     pageFetchService: PageFetchService,
     budget: FetchBudget = FetchBudget(),
+    title: String = "",
 ): List<PlayableSource>? {
-    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, pageFetchService, budget)?.let {
+    sniffDirectOrProtocolStream(fetched.html, fetched.url, epNumber, siteName, title)?.let {
         return it
     }
     val extracted = extractPlayableSources(fetched.html, fetched.url, epNumber, siteName)
@@ -943,124 +959,112 @@ private suspend fun sniffDirectOrProtocolStream(
     url: String,
     epNumber: Float,
     siteName: String,
-    pageFetchService: PageFetchService,
-    budget: FetchBudget = FetchBudget(),
+    title: String = "",
 ): List<PlayableSource>? {
-    sniffAnime1Stream(html, url, epNumber, siteName, pageFetchService, budget)?.let {
-        return listOf(it)
-    }
-    val macCms = extractMacCmsSources(html, url, epNumber, siteName)
-    if (macCms.isNotEmpty()) return macCms
-    return null
-}
-
-private val ANIME1_APIREQ_REGEX =
-    Regex("""data-apireq\s*=\s*["']([^"'>]+)["']""", RegexOption.IGNORE_CASE)
-
-private val ANIME1_SRC_REGEX =
-    Regex(""""src"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
-
-internal suspend fun sniffAnime1Stream(
-    html: String,
-    pageUrl: String,
-    targetEp: Float,
-    siteName: String,
-    pageFetchService: PageFetchService,
-    budget: FetchBudget? = null,
-): PlayableSource? {
-    val apireqMatch = ANIME1_APIREQ_REGEX.find(html) ?: return null
-    val rawApireq = apireqMatch.groupValues[1]
-    val decoded = decodeUrlComponent(rawApireq)
-
-    if (budget != null && !budget.take()) return null
-
-    val apiPage =
-        pageFetchService.postForm(
-            url = "https://v.anime1.me/api",
-            formData = mapOf("d" to decoded),
-            requestHeaders = mapOf("Referer" to pageUrl),
-        ) ?: return null
-
-    val srcMatch = ANIME1_SRC_REGEX.find(apiPage.html) ?: return null
-    val rawSrc = srcMatch.groupValues[1].replace("\\/", "/")
-    val streamUrl =
-        when {
-            rawSrc.startsWith("//") -> "https:$rawSrc"
-            rawSrc.startsWith("http://", ignoreCase = true) || rawSrc.startsWith("https://", ignoreCase = true) -> rawSrc
-            else -> "https://v.anime1.me$rawSrc"
-        }
-
-    val streamHeaders = mutableMapOf<String, String>()
-    streamHeaders["Referer"] = "https://anime1.me/"
-    val cookie = apiPage.responseHeaders["Cookie"]
-    if (!cookie.isNullOrBlank()) {
-        streamHeaders["Cookie"] = cookie
-    }
-
-    val label = if (targetEp > 0f) "第 ${targetEp.toInt()} 话" else ""
-    return PlayableSource(
-        url = streamUrl,
-        kind = PlaylistEntryKind.DIRECT,
-        label = label,
-        episodeSort = targetEp,
-        siteName = siteName.ifBlank { "Anime1" },
-        pageUrl = pageUrl,
-        headers = streamHeaders,
-    )
+    val macCms = extractMacCmsSources(html, url, epNumber, siteName, title)
+    return macCms.takeIf { it.isNotEmpty() }
 }
 
 private val MACCMS_PLAY_URL_REGEX =
     Regex(""""(?:vod_play_url|url)"\s*:\s*"([^"]*\$[a-zA-Z0-9_/:.\-%?&=#]+)"""")
 
+private val MACCMS_VOD_NAME_REGEX =
+    Regex(""""vod_name"\s*:\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
+
+/**
+ * 把 MacCMS 响应按 `vod_name` 切成逐条目片段。
+ *
+ * 搜索接口一次返回多部片子（同名续作、剧场版、不同季），只认第一段必然出现"播错番"——
+ * 与列表页下探时校验片名归属是同一类问题。没有 `vod_name` 的响应
+ * （播放页内嵌串、单条目详情接口）整体作为唯一一段，行为与从前一致。
+ */
+internal fun splitMacCmsEntries(html: String): List<String> {
+    val names = MACCMS_VOD_NAME_REGEX.findAll(html).toList()
+    if (names.isEmpty()) return listOf(html)
+    return names.mapIndexed { index, match ->
+        val start = match.range.first
+        val end = names.getOrNull(index + 1)?.range?.first ?: html.length
+        html.substring(start, end)
+    }
+}
+
+private fun segmentVodName(segment: String): String? = MACCMS_VOD_NAME_REGEX.find(segment)?.groupValues?.get(1)
+
+/**
+ * 抽取 MacCMS 剧集直链。
+ *
+ * - 多条目响应优先取 [title] 对得上的那一段（同名续作、剧场版混在搜索结果里时避免播错番）；
+ *   **一段都对不上时退回原来"取第一段"的行为**——源站 `vod_name` 可能是日文原名而 App 侧是中文译名，
+ *   硬拦会把本来能用的源判死，这里只做"能认出来就用对的"，不做"认不出就拒绝"；
+ * - 分隔符：`$$$` 分线路、`#` 分集、`集名$地址`；集名为空时用地址里的集号定位
+ *   （从地址真实抽取，不按话数猜号）；
+ * - 判定扩展名前先剥 query 与 fragment，否则 `x.m3u8?sign=…` 这类带签名直链会被整条丢掉。
+ */
 internal fun extractMacCmsSources(
     html: String,
     pageUrl: String,
     epNumber: Float,
     siteName: String,
+    title: String = "",
 ): List<PlayableSource> {
-    val match = MACCMS_PLAY_URL_REGEX.find(html) ?: return emptyList()
-    val playListStr = match.groupValues[1].replace("\\/", "/")
-    val entries = playListStr.split("$$$").flatMap { it.split('#') }
+    // HTML 内嵌 JSON 会把 & 转义成 &amp;，不还原则直链带着 &amp; 去播放必然取不到流
+    val normalized = html.replace("\\/", "/").replace("&amp;", "&")
+    val segments = splitMacCmsEntries(normalized)
+    val segment =
+        segments.firstOrNull { entry -> segmentVodName(entry)?.let { titleMatches(it, title) } ?: true }
+            ?: segments.firstOrNull()
+            ?: return emptyList()
+
     val targetEpInt = epNumber.toInt()
     val paddedEp = targetEpInt.toString().padStart(2, '0')
+    val referer = pageOrigin(pageUrl)?.let { mapOf("Referer" to it) }.orEmpty()
     val results = mutableListOf<PlayableSource>()
-    for (entry in entries) {
-        val parts = entry.split('$')
-        if (parts.size >= 2) {
-            val title = parts[0].trim()
+    MACCMS_PLAY_URL_REGEX.find(segment)?.let { match ->
+        val playListStr = match.groupValues[1].replace("\\/", "/")
+        for (entry in playListStr.split("$$$").flatMap { it.split('#') }) {
+            val parts = entry.split('$', limit = 2)
+            if (parts.size < 2) continue
+            val entryLabel = parts[0].trim()
             val mediaUrl = parts[1].trim()
-            val isMatch =
-                if (epNumber > 0f) {
-                    title.contains("第${targetEpInt}集") ||
-                        title.contains("第${paddedEp}集") ||
-                        title.contains("第${targetEpInt}话") ||
-                        title.contains("第${paddedEp}话") ||
-                        title.contains("[$targetEpInt]") ||
-                        title.contains("[$paddedEp]") ||
-                        title == targetEpInt.toString() ||
-                        title == paddedEp ||
-                        Regex("""\b(?:ep|e)?\s*0*$targetEpInt\b""", RegexOption.IGNORE_CASE).containsMatchIn(title)
-                } else {
-                    true
-                }
-            if (isMatch &&
-                (mediaUrl.endsWith(".m3u8", ignoreCase = true) || mediaUrl.endsWith(".mp4", ignoreCase = true))
-            ) {
-                results.add(
-                    PlayableSource(
-                        url = mediaUrl,
-                        kind = PlaylistEntryKind.DIRECT,
-                        label = title,
-                        episodeSort = epNumber,
-                        siteName = siteName,
-                        pageUrl = pageUrl,
-                        headers = pageOrigin(pageUrl)?.let { mapOf("Referer" to it) } ?: emptyMap(),
-                    ),
-                )
-            }
+            if (!isPlayableMediaUrl(mediaUrl)) continue
+            if (epNumber > 0f && !entryMatchesEpisode(entryLabel, mediaUrl, targetEpInt, paddedEp)) continue
+            results.add(
+                PlayableSource(
+                    url = mediaUrl,
+                    kind = PlaylistEntryKind.DIRECT,
+                    label = entryLabel,
+                    episodeSort = epNumber,
+                    siteName = siteName,
+                    pageUrl = pageUrl,
+                    headers = referer,
+                ),
+            )
         }
     }
-    return results
+    return results.distinctBy { it.url }.take(MAX_MANIFEST_ENTRIES)
+}
+
+private fun isPlayableMediaUrl(url: String): Boolean = URL_FILE_EXTENSION.containsMatchIn(url.substringBefore('#').substringBefore('?'))
+
+private fun entryMatchesEpisode(
+    entryLabel: String,
+    mediaUrl: String,
+    targetEpInt: Int,
+    paddedEp: String,
+): Boolean {
+    if (entryLabel.isBlank()) {
+        // 采集串偶尔不给集名（形如 `$http://…`），这时只能用地址里的集号定位
+        return episodeNumberFromUrl(mediaUrl, allowWeak = true)?.toInt() == targetEpInt
+    }
+    return entryLabel.contains("第${targetEpInt}集") ||
+        entryLabel.contains("第${paddedEp}集") ||
+        entryLabel.contains("第${targetEpInt}话") ||
+        entryLabel.contains("第${paddedEp}话") ||
+        entryLabel.contains("[$targetEpInt]") ||
+        entryLabel.contains("[$paddedEp]") ||
+        entryLabel == targetEpInt.toString() ||
+        entryLabel == paddedEp ||
+        Regex("""\b(?:ep|e)?\s*0*$targetEpInt\b""", RegexOption.IGNORE_CASE).containsMatchIn(entryLabel)
 }
 
 private val A_TAG_REGEX =

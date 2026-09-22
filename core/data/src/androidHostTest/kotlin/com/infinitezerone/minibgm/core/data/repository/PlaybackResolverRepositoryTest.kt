@@ -337,14 +337,14 @@ class PlaybackResolverRepositoryTest {
         runTest {
             val pages =
                 mapOf(
-                    "https://anime1.me/?s=test" to
+                    "https://example.tv/?s=test" to
                         """
                         <article>
-                            <h2><a href="https://anime1.me/1001">测试动画 [1]</a></h2>
-                            <h2><a href="https://anime1.me/1002">测试动画 [2]</a></h2>
+                            <h2><a href="https://example.tv/1001">测试动画 [1]</a></h2>
+                            <h2><a href="https://example.tv/1002">测试动画 [2]</a></h2>
                         </article>
                         """.trimIndent(),
-                    "https://anime1.me/1002" to
+                    "https://example.tv/1002" to
                         """
                         <div class="video-container">
                             <video src="https://cdn.example.com/anime/ep2.mp4"></video>
@@ -353,44 +353,13 @@ class PlaybackResolverRepositoryTest {
                 )
             val repo = PlaybackResolverRepositoryImpl(pageFetchService = FakePageFetchService(pages))
 
-            val sources = repo.resolvePages(listOf("https://anime1.me/?s=test"), epNumber = 2f, siteName = "Anime1")
+            val sources = repo.resolvePages(listOf("https://example.tv/?s=test"), epNumber = 2f, siteName = "示例站")
 
             assertEquals(1, sources.size)
             val source = sources.single()
             assertEquals(PlaylistEntryKind.DIRECT, source.kind)
             assertEquals("https://cdn.example.com/anime/ep2.mp4", source.url)
             assertEquals("第 2 话", source.label)
-        }
-
-    @Test
-    fun `单集页含 Anime1 协议时自动请求 API 并携带 Cookie 与 Referer`() =
-        runTest {
-            val responses =
-                mapOf(
-                    "https://anime1.me/30193" to
-                        FetchedPage(
-                            url = "https://anime1.me/30193",
-                            html = """<video id="vjs" data-apireq="%7B%22c%22%3A%221949%22%2C%22e%22%3A%2211%22%7D"></video>""",
-                        ),
-                    "https://v.anime1.me/api" to
-                        FetchedPage(
-                            url = "https://v.anime1.me/api",
-                            html = """{"s":[{"src":"//nazuna.v.anime1.me/1949/11.mp4","type":"video/mp4"}]}""",
-                            responseHeaders = mapOf("Cookie" to "e=auth123; p=sig456"),
-                        ),
-                )
-            val fakeFetch = FakePageFetchService(pages = emptyMap(), responses = responses)
-            val repo = PlaybackResolverRepositoryImpl(pageFetchService = fakeFetch)
-
-            val sources = repo.resolvePages(listOf("https://anime1.me/30193"), epNumber = 11f, siteName = "Anime1")
-
-            assertEquals(1, sources.size)
-            val source = sources.single()
-            assertEquals(PlaylistEntryKind.DIRECT, source.kind)
-            assertEquals("https://nazuna.v.anime1.me/1949/11.mp4", source.url)
-            assertEquals("https://anime1.me/", source.headers["Referer"])
-            assertEquals("e=auth123; p=sig456", source.headers["Cookie"])
-            assertEquals("第 11 话", source.label)
         }
 
     @Test
@@ -434,19 +403,100 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `MacCMS 带签名参数的直链不被丢弃`() =
+        runTest {
+            val html =
+                """
+                {
+                    "vod_name": "测试动画",
+                    "vod_play_url": "第01集${'$'}https://cdn.example.com/1.m3u8?sign=a1#第02集${'$'}https://cdn.example.com/2.m3u8?sign=b2"
+                }
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/v/1" to html)))
+
+            val sources = repo.resolvePages(listOf("https://maccms.example.com/v/1"), epNumber = 2f, siteName = "MacCMS")
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://cdn.example.com/2.m3u8?sign=b2", source.url)
+            assertEquals("第02集", source.label)
+        }
+
+    @Test
+    fun `MacCMS 多条目响应优先取片名对得上的那一条`() =
+        runTest {
+            val html =
+                """
+                {
+                    "list": [
+                        {"vod_name": "无关的片子", "vod_play_url": "第01集${'$'}https://other.example.com/1.m3u8#第02集${'$'}https://other.example.com/2.m3u8"},
+                        {"vod_name": "测试动画", "vod_play_url": "第01集${'$'}https://want.example.com/1.m3u8#第02集${'$'}https://want.example.com/2.m3u8"}
+                    ]
+                }
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/api?wd=x" to html)))
+
+            val sources =
+                repo.resolvePages(
+                    listOf("https://maccms.example.com/api?wd=x"),
+                    epNumber = 2f,
+                    siteName = "MacCMS",
+                    title = "测试动画",
+                )
+
+            assertEquals(1, sources.size)
+            assertEquals("https://want.example.com/2.m3u8", sources.single().url)
+        }
+
+    @Test
+    fun `MacCMS 集名为空时按地址里的集号定位`() =
+        runTest {
+            val html =
+                """
+                {
+                    "vod_name": "测试动画",
+                    "vod_play_url": "${'$'}https://cdn.example.com/a/1.m3u8#${'$'}https://cdn.example.com/a/2.m3u8"
+                }
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/v/1" to html)))
+
+            val sources = repo.resolvePages(listOf("https://maccms.example.com/v/1"), epNumber = 2f, siteName = "MacCMS")
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/a/2.m3u8", sources.single().url)
+        }
+
+    @Test
+    fun `MacCMS 直链里的 HTML 实体在抽取前还原`() =
+        runTest {
+            val html =
+                """
+                {
+                    "vod_name": "测试动画",
+                    "vod_play_url": "第01集${'$'}https://cdn.example.com/1.m3u8?token=a&amp;exp=1"
+                }
+                """.trimIndent()
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(mapOf("https://maccms.example.com/v/1" to html)))
+
+            val sources = repo.resolvePages(listOf("https://maccms.example.com/v/1"), epNumber = 1f, siteName = "MacCMS")
+
+            assertEquals("https://cdn.example.com/1.m3u8?token=a&exp=1", sources.single().url)
+        }
+
+    @Test
     fun `搜索列表页严格忽略跨域社交外链`() =
         runTest {
             val pages =
                 mapOf(
-                    "https://anime1.me/?s=test" to
+                    "https://example.tv/?s=test" to
                         """
                         <article>
-                            <a href="https://twitter.com/Anime1Me">Twitter</a>
-                            <a href="https://t.me/anime1notify">Telegram</a>
-                            <h2><a href="https://anime1.me/21133">测试动画 [01]</a></h2>
+                            <a href="https://twitter.com/ExampleSite">Twitter</a>
+                            <a href="https://t.me/examplesite">Telegram</a>
+                            <h2><a href="https://example.tv/21133">测试动画 [01]</a></h2>
                         </article>
                         """.trimIndent(),
-                    "https://anime1.me/21133" to
+                    "https://example.tv/21133" to
                         """
                         <video src="https://cdn.example.com/ep1.mp4"></video>
                         """.trimIndent(),
@@ -454,7 +504,7 @@ class PlaybackResolverRepositoryTest {
             val fake = FakePageFetchService(pages)
             val repo = PlaybackResolverRepositoryImpl(fake)
 
-            val sources = repo.resolvePages(listOf("https://anime1.me/?s=test"), epNumber = 1f, siteName = "Anime1")
+            val sources = repo.resolvePages(listOf("https://example.tv/?s=test"), epNumber = 1f, siteName = "示例站")
 
             assertEquals(1, sources.size)
             assertEquals("https://cdn.example.com/ep1.mp4", sources.single().url)
@@ -522,7 +572,122 @@ class PlaybackResolverRepositoryTest {
             assertEquals("https://cdn.example.com/stream/ep1.m3u8", source.url)
             assertEquals("第 1 话", source.label)
             assertEquals("https://example.com/", source.headers["Referer"])
-            assertEquals("auth=xyz789", source.headers["Set-Cookie"])
+            // Set-Cookie 是响应头，回传时必须按 Cookie 语义规范化，不能沿用原头名
+            assertEquals("auth=xyz789", source.headers["Cookie"])
+            assertEquals(null, source.headers["Set-Cookie"])
+        }
+
+    @Test
+    fun `捕获 Set-Cookie 时剥掉属性再以 Cookie 头发给播放器`() =
+        runTest {
+            val responses =
+                mapOf(
+                    "https://example.com/watch" to
+                        FetchedPage(url = "https://example.com/watch", html = """<div data-token="t1"></div>"""),
+                    "https://api.example.com/token" to
+                        FetchedPage(
+                            url = "https://api.example.com/token",
+                            html = """{"stream":"https://cdn.example.com/a.m3u8"}""",
+                            responseHeaders =
+                                mapOf(
+                                    "Set-Cookie" to
+                                        "SESS=abc123; Path=/; HttpOnly, TOKEN=def456; " +
+                                        "Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+                                ),
+                        ),
+                )
+            val repo =
+                PlaybackResolverRepositoryImpl(FakePageFetchService(pages = emptyMap(), responses = responses))
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_cookie",
+                    name = "测试采集",
+                    urlTemplate = "https://example.com/watch",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/watch"),
+                            PipelineStep(
+                                action = StepAction.FETCH,
+                                method = "POST",
+                                urlTemplate = "https://api.example.com/token",
+                                bodyTemplate = "k=v",
+                                captureHeaders = listOf("Set-Cookie"),
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"stream"\s*:\s*"([^"]+)"""",
+                            ),
+                        ),
+                )
+
+            val source = repo.resolveRule(rule = rule, title = "t", epNumber = 1f).single()
+
+            assertEquals("https://cdn.example.com/a.m3u8", source.url)
+            // 只保留 name=value：Path/HttpOnly 被丢，Expires 里的逗号不会把后面的 cookie 切坏
+            assertEquals("SESS=abc123; TOKEN=def456", source.headers["Cookie"])
+            assertEquals(null, source.headers["Set-Cookie"])
+        }
+
+    @Test
+    fun `PIPELINE 规则可复现含 POST 与 Cookie 的三步取流流程`() =
+        runTest {
+            val responses =
+                mapOf(
+                    "https://example.com/ep/1" to
+                        FetchedPage(
+                            url = "https://example.com/ep/1",
+                            html = """<div id="player" data-apireq="%7B%22id%22%3A%22123%22%7D"></div>""",
+                        ),
+                    "https://api.example.com/stream" to
+                        FetchedPage(
+                            url = "https://api.example.com/stream",
+                            html = """{"s":[{"src":"//cdn.example.com/hls/1.m3u8"}]}""",
+                            responseHeaders = mapOf("Set-Cookie" to "SESS=s1; Path=/; HttpOnly"),
+                        ),
+                )
+            val fake = FakePageFetchService(pages = emptyMap(), responses = responses)
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_three_step",
+                    name = "测试采集",
+                    urlTemplate = "https://example.com/ep/{ep}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/ep/{ep}"),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_VARIABLE,
+                                regex = """data-apireq\s*=\s*["']([^"']+)["']""",
+                                variableName = "apireq",
+                            ),
+                            PipelineStep(
+                                action = StepAction.FETCH,
+                                method = "POST",
+                                urlTemplate = "https://api.example.com/stream",
+                                bodyTemplate = "d={apireq}",
+                                headers = mapOf("Referer" to "{pageUrl}"),
+                                captureHeaders = listOf("Set-Cookie"),
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"src"\s*:\s*"([^"]+)"""",
+                                headers = mapOf("Referer" to "https://example.com/"),
+                            ),
+                        ),
+                )
+
+            val source = repo.resolveRule(rule = rule, title = "t", epNumber = 1f).single()
+
+            assertEquals("https://cdn.example.com/hls/1.m3u8", source.url)
+            assertEquals("SESS=s1", source.headers["Cookie"])
+            assertEquals("https://example.com/", source.headers["Referer"])
+            // 步骤 1 抽到的是 URL 编码串，引擎应解码后再注入 POST 表单
+            assertEquals("""{"id":"123"}""", fake.sentForms["https://api.example.com/stream"]?.get("d"))
         }
 
     @Test
@@ -669,19 +834,19 @@ class PlaybackResolverRepositoryTest {
             """
             <html>
             <head>
-              <link rel="stylesheet" href="https://anime1.me/wp-content/themes/twentyten/style.css?ver=20190507" type="text/css" />
-              <script src="https://anime1.me/wp-includes/js/jquery.js?ver=3.7.1"></script>
+              <link rel="stylesheet" href="https://example.tv/wp-content/themes/twentyten/style.css?ver=20190507" type="text/css" />
+              <script src="https://example.tv/wp-includes/js/jquery.js?ver=3.7.1"></script>
             </head>
             <body>
               <a href="/category/all">所有动画</a>
               <a href="/about.html">关于我们</a>
-              <a href="https://anime1.me/30194">葬送的芙莉莲 [01]</a>
+              <a href="https://example.tv/30194">葬送的芙莉莲 [01]</a>
             </body>
             </html>
             """.trimIndent()
 
-        val candidate = findCandidateEpisodeUrl(html, "https://anime1.me")
-        assertEquals("https://anime1.me/30194", candidate)
+        val candidate = findCandidateEpisodeUrl(html, "https://example.tv")
+        assertEquals("https://example.tv/30194", candidate)
     }
 
     @Test
@@ -689,11 +854,11 @@ class PlaybackResolverRepositoryTest {
         val html =
             """
             <article>
-              <h2 class="entry-title"><a rel="bookmark" href="https://anime1.me/30194">葬送的芙莉莲 [01]</a></h2>
+              <h2 class="entry-title"><a rel="bookmark" href="https://example.tv/30194">葬送的芙莉莲 [01]</a></h2>
             </article>
             """.trimIndent()
 
-        val candidate = findCandidateEpisodeUrl(html, "https://anime1.me")
-        assertEquals("https://anime1.me/30194", candidate)
+        val candidate = findCandidateEpisodeUrl(html, "https://example.tv")
+        assertEquals("https://example.tv/30194", candidate)
     }
 }

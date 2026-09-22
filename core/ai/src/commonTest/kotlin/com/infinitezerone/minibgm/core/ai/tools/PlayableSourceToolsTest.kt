@@ -306,8 +306,8 @@ class PlayableSourceToolsTest {
                 listOf(
                     PlaybackSourceRule(
                         id = "r_page",
-                        name = "AGE动漫",
-                        urlTemplate = "https://www.agemys.org/search?query={title}",
+                        name = "示例采集站",
+                        urlTemplate = "https://www.example.tv/search?query={title}",
                         kind = PlaybackRuleKind.PAGE,
                         isEnabled = true,
                     ),
@@ -322,7 +322,7 @@ class PlayableSourceToolsTest {
                 result.episodes
                     .first()
                     .url
-                    .contains("agemys.org"),
+                    .contains("example.tv"),
             )
             assertEquals(PlaylistEntryKind.PAGE, result.episodes.first().kind)
         }
