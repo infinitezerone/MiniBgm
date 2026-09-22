@@ -222,16 +222,16 @@ class CommunitySubscriptionServiceTest {
                     "sites": [
                         {
                             "key": "age_anime",
-                            "name": "AGE动漫",
+                            "name": "示例采集站",
                             "type": 0,
-                            "api": "https://m.agemys.org/search?query={title}",
+                            "api": "https://api.example.tv/search?query={title}",
                             "searchable": 1
                         },
                         {
                             "key": "maccms_demo",
-                            "name": "樱花采集站",
+                            "name": "第二采集站",
                             "type": 1,
-                            "api": "https://api.yhdm.com/provide/vod",
+                            "api": "https://api.example2.tv/provide/vod",
                             "searchable": 1
                         }
                     ]
@@ -242,8 +242,8 @@ class CommunitySubscriptionServiceTest {
                 MockEngine { request ->
                     val urlStr = request.url.toString()
                     when {
-                        urlStr.contains("agemys.org") -> respond(content = "OK", status = HttpStatusCode.OK)
-                        urlStr.contains("yhdm.com") -> respond(content = "OK", status = HttpStatusCode.OK)
+                        urlStr.contains("example.tv") -> respond(content = "OK", status = HttpStatusCode.OK)
+                        urlStr.contains("example2.tv") -> respond(content = "OK", status = HttpStatusCode.OK)
                         else -> respond(content = "OK", status = HttpStatusCode.OK)
                     }
                 }
@@ -261,10 +261,10 @@ class CommunitySubscriptionServiceTest {
             assertTrue(report.isHealthy)
             assertEquals(2, report.totalRules)
             assertEquals(2, report.aliveRules)
-            val age = report.sources.first { it.name == "AGE动漫" }
-            assertEquals("https://m.agemys.org/search?query={title}", age.urlTemplate)
-            val maccms = report.sources.first { it.name == "樱花采集站" }
-            assertEquals("https://api.yhdm.com/provide/vod?ac=detail&wd={title}", maccms.urlTemplate)
+            val age = report.sources.first { it.name == "示例采集站" }
+            assertEquals("https://api.example.tv/search?query={title}", age.urlTemplate)
+            val maccms = report.sources.first { it.name == "第二采集站" }
+            assertEquals("https://api.example2.tv/provide/vod?ac=detail&wd={title}", maccms.urlTemplate)
         }
 
     @Test
@@ -275,7 +275,7 @@ class CommunitySubscriptionServiceTest {
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Anime1.me 动画线上看 - 官方网站</title>
+                    <title>示例站 动画线上看 - 官方网站</title>
                 </head>
                 <body>
                     <form action="/" method="get">
@@ -289,7 +289,7 @@ class CommunitySubscriptionServiceTest {
                 MockEngine { request ->
                     val urlStr = request.url.toString()
                     when {
-                        urlStr == "https://anime1.me/" || urlStr == "https://anime1.me" -> {
+                        urlStr == "https://example.tv/" || urlStr == "https://example.tv" -> {
                             respond(
                                 content = htmlContent,
                                 status = HttpStatusCode.OK,
@@ -308,13 +308,13 @@ class CommunitySubscriptionServiceTest {
                 }
 
             val service = CommunitySubscriptionServiceImpl(client = client)
-            val report = service.validateAndTestSubscription("https://anime1.me")
+            val report = service.validateAndTestSubscription("https://example.tv")
 
             assertTrue(report.isHealthy)
             assertEquals(1, report.totalRules)
             val source = report.sources.first()
-            assertEquals("Anime1.me 动画线上看", source.name)
-            assertEquals("https://anime1.me/?s={title}", source.urlTemplate)
+            assertEquals("示例站 动画线上看", source.name)
+            assertEquals("https://example.tv/?s={title}", source.urlTemplate)
             assertTrue(source.isAlive)
         }
 }

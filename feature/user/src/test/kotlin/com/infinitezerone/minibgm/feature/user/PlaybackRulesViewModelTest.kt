@@ -25,7 +25,7 @@ class PlaybackRulesViewModelTest {
             val rule =
                 PlaybackSourceRule(
                     id = "rule-1",
-                    name = "AGE动漫",
+                    name = "示例采集站",
                     urlTemplate = "https://agefans.com/search?q={title}",
                     isEnabled = true,
                 )
@@ -35,7 +35,7 @@ class PlaybackRulesViewModelTest {
             val state = viewModel.uiState.first { !it.isLoading }
 
             assertEquals(1, state.rules.size)
-            assertEquals("AGE动漫", state.rules.first().name)
+            assertEquals("示例采集站", state.rules.first().name)
         }
 
     @Test
@@ -114,12 +114,12 @@ class PlaybackRulesViewModelTest {
             val viewModel = PlaybackRulesViewModel(fakeRepo)
             viewModel.updateRule(
                 id = "rule-1",
-                name = "AGE动漫 (新版)",
+                name = "示例采集站 (新版)",
                 urlTemplate = "https://agefans.vip/{title}",
             )
 
             val updated = fakeRepo.playbackRules.first().first()
-            assertEquals("AGE动漫 (新版)", updated.name)
+            assertEquals("示例采集站 (新版)", updated.name)
             assertEquals("https://agefans.vip/{title}", updated.urlTemplate)
         }
 

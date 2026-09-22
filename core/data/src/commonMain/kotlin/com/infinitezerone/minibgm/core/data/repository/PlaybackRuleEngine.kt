@@ -103,14 +103,11 @@ class PlaybackRuleEngineImpl(
                         variables["pageUrl"] = lastUrl
 
                         for (headerName in step.captureHeaders) {
-                            val matchedValue =
-                                fetchedPage.responseHeaders.entries
-                                    .firstOrNull { it.key.equals(headerName, ignoreCase = true) }
-                                    ?.value
-                            if (!matchedValue.isNullOrBlank()) {
-                                capturedHeaders[headerName] = matchedValue
-                                variables[headerName] = matchedValue
-                            }
+                            val captured = captureResponseHeader(fetchedPage, headerName) ?: continue
+                            capturedHeaders[captured.first] = captured.second
+                            // 原名与规范名都注册，模板里写 {Set-Cookie} 或 {Cookie} 都能取到值
+                            variables[headerName] = captured.second
+                            variables[captured.first] = captured.second
                         }
                     }
 
@@ -154,6 +151,31 @@ class PlaybackRuleEngineImpl(
 
             return@withContext emptyList()
         }
+
+    /**
+     * 从响应里取一个头，并规范化成"能作为请求头发出去"的形态。
+     *
+     * `Set-Cookie` 是唯一需要改名的：它是响应头，原样当请求头发出去无效——头名不对，
+     * 值里还带 `Path`/`HttpOnly`/`Expires` 等属性。抓取层已经把多个 Set-Cookie 归并成
+     * `Cookie: a=1; b=2`（见 [FetchedPage.responseHeaders] 的约定），优先用那个；
+     * 拿不到时退而自行提取，不依赖抓取实现的具体细节。
+     */
+    private fun captureResponseHeader(
+        page: FetchedPage,
+        headerName: String,
+    ): Pair<String, String>? {
+        fun headerValueOf(name: String): String? =
+            page.responseHeaders.entries
+                .firstOrNull { it.key.equals(name, ignoreCase = true) }
+                ?.value
+                ?.takeIf { it.isNotBlank() }
+
+        if (!headerName.equals("Set-Cookie", ignoreCase = true)) {
+            return headerValueOf(headerName)?.let { headerName to it }
+        }
+        val normalized = headerValueOf("Cookie") ?: headerValueOf("Set-Cookie")?.let(::cookiePairsOf)
+        return normalized?.let { "Cookie" to it }
+    }
 
     private fun replacePlaceholders(
         template: String,
@@ -206,3 +228,21 @@ class PlaybackRuleEngineImpl(
         return null
     }
 }
+
+/**
+ * 从 `Set-Cookie` 原始值里提取可回传的 `name=value` 集合。
+ *
+ * 多个 cookie 常被合并成一行（换行或 `", "` 分隔），而属性里也含逗号
+ * （`Expires=Wed, 21 Oct 2025 07:28:00 GMT`），所以不能简单按逗号切。
+ * 这里逐段用 `name=value` 的形态去匹配，匹配不上的属性碎片自然被丢掉。
+ */
+private val COOKIE_PAIR_REGEX = Regex("""([A-Za-z0-9_\-!#%&'*+.^`|~]+)\s*=\s*([^;,\s]+)""")
+
+internal fun cookiePairsOf(rawSetCookie: String): String? =
+    rawSetCookie
+        .split('\n', ',')
+        .mapNotNull { segment ->
+            COOKIE_PAIR_REGEX.find(segment)?.let { "${it.groupValues[1]}=${it.groupValues[2]}" }
+        }.distinct()
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString("; ")

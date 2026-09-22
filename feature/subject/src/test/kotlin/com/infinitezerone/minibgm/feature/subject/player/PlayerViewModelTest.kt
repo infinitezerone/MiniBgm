@@ -300,8 +300,8 @@ class PlayerViewModelTest {
                 listOf(
                     PlaybackSourceRule(
                         id = "rule1",
-                        name = "Anime1",
-                        urlTemplate = "https://anime1.me/?s={title}",
+                        name = "示例站",
+                        urlTemplate = "https://example.tv/?s={title}",
                         isEnabled = true,
                     ),
                 ),
@@ -312,7 +312,7 @@ class PlayerViewModelTest {
             val sources = vm.uiState.value.sources
             assertEquals(2, sources.size)
             assertTrue(sources[0].isDirect)
-            assertEquals("Anime1", sources[1].name)
+            assertEquals("示例站", sources[1].name)
         }
 
     @Test
