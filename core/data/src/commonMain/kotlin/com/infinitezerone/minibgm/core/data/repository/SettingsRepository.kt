@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistDocument
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
@@ -51,6 +52,24 @@ interface SettingsRepository {
 
     /** 更新 AI 服务配置 */
     suspend fun setAiConfig(config: AiConfig)
+
+    /** 已保存的 AI 配置方案池（命名快照，供多套端点/密钥快速切换） */
+    val aiConfigProfiles: Flow<List<AiConfigProfile>>
+
+    /** 当前启用的方案 id；空串表示未启用任何方案（生效配置仍以 aiConfig 为准） */
+    val activeAiProfileId: Flow<String>
+
+    /** 保存 AI 配置方案：同 id 覆盖、新 id 追加 */
+    suspend fun saveAiConfigProfile(profile: AiConfigProfile)
+
+    /**
+     * 启用指定方案：把方案配置写回当前生效配置（aiConfig 四字段）并记录启用标记。
+     * 未知 id 是 no-op——启用动作不允许凭空产生配置。
+     */
+    suspend fun activateAiConfigProfile(profileId: String)
+
+    /** 删除方案；若删除的是启用中的方案，仅清除启用标记（生效配置保留，不产生行为回退） */
+    suspend fun deleteAiConfigProfile(profileId: String)
 
     suspend fun setAirDelayOffsetMinutes(minutes: Int)
 
@@ -193,6 +212,60 @@ class SettingsRepositoryImpl(
             model = config.model,
             provider = config.provider,
         )
+    }
+
+    private val aiProfilesWriteMutex = Mutex()
+
+    private fun decodeAiProfiles(raw: String): List<AiConfigProfile> =
+        if (raw.isBlank()) {
+            emptyList()
+        } else {
+            runCatching {
+                json.decodeFromString<List<AiConfigProfile>>(raw)
+            }.getOrDefault(emptyList())
+        }
+
+    override val aiConfigProfiles: Flow<List<AiConfigProfile>> =
+        userPreferences.userPreferences.map { prefs ->
+            decodeAiProfiles(prefs.aiConfigProfilesJson)
+        }
+
+    override val activeAiProfileId: Flow<String> =
+        userPreferences.userPreferences.map { prefs ->
+            prefs.aiActiveProfileId
+        }
+
+    override suspend fun saveAiConfigProfile(profile: AiConfigProfile) {
+        aiProfilesWriteMutex.withLock {
+            val current = decodeAiProfiles(userPreferences.userPreferences.first().aiConfigProfilesJson)
+            val updated = current.filterNot { it.id == profile.id } + profile
+            userPreferences.setAiConfigProfilesJson(json.encodeToString(updated))
+        }
+    }
+
+    override suspend fun activateAiConfigProfile(profileId: String) {
+        val profile =
+            decodeAiProfiles(userPreferences.userPreferences.first().aiConfigProfilesJson)
+                .firstOrNull { it.id == profileId } ?: return
+        userPreferences.setAiConfig(
+            endpoint = profile.config.endpoint,
+            apiKey = profile.config.apiKey,
+            model = profile.config.model,
+            provider = profile.config.provider,
+        )
+        userPreferences.setAiActiveProfileId(profileId)
+    }
+
+    override suspend fun deleteAiConfigProfile(profileId: String) {
+        aiProfilesWriteMutex.withLock {
+            val prefs = userPreferences.userPreferences.first()
+            val current = decodeAiProfiles(prefs.aiConfigProfilesJson)
+            if (current.none { it.id == profileId }) return@withLock
+            userPreferences.setAiConfigProfilesJson(json.encodeToString(current.filterNot { it.id == profileId }))
+            if (prefs.aiActiveProfileId == profileId) {
+                userPreferences.setAiActiveProfileId("")
+            }
+        }
     }
 
     override suspend fun setAirDelayOffsetMinutes(minutes: Int) {

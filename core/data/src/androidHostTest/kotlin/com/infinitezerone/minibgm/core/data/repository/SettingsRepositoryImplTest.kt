@@ -112,4 +112,50 @@ class SettingsRepositoryImplTest {
             assertTrue(rulesAfterSecondImport.any { it.id == "1" })
             assertTrue(rulesAfterSecondImport.any { it.id == "2" })
         }
+
+    @Test
+    fun aiConfigProfiles_roundTrip_saveActivateDelete() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            val repo = SettingsRepositoryImpl(createTestUserPreferencesDataSource(), fakeService)
+
+            val configA =
+                com.infinitezerone.minibgm.core.model.AiConfig(
+                    endpoint = "https://a.example.com/v1",
+                    apiKey = "ka",
+                    model = "ma",
+                    provider = com.infinitezerone.minibgm.core.model.AiConfig.PROVIDER_CUSTOM,
+                )
+            val configB = configA.copy(endpoint = "https://b.example.com/v1", apiKey = "kb", model = "mb")
+            val profileA =
+                com.infinitezerone.minibgm.core.model
+                    .AiConfigProfile(id = "pa", name = "A", config = configA)
+            val profileB =
+                com.infinitezerone.minibgm.core.model
+                    .AiConfigProfile(id = "pb", name = "B", config = configB)
+
+            repo.saveAiConfigProfile(profileA)
+            repo.saveAiConfigProfile(profileB)
+            // 同 id 覆盖
+            repo.saveAiConfigProfile(profileA.copy(name = "A2"))
+
+            val profiles = repo.aiConfigProfiles.first()
+            assertEquals(2, profiles.size)
+            assertEquals("A2", profiles.first { it.id == "pa" }.name)
+
+            // 启用 B：生效配置切换 + 标记更新
+            repo.activateAiConfigProfile("pb")
+            assertEquals(configB, repo.aiConfig.first())
+            assertEquals("pb", repo.activeAiProfileId.first())
+
+            // 删除启用中的方案：清除标记但生效配置保留
+            repo.deleteAiConfigProfile("pb")
+            assertEquals(1, repo.aiConfigProfiles.first().size)
+            assertEquals("", repo.activeAiProfileId.first())
+            assertEquals(configB, repo.aiConfig.first())
+
+            // 未知 id 启用是 no-op
+            repo.activateAiConfigProfile("不存在")
+            assertEquals("", repo.activeAiProfileId.first())
+        }
 }

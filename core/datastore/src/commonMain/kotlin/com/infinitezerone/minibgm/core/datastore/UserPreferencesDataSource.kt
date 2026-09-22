@@ -164,6 +164,20 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新 AI 配置方案池 JSON（List<AiConfigProfile> 序列化串；上限与去重由写入方维护） */
+    suspend fun setAiConfigProfilesJson(json: String) {
+        dataStore.updateData { current ->
+            current.copy(aiConfigProfilesJson = json)
+        }
+    }
+
+    /** 记录当前启用的 AI 配置方案 id */
+    suspend fun setAiActiveProfileId(profileId: String) {
+        dataStore.updateData { current ->
+            current.copy(aiActiveProfileId = profileId)
+        }
+    }
+
     /** 更新自定义播放规则配置 JSON */
     suspend fun setPlaybackRulesJson(json: String) {
         dataStore.updateData { current ->

@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistDocument
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
@@ -62,6 +63,36 @@ class FakeSettingsRepository(
     override suspend fun setAiConfig(config: AiConfig) {
         setAiConfigCallCount++
         settingsState.value = settingsState.value.copy(aiConfig = config)
+    }
+
+    private val aiProfilesState = MutableStateFlow<List<AiConfigProfile>>(emptyList())
+    private val activeAiProfileIdState = MutableStateFlow("")
+
+    override val aiConfigProfiles: Flow<List<AiConfigProfile>> = aiProfilesState
+
+    override val activeAiProfileId: Flow<String> = activeAiProfileIdState
+
+    override suspend fun saveAiConfigProfile(profile: AiConfigProfile) {
+        val current = aiProfilesState.value.filterNot { it.id == profile.id }
+        aiProfilesState.value = current + profile
+    }
+
+    override suspend fun activateAiConfigProfile(profileId: String) {
+        val profile = aiProfilesState.value.firstOrNull { it.id == profileId } ?: return
+        settingsState.value = settingsState.value.copy(aiConfig = profile.config)
+        activeAiProfileIdState.value = profileId
+    }
+
+    override suspend fun deleteAiConfigProfile(profileId: String) {
+        aiProfilesState.value = aiProfilesState.value.filterNot { it.id == profileId }
+        if (activeAiProfileIdState.value == profileId) {
+            activeAiProfileIdState.value = ""
+        }
+    }
+
+    /** 直接注入 AI 配置方案池（供 ViewModel 测试构造场景） */
+    fun setAiProfiles(profiles: List<AiConfigProfile>) {
+        aiProfilesState.value = profiles
     }
 
     private val airDelayOffsetMinutesState = MutableStateFlow(0)

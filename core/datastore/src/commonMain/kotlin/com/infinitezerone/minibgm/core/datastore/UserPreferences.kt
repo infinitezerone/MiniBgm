@@ -46,6 +46,10 @@ data class UserPreferences(
     val aiModel: String = "",
     /** AI 服务配置：服务商类型（如 ollama, openai） */
     val aiProvider: String = "ollama",
+    /** AI 配置方案池 JSON（List<AiConfigProfile>；空串表示尚未保存任何方案） */
+    val aiConfigProfilesJson: String = "",
+    /** 当前启用的 AI 配置方案 id（空串表示未启用任何方案；生效配置始终以 ai* 四字段为准） */
+    val aiActiveProfileId: String = "",
     /** 自定义播放规则列表 JSON 序列化字符串 */
     val playbackRulesJson: String = "",
     /** 用户自备播放列表信封 JSON（PlaybackPlaylistDocument 序列化串；空串表示从未导入） */
