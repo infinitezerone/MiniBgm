@@ -335,6 +335,10 @@ class AssistantViewModel(
 
                         val playableSources = PlayableSourcesParser.extract(rawContent)
 
+                        // 卡片和正文里的是同一份提案，正文那份去掉；剩下的自然语言照常保留
+                        val messageBody =
+                            stripDuplicatedJsonBlock(rawContent, combinedActions.isNotEmpty())
+
                         val displayContent =
                             when {
                                 playableSources != null -> {
@@ -342,10 +346,10 @@ class AssistantViewModel(
                                     val suffix = if (source.isBlank()) "" else "（来源：$source）"
                                     "为你找到 ${playableSources.episodes.size} 条可播放来源$suffix："
                                 }
-                                rawContent.trim().startsWith("{") && combinedActions.isNotEmpty() -> {
+                                combinedActions.isNotEmpty() && messageBody.isBlank() -> {
                                     "已为您生成待确认操作提案，请确认是否提交同步至 Bangumi："
                                 }
-                                else -> rawContent
+                                else -> messageBody
                             }
 
                         val assistantMessage =
