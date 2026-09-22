@@ -22,6 +22,8 @@ data class RecordedRuleDraft(
     val steps: List<PipelineStep>,
     /** 本次审计直接抓到的媒体地址。非空说明这一次根本不依赖规则，但仍可当作正则线索 */
     val mediaUrl: String? = null,
+    /** 重放接口取回的响应样本：有它才能写 `EXTRACT_STREAM` 的正则，而不是靠猜 */
+    val apiSamples: List<ApiResponseSample> = emptyList(),
     /** 需要补全之处，逐条说清为什么——每一条都对应一处模型必须自己判断的地方 */
     val notes: List<String> = emptyList(),
 )
@@ -33,16 +35,20 @@ data class RecordedRuleDraft(
  * （重放器是 [PlaybackRuleEngine]）。与浏览器 agent 框架不同的是，这里无法录到
  * 点击动作与请求体：`shouldInterceptRequest` 只有 URL 与方法，所以只归纳请求序列，
  * 缺的部分写进 [RecordedRuleDraft.notes] 交给调用方处理。
+ *
+ * 本类保持**纯归纳**——不联网、不做 IO。响应样本由调用方先经
+ * [PlaybackRuleSampleReplayer] 取回再传进来（[apiSamples]），这样这一层可确定性测试。
  */
 object PlaybackRuleRecorder {
     /** 媒体请求常常依赖这几个头才能拉流，录制时保留；其余头（Accept 等）由抓取层自行决定 */
-    private val REPLAYABLE_HEADERS = setOf("referer", "user-agent", "origin")
+    internal val REPLAYABLE_HEADERS = setOf("referer", "user-agent", "origin")
 
     fun recordFromTrace(
         trace: NetworkAuditTrace,
         ruleName: String,
         title: String,
         ep: String,
+        apiSamples: List<ApiResponseSample> = emptyList(),
     ): RecordedRuleDraft {
         val notes = mutableListOf<String>()
         val entryUrl = trace.finalUrl.ifBlank { trace.pageUrl }
@@ -105,7 +111,20 @@ object PlaybackRuleRecorder {
             notes += "没有归纳出可重放的步骤，先确认审计是否跑在正确的播放页上"
         }
         if (mediaUrl != null || apiCalls.isNotEmpty()) {
-            notes += "EXTRACT_STREAM 的 regex 留空待补：审计看不到响应正文，正则只能照着真实响应写"
+            val succeeded = apiSamples.count { it.ok }
+            val failed = apiSamples.size - succeeded
+            notes +=
+                when {
+                    succeeded > 0 ->
+                        "已重放 $succeeded 条接口请求并附上响应片段（apiSamples）——" +
+                            "EXTRACT_STREAM 的 regex 照着片段里承载直链的字段写，不要凭印象编字段名" +
+                            if (failed > 0) "；另有 $failed 条没取到响应，失败原因见各自的 note" else ""
+                    apiSamples.isNotEmpty() ->
+                        "所有接口重放都没取到响应（原因见 apiSamples[].note）：" +
+                            "要么站点需要按页面上下文才认这次请求，要么该请求只能在点击后发生"
+                    else ->
+                        "EXTRACT_STREAM 的 regex 留空待补：没有可用响应样本，正则只能照着真实响应写"
+                }
         }
 
         return RecordedRuleDraft(
@@ -113,6 +132,7 @@ object PlaybackRuleRecorder {
             pageUrl = entryUrl,
             steps = steps,
             mediaUrl = mediaUrl,
+            apiSamples = apiSamples,
             notes = notes,
         )
     }

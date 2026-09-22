@@ -36,6 +36,7 @@ val aiModule =
                 playbackResolverRepository = get(),
                 pendingActionStore = get<PendingActionStore>(),
                 playbackSourceVerifier = getOrNull(),
+                sampleReplayer = getOrNull(),
             )
         }
         single<PendingActionExecutor> {

@@ -1,7 +1,9 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
+import com.infinitezerone.minibgm.core.data.repository.ApiResponseSample
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleSampleReplayer
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
@@ -415,6 +417,51 @@ class PlaybackRuleDiagnosticsToolsTest {
             val obj = json.parseToJsonElement(output).jsonObject
 
             assertEquals("false", obj["success"]?.jsonPrimitive?.content)
+        }
+
+    @Test
+    fun `recordPlaybackRuleFromTrace 把重放到的响应样本带进草案`() =
+        runTest {
+            val apiUrl = "https://api.example.tv/vod?wd=x"
+            val tools =
+                PlaybackRuleDiagnosticsTools(
+                    RecordingResolver(),
+                    sampleReplayer =
+                        object : PlaybackRuleSampleReplayer {
+                            override suspend fun replayApiSamples(trace: NetworkAuditTrace) =
+                                listOf(
+                                    ApiResponseSample(
+                                        url = apiUrl,
+                                        ok = true,
+                                        bodyExcerpt = """{"list":[{"vod_play_url":"第1集${'$'}http://cdn/x.m3u8"}]}""",
+                                    ),
+                                )
+                        },
+                )
+            val trace =
+                NetworkAuditTrace(
+                    pageUrl = "https://site.example.tv/play/1",
+                    calls = listOf(CapturedNetworkCall(url = apiUrl, isApi = true)),
+                )
+
+            val output = tools.recordPlaybackRuleFromTrace(Json.encodeToString(trace), sampleTitle = "某番", sampleEp = 1)
+
+            val samples =
+                json
+                    .parseToJsonElement(output)
+                    .jsonObject["apiSamples"]
+                    ?.jsonArray
+                    .orEmpty()
+            assertEquals(1, samples.size)
+            assertTrue(
+                samples[0]
+                    .jsonObject["bodyExcerpt"]
+                    ?.jsonPrimitive
+                    ?.content
+                    .orEmpty()
+                    .contains("vod_play_url"),
+                "样本要原样交给模型，正则才可能照着真实字段写而不是猜字段名",
+            )
         }
 
     @Test

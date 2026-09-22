@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.ai.PendingActionStore
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleRecorder
+import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleSampleReplayer
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.StreamVerification
 import com.infinitezerone.minibgm.core.model.ActionProposal
@@ -54,6 +55,7 @@ class PlaybackRuleDiagnosticsTools(
         },
     private val pendingActionStore: PendingActionStore? = null,
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
+    private val sampleReplayer: PlaybackRuleSampleReplayer? = null,
 ) : ToolSet {
     @Tool
     @LLMDescription(
@@ -107,10 +109,10 @@ class PlaybackRuleDiagnosticsTools(
             "It extracts the REAL request sequence (page -> API calls -> media) with the exact URLs, methods " +
             "and replayable headers that were observed, substituting {title}/{ep} into them. " +
             "Call this INSTEAD OF inventing an interface URL from scratch. " +
-            "The skeleton's EXTRACT_STREAM regex is deliberately left empty because an audit cannot see " +
-            "response bodies — fill it yourself from the real response, then run testPlaybackRule. " +
-            "Read the returned notes: they list what the audit could NOT capture (POST bodies, requests that " +
-            "only fire after a click), so you can tell a structural gap from something worth retrying.",
+            "It also REPLAYS the audited GET API calls (same site only) and returns their real response " +
+            "bodies in apiSamples — write the EXTRACT_STREAM regex against that sample, do not invent field " +
+            "names. POST calls and requests that only fire after a click cannot be replayed; the notes say so. " +
+            "After filling the regex, run testPlaybackRule.",
     )
     suspend fun recordPlaybackRuleFromTrace(
         @LLMDescription("JSON string previously returned by traceNetworkTraffic")
@@ -132,12 +134,15 @@ class PlaybackRuleDiagnosticsTools(
                     ),
                 )
             }
+        // 先重放取样、再归纳：录制器保持纯函数，IO 全部发生在这一层
+        val samples = sampleReplayer?.replayApiSamples(trace).orEmpty()
         val draft =
             PlaybackRuleRecorder.recordFromTrace(
                 trace = trace,
                 ruleName = ruleNameFromTrace(trace),
                 title = sampleTitle,
                 ep = if (sampleEp > 0) sampleEp.toString() else "",
+                apiSamples = samples,
             )
         return json.encodeToString(draft)
     }
