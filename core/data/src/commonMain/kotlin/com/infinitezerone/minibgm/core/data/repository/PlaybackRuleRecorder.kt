@@ -166,6 +166,23 @@ object PlaybackRuleRecorder {
     private val IFRAME_SRC_REGEX =
         Regex("""<iframe\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
+    /** 百分号编码段：整段或部分编码的直链都要能还原，非法序列原样保留 */
+    private val PERCENT_ENCODED_RUN = Regex("""(?:%[0-9A-Fa-f]{2})+""")
+
+    private fun decodePercentRuns(html: String): String =
+        PERCENT_ENCODED_RUN.replace(html) { match -> percentDecode(match.value) ?: match.value }
+
+    /** commonMain 没有现成的 percent 解码：按字节还原再按 UTF-8 解，与 encodeParam 互逆 */
+    private fun percentDecode(encoded: String): String? {
+        if (encoded.isEmpty() || encoded.length % 3 != 0) return null
+        val bytes = ByteArray(encoded.length / 3)
+        for (i in bytes.indices) {
+            if (encoded[i * 3] != '%') return null
+            bytes[i] = (encoded.substring(i * 3 + 1, i * 3 + 3).toIntOrNull(16) ?: return null).toByte()
+        }
+        return bytes.decodeToString()
+    }
+
     /** 最多采几条媒体候选：采样是为了写正则，不是替调用方做选择 */
     private const val MAX_STATIC_MEDIA: Int = 3
 
@@ -196,14 +213,32 @@ object PlaybackRuleRecorder {
             steps += PipelineStep(action = StepAction.FETCH, urlTemplate = parametrizeUrl(entryUrl, title))
         }
 
-        val mediaUrls =
+        var mediaUrls =
             STATIC_MEDIA_REGEX
                 .findAll(html)
                 .map { it.value }
                 .distinct()
-                .take(MAX_STATIC_MEDIA)
                 .toList()
-        val mediaUrl = mediaUrls.firstOrNull()
+        var mediaSource = html
+        var percentDecoded = false
+        if (mediaUrls.isEmpty()) {
+            // MacCMS 播放器配置常把直链整段百分号编码后写进源码（实测 moonci 类站点），解码一遍再抽
+            val decodedHtml = decodePercentRuns(html)
+            val decodedUrls =
+                STATIC_MEDIA_REGEX
+                    .findAll(decodedHtml)
+                    .map { it.value }
+                    .distinct()
+                    .take(MAX_STATIC_MEDIA)
+                    .toList()
+            if (decodedUrls.isNotEmpty()) {
+                mediaUrls = decodedUrls
+                mediaSource = decodedHtml
+                percentDecoded = true
+            }
+        }
+        val candidates = mediaUrls.take(MAX_STATIC_MEDIA)
+        val mediaUrl = candidates.firstOrNull()
 
         if (mediaUrl != null) {
             steps +=
@@ -212,10 +247,16 @@ object PlaybackRuleRecorder {
                     // 静态路径没有捕获到的真实请求头；Referer 用播放页地址是来源校验的常规要求
                     headers = entryUrl.takeIf { it.isNotBlank() }?.let { mapOf("Referer" to it) }.orEmpty(),
                 )
-            notes +=
-                "静态页源码里直接抽到了媒体地址（${mediaUrls.joinToString("、")}）——" +
-                "正则照下面的源码上下文写，不要凭印象编字段名"
-            notes += "媒体地址的源码上下文：${contextAround(html, mediaUrl)}"
+            if (percentDecoded) {
+                notes +=
+                    "直链在源码里是百分号编码形态（MacCMS 播放器配置常见），解码后得到：" +
+                    candidates.joinToString("、") + "——EXTRACT_STREAM 的正则写解码后的明文形态，照下面的上下文写"
+            } else {
+                notes +=
+                    "静态页源码里直接抽到了媒体地址（${candidates.joinToString("、")}）——" +
+                    "正则照下面的源码上下文写，不要凭印象编字段名"
+            }
+            notes += "媒体地址的源码上下文：${contextAround(mediaSource, mediaUrl)}"
         } else {
             notes +=
                 "静态 HTML 里没有直链：页面很可能由 JS 渲染或直链由接口在运行时返回——" +
@@ -225,7 +266,8 @@ object PlaybackRuleRecorder {
         if (html.contains("vod_play_url") || html.contains("player_aaaa")) {
             notes +=
                 "检测到 MacCMS 特征（vod_play_url / player_aaaa）：优先考虑 parserType=MACCMS 的规则，" +
-                "引擎有现成的标准接口解析，pipeline 反而绕远"
+                "引擎有现成的标准接口解析，pipeline 反而绕远。注意部分站点会关闭开放接口（接口返回 closed），" +
+                "此时从 player_aaaa 配置里解码直链，解不出明文再转网络审计"
         }
 
         val iframes =
