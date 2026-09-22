@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.network
 import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import com.infinitezerone.minibgm.core.model.TvBoxConfig
+import com.infinitezerone.minibgm.core.model.TvBoxSiteConversion
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -15,6 +16,17 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.measureTimedValue
+
+/**
+ * 一次解析的产出：可用规则 + 被跳过的条目分类。
+ *
+ * 跳过必须分类上报，调用方才能对用户说清"收下几条、跳过几条、为什么"。
+ */
+internal data class ParsedSourceBatch(
+    val sources: List<DiscoveredSource> = emptyList(),
+    val skippedUnsupported: Int = 0,
+    val skippedMalformed: Int = 0,
+)
 
 /**
  * 社区开源订阅响应实体
@@ -57,12 +69,23 @@ class CommunitySubscriptionServiceImpl(
             )
         }
 
-        val rawSources = resolveSources(trimmed)
+        val batch = resolveSources(trimmed)
+        val rawSources = batch.sources
         if (rawSources.isEmpty()) {
+            val skipped = batch.skippedUnsupported + batch.skippedMalformed
             return SubscriptionValidationReport(
                 isHealthy = false,
                 subscriptionUrl = trimmed,
-                errorMessage = "未解析到有效播放源规则，请检查网络连接或规则 JSON 格式",
+                errorMessage =
+                    if (skipped > 0) {
+                        "订阅里有 $skipped 个站点但均无法使用：" +
+                            "${batch.skippedUnsupported} 个为爬虫/扩展源（本应用不支持），" +
+                            "${batch.skippedMalformed} 个条目信息不完整"
+                    } else {
+                        "未解析到有效播放源规则，请检查网络连接或规则 JSON 格式"
+                    },
+                skippedUnsupportedSites = batch.skippedUnsupported,
+                skippedMalformedSites = batch.skippedMalformed,
             )
         }
 
@@ -97,10 +120,12 @@ class CommunitySubscriptionServiceImpl(
             aliveRules = aliveList.size,
             averageLatencyMs = avgLatency,
             sources = sortedSources,
+            skippedUnsupportedSites = batch.skippedUnsupported,
+            skippedMalformedSites = batch.skippedMalformed,
         )
     }
 
-    private suspend fun resolveSources(target: String): List<DiscoveredSource> {
+    private suspend fun resolveSources(target: String): ParsedSourceBatch {
         if (target.startsWith("[") || target.startsWith("{")) {
             return parseSourcesFromText(target)
         }
@@ -110,36 +135,42 @@ class CommunitySubscriptionServiceImpl(
     private fun parseSourcesFromText(
         rawText: String,
         pageUrl: String = "",
-    ): List<DiscoveredSource> {
+    ): ParsedSourceBatch {
         val trimmed = rawText.trim()
-        if (trimmed.isBlank()) return emptyList()
+        if (trimmed.isBlank()) return ParsedSourceBatch()
 
         // 1. 直接解析 MiniBgm 规则数组
         if (trimmed.startsWith("[")) {
             val directList = runCatching { json.decodeFromString<List<DiscoveredSource>>(trimmed) }.getOrNull()
-            if (!directList.isNullOrEmpty()) return directList
+            if (!directList.isNullOrEmpty()) return ParsedSourceBatch(sources = directList)
         }
 
         // 2. 解析 MiniBgm 标准订阅包
         val pkg = runCatching { json.decodeFromString<CommunitySubscriptionPackage>(trimmed) }.getOrNull()
         if (pkg != null && pkg.sources.isNotEmpty()) {
-            return pkg.sources
+            return ParsedSourceBatch(sources = pkg.sources)
         }
 
-        // 3. 解析 TVBox 标准配置包 {"sites": [...]}
+        // 3. 解析 TVBox 标准配置包 {"sites": [...]}：逐条分类，跳过数必须能带回调用方
         val tvBox = runCatching { json.decodeFromString<TvBoxConfig>(trimmed) }.getOrNull()
         if (tvBox != null && tvBox.sites.isNotEmpty()) {
-            val converted = tvBox.sites.mapNotNull { it.toDiscoveredSource() }
-            if (converted.isNotEmpty()) return converted
+            val conversions = tvBox.sites.map { it.convert() }
+            // 即使一条都转换不出来也要在此返回：落到下面的 HTML 兜底会把跳过原因吞掉，
+            // 调用方就只能笼统说"没解析到"，分不清是不支持还是条目残缺
+            return ParsedSourceBatch(
+                sources = conversions.filterIsInstance<TvBoxSiteConversion.Supported>().map { it.source },
+                skippedUnsupported = conversions.count { it is TvBoxSiteConversion.Unsupported },
+                skippedMalformed = conversions.count { it is TvBoxSiteConversion.Malformed },
+            )
         }
 
-        // 4. 纯 HTML 文本兜底提取
-        extractSourceFromHtml(trimmed, pageUrl)?.let { return listOf(it) }
+        // 4. 纯 HTML 文本兜底提取（单站搜索模板，属页面规则）
+        extractSourceFromHtml(trimmed, pageUrl)?.let { return ParsedSourceBatch(sources = listOf(it)) }
 
-        return emptyList()
+        return ParsedSourceBatch()
     }
 
-    private suspend fun fetchSourcesFromUrl(url: String): List<DiscoveredSource> {
+    private suspend fun fetchSourcesFromUrl(url: String): ParsedSourceBatch {
         return try {
             val response: HttpResponse =
                 client.get(url) {
@@ -148,12 +179,12 @@ class CommunitySubscriptionServiceImpl(
                         connectTimeoutMillis = 3000
                     }
                 }
-            if (!response.status.isSuccess()) return emptyList()
+            if (!response.status.isSuccess()) return ParsedSourceBatch()
 
             val rawText: String = response.body()
             parseSourcesFromText(rawText, url)
         } catch (_: Throwable) {
-            emptyList()
+            ParsedSourceBatch()
         }
     }
 
