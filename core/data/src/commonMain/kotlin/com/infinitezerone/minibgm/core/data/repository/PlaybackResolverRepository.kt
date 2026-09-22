@@ -209,6 +209,19 @@ interface PlaybackResolverRepository {
         pageUrl: String,
         durationMs: Long = 8000L,
     ): NetworkAuditTrace = NetworkAuditTrace(pageUrl = pageUrl, isReachable = false, errorMessage = "Not implemented")
+
+    /**
+     * 直读静态播放页源码归纳规则草案（一次普通抓取，不走 WebView）。
+     *
+     * 静态站（直链写在 HTML 里）用这一条就够了；返回 null 表示页面不可达或没有正文，
+     * "取到了但没抽到媒体"会体现在草案 notes 里，由调用方决定是否改走 [auditPageTraffic]。
+     */
+    suspend fun recordRuleFromStaticPage(
+        pageUrl: String,
+        ruleName: String,
+        sampleTitle: String,
+        sampleEp: String = "",
+    ): RecordedRuleDraft? = null
 }
 
 class PlaybackResolverRepositoryImpl(
@@ -355,6 +368,24 @@ class PlaybackResolverRepositoryImpl(
                     errorMessage = "WebView capture service not available",
                 )
         return capture.auditPageTraffic(pageUrl, durationMs)
+    }
+
+    override suspend fun recordRuleFromStaticPage(
+        pageUrl: String,
+        ruleName: String,
+        sampleTitle: String,
+        sampleEp: String,
+    ): RecordedRuleDraft? {
+        val fetched = pageFetchService.fetchHtml(pageUrl.trim()) ?: return null
+        return withContext(Dispatchers.Default) {
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = fetched.url.ifBlank { pageUrl },
+                html = fetched.html,
+                ruleName = ruleName,
+                title = sampleTitle,
+                ep = sampleEp,
+            )
+        }
     }
 
     override suspend fun probeSite(

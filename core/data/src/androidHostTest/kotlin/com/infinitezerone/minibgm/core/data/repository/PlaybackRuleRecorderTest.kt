@@ -151,4 +151,105 @@ class PlaybackRuleRecorderTest {
         assertTrue(draft.notes.any { it.contains("没取到响应") })
         assertTrue(draft.notes.none { it.contains("照着片段") })
     }
+
+    @Test
+    fun `静态页直读抽到直链时归纳骨架并附源码上下文`() {
+        val mediaUrl = "https://cdn.example.tv/hls/1.m3u8"
+        val html =
+            """<html><body><div class="player" data-url="$mediaUrl" data-referer="1"></div><script>var p="ok";</script></body></html>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/ep/1",
+                html = html,
+                ruleName = "示例站",
+                title = "某番",
+                ep = "1",
+            )
+
+        assertEquals(mediaUrl, draft.mediaUrl)
+        assertEquals(2, draft.steps.size, "页面抓取与抽取各一步")
+        assertEquals(StepAction.EXTRACT_STREAM, draft.steps[1].action)
+        assertEquals("https://s.example.tv/ep/1", draft.steps[1].headers["Referer"], "静态路径没有捕获头，Referer 用播放页地址")
+        assertTrue(
+            draft.notes.any { it.contains("源码上下文") && it.contains("data-url") },
+            "直链的页面上下文要原样交给调用方，正则才可能照真实源码写",
+        )
+        assertTrue(draft.apiSamples.isEmpty(), "静态路径正文在手，不需要 apiSamples")
+    }
+
+    @Test
+    fun `静态页带 MacCMS 特征时建议直接用标准解析器`() {
+        val html = """<script>var player_aaaa = {"url":"https://cdn.example.tv/1.m3u8"};</script>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/ep/1",
+                html = html,
+                ruleName = "示例站",
+                title = "某番",
+            )
+
+        assertTrue(
+            draft.notes.any { it.contains("parserType=MACCMS") },
+            "引擎已有 MacCMS 标准解析，pipeline 是绕远路",
+        )
+    }
+
+    @Test
+    fun `静态页没有直链时明确指向网络审计而不是让调用方重试`() {
+        val html = """<html><body><div id="app"></div><script src="/app.js"></script></body></html>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/ep/1",
+                html = html,
+                ruleName = "示例站",
+                title = "某番",
+            )
+
+        assertEquals(null, draft.mediaUrl)
+        assertTrue(
+            draft.notes.any { it.contains("traceNetworkTraffic") },
+            "JS 渲染站是静态路径的结构性边界，要说清出路在哪",
+        )
+    }
+
+    @Test
+    fun `静态页内嵌 iframe 时提示跟进播放器页`() {
+        val html =
+            """<html><body><iframe src="https://p.example.tv/embed/9"></iframe></body></html>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/ep/1",
+                html = html,
+                ruleName = "示例站",
+                title = "某番",
+            )
+
+        assertTrue(
+            draft.notes.any { it.contains("https://p.example.tv/embed/9") },
+            "iframe 地址要原样列出，调用方才能对它再走一次直读",
+        )
+    }
+
+    @Test
+    fun `静态页直读同样把片名参数化并要求自行替换集数`() {
+        val title = "葬送的芙莉莲"
+        val encoded = PlaybackSourceRule.encodeParam(title)
+        val html = """<html><body>ok</body></html>"""
+
+        val draft =
+            PlaybackRuleRecorder.recordFromStaticPage(
+                pageUrl = "https://s.example.tv/search?q=$encoded",
+                html = html,
+                ruleName = "示例站",
+                title = title,
+                ep = "2",
+            )
+
+        assertTrue(draft.steps[0].urlTemplate.contains("{title}"))
+        assertTrue(draft.notes.any { it.contains("{ep}") })
+    }
 }

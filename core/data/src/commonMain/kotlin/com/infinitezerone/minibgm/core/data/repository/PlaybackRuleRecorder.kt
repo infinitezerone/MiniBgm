@@ -155,4 +155,128 @@ object PlaybackRuleRecorder {
             .replace(PlaybackSourceRule.encodeParam(title), "{title}", ignoreCase = true)
             .replace(title, "{title}")
     }
+
+    /** 静态页直读时抽媒体直链用：与抓取层/捕获层同一套扩展名，三层口径保持一致 */
+    private val STATIC_MEDIA_REGEX =
+        Regex(
+            """https?://[^"'()\s<>]+?\.(?:m3u8|mp4|mkv|flv|webm|ts)(?:\?[^"'()\s<>]*)?""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    private val IFRAME_SRC_REGEX =
+        Regex("""<iframe\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+
+    /** 最多采几条媒体候选：采样是为了写正则，不是替调用方做选择 */
+    private const val MAX_STATIC_MEDIA: Int = 3
+
+    /** 媒体地址前后的源码上下文窗口（字符数）：正则照片段写，片段太长反而稀释信号 */
+    private const val STATIC_CONTEXT_CHARS: Int = 200
+
+    /**
+     * 直读静态页源码归纳规则草案——WebView 审计的便宜替代。
+     *
+     * 适用面：直链或接口地址就写在 HTML 里的站点（MacCMS 模板站是大头）。
+     * 一次普通抓取就拿到了响应正文，`EXTRACT_STREAM` 的正则照源码上下文写即可，
+     * 不需要重放取样。页面由 JS 渲染或直链只在运行时出现时抽不到东西，
+     * notes 会明确说明，让调用方改走网络审计。
+     *
+     * 与 [recordFromTrace] 一样保持**纯归纳**——不联网、不做 IO。
+     */
+    fun recordFromStaticPage(
+        pageUrl: String,
+        html: String,
+        ruleName: String,
+        title: String,
+        ep: String = "",
+    ): RecordedRuleDraft {
+        val notes = mutableListOf<String>()
+        val entryUrl = pageUrl.trim()
+        val steps = mutableListOf<PipelineStep>()
+        if (entryUrl.isNotBlank()) {
+            steps += PipelineStep(action = StepAction.FETCH, urlTemplate = parametrizeUrl(entryUrl, title))
+        }
+
+        val mediaUrls =
+            STATIC_MEDIA_REGEX
+                .findAll(html)
+                .map { it.value }
+                .distinct()
+                .take(MAX_STATIC_MEDIA)
+                .toList()
+        val mediaUrl = mediaUrls.firstOrNull()
+
+        if (mediaUrl != null) {
+            steps +=
+                PipelineStep(
+                    action = StepAction.EXTRACT_STREAM,
+                    // 静态路径没有捕获到的真实请求头；Referer 用播放页地址是来源校验的常规要求
+                    headers = entryUrl.takeIf { it.isNotBlank() }?.let { mapOf("Referer" to it) }.orEmpty(),
+                )
+            notes +=
+                "静态页源码里直接抽到了媒体地址（${mediaUrls.joinToString("、")}）——" +
+                "正则照下面的源码上下文写，不要凭印象编字段名"
+            notes += "媒体地址的源码上下文：${contextAround(html, mediaUrl)}"
+        } else {
+            notes +=
+                "静态 HTML 里没有直链：页面很可能由 JS 渲染或直链由接口在运行时返回——" +
+                "改用 traceNetworkTraffic 做网络审计，静态路径对这类站点无能为力"
+        }
+
+        if (html.contains("vod_play_url") || html.contains("player_aaaa")) {
+            notes +=
+                "检测到 MacCMS 特征（vod_play_url / player_aaaa）：优先考虑 parserType=MACCMS 的规则，" +
+                "引擎有现成的标准接口解析，pipeline 反而绕远"
+        }
+
+        val iframes =
+            IFRAME_SRC_REGEX
+                .findAll(html)
+                .map { it.groupValues[1] }
+                .filter { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+                .distinct()
+                .take(MAX_STATIC_MEDIA)
+                .toList()
+        if (iframes.isNotEmpty()) {
+            notes +=
+                "页面内嵌 iframe 播放器（${iframes.joinToString("、")}）：真正承载播放器的可能是其中之一，" +
+                "可对它再走一次静态直读"
+        }
+
+        if (title.isNotBlank()) {
+            val sample = if (ep.isNotBlank()) "（本次样本用的是第 $ep 话）" else ""
+            notes += "片名已参数化为 {title}$sample；URL 里代表集数的参数请自行改成 {ep}——" +
+                "哪个参数是集数无法可靠判断，代码不替你做这个猜测"
+        }
+
+        if (steps.none { it.action == StepAction.EXTRACT_STREAM }) {
+            steps += PipelineStep(action = StepAction.EXTRACT_STREAM)
+        }
+        if (steps.size <= 1 && mediaUrl == null) {
+            notes += "没有归纳出可重放的步骤，先确认这个地址是不是真的播放页"
+        }
+
+        return RecordedRuleDraft(
+            ruleName = ruleName,
+            pageUrl = entryUrl,
+            steps = steps,
+            mediaUrl = mediaUrl,
+            apiSamples = emptyList(),
+            notes = notes,
+        )
+    }
+
+    /** 媒体地址在页面源码里的上下文窗口，供模型照着写 EXTRACT_STREAM 正则 */
+    private fun contextAround(
+        html: String,
+        needle: String,
+    ): String {
+        val index = html.indexOf(needle)
+        if (index < 0) return "（源码里没定位到该地址）"
+        val start = (index - STATIC_CONTEXT_CHARS).coerceAtLeast(0)
+        val end = (index + needle.length + STATIC_CONTEXT_CHARS).coerceAtMost(html.length)
+        val prefix = if (start > 0) "…" else ""
+        val suffix = if (end < html.length) "…" else ""
+        val context = html.substring(start, end).replace('\n', ' ').replace('\r', ' ')
+        return "$prefix$context$suffix"
+    }
 }
