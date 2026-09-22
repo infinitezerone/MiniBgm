@@ -37,7 +37,7 @@ interface PageFetchService {
         requestHeaders: Map<String, String> = emptyMap(),
     ): FetchedPage?
 
-    /** 发送表单 POST 请求并取回正文与响应头（Anime1 等播放接口用） */
+    /** 发送表单 POST 请求并取回正文与响应头（部分播放接口用） */
     suspend fun postForm(
         url: String,
         formData: Map<String, String>,
