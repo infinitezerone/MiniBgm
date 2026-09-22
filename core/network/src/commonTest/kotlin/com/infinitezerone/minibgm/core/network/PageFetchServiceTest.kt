@@ -160,4 +160,60 @@ class PageFetchServiceTest {
             assertEquals("e=123; p=abc", page?.responseHeaders?.get("Cookie"))
             assertEquals("payload123", capturedParamD)
         }
+
+    @Test
+    fun `probeStream 只取状态码与去掉 charset 的 Content-Type`() =
+        runTest {
+            val impl =
+                PageFetchServiceImpl(
+                    HttpClient(
+                        MockEngine { request ->
+                            capturedHeaders.add(request.headers)
+                            respond(
+                                content = "binary",
+                                status = HttpStatusCode.PartialContent,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("video/mp4; charset=utf-8")),
+                            )
+                        },
+                    ),
+                )
+
+            val probe = impl.probeStream("https://cdn.example.com/v/1.mp4?sign=x")
+
+            assertEquals(StreamProbe.Responded(status = 206, contentType = "video/mp4"), probe)
+            val headers = capturedHeaders.single()
+            assertEquals("bytes=0-2047", headers[HttpHeaders.Range])
+            // 探测媒体不能沿用 text/html，否则 CDN 可能回一个错误页
+            assertEquals("*/*", headers[HttpHeaders.Accept])
+        }
+
+    @Test
+    fun `probeStream 对非 http 地址与请求异常都返回失败而不是抛出`() =
+        runTest {
+            assertTrue(PageFetchServiceImpl(HttpClient(MockEngine { respond("") })).probeStream("file:///etc/passwd") is StreamProbe.Failed)
+
+            val broken = PageFetchServiceImpl(HttpClient(MockEngine { throw RuntimeException("boom") }))
+            assertTrue(broken.probeStream("https://cdn.example.com/v.mp4") is StreamProbe.Failed)
+        }
+
+    @Test
+    fun `probeStream 丢弃含换行的头`() =
+        runTest {
+            PageFetchServiceImpl(
+                HttpClient(
+                    MockEngine { request ->
+                        capturedHeaders.add(request.headers)
+                        respond("", status = HttpStatusCode.OK, headers = headersOf())
+                    },
+                ),
+            ).probeStream(
+                "https://cdn.example.com/v.mp4",
+                mapOf("X-A" to "1\r\nX-Injected: 2", "X-B" to "2"),
+            )
+
+            val headers = capturedHeaders.single()
+            assertNull(headers["X-A"])
+            assertEquals("2", headers["X-B"])
+            assertTrue(headers.names().none { it.equals("X-Injected", ignoreCase = true) })
+        }
 }
