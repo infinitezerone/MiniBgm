@@ -10,7 +10,8 @@ class ModelCatalogTest {
     fun buildModelsUrl_keepsVersionPrefixAndAppendsModels() {
         // OpenAI 兼容端点：保留 /v1 前缀（实测 …/api/v1/models 可用）
         assertEquals("https://api.example.com/v1/models", buildModelsUrl("https://api.example.com/v1", "custom"))
-        assertEquals("https://api.example.com/models", buildModelsUrl("https://api.example.com", "custom"))
+        // 裸域名要补 /v1：chat 走的是 …/v1/chat/completions，models 不该落在 …/models
+        assertEquals("https://api.example.com/v1/models", buildModelsUrl("https://api.example.com", "custom"))
         assertEquals(
             "https://api.example.com/v1/models",
             buildModelsUrl("https://api.example.com/v1/chat/completions", "custom"),
@@ -31,6 +32,45 @@ class ModelCatalogTest {
         // Ollama：原生 /api/tags
         assertEquals("http://10.0.2.2:11434/api/tags", buildModelsUrl("http://10.0.2.2:11434", AiConfig.PROVIDER_OLLAMA))
         assertEquals("http://10.0.2.2:11434/api/tags", buildModelsUrl("", AiConfig.PROVIDER_OLLAMA))
+    }
+
+    @Test
+    fun resolveApiBase_keepsProviderSpecificVersionSegments() {
+        // 智谱：版本段是 /api/paas/v4，不是 /v1（硬拼 v1 会请求 …/v4/v1/chat/completions，实测 60 秒无响应）
+        assertEquals(
+            "https://open.bigmodel.cn/api/paas/v4",
+            resolveApiBase("https://open.bigmodel.cn/api/paas/v4", "custom"),
+        )
+        // 通义兼容模式
+        assertEquals(
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            resolveApiBase("https://dashscope.aliyuncs.com/compatible-mode/v1", "custom"),
+        )
+        // Gemini 的 OpenAI 兼容入口
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            resolveApiBase("https://generativelanguage.googleapis.com/v1beta/openai", AiConfig.PROVIDER_GEMINI),
+        )
+        // 裸域名才补 /v1
+        assertEquals("https://apihub.example.com/v1", resolveApiBase("https://apihub.example.com", "custom"))
+        // 用户把整条 chat 路径也贴进来时，要能剥掉
+        assertEquals(
+            "https://api.example.com/v1",
+            resolveApiBase("https://api.example.com/v1/chat/completions", "custom"),
+        )
+        assertEquals("https://api.example.com/v1", resolveApiBase("https://api.example.com/v1/", "custom"))
+    }
+
+    @Test
+    fun buildModelsUrl_usesSameApiBaseAsChat() {
+        assertEquals(
+            "https://open.bigmodel.cn/api/paas/v4/models",
+            buildModelsUrl("https://open.bigmodel.cn/api/paas/v4", "custom"),
+        )
+        assertEquals(
+            "https://open.bigmodel.cn/api/paas/v4/models",
+            buildModelsUrl("https://open.bigmodel.cn/api/paas/v4/", "custom"),
+        )
     }
 
     @Test

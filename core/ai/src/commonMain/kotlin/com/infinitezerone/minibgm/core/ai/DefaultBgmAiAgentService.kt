@@ -114,43 +114,23 @@ class DefaultBgmAiAgentService(
                         baseUrl = config.endpoint.ifBlank { OllamaClient.DEFAULT_BASE_URL },
                     )
                 }
-                config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) -> {
-                    val rawEndpoint =
-                        config.endpoint
-                            .ifBlank { "https://generativelanguage.googleapis.com/v1beta/openai" }
-                            .removeSuffix("/chat/completions")
-                            .removeSuffix("/chat/completions/")
-                            .trimEnd('/')
-                    OpenAILLMClient(
-                        apiKey = config.apiKey,
-                        settings =
-                            OpenAIClientSettings(
-                                baseUrl = rawEndpoint,
-                                chatCompletionsPath = "chat/completions",
-                                timeoutConfig = aiTimeoutConfig,
-                            ),
-                        httpClientFactory = koogClientFactory,
-                    )
-                }
                 else -> {
-                    val rawEndpoint =
-                        config.endpoint
-                            .ifBlank { "https://api.openai.com/v1" }
-                            .removeSuffix("/chat/completions")
-                            .removeSuffix("/chat/completions/")
-                            .trimEnd('/')
-                    val (baseUrl, chatCompletionsPath) =
-                        if (rawEndpoint.endsWith("/v1")) {
-                            rawEndpoint to "chat/completions"
-                        } else {
-                            rawEndpoint to "v1/chat/completions"
+                    val isGemini = config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true)
+                    val endpoint =
+                        config.endpoint.ifBlank {
+                            if (isGemini) {
+                                "https://generativelanguage.googleapis.com/v1beta/openai"
+                            } else {
+                                "https://api.openai.com/v1"
+                            }
                         }
                     OpenAILLMClient(
                         apiKey = config.apiKey,
                         settings =
                             OpenAIClientSettings(
-                                baseUrl = baseUrl,
-                                chatCompletionsPath = chatCompletionsPath,
+                                baseUrl = resolveApiBase(endpoint, config.provider),
+                                // 版本段（/v1、/v4、/v1beta/openai…）属于 baseUrl，路径只补最后一段
+                                chatCompletionsPath = "chat/completions",
                                 timeoutConfig = aiTimeoutConfig,
                             ),
                         httpClientFactory = koogClientFactory,
@@ -454,29 +434,58 @@ internal fun extractJsonErrorMessage(raw: String): String? {
 }
 
 /**
- * 模型列表端点：OpenAI 兼容形态保留 /v1 前缀（…/v1/models）；
- * Ollama 用原生 /api/tags。端点若以 /chat/completions 结尾则先剥掉。
+ * 端点里是否已经带了 API 版本段：`/v1`、`/v4`、`/v1beta/openai`、`/compatible-mode/v1`、以 `/openai` 结尾……
+ */
+private val API_VERSION_SEGMENT = Regex("""/(?:v\d+[a-z0-9]*|openai)(?:/|$)""", RegexOption.IGNORE_CASE)
+
+/**
+ * 从用户填写的端点推导「API 基址」——chat 与 models 两条路径共用，避免各拼各的。
+ *
+ * 约定：**端点里已有版本段就原样用，没有才补 `/v1`**。不能假设版本段一定是 `/v1`：
+ * 智谱是 `…/api/paas/v4`、Gemini 是 `…/v1beta/openai`、通义是 `…/compatible-mode/v1`，
+ * 硬拼 `/v1` 会得到一个不存在的路径（实测智谱 `…/v4/v1/chat/completions` 请求 60 秒无响应，
+ * 而正确路径是 `…/v4/chat/completions`）。
+ */
+internal fun resolveApiBase(
+    rawEndpoint: String,
+    provider: String,
+): String {
+    var base = rawEndpoint.trim().trimEnd('/')
+    base = base.removeSuffix("/chat/completions").removeSuffix("/models").trimEnd('/')
+    if (base.isBlank()) return ""
+    // Ollama 走原生 /api/*，不带 OpenAI 版本段
+    if (provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) return base
+    return if (API_VERSION_SEGMENT.containsMatchIn(base)) base else "$base/v1"
+}
+
+/**
+ * 模型列表端点：与 chat 共用同一个基址（[resolveApiBase]），只把最后一段换成 `models`；
+ * Ollama 用原生 `/api/tags`。
  */
 internal fun buildModelsUrl(
     rawEndpoint: String,
     provider: String,
 ): String {
-    val defaultBase =
-        when (provider.lowercase()) {
-            AiConfig.PROVIDER_OLLAMA -> "http://10.0.2.2:11434"
-            AiConfig.PROVIDER_GEMINI -> "https://generativelanguage.googleapis.com/v1beta/openai"
-            else -> "https://api.openai.com/v1"
-        }
-    var base = rawEndpoint.trim().ifBlank { defaultBase }
-    base = base.trimEnd('/')
-    base = base.removeSuffix("/chat/completions").trimEnd('/')
-
     val isOllama = provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)
-    return if (isOllama) {
-        base.removeSuffix("/api/tags").trimEnd('/') + "/api/tags"
-    } else {
-        base.removeSuffix("/models").trimEnd('/') + "/models"
+    if (isOllama) {
+        val base =
+            rawEndpoint
+                .trim()
+                .ifBlank { "http://10.0.2.2:11434" }
+                .trimEnd('/')
+                .removeSuffix("/api/tags")
+                .removeSuffix("/v1")
+                .trimEnd('/')
+        return "$base/api/tags"
     }
+
+    val defaultBase =
+        if (provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true)) {
+            "https://generativelanguage.googleapis.com/v1beta/openai"
+        } else {
+            "https://api.openai.com/v1"
+        }
+    return resolveApiBase(rawEndpoint.trim().ifBlank { defaultBase }, provider) + "/models"
 }
 
 private val catalogJson =
