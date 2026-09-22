@@ -3,18 +3,24 @@ package com.infinitezerone.minibgm.feature.user
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.uuid.ExperimentalUuidApi
@@ -29,6 +35,20 @@ data class PlaybackRulesUiState(
     val isLoading: Boolean = false,
     /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
     val playbackPositions: Map<String, Long> = emptyMap(),
+)
+
+/**
+ * 站点探测对话框状态。
+ *
+ * 「我有个网址」是最常见的入口，但采集站的接口地址是**可判定的**（标准 MacCMS V10 路径），
+ * 不该每次都让人手写 `{title}` 模板或去问模型。
+ */
+data class SiteProbeUiState(
+    val isVisible: Boolean = false,
+    val input: String = "",
+    val isProbing: Boolean = false,
+    val result: MacCmsProbeResult? = null,
+    val errorMessage: String? = null,
 )
 
 /**
@@ -50,12 +70,18 @@ sealed interface PlaybackRulesUiEvent {
  */
 class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
+    private val playbackResolverRepository: PlaybackResolverRepository? = null,
 ) : ViewModel() {
     private val json =
         Json {
             ignoreUnknownKeys = true
             isLenient = true
         }
+
+    private val _siteProbe = MutableStateFlow(SiteProbeUiState())
+
+    /** 站点探测状态；与主列表相互独立，探测过程不该让规则列表重建 */
+    val siteProbe: StateFlow<SiteProbeUiState> = _siteProbe.asStateFlow()
 
     private val _events = Channel<PlaybackRulesUiEvent>(Channel.BUFFERED)
     val events: Flow<PlaybackRulesUiEvent> = _events.receiveAsFlow()
@@ -131,12 +157,83 @@ class PlaybackRulesViewModel(
         }
     }
 
+    /** 打开「探测站点」对话框（清掉上一次的输入与结论，避免误当成这次的） */
+    fun openSiteProbe() {
+        _siteProbe.value = SiteProbeUiState(isVisible = true)
+    }
+
+    fun closeSiteProbe() {
+        _siteProbe.value = SiteProbeUiState()
+    }
+
+    fun onProbeInputChanged(text: String) {
+        _siteProbe.update { it.copy(input = text, errorMessage = null, result = null) }
+    }
+
+    /**
+     * 探测输入是否为标准 MacCMS 采集接口。
+     *
+     * 纯确定性路径：拿 `/api.php/provide/vod/` 上的响应结构做判定，不调模型、不猜站点。
+     * 探不到就如实说探不到，并指出还有哪两条路可走。
+     */
+    fun startSiteProbe() {
+        val repository = playbackResolverRepository
+        if (repository == null) {
+            sendSnackbar("站点探测不可用")
+            return
+        }
+        val input = _siteProbe.value.input.trim()
+        if (input.isBlank()) {
+            _siteProbe.update { it.copy(errorMessage = "请填写站点域名或接口地址") }
+            return
+        }
+        viewModelScope.launch {
+            _siteProbe.update { it.copy(isProbing = true, errorMessage = null, result = null) }
+            when (val outcome = repository.probeMacCmsEndpoint(input)) {
+                is AppResult.Success ->
+                    _siteProbe.update {
+                        it.copy(isProbing = false, result = outcome.data, errorMessage = null)
+                    }
+                is AppResult.Error ->
+                    _siteProbe.update { it.copy(isProbing = false, result = null, errorMessage = outcome.message) }
+                is AppResult.Loading -> _siteProbe.update { it.copy(isProbing = false) }
+            }
+        }
+    }
+
+    /**
+     * 把探测结论落成规则。
+     *
+     * 必须显式声明 `kind = SOURCE` + `parserType = MACCMS`：探到的是**接口端点**，
+     * 标成 PAGE 会让播放时丢掉专用解析器、静默降级成页面嗅探。
+     */
+    @OptIn(ExperimentalUuidApi::class)
+    fun addProbedRule() {
+        val probed = _siteProbe.value.result ?: return
+        viewModelScope.launch {
+            settingsRepository.addPlaybackRule(
+                PlaybackSourceRule(
+                    id = Uuid.random().toString(),
+                    name = probed.siteName,
+                    urlTemplate = probed.ruleTemplate,
+                    description = "站点探测生成（${probed.endpointUrl}）",
+                    isEnabled = true,
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.MACCMS,
+                ),
+            )
+            _siteProbe.value = SiteProbeUiState()
+            sendSnackbar("已添加规则：${probed.siteName}")
+        }
+    }
+
     @OptIn(ExperimentalUuidApi::class)
     fun addRule(
         name: String,
         urlTemplate: String,
         description: String = "",
         kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
+        parserType: RuleParserType = RuleParserType.AUTO,
         headersText: String = "",
     ) {
         val trimmedName = name.trim()
@@ -154,6 +251,7 @@ class PlaybackRulesViewModel(
                     description = description.trim(),
                     isEnabled = true,
                     kind = kind,
+                    parserType = parserType,
                     headers = parseHeaderLines(headersText),
                 )
             settingsRepository.addPlaybackRule(rule)
@@ -167,6 +265,7 @@ class PlaybackRulesViewModel(
         urlTemplate: String,
         description: String = "",
         kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
+        parserType: RuleParserType = RuleParserType.AUTO,
         headersText: String = "",
     ) {
         val trimmedName = name.trim()
@@ -185,6 +284,7 @@ class PlaybackRulesViewModel(
                     description = description.trim(),
                     isEnabled = existing?.isEnabled ?: true,
                     kind = kind,
+                    parserType = parserType,
                     headers = parseHeaderLines(headersText),
                 )
             settingsRepository.updatePlaybackRule(rule)

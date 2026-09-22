@@ -1,12 +1,18 @@
 package com.infinitezerone.minibgm.feature.user
 
+import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
+import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,7 +20,140 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+/** 只用于站点探测的替身：其余解析入口保持空实现 */
+private class FakeProbeResolver(
+    private val result: AppResult<MacCmsProbeResult>,
+) : PlaybackResolverRepository {
+    var lastInput: String? = null
+
+    override suspend fun resolvePages(
+        pageUrls: List<String>,
+        epNumber: Float,
+        siteName: String,
+        title: String,
+    ): List<PlayableSource> = emptyList()
+
+    override suspend fun resolveTemplate(
+        url: String,
+        headers: Map<String, String>,
+        epNumber: Float,
+        siteName: String,
+        title: String,
+    ): List<PlayableSource> = emptyList()
+
+    override suspend fun probeMacCmsEndpoint(input: String): AppResult<MacCmsProbeResult> {
+        lastInput = input
+        return result
+    }
+}
+
 class PlaybackRulesViewModelTest {
+    @Test
+    fun addRule_withExplicitParserType_persistsItRatherThanDefaulting() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.addRule(
+                name = "MacCMS 站",
+                urlTemplate = "https://cms.example.tv/api.php/provide/vod/?ac=detail&wd={title}",
+                kind = PlaybackRuleKind.SOURCE,
+                parserType = RuleParserType.MACCMS,
+            )
+            advanceUntilIdle()
+
+            // 表单默认 AUTO 也能跑（靠兜底识别），但手填接口地址的人应该能直接声明 MACCMS
+            val added = fakeRepo.playbackRules.first().single()
+            assertEquals(PlaybackRuleKind.SOURCE, added.kind)
+            assertEquals(RuleParserType.MACCMS, added.parserType)
+        }
+
+    @Test
+    fun siteProbe_success_previewsEndpointThenAddsSourceRule() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val resolver =
+                FakeProbeResolver(
+                    AppResult.Success(
+                        MacCmsProbeResult(
+                            endpointUrl = "https://cms.example.tv/api.php/provide/vod/",
+                            ruleTemplate = "https://cms.example.tv/api.php/provide/vod/?ac=detail&wd={title}",
+                            siteName = "cms.example.tv",
+                            sampleCount = 42,
+                        ),
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo, resolver)
+
+            viewModel.openSiteProbe()
+            viewModel.onProbeInputChanged("  cms.example.tv  ")
+            viewModel.startSiteProbe()
+            advanceUntilIdle()
+
+            val probed = viewModel.siteProbe.value
+            assertFalse(probed.isProbing)
+            assertEquals(42, probed.result?.sampleCount)
+            assertEquals("cms.example.tv", resolver.lastInput?.trim())
+
+            viewModel.addProbedRule()
+            advanceUntilIdle()
+
+            // 落库必须是接口形态：标成跳转页面会在播放时丢掉专用解析器、静默降级成嗅探
+            val added = fakeRepo.playbackRules.first().single()
+            assertEquals(PlaybackRuleKind.SOURCE, added.kind)
+            assertEquals(RuleParserType.MACCMS, added.parserType)
+            assertEquals("cms.example.tv", added.name)
+            assertFalse(viewModel.siteProbe.value.isVisible)
+        }
+
+    @Test
+    fun siteProbe_failure_keepsDialogOpenWithReasonAndAddsNothing() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val resolver =
+                FakeProbeResolver(
+                    AppResult.Error(IllegalStateException("no maccms"), "已试过 2 个标准接口地址，都没有 MacCMS 响应。"),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo, resolver)
+
+            viewModel.openSiteProbe()
+            viewModel.onProbeInputChanged("blog.example.com")
+            viewModel.startSiteProbe()
+            advanceUntilIdle()
+
+            val probed = viewModel.siteProbe.value
+            assertTrue(probed.isVisible)
+            assertTrue(probed.result == null)
+            assertTrue(
+                "错误原因应回显给用户：${probed.errorMessage}",
+                probed.errorMessage.orEmpty().contains("没有 MacCMS 响应"),
+            )
+
+            // 没有结论时点添加不应落库
+            viewModel.addProbedRule()
+            advanceUntilIdle()
+            assertTrue(fakeRepo.playbackRules.first().isEmpty())
+        }
+
+    @Test
+    fun siteProbe_blankInput_doesNotCallRepository() =
+        runTest {
+            val resolver = FakeProbeResolver(AppResult.Success(MacCmsProbeResult("", "", "", 0)))
+            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository(), resolver)
+
+            viewModel.openSiteProbe()
+            viewModel.onProbeInputChanged("   ")
+            viewModel.startSiteProbe()
+            advanceUntilIdle()
+
+            assertTrue(resolver.lastInput == null)
+            assertTrue(
+                viewModel.siteProbe.value.errorMessage
+                    .orEmpty()
+                    .contains("请填写"),
+            )
+        }
+
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
