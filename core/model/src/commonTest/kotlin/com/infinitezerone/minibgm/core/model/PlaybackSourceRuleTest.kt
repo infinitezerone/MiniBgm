@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.model
 
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -90,5 +91,56 @@ class PlaybackSourceRuleTest {
         assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.STREMIO).isResolvable)
         // 给了 pipeline 却没声明 PIPELINE 解析器，步骤同样会被丢掉
         assertFalse(rule(PlaybackRuleKind.SOURCE, RuleParserType.AUTO, fetchStep).isResolvable)
+    }
+
+    @Test
+    fun isImportable_版本超限的规则不可导入() {
+        fun rule(minClientApi: Int) =
+            PlaybackSourceRule(
+                id = "r",
+                name = "n",
+                urlTemplate = "https://example.com/s?q={title}",
+                kind = PlaybackRuleKind.SOURCE,
+                parserType = RuleParserType.MACCMS,
+                minClientApi = minClientApi,
+            )
+
+        assertTrue(rule(0).isImportable)
+        assertTrue(rule(PlaybackRuleApi.SUPPORTED_RULE_API).isImportable)
+        // 要求超出本客户端能力级别：宁可拒收，不可静默跑错语义
+        assertFalse(rule(PlaybackRuleApi.SUPPORTED_RULE_API + 1).isImportable)
+        // 组合无效（isResolvable 不通过）同样不可导入，与版本无关
+        val pageWithParser =
+            PlaybackSourceRule(
+                id = "r",
+                name = "n",
+                urlTemplate = "https://example.com/s?q={title}",
+                kind = PlaybackRuleKind.PAGE,
+                parserType = RuleParserType.MACCMS,
+            )
+        assertFalse(pageWithParser.isImportable)
+    }
+
+    @Test
+    fun ruleVersion_旧版JSON缺省字段可反序列化并取默认值() {
+        val json = Json { ignoreUnknownKeys = true }
+        // 早期规则 JSON 没有 ruleVersion / minClientApi 字段
+        val legacy =
+            """
+            {"id":"r","name":"n","urlTemplate":"https://example.com/s?q={title}","kind":"SOURCE","parserType":"MACCMS"}
+            """.trimIndent()
+        val rule = json.decodeFromString<PlaybackSourceRule>(legacy)
+        assertEquals(PlaybackRuleApi.WRITER_RULE_VERSION, rule.ruleVersion)
+        assertEquals(0, rule.minClientApi)
+        assertTrue(rule.isImportable)
+
+        val newer =
+            """
+            {"id":"r2","name":"n","urlTemplate":"https://example.com/s?q={title}","ruleVersion":2,"minClientApi":3}
+            """.trimIndent()
+        val upgraded = json.decodeFromString<PlaybackSourceRule>(newer)
+        assertEquals(2, upgraded.ruleVersion)
+        assertEquals(3, upgraded.minClientApi)
+        assertFalse(upgraded.isImportable)
     }
 }

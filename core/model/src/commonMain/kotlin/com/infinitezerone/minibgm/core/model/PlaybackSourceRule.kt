@@ -26,6 +26,20 @@ enum class StepAction {
 }
 
 /**
+ * 取源规则版本协议。
+ *
+ * - [WRITER_RULE_VERSION]：写入方（录制器 / 站点探测 / AI 提案 / 手写导入）写规则时打上的
+ *   schema 语义版本。语义演进（新增步骤行为、字段含义变化）时递增，旧客户端遇到更高的
+ *   [PlaybackSourceRule.ruleVersion] 只按它认识的语义执行并如实标注，不猜测。
+ * - [SUPPORTED_RULE_API]：本客户端能够执行的规则能力级别。[PlaybackSourceRule.minClientApi]
+ *   超过它的规则**拒绝导入、拒绝执行**——宁可明确不可用，不可静默跑错语义。
+ */
+object PlaybackRuleApi {
+    const val WRITER_RULE_VERSION: Int = 1
+    const val SUPPORTED_RULE_API: Int = 1
+}
+
+/**
  * 声明式流水线单步定义。
  *
  * - [action]: 操作类型（发起请求、提取变量、提取媒体直链）
@@ -78,6 +92,10 @@ data class PlaybackSourceRule(
     val headers: Map<String, String> = emptyMap(),
     val parserType: RuleParserType = RuleParserType.AUTO,
     val pipeline: List<PipelineStep> = emptyList(),
+    /** 写入时的规则 schema 语义版本，见 [PlaybackRuleApi.WRITER_RULE_VERSION] */
+    val ruleVersion: Int = PlaybackRuleApi.WRITER_RULE_VERSION,
+    /** 规则要求的客户端最低能力版本；0 = 无要求。超出客户端支持时拒绝导入与执行 */
+    val minClientApi: Int = 0,
 ) {
     /**
      * 针对具体分集安全替换占位符并返回解析后的目标 URL。
@@ -108,6 +126,14 @@ data class PlaybackSourceRule(
                 pipeline.isNotEmpty() -> kind == PlaybackRuleKind.SOURCE && parserType == RuleParserType.PIPELINE
                 else -> parserType == RuleParserType.AUTO || kind == PlaybackRuleKind.SOURCE
             }
+
+    /**
+     * 规则是否可以被本客户端导入并执行：组合有执行路径（[isResolvable]），
+     * 且要求的能力版本在本客户端支持范围内（[minClientApi] <= [PlaybackRuleApi.SUPPORTED_RULE_API]）。
+     * AI 提案确认、手动批量导入、社区订阅转换都应以此为准——版本超限的规则收进来只会静默跑错语义。
+     */
+    val isImportable: Boolean
+        get() = isResolvable && minClientApi <= PlaybackRuleApi.SUPPORTED_RULE_API
 
     companion object {
         fun encodeParam(value: String): String =
