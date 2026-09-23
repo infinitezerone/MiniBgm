@@ -16,6 +16,7 @@ import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackRuleApi
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import kotlinx.serialization.Serializable
@@ -231,14 +232,16 @@ class PlaybackRuleDiagnosticsTools(
                 )
             }
 
-        if (!rule.isResolvable) {
+        if (!rule.isImportable) {
             return json.encodeToString(
                 RuleTestOutput(
                     success = false,
                     ruleName = rule.name,
                     errorMessage =
                         "Rule shape is not executable: parserType=${rule.parserType} 与 pipeline 只在 " +
-                            "kind=SOURCE 的规则上生效，请修正 kind/parserType 组合后重试。",
+                            "kind=SOURCE 的规则上生效，请修正 kind/parserType 组合后重试。" +
+                            "若 minClientApi=${rule.minClientApi} 超出本客户端能力级别（${PlaybackRuleApi.SUPPORTED_RULE_API}），" +
+                            "本条规则无法被导入或执行，请降级要求或改写为当前版本语义。",
                 ),
             )
         }
@@ -321,14 +324,15 @@ class PlaybackRuleDiagnosticsTools(
                 )
             }
 
-        if (!rule.isResolvable) {
+        if (!rule.isImportable) {
             return json.encodeToString(
                 RuleTestOutput(
                     success = false,
                     ruleName = rule.name,
                     errorMessage =
-                        "Rule shape is not executable (kind=${rule.kind}, parserType=${rule.parserType}); " +
-                            "fix it and re-run testPlaybackRule before proposing.",
+                        "Rule is not importable (kind=${rule.kind}, parserType=${rule.parserType}, " +
+                            "minClientApi=${rule.minClientApi}, supported=${PlaybackRuleApi.SUPPORTED_RULE_API}); " +
+                            "fix the shape or lower the required API level, then re-run testPlaybackRule before proposing.",
                 ),
             )
         }

@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackRuleApi
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.ProbeSiteOutput
@@ -298,6 +299,9 @@ class PlaybackResolverRepositoryImpl(
         episodeId: Long,
     ): List<PlayableSource> =
         withContext(Dispatchers.Default) {
+            // 版本门控的执行侧防线：导入入口会拒收 minClientApi 超限的规则，但备份恢复、
+            // 旧客户端写库等路径仍可能让高要求规则入库——宁可无候选，不可按未知语义跑
+            if (rule.minClientApi > PlaybackRuleApi.SUPPORTED_RULE_API) return@withContext emptyList()
             when (rule.parserType) {
                 RuleParserType.PIPELINE -> {
                     playbackRuleEngine.executePipeline(rule, title, epNumber, subjectId, episodeId)

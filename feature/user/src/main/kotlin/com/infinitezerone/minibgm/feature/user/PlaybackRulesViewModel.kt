@@ -327,13 +327,14 @@ class PlaybackRulesViewModel(
                 if (importedList.isEmpty()) {
                     sendSnackbar("未解析到有效规则")
                 } else {
-                    // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探
-                    val (accepted, rejected) = importedList.partition { it.isResolvable }
+                    // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探；
+                    // minClientApi 超出本客户端能力级别的规则同理——宁拒收，不跑错语义
+                    val (accepted, rejected) = importedList.partition { it.isImportable }
                     if (accepted.isEmpty()) {
                         sendSnackbar("规则组合无效：专用解析器只能配在取源(SOURCE)规则上")
                     } else {
                         settingsRepository.importPlaybackRules(accepted)
-                        val dropped = if (rejected.isEmpty()) "" else "，已跳过 ${rejected.size} 条无效组合"
+                        val dropped = if (rejected.isEmpty()) "" else "，已跳过 ${rejected.size} 条无效或超出客户端版本的规则"
                         sendSnackbar("成功导入 ${accepted.size} 条规则$dropped")
                     }
                 }

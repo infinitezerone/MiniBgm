@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PipelineStep
+import com.infinitezerone.minibgm.core.model.PlaybackRuleApi
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
@@ -941,6 +942,34 @@ class PlaybackResolverRepositoryTest {
         assertEquals(null, episodeNumberFromUrl("https://cdn.example.com/20260116/index.m3u8", allowWeak = true))
         assertEquals(null, episodeNumberFromUrl("https://cdn.example.com/12108_786fc808/index.m3u8", allowWeak = true))
     }
+
+    @Test
+    fun `resolveRule 拒绝执行 minClientApi 超出客户端能力级别的规则`() =
+        runTest {
+            val html = """{"a":{"src":"https://cdn.example.com/a1.m3u8"}}"""
+            val fake = FakePageFetchService(mapOf("https://example.com/play" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_future",
+                    name = "未来能力源",
+                    urlTemplate = "https://example.com/play",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/play"),
+                            PipelineStep(action = StepAction.EXTRACT_STREAM, regex = """"src":"([^"]+)""""),
+                        ),
+                    // 入库防线被绕过时（备份恢复、旧客户端写库）的执行侧兜底
+                    minClientApi = PlaybackRuleApi.SUPPORTED_RULE_API + 1,
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "t", epNumber = 1f)
+
+            assertTrue(sources.isEmpty())
+            assertEquals(0, fake.requested.size)
+        }
 
     @Test
     fun `inspectPage 成功提取 video 属性与 iframe 及 MacCMS`() =
