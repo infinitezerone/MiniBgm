@@ -951,6 +951,42 @@ internal fun episodeLabelFromNumber(value: Float): String {
     return "第 $text 话"
 }
 
+/**
+ * 从集名/标注文本里抽分集号（`第03集`、`[12]`、`EP07`、纯数字）。
+ *
+ * 与 [entryMatchesEpisode] 的判定形态对齐，但这里是"抽取"而非"断言"——
+ * 规则引擎拿它给 EXTRACT_STREAM 的候选列表做真实集数标注。
+ * 抽不到返回 null，调用方回退到地址抽取，不做猜测。
+ */
+internal fun episodeNumberFromLabel(label: String): Float? {
+    val text = label.trim()
+    if (text.isEmpty()) return null
+    Regex("""第\s*(\d+(?:\.\d+)?)\s*[集话話]""")
+        .find(text)
+        ?.groupValues
+        ?.get(1)
+        ?.toFloatOrNull()
+        ?.let { return it }
+    Regex("""[\[\(【]\s*(\d+(?:\.\d+)?)\s*[\]\)】]""")
+        .find(text)
+        ?.groupValues
+        ?.get(1)
+        ?.toFloatOrNull()
+        ?.let { return it }
+    Regex("""(?i)\b(?:ep|e)\s*\.?\s*(\d+(?:\.\d+)?)\b""")
+        .find(text)
+        ?.groupValues
+        ?.get(1)
+        ?.toFloatOrNull()
+        ?.let { return it }
+    if (URL_NUMBER_TOKEN.matches(text)) {
+        return text.toFloatOrNull()?.takeIf { it > 0f && it <= 9999f && it !in NOISE_NUMBERS_FLOAT }
+    }
+    return null
+}
+
+private val NOISE_NUMBERS_FLOAT: Set<Float> = NOISE_NUMBERS.mapNotNull { it.toFloatOrNull() }.toSet()
+
 /** scheme://host/ 形式的站点根，作为 Referer 与相对地址的基准 */
 private fun pageOrigin(url: String): String? {
     val schemeEnd = url.indexOf("://").takeIf { it > 0 } ?: return null

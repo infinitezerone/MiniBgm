@@ -118,6 +118,8 @@ object PlaybackRuleRecorder {
                     succeeded > 0 ->
                         "已重放 $succeeded 条接口请求并附上响应片段（apiSamples）——" +
                             "EXTRACT_STREAM 的 regex 照着片段里承载直链的字段写，不要凭印象编字段名" +
+                            "；响应含多集时正则第 1 组捕获直链、第 2 组捕获集名文本，引擎会按话数自动选条目，" +
+                            "不要把 {ep} 锚死在正则里" +
                             if (failed > 0) "；另有 $failed 条没取到响应，失败原因见各自的 note" else ""
                     apiSamples.isNotEmpty() ->
                         "所有接口重放都没取到响应（原因见 apiSamples[].note）：" +
@@ -255,6 +257,11 @@ object PlaybackRuleRecorder {
                 notes +=
                     "静态页源码里直接抽到了媒体地址（${candidates.joinToString("、")}）——" +
                     "正则照下面的源码上下文写，不要凭印象编字段名"
+            }
+            if (candidates.size > 1) {
+                notes +=
+                    "源码里有多条媒体地址（可能对应不同分集或线路）：正则第 1 组捕获直链、第 2 组捕获集名或编号文本，" +
+                    "引擎会按请求话数自动选条目；不要只锚定当前样本那一集"
             }
             notes += "媒体地址的源码上下文：${contextAround(mediaSource, mediaUrl)}"
         } else {
