@@ -192,6 +192,14 @@ class PlayerViewModel(
 
     private var subjectOriginalName: String = ""
 
+    /**
+     * 条目的片名别名（台译/港译/英文名/罗马音），来自已缓存 Subject 的 infobox。
+     *
+     * 只读缓存不额外发请求：从详情页进播放页时详情已经拉过，缓存命中即有别名；
+     * 冷启动直达则为空，退化成「主标题 + 繁体 + 原名」的老行为，不会变慢。
+     */
+    private var subjectAliases: List<String> = emptyList()
+
     private var resolveJob: Job? = null
 
     private fun initialEpisodes(): List<PlayerEpisodeItem> =
@@ -335,6 +343,7 @@ class PlayerViewModel(
                 subjectRepository?.getSubjectStream(route.subjectId)?.collect { subject ->
                     if (subject != null) {
                         subjectOriginalName = subject.name
+                        subjectAliases = subject.titleAliases
                         _uiState.update { current ->
                             if (current.subjectName.isBlank()) {
                                 current.copy(subjectName = subject.displayName)
@@ -601,11 +610,18 @@ class PlayerViewModel(
                             epSort.toString()
                         }
                     val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
-                    // 片名候选与助手侧同源（queryVariants：原样优先、繁体兜底），不再各拼一套。
+                    // 片名候选与助手侧同源（searchTitles：主标题 → 别名 → 日文原名），不再各拼一套。
                     // 顺序有实测依据——3 个采集站 × 4 部番的命中数：
                     // 原样（简体）11/12、繁体 5/12、日文原名 2/12，其中两个站是**纯简体**（繁体 0 命中）。
                     // 所以「原样」必须排第一：把繁体排前面等于每轮固定白费一发请求。
-                    val baseTitles = ChineseConverter.queryVariants(primaryTitle, subjectOriginalName)
+                    // 别名（Bangumi infobox 的台译/港译/英文名/罗马音）是采集站标题上真正写的字，
+                    // 中文字形优先、拉丁字母垫后，总数由 MAX_SEARCH_TITLES 封顶。
+                    val baseTitles =
+                        ChineseConverter.searchTitles(
+                            primary = primaryTitle,
+                            aliases = subjectAliases,
+                            origin = subjectOriginalName,
+                        )
 
                     // 关键词策略按规则形态分流——两者的搜索语义完全不同：
                     // - SOURCE（取源接口）：`wd=` 多为**标题模糊搜索**，一次就返回整部片子（含全部分集），

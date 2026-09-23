@@ -939,4 +939,58 @@ class PlaybackResolverRepositoryTest {
         val candidate = findCandidateEpisodeUrl(html, "https://example.tv")
         assertEquals("https://example.tv/30194", candidate)
     }
+
+    @Test
+    fun `findHomeEntryTitle 从详情链接锚文本抽条目名并跳过导航与超长文本`() {
+        val html =
+            """
+            <html><body>
+              <a href="/voddetail/1.html">首页</a>
+              <a href="/about.html">关于我们</a>
+              <a href="/voddetail/2.html">12</a>
+              <a href="/voddetail/3.html">${"推".repeat(50)}</a>
+              <a href="/voddetail/4.html">葬送的芙莉莲</a>
+            </body></html>
+            """.trimIndent()
+
+        assertEquals("葬送的芙莉莲", findHomeEntryTitle(html, "https://example.tv"))
+    }
+
+    @Test
+    fun `probeSite 未给样本时从首页抽真实条目当样本`() =
+        runTest {
+            val homeHtml =
+                """
+                <html>
+                <head><title>AnimeSite 动漫主页</title></head>
+                <body>
+                    <form action="/search" method="get">
+                        <input type="text" name="keyword" placeholder="搜索番剧" />
+                    </form>
+                    <a href="/voddetail/123.html">葬送的芙莉莲</a>
+                    <a href="/voddetail/456.html">孤独摇滚</a>
+                </body>
+                </html>
+                """.trimIndent()
+            val searchHtml =
+                """
+                <div class="results">
+                    <a href="/watch/202">葬送的芙莉莲 第 1 话</a>
+                </div>
+                """.trimIndent()
+            val fake =
+                FakePageFetchService(
+                    mapOf(
+                        "https://anime.example.com/" to homeHtml,
+                        "https://anime.example.com/search?keyword=${PlaybackSourceRule.encodeParam("葬送的芙莉莲")}" to searchHtml,
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val probe = repo.probeSite("https://anime.example.com/")
+
+            // 样本必须是该站真实存在的条目：写死的通用番名在没收录它的站上探不出搜索参数模式
+            assertEquals("葬送的芙莉莲", probe.sampleTitleUsed)
+            assertEquals("https://anime.example.com/watch/202", probe.sampleEpisodeUrl)
+        }
 }

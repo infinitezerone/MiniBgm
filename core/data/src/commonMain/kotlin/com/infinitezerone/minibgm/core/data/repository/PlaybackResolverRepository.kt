@@ -204,7 +204,7 @@ interface PlaybackResolverRepository {
      */
     suspend fun probeSite(
         siteUrl: String,
-        sampleAnime: String = "芙莉莲",
+        sampleAnime: String = "",
     ): ProbeSiteOutput = ProbeSiteOutput(siteUrl = siteUrl, isReachable = false, errorMessage = "Not implemented")
 
     /**
@@ -429,7 +429,11 @@ class PlaybackResolverRepositoryImpl(
         val isAdParking = detectAdParking(title, html)
         val origin = pageOrigin(fetched.url)
         val (hasSearchBox, searchUrlPattern) = detectSearchUrlPattern(html, siteUrl, origin)
-        val sampleEpisodeUrl = probeSampleEpisodeUrl(searchUrlPattern, sampleAnime, html, origin, pageFetchService)
+        // 样本：调用方给了就用；没给就从首页挑一个**该站真实存在**的条目标题。
+        // 写死一个通用番名（如「芙莉莲」）时，没收录它的站根本探不出搜索参数模式，
+        // 报出来的失败原因还是误导性的——搜索参数模式是后续建规则的地基，必须用真实存在的名字去验证。
+        val sampleTitle = sampleAnime.trim().ifBlank { findHomeEntryTitle(html, origin).orEmpty() }
+        val sampleEpisodeUrl = probeSampleEpisodeUrl(searchUrlPattern, sampleTitle, html, origin, pageFetchService)
 
         return ProbeSiteOutput(
             siteUrl = fetched.url,
@@ -439,6 +443,7 @@ class PlaybackResolverRepositoryImpl(
             sampleEpisodeUrl = sampleEpisodeUrl,
             hasSearchBox = hasSearchBox,
             searchUrlPattern = searchUrlPattern,
+            sampleTitleUsed = sampleTitle.ifBlank { null },
         )
     }
 
@@ -622,6 +627,71 @@ private val NON_EPISODE_KEYWORDS =
     )
 private val PLAY_KEYWORDS = listOf("/watch", "/play", "/video", "/bangumi", "/view", "/anime", "?cat=")
 private val NUMERIC_PAGE_REGEX = Regex("""^(?:https?://[^/]+)?/(?:archives/|p/)?\d+/?$""")
+
+/** 站点详情页（条目页）的典型路径特征——首页上这些链接的锚文本就是站内条目名 */
+private val DETAIL_LINK_KEYWORDS =
+    listOf(
+        "/voddetail/",
+        "/vod/detail/",
+        "/detail/",
+        "/vod/",
+        "/show/",
+        "/subject/",
+        "/bangumi/",
+        "/anime/",
+    )
+
+/** 探查样本的合理片名长度：比这短的多是单字导航，比这长的多是整句推荐语 */
+private const val MIN_SAMPLE_TITLE_LENGTH = 2
+private const val MAX_SAMPLE_TITLE_LENGTH = 40
+
+/** 锚文本命中这些词的多是站内导航位，不是条目名 */
+private val NON_ENTRY_TITLE_KEYWORDS =
+    listOf("首页", "主页", "排行", "排行榜", "最新", "全部", "更多", "登录", "注册", "公告", "资讯", "新闻")
+
+/**
+ * 从站点首页挑一个**真实存在**的条目标题当探查样本。
+ *
+ * 详情页链接的锚文本就是站内条目的名字，比编一个通用番名可靠得多——
+ * 样本必须在目标站上真实存在，否则搜索页返回空列表，探不出搜索参数模式。
+ */
+internal fun findHomeEntryTitle(
+    html: String,
+    origin: String?,
+): String? {
+    val aTagRegex = Regex("""<a\b([^>]*)>([\s\S]*?)</a>""", RegexOption.IGNORE_CASE)
+    val hrefRegex = Regex("""href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+    val tagRegex = Regex("""<[^>]*>""")
+    val spaceRegex = Regex("""\s+""")
+    val originPath = origin?.trimEnd('/')?.lowercase()
+    return aTagRegex
+        .findAll(html)
+        .mapNotNull { match ->
+            val href =
+                hrefRegex
+                    .find(match.groupValues[1])
+                    ?.groupValues
+                    ?.get(1)
+                    ?.trim() ?: return@mapNotNull null
+            val cleanPath =
+                href
+                    .substringBefore('?')
+                    .substringBefore('#')
+                    .trim()
+                    .lowercase()
+            if (DETAIL_LINK_KEYWORDS.none { cleanPath.contains(it) }) return@mapNotNull null
+            if (originPath != null && cleanPath == originPath) return@mapNotNull null
+            val text = spaceRegex.replace(tagRegex.replace(match.groupValues[2], " "), " ").trim()
+            text.takeIf { it.looksLikeEntryTitle() }
+        }.firstOrNull()
+}
+
+private fun String.looksLikeEntryTitle(): Boolean =
+    length in MIN_SAMPLE_TITLE_LENGTH..MAX_SAMPLE_TITLE_LENGTH &&
+        NON_EPISODE_KEYWORDS.none { contains(it, ignoreCase = true) } &&
+        NON_ENTRY_TITLE_KEYWORDS.none { contains(it) } &&
+        any { it.isLetterOrDigit() } &&
+        !all { it.isDigit() }
 
 internal data class AnchorCandidate(
     val href: String,

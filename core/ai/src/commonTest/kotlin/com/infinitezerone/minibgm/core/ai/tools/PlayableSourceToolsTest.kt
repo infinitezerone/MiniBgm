@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.model.Infobox
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
@@ -10,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
@@ -288,6 +290,72 @@ class PlayableSourceToolsTest {
 
             assertEquals(listOf("1", "2"), result.episodes.map { it.label })
             assertEquals(listOf(1f, 2f), result.episodes.map { it.episodeSort })
+        }
+
+    @Test
+    fun `取源候选接入 Bangumi 别名且中文字形排在英文名前`() =
+        runTest {
+            sendScheduleWithLinks()
+            subjectRepository.sendSubject(
+                Subject(
+                    id = 1001L,
+                    name = "葬送のフリーレン",
+                    nameCn = "葬送的芙莉莲",
+                    infobox =
+                        listOf(
+                            Infobox(
+                                key = "别名",
+                                value =
+                                    Json.parseToJsonElement(
+                                        """[{"v":"Frieren: Beyond Journey's End"},{"v":"Sousou no Frieren"},{"v":"葬送的芙莉蓮"}]""",
+                                    ),
+                            ),
+                        ),
+                ),
+            )
+            settingsRepository.addPlaybackRule(
+                PlaybackSourceRule(
+                    id = "r-alias",
+                    name = "示例搜索站",
+                    urlTemplate = "https://api.example.tv/search?wd={title}",
+                    kind = PlaybackRuleKind.SOURCE,
+                ),
+            )
+            val resolver = FakePlaybackResolverRepository()
+
+            tools(resolver).findPlayableSources(subjectId = 1001L, epNumber = 1)
+
+            // 主标题第一（实测 11/12），繁体形态与别名合并去重，日文原名垫底（实测 2/12）；
+            // 第 6 条记录来自后续的 resolvePages（来源站解析，用主标题），不在断言范围
+            assertEquals(
+                listOf(
+                    "葬送的芙莉莲",
+                    "葬送的芙莉蓮",
+                    "Frieren: Beyond Journey's End",
+                    "Sousou no Frieren",
+                    "葬送のフリーレン",
+                ),
+                resolver.requestedTitles.take(5),
+            )
+        }
+
+    @Test
+    fun `自备片单命中时不再为片名取条目详情`() =
+        runTest {
+            settingsRepository.setPlaylists(
+                listOf(
+                    PlaybackPlaylist(
+                        id = "pl1",
+                        name = "我的片单",
+                        bgmSubjectId = 1001L,
+                        entries = listOf(PlaylistEntry(label = "1", url = "https://cdn.example.com/ep1.mp4")),
+                    ),
+                ),
+            )
+
+            decode(tools(FakePlaybackResolverRepository()).findPlayableSources(subjectId = 1001L))
+
+            assertEquals(0, subjectRepository.fetchSubjectDetailCallCount)
         }
 
     @Test
