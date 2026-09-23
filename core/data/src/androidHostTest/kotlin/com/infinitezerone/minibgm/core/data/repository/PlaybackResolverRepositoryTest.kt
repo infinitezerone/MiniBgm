@@ -921,6 +921,28 @@ class PlaybackResolverRepositoryTest {
     }
 
     @Test
+    fun `episodeNumberFromUrl 强信号放行且弱信号拒绝哈希片段数字`() {
+        // 强信号：ep/E 前缀，无条件采用
+        assertEquals(12f, episodeNumberFromUrl("https://cdn.example.com/hls/ep12/index.m3u8", allowWeak = false))
+        assertEquals(7f, episodeNumberFromUrl("https://cdn.example.com/E07/index.m3u8", allowWeak = true))
+        // 弱信号：独占一段的裸数字，仅整季请求采用
+        assertEquals(12f, episodeNumberFromUrl("https://cdn.example.com/hls/12/index.m3u8", allowWeak = true))
+        assertEquals(null, episodeNumberFromUrl("https://cdn.example.com/hls/12/index.m3u8", allowWeak = false))
+        // 实测（dcc3.com 播放页）回归锚点：哈希/ID 片段里的数字串不是分集信息
+        assertEquals(
+            null,
+            episodeNumberFromUrl("https://cdn.vvvip-plays33.cc/20260116/4703_ac4395ad/index.m3u8", allowWeak = true),
+        )
+        assertEquals(
+            null,
+            episodeNumberFromUrl("https://cdn.yzzyvip-29.com/20260130/16191_3f1d0069/index.m3u8", allowWeak = true),
+        )
+        // 年份与超长 ID 段依旧过滤
+        assertEquals(null, episodeNumberFromUrl("https://cdn.example.com/20260116/index.m3u8", allowWeak = true))
+        assertEquals(null, episodeNumberFromUrl("https://cdn.example.com/12108_786fc808/index.m3u8", allowWeak = true))
+    }
+
+    @Test
     fun `inspectPage 成功提取 video 属性与 iframe 及 MacCMS`() =
         runTest {
             val html =

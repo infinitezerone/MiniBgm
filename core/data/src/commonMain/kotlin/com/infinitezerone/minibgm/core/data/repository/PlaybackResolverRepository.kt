@@ -890,7 +890,7 @@ private val NOISE_NUMBERS = setOf("1080", "720", "480", "360", "240", "2160", "1
  *
  * 分两级信号，避免把 CDN 路径里的编号（`/hls/123/`）误当成集数：
  * - 强信号：带 ep/E/e/p 前缀的数字（`ep12`、`E07`）——无条件采用；
- * - 弱信号：末段或路径里最后一个裸数字——仅当调用方没有指定话数（整季请求）时采用。
+ * - 弱信号：路径里独占一段的裸数字（`/hls/12/`）——仅当调用方没有指定话数（整季请求）时采用。
  * 分辨率（1080p）、编码（h264/x265）、年份与超长 ID 段一律跳过。抓不到返回 null。
  * 末段（文件名）优先于整条路径。
  */
@@ -921,12 +921,19 @@ internal fun episodeNumberFromUrl(
 private fun String.numberToken(strongOnly: Boolean): Float? {
     for (match in URL_NUMBER_TOKEN.findAll(this).toList().asReversed()) {
         val before = getOrNull(match.range.first - 1)?.lowercaseChar()
+        val after = getOrNull(match.range.last + 1)?.lowercaseChar()
         val value = match.value
         if (isNoiseNumber(value, before)) continue
         val number = value.toFloatOrNull() ?: continue
         if (number <= 0f || number > 9999f) continue
         val strong = before == 'e' || before == 'p'
-        if (strong || !strongOnly) return number
+        if (strong) return number
+        if (strongOnly) continue
+        // 裸数字只有在独占一段路径（两侧都是分隔符或端点）时才当集号：
+        // 嵌在哈希/ID 片段里的数字串（ac4395ad、3f1d0069、4703_...）不是分集信息——
+        // 实测（dcc3.com 播放页）证实按"最后一个数字 token"抽取会标出"第 4395 话"
+        val standalone = (before == null || before == '/') && (after == null || after == '/')
+        if (standalone) return number
     }
     return null
 }
