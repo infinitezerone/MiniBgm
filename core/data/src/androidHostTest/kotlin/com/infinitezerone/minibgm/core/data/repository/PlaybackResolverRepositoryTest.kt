@@ -801,6 +801,126 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `EXTRACT_STREAM 列表语义按第 2 组集名选中目标话`() =
+        runTest {
+            val html =
+                """
+                {"list":[
+                    {"u":"https://cdn.example.com/hls/1080/1.m3u8","t":"第01话"},
+                    {"u":"https://cdn.example.com/hls/1080/2.m3u8","t":"第02话"},
+                    {"u":"https://cdn.example.com/hls/1080/3.m3u8","t":"第03话"}
+                ]}
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://example.com/api?ep=2" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_list",
+                    name = "列表语义源",
+                    urlTemplate = "https://example.com/api?ep={ep}",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/api?ep={ep}"),
+                            // 集名标注候选地址里的 1080 是分辨率噪声——选中必须靠第 2 组集名，不是按话数猜号
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"u":"([^"]+)","t":"([^"]+)"""",
+                            ),
+                        ),
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "test", epNumber = 2f)
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://cdn.example.com/hls/1080/2.m3u8", source.url)
+            assertEquals("第02话", source.label)
+            assertEquals(2f, source.episodeSort)
+        }
+
+    @Test
+    fun `EXTRACT_STREAM 整季请求返回全部候选并带真实集号`() =
+        runTest {
+            val html =
+                """
+                {"list":[
+                    {"u":"https://cdn.example.com/hls/1.m3u8","t":"第01话"},
+                    {"u":"https://cdn.example.com/hls/2.m3u8","t":"第02话"},
+                    {"u":"https://cdn.example.com/hls/2.5.m3u8","t":"第2.5话"}
+                ]}
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://example.com/api" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_list_all",
+                    name = "整季源",
+                    urlTemplate = "https://example.com/api",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/api"),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"u":"([^"]+)","t":"([^"]+)"""",
+                            ),
+                        ),
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "test", epNumber = 0f)
+
+            assertEquals(3, sources.size)
+            assertEquals(listOf("第01话", "第02话", "第2.5话"), sources.map { it.label })
+            assertEquals(listOf(1f, 2f, 2.5f), sources.map { it.episodeSort })
+        }
+
+    @Test
+    fun `EXTRACT_STREAM 无集名标注时保留首个候选兜底`() =
+        runTest {
+            // 兼容旧形态：正则没有第 2 组、地址也没有强信号——行为应与列表语义引入前一致（取首个）
+            val html = """{"a":{"src":"https://cdn.example.com/a1.m3u8"},"b":{"src":"https://cdn.example.com/b2.m3u8"}}"""
+            val fake = FakePageFetchService(mapOf("https://example.com/play" to html))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_legacy",
+                    name = "旧形态源",
+                    urlTemplate = "https://example.com/play",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://example.com/play"),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = """"src":"([^"]+)"""",
+                            ),
+                        ),
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "t", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/a1.m3u8", sources.single().url)
+            assertEquals("第 1 话", sources.single().label)
+        }
+
+    @Test
+    fun `episodeNumberFromLabel 覆盖中文章节括号与纯数字形态`() {
+        assertEquals(3f, episodeNumberFromLabel("第03集"))
+        assertEquals(12f, episodeNumberFromLabel("[12]"))
+        assertEquals(7f, episodeNumberFromLabel("EP07"))
+        assertEquals(7.5f, episodeNumberFromLabel("第7.5话"))
+        assertEquals(2f, episodeNumberFromLabel("2"))
+        assertEquals(null, episodeNumberFromLabel("1080"))
+        assertEquals(null, episodeNumberFromLabel("预告"))
+        assertEquals(null, episodeNumberFromLabel(""))
+    }
+
+    @Test
     fun `inspectPage 成功提取 video 属性与 iframe 及 MacCMS`() =
         runTest {
             val html =

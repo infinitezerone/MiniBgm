@@ -39,6 +39,17 @@ interface PlaybackRuleEngine {
 class PlaybackRuleEngineImpl(
     private val pageFetchService: PageFetchService,
 ) : PlaybackRuleEngine {
+    /** EXTRACT_STREAM 单步最多返回多少条候选：选集列表够用，又不至于把整页资源灌进播放队列 */
+    private companion object {
+        const val MAX_STREAM_CANDIDATES: Int = 50
+    }
+
+    /** 引擎内部的候选条目：直链 + 可选的集名标注（正则第 2 组） */
+    private data class StreamCandidate(
+        val url: String,
+        val annotation: String?,
+    )
+
     override suspend fun executePipeline(
         rule: PlaybackSourceRule,
         title: String,
@@ -123,28 +134,71 @@ class PlaybackRuleEngineImpl(
                     StepAction.EXTRACT_STREAM -> {
                         if (step.regex.isBlank()) return@withContext emptyList()
                         val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
-                        val match = regex.find(lastHtml) ?: return@withContext emptyList()
-                        val rawStream = (if (match.groupValues.size > 1) match.groupValues[1] else match.value).replace("\\/", "/")
-
-                        val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return@withContext emptyList()
 
                         val finalHeaders = mutableMapOf<String, String>()
                         finalHeaders.putAll(rule.headers)
                         finalHeaders.putAll(step.headers.mapValues { replacePlaceholders(it.value, variables) })
                         finalHeaders.putAll(capturedHeaders)
 
-                        val label = if (epNumber > 0f) "第 $epInt 话" else ""
-                        return@withContext listOf(
+                        // 列表语义：正则第 1 组（无组时整个匹配）是直链，可选第 2 组是集名/集号文本。
+                        // findAll 收集全部候选，"按话数选条目"是引擎固定行为——规则不必把 {ep} 锚死在正则里。
+                        val candidates =
+                            regex
+                                .findAll(lastHtml)
+                                .mapNotNull { match ->
+                                    val rawStream =
+                                        (
+                                            if (match.groupValues.size > 1) {
+                                                match.groupValues[1]
+                                            } else {
+                                                match.value
+                                            }
+                                        ).replace("\\/", "/")
+                                    val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return@mapNotNull null
+                                    val annotation =
+                                        if (match.groupValues.size > 2) {
+                                            match.groupValues[2].trim().takeIf { it.isNotEmpty() }
+                                        } else {
+                                            null
+                                        }
+                                    StreamCandidate(streamUrl, annotation)
+                                }.distinctBy { it.url }
+                                .take(MAX_STREAM_CANDIDATES)
+                                .toList()
+                        if (candidates.isEmpty()) return@withContext emptyList()
+
+                        fun episodeOf(candidate: StreamCandidate): Float? =
+                            candidate.annotation?.let(::episodeNumberFromLabel)
+                                ?: episodeNumberFromUrl(candidate.url, allowWeak = epNumber <= 0f)
+
+                        // 指定话数时优先取标注对得上的候选；全对不上退回首个（兼容旧的锚定 {ep} 正则）
+                        val selected =
+                            if (epNumber > 0f) {
+                                val matched = candidates.filter { episodeOf(it) == epNumber }
+                                if (matched.isNotEmpty()) matched else listOf(candidates.first())
+                            } else {
+                                candidates
+                            }
+
+                        return@withContext selected.map { candidate ->
+                            val annotatedEp = episodeOf(candidate)
+                            val label =
+                                when {
+                                    candidate.annotation != null -> candidate.annotation
+                                    annotatedEp != null -> episodeLabelFromNumber(annotatedEp)
+                                    epNumber > 0f -> "第 $epInt 话"
+                                    else -> ""
+                                }
                             PlayableSource(
-                                url = streamUrl,
+                                url = candidate.url,
                                 kind = PlaylistEntryKind.DIRECT,
                                 label = label,
-                                episodeSort = epNumber,
+                                episodeSort = annotatedEp ?: epNumber,
                                 siteName = rule.name,
                                 pageUrl = lastUrl,
                                 headers = finalHeaders,
-                            ),
-                        )
+                            )
+                        }
                     }
                 }
             }

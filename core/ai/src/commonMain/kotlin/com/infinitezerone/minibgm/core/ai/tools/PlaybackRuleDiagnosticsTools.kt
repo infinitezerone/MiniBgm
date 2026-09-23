@@ -116,7 +116,10 @@ class PlaybackRuleDiagnosticsTools(
             "Call this INSTEAD OF inventing an interface URL from scratch. " +
             "It also REPLAYS the audited GET API calls (same site only) and returns their real response " +
             "bodies in apiSamples — write the EXTRACT_STREAM regex against that sample, do not invent field " +
-            "names. POST calls and requests that only fire after a click cannot be replayed; the notes say so. " +
+            "names. EXTRACT_STREAM is list-aware: capture the stream URL in group 1 and optionally the " +
+            "episode label text in group 2; the engine picks the requested episode from all candidates — " +
+            "do not anchor {ep} into the regex. POST calls and requests that only fire after a click cannot " +
+            "be replayed; the notes say so. " +
             "After filling the regex, run testPlaybackRule.",
     )
     suspend fun recordPlaybackRuleFromTrace(
@@ -167,7 +170,9 @@ class PlaybackRuleDiagnosticsTools(
         "Induce a playback rule skeleton by reading the STATIC page source of a playback page URL " +
             "(one plain HTTP fetch, no browser). If the media URL (.m3u8/.mp4/...) is present in the " +
             "HTML, the draft carries the exact source-code context around it — write the EXTRACT_STREAM " +
-            "regex against that context, do not invent field names. TRY THIS FIRST for ordinary sites: " +
+            "regex against that context, do not invent field names. If the page carries multiple media " +
+            "URLs (episodes or lines), capture the stream URL in regex group 1 and the episode label in " +
+            "group 2 — the engine picks the requested episode from all candidates. TRY THIS FIRST for ordinary sites: " +
             "it is much cheaper and faster than traceNetworkTraffic. Fall back to traceNetworkTraffic " +
             "only when the draft notes say the page is JS-rendered or the stream only appears at runtime. " +
             "After filling the regex, run testPlaybackRule.",

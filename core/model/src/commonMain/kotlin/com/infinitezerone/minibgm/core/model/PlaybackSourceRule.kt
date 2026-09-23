@@ -33,7 +33,9 @@ enum class StepAction {
  * - [method]: HTTP 方法，"GET" 或 "POST"
  * - [bodyTemplate]: POST 请求体模板（如 `d={apireq}`）
  * - [headers]: 附带的固定或动态请求头
- * - [regex]: 用于从响应文本中抓取变量或直链的正则表达式（第一个捕获组作为提取值）
+ * - [regex]: 用于从响应文本中抓取变量或直链的正则表达式。EXTRACT_VARIABLE 取第一个捕获组；
+ *   EXTRACT_STREAM 为列表语义——第 1 组是直链（无组时整个匹配），可选第 2 组是集名/集号文本，
+ *   引擎收集全部候选并按请求话数自动选条目，规则无需把 {ep} 锚死在正则里
  * - [variableName]: 提取到的变量存入上下文的键名（支持以 `{variableName}` 引用）
  * - [captureHeaders]: 需要从 HTTP 响应头中捕获并透传给播放器的 Header 名称列表（如 "Set-Cookie" 或 "Cookie"）
  */
