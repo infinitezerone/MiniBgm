@@ -26,9 +26,6 @@ private const val AFTER_FINISH_GRACE_MS = 6_000L
 /** 最多采纳的候选媒体请求数（与正则档一致） */
 private const val MAX_CANDIDATES = 12
 
-private val MEDIA_REQUEST_URL =
-    Regex("""https?://[^\s"'()<>]+?\.(?:m3u8|mp4|mkv|flv|webm|ts)(?:\?[^\s"'()<>]*)?""", RegexOption.IGNORE_CASE)
-
 /**
  * WebView 深度解析会话（第 5 档：确定性运行时捕获，无 AI 参与）。
  *
@@ -46,6 +43,7 @@ class WebViewCaptureServiceImpl(
     override suspend fun capturePlayableSources(pageUrl: String): List<PlayableSource> =
         suspendCancellableCoroutine { continuation ->
             val captured = LinkedHashMap<String, Map<String, String>>()
+            val ranks = HashMap<String, Int>()
             var webview: WebView? = null
             var settled = false
 
@@ -54,18 +52,21 @@ class WebViewCaptureServiceImpl(
                 settled = true
                 val sources =
                     runCatching {
-                        captured.entries.take(MAX_CANDIDATES).map { (url, headers) ->
-                            PlayableSource(
-                                url = url,
-                                kind = PlaylistEntryKind.DIRECT,
-                                label = "",
-                                episodeSort = 0f,
-                                siteName = hostOf(pageUrl),
-                                pageUrl = pageUrl,
-                                // 播放头直接取自捕获到的媒体请求自身（Referer/UA），比反推可靠
-                                headers = headers,
-                            )
-                        }
+                        captured.entries
+                            .sortedBy { ranks[it.key] ?: Int.MAX_VALUE }
+                            .take(MAX_CANDIDATES)
+                            .map { (url, headers) ->
+                                PlayableSource(
+                                    url = url,
+                                    kind = PlaylistEntryKind.DIRECT,
+                                    label = "",
+                                    episodeSort = 0f,
+                                    siteName = hostOf(pageUrl),
+                                    pageUrl = pageUrl,
+                                    // 播放头直接取自捕获到的媒体请求自身（Referer/UA），比反推可靠
+                                    headers = headers,
+                                )
+                            }
                     }.getOrElse {
                         logger.w { "捕获结果映射异常（按空处理）: ${it.message}" }
                         emptyList()
@@ -82,7 +83,11 @@ class WebViewCaptureServiceImpl(
                 // 深度解析是可选兜底档，失败就是"没有结果"
                 runCatching {
                     val url = request.url.toString()
-                    if (!MEDIA_REQUEST_URL.matches(url)) return
+                    val rangeHeader =
+                        request.requestHeaders.entries
+                            .firstOrNull { it.key.equals("Range", ignoreCase = true) }
+                            ?.value
+                    if (!MediaCandidateJudge.isMediaCandidate(url, rangeHeader)) return
                     synchronized(captured) {
                         if (captured.containsKey(url)) return@synchronized
                         val headers =
@@ -92,6 +97,7 @@ class WebViewCaptureServiceImpl(
                                 request.requestHeaders["Origin"]?.let { put("Origin", it) }
                             }
                         captured[url] = headers
+                        ranks[url] = MediaCandidateJudge.rank(url)
                         logger.d { "捕获媒体请求 ${request.requestHeaders["Referer"]?.let { "（带 Referer）" } ?: ""}: $url" }
                     }
                 }.onFailure { e -> logger.w { "捕获回调异常（已忽略）: ${e.message}" } }
@@ -181,7 +187,11 @@ class WebViewCaptureServiceImpl(
                         title = pageTitle,
                         calls = capturedCalls.take(40),
                         cookies = cookiesMap,
-                        mediaSources = mediaSources.distinctBy { it.url }.take(MAX_CANDIDATES),
+                        mediaSources =
+                            mediaSources
+                                .distinctBy { it.url }
+                                .sortedBy { MediaCandidateJudge.rank(it.url) }
+                                .take(MAX_CANDIDATES),
                     )
 
                 mainHandler.post {
@@ -213,7 +223,11 @@ class WebViewCaptureServiceImpl(
                                     ): android.webkit.WebResourceResponse? {
                                         runCatching {
                                             val reqUrl = request.url.toString()
-                                            val isMedia = MEDIA_REQUEST_URL.matches(reqUrl)
+                                            val rangeHeader =
+                                                request.requestHeaders.entries
+                                                    .firstOrNull { it.key.equals("Range", ignoreCase = true) }
+                                                    ?.value
+                                            val isMedia = MediaCandidateJudge.isMediaCandidate(reqUrl, rangeHeader)
                                             val isApi =
                                                 reqUrl.contains("/api/", ignoreCase = true) ||
                                                     reqUrl.contains(".json", ignoreCase = true) ||
