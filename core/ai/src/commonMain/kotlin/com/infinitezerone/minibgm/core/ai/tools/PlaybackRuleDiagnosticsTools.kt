@@ -66,8 +66,12 @@ class PlaybackRuleDiagnosticsTools(
     suspend fun probeSiteAndFindSample(
         @LLMDescription("The base HTTP/HTTPS URL of the target anime website, e.g. https://example.com/")
         siteUrl: String,
-        @LLMDescription("Sample anime title to search or match, defaults to '芙莉莲'")
-        sampleAnime: String = "芙莉莲",
+        @LLMDescription(
+            "An anime title KNOWN to be listed on that site — pass the title the user is actually looking for " +
+                "(its aliases work too). Leave empty only when nothing is known; the probe then picks a real " +
+                "entry from the site's own home page as the sample.",
+        )
+        sampleAnime: String = "",
     ): String {
         val result = playbackResolverRepository.probeSite(siteUrl, sampleAnime)
         return json.encodeToString(result)

@@ -38,4 +38,40 @@ object ChineseConverter {
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+
+    /**
+     * 取源检索的完整片名候选：主标题 → 别名 → 日文原名，每项都带其繁体形式。
+     *
+     * 顺序有实测依据（3 个采集站 × 4 部番）：原样简体 11/12、繁体 5/12、日文原名 2/12。
+     * 所以**主标题必须排第一**——排在它后面的候选，即使命中也先白付了一发请求。
+     *
+     * [aliases] 来自 Bangumi infobox（台译、港译、英文名、罗马音），是第三方站点标题上
+     * 真正写的字，远不止 name/name_cn 那两个。中文字形的排在前（大陆站认简体、港台站认繁体），
+     * 纯拉丁字母的排后；[origin] 实测命中最低，垫底。
+     *
+     * [max] 是硬上限：**每次未命中都要为下一个候选付一次请求**，别名多的条目不能无限试。
+     */
+    fun searchTitles(
+        primary: String,
+        aliases: List<String> = emptyList(),
+        origin: String = "",
+        max: Int = MAX_SEARCH_TITLES,
+    ): List<String> {
+        val ordered =
+            buildList {
+                primary.takeIf { it.isNotBlank() }?.let(::add)
+                addAll(aliases.filter { it.isNotBlank() }.sortedBy { if (it.hasCjk()) 0 else 1 })
+                origin.takeIf { it.isNotBlank() }?.let(::add)
+            }
+        return queryVariants(*ordered.toTypedArray()).take(max)
+    }
+
+    /** 候选上限：8 个候选在最坏情况下约对应 16 秒，与取源链路的 20 秒总超时同量级 */
+    const val MAX_SEARCH_TITLES: Int = 8
+
+    /** 是否含中日文字形——用来把中文译名排在英文名与罗马音之前 */
+    private fun String.hasCjk(): Boolean =
+        any { ch ->
+            ch.code in 0x3040..0x30FF || ch.code in 0x3400..0x4DBF || ch.code in 0x4E00..0x9FFF
+        }
 }

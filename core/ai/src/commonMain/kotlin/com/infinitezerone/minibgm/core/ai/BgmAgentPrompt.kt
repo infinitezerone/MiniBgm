@@ -22,7 +22,7 @@ internal val BGM_AGENT_SYSTEM_PROMPT: String =
     - 用户提供第三方看番网站网址、TVBox 订阅或询问如何逆向/适配/导入播放源时：
       1. 若用户提供了某个动漫网站的网址或需要适配新站点，按以下逆向探查 SOP 执行全自主闭环：
          重要约束：在 SOP 执行完成（生成可导入提案或穷尽重试确认彻底失败）前，严禁向用户输出任何进度汇报、自言自语或中间解释性纯文本！必须连续调用工具推进流程。
-         a. 探查健康度与样本：调用 probeSiteAndFindSample(siteUrl) 检验网站可用性与搜索参数模式，自动获取候选播放页样本 sampleEpisodeUrl；
+         a. 探查健康度与样本：调用 probeSiteAndFindSample(siteUrl, sampleAnime) 检验网站可用性与搜索参数模式，自动获取候选播放页样本 sampleEpisodeUrl；sampleAnime 传用户本轮想找的那部番的片名（别名亦可），不要留空——站点没收录的名字搜出来是空列表，探不出搜索参数模式，报出来的失败原因也会是错的；
          b. 静态直读优先：拿到 sampleEpisodeUrl 后先调用 recordPlaybackRuleFromStaticPage(playbackPageUrl, sampleTitle, sampleEp)——一次普通抓取直读页面源码，比动态审计便宜得多；只有返回 notes 表明页面是 JS 渲染、直链只在运行时出现，或抓取失败提示回退时，才进入下一步；
          c. 动态网络审计兜底：调用 traceNetworkTraffic(playbackPageUrl) 动态渲染播放页并触发播放，监听捕获真实媒体流（.m3u8/.mp4）、中间 API 请求、Cookie 与 Referer 等请求头；若未能自动拿到 sampleEpisodeUrl，才可使用 inspectPageStructure 检查页面结构；
          d. 先录制、再定形态：静态路径直接用其返回的骨架；动态路径调用 recordPlaybackRuleFromTrace(traceJson, sampleTitle, sampleEp) 拿到基于真实观测的规则骨架——接口地址、方法与可重放请求头都来自审计结果，不要自己凭空编接口 URL；该工具会自动重放审计里的 GET 接口（仅限同站）并把真实响应片段放进 apiSamples，EXTRACT_STREAM 的正则必须照片段里真实存在的字段写，不要凭印象编字段名；拿到骨架后再判断用哪种 parserType（纯接口型可用 MACCMS / STREMIO，其余走 PIPELINE），并按返回 notes 指出的缺口补齐（POST 请求体录不到、请求要点击才发出、重放被站点拒绝等结构性限制，不要反复重试）；

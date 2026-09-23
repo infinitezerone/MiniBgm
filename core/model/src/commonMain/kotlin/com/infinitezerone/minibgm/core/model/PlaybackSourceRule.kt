@@ -189,5 +189,7 @@ data class ProbeSiteOutput(
     val sampleEpisodeUrl: String? = null,
     val hasSearchBox: Boolean = false,
     val searchUrlPattern: String? = null,
+    /** 本次探查实际使用的样本片名——调用方据此判断样本是否代表真实需求 */
+    val sampleTitleUsed: String? = null,
     val errorMessage: String? = null,
 )
