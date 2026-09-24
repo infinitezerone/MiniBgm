@@ -293,7 +293,6 @@ internal fun PlayerControlsOverlay(
                         ),
                     ).displayCutoutPadding()
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
             } else {
                 Modifier
                     .fillMaxWidth()
@@ -302,7 +301,7 @@ internal fun PlayerControlsOverlay(
                         Brush.verticalGradient(
                             colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f)),
                         ),
-                    ).padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
             }
 
         Column(modifier = bottomBarModifier) {
@@ -315,41 +314,17 @@ internal fun PlayerControlsOverlay(
                     0f
                 }
 
-            // 悬浮时间气泡与自适应双层进度条
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isScrubbing && totalDuration > 0L) {
-                    val scrubMs = (scrubProgress * totalDuration).toLong()
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color.Black.copy(alpha = 0.85f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                        modifier = Modifier.offset(y = (-24).dp),
-                    ) {
-                        Text(
-                            text = "${formatDuration(scrubMs)} / ${formatDuration(totalDuration)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-
-                PlayerProgressBar(
-                    progress = progress,
-                    isScrubbing = isScrubbing,
-                    onScrubStart = onScrubStart,
-                    onScrubbing = onScrubbing,
-                    onScrubEnd = onScrubEnd,
-                )
-            }
-
-            // 紧凑单行集成控制条
+            // 1. 控制行（位于进度条上方）
             Row(
-                modifier = Modifier.fillMaxWidth().height(36.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = if (isLandscape) 16.dp else 12.dp,
+                            end = if (isLandscape) 16.dp else 12.dp,
+                            top = if (isLandscape) 8.dp else 6.dp,
+                            bottom = 2.dp,
+                        ).height(36.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // 播放/暂停
@@ -443,6 +418,38 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(22.dp),
                     )
                 }
+            }
+
+            // 2. 最底部进度条（紧贴视频最底边）
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isScrubbing && totalDuration > 0L) {
+                    val scrubMs = (scrubProgress * totalDuration).toLong()
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.Black.copy(alpha = 0.88f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                        modifier = Modifier.offset(y = (-32).dp),
+                    ) {
+                        Text(
+                            text = "${formatDuration(scrubMs)} / ${formatDuration(totalDuration)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                PlayerProgressBar(
+                    progress = progress,
+                    isScrubbing = isScrubbing,
+                    onScrubStart = onScrubStart,
+                    onScrubbing = onScrubbing,
+                    onScrubEnd = onScrubEnd,
+                )
             }
         }
     }
