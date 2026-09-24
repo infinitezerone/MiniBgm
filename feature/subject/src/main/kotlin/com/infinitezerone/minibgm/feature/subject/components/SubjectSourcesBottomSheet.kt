@@ -99,7 +99,8 @@ fun SubjectSourcesBottomSheet(
         }
 
     val runAfterDismiss: (() -> Unit) -> Unit = { action ->
-        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+        coroutineScope.launch {
+            sheetState.hide()
             onDismissRequest()
             action()
         }
@@ -157,7 +158,8 @@ fun SubjectSourcesBottomSheet(
 
                 IconButton(
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.launch {
+                            sheetState.hide()
                             onDismissRequest()
                         }
                     },
@@ -296,8 +298,7 @@ fun SubjectSourcesBottomSheet(
                     subtitle = "打开 B 站客户端/网页搜索",
                     iconVector = Icons.Filled.Tv,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
+                        runAfterDismiss {
                             onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
                         }
                     },
@@ -308,8 +309,7 @@ fun SubjectSourcesBottomSheet(
                     subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
                     iconVector = Icons.Filled.Download,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
+                        runAfterDismiss {
                             onOpenUrl(mikanUrl)
                         }
                     },

@@ -94,7 +94,8 @@ fun EpisodeSourceGuideBottomSheet(
             playlists.matchesForEpisode(subject.id, if (episode.ep > 0f) episode.ep else episode.sort)
         }
     val runAfterDismiss: (() -> Unit) -> Unit = { action ->
-        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+        coroutineScope.launch {
+            sheetState.hide()
             onDismissRequest()
             action()
         }
@@ -227,7 +228,8 @@ fun EpisodeSourceGuideBottomSheet(
 
                 IconButton(
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.launch {
+                            sheetState.hide()
                             onDismissRequest()
                         }
                     },
@@ -330,8 +332,7 @@ fun EpisodeSourceGuideBottomSheet(
                                 )
                             },
                             onClick = {
-                                coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                                    onDismissRequest()
+                                runAfterDismiss {
                                     if (onInternalPlayClick != null) {
                                         val route =
                                             PlayerRoute(
@@ -368,17 +369,19 @@ fun EpisodeSourceGuideBottomSheet(
                             )
                         },
                         onClick = {
-                            val route =
-                                PlayerRoute(
-                                    subjectId = subject.id,
-                                    episodeId = episode.id,
-                                    streamUrl = "",
-                                    episodeName = episode.nameCn.ifBlank { episode.name },
-                                    subjectName = displayName,
-                                    episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
-                                    episodeType = episode.type,
-                                )
-                            onInternalPlayClick(route)
+                            runAfterDismiss {
+                                val route =
+                                    PlayerRoute(
+                                        subjectId = subject.id,
+                                        episodeId = episode.id,
+                                        streamUrl = "",
+                                        episodeName = episode.nameCn.ifBlank { episode.name },
+                                        subjectName = displayName,
+                                        episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                        episodeType = episode.type,
+                                    )
+                                onInternalPlayClick(route)
+                            }
                         },
                     )
                 }
@@ -390,8 +393,7 @@ fun EpisodeSourceGuideBottomSheet(
                         iconVector = Icons.Filled.Settings,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                         onClick = {
-                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                                onDismissRequest()
+                            runAfterDismiss {
                                 onManageRules()
                             }
                         },
@@ -441,8 +443,7 @@ fun EpisodeSourceGuideBottomSheet(
                     subtitle = "在 B 站中搜索当前分集",
                     iconVector = Icons.Filled.Tv,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
+                        runAfterDismiss {
                             onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
                         }
                     },
@@ -453,8 +454,7 @@ fun EpisodeSourceGuideBottomSheet(
                     subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
                     iconVector = Icons.Filled.Download,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
+                        runAfterDismiss {
                             onOpenUrl(mikanUrl)
                         }
                     },
@@ -566,7 +566,7 @@ internal fun PlaylistSourceSection(
                         if (playableInApp) {
                             // 同片单的可播条目按用户书写顺序入队：播放器内支持连播与选集抽屉
                             val queueEntries = item.playlist.entries.filter { it.kind == PlaylistEntryKind.DIRECT }
-                            onInternalPlayClick?.invoke(
+                            onInternalPlayClick(
                                 PlayerRoute(
                                     subjectId = subject.id,
                                     episodeId = episode.id,

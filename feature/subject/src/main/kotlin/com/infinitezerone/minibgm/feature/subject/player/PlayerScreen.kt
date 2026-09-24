@@ -351,7 +351,9 @@ fun PlayerScreen(
     DisposableEffect(activity) {
         onDispose {
             if (activity != null) {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                if (activity.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
                 val window = activity.window
                 WindowCompat
                     .getInsetsController(window, window.decorView)
