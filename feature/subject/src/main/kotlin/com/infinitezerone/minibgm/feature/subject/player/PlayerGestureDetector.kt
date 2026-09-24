@@ -7,6 +7,8 @@ import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +16,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,7 +31,6 @@ import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -98,6 +101,7 @@ internal fun Modifier.playerGestures(
     onFastForwardEnd: () -> Unit,
     onHudStateChange: (GestureHudState) -> Unit,
     onTriggerHudDismiss: () -> Unit,
+    isLocked: Boolean = false,
 ): Modifier =
     this then
         PlayerGesturesElement(
@@ -113,6 +117,7 @@ internal fun Modifier.playerGestures(
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
+            isLocked = isLocked,
         )
 
 private data class PlayerGesturesElement(
@@ -128,6 +133,7 @@ private data class PlayerGesturesElement(
     val onFastForwardEnd: () -> Unit,
     val onHudStateChange: (GestureHudState) -> Unit,
     val onTriggerHudDismiss: () -> Unit,
+    val isLocked: Boolean = false,
 ) : ModifierNodeElement<PlayerGesturesNode>() {
     override fun create(): PlayerGesturesNode =
         PlayerGesturesNode(
@@ -143,6 +149,7 @@ private data class PlayerGesturesElement(
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
+            isLocked = isLocked,
         )
 
     override fun update(node: PlayerGesturesNode) {
@@ -159,6 +166,7 @@ private data class PlayerGesturesElement(
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
+            isLocked = isLocked,
         )
     }
 
@@ -167,6 +175,7 @@ private data class PlayerGesturesElement(
         properties["isPlaying"] = isPlaying
         properties["currentPositionMs"] = currentPositionMs
         properties["totalDurationMs"] = totalDurationMs
+        properties["isLocked"] = isLocked
     }
 }
 
@@ -183,6 +192,7 @@ private class PlayerGesturesNode(
     var onFastForwardEnd: () -> Unit,
     var onHudStateChange: (GestureHudState) -> Unit,
     var onTriggerHudDismiss: () -> Unit,
+    var isLocked: Boolean = false,
 ) : DelegatingNode() {
     private var isFastForwarding = false
     private var dragMode = DragMode.NONE
@@ -205,6 +215,7 @@ private class PlayerGesturesNode(
         onFastForwardEnd: () -> Unit,
         onHudStateChange: (GestureHudState) -> Unit,
         onTriggerHudDismiss: () -> Unit,
+        isLocked: Boolean = false,
     ) {
         this.context = context
         this.isPlaying = isPlaying
@@ -218,6 +229,7 @@ private class PlayerGesturesNode(
         this.onFastForwardEnd = onFastForwardEnd
         this.onHudStateChange = onHudStateChange
         this.onTriggerHudDismiss = onTriggerHudDismiss
+        this.isLocked = isLocked
     }
 
     @Suppress("unused")
@@ -227,6 +239,7 @@ private class PlayerGesturesNode(
                 detectTapGestures(
                     onTap = { onSingleTap() },
                     onDoubleTap = { offset ->
+                        if (isLocked) return@detectTapGestures
                         val width = size.width
                         val x = offset.x
                         val cur = currentPositionMs
@@ -251,7 +264,7 @@ private class PlayerGesturesNode(
                         }
                     },
                     onLongPress = {
-                        if (isPlaying) {
+                        if (!isLocked && isPlaying) {
                             isFastForwarding = true
                             onFastForwardStart()
                             onHudStateChange(GestureHudState.FastForward(2.0f))
@@ -278,6 +291,10 @@ private class PlayerGesturesNode(
 
                 detectDragGestures(
                     onDragStart = { offset ->
+                        if (isLocked) {
+                            dragMode = DragMode.NONE
+                            return@detectDragGestures
+                        }
                         startOffset = offset
                         dragMode = DragMode.NONE
                         dragAccumulatedX = 0f
@@ -295,6 +312,7 @@ private class PlayerGesturesNode(
                         initialVolume = currentVol.toFloat()
                     },
                     onDrag = { change, dragAmount ->
+                        if (isLocked) return@detectDragGestures
                         change.consume()
                         dragAccumulatedX += dragAmount.x
                         dragAccumulatedY += dragAmount.y
@@ -349,6 +367,7 @@ private class PlayerGesturesNode(
                         }
                     },
                     onDragEnd = {
+                        if (isLocked) return@detectDragGestures
                         val total = totalDurationMs
                         if (dragMode == DragMode.HORIZONTAL_SEEK && total > 0L) {
                             onSeekConfirm(seekTargetMs)
@@ -357,6 +376,7 @@ private class PlayerGesturesNode(
                         onTriggerHudDismiss()
                     },
                     onDragCancel = {
+                        if (isLocked) return@detectDragGestures
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
                     },
@@ -387,6 +407,7 @@ internal fun PlayerGestureDetector(
     onFastForwardStart: () -> Unit,
     onFastForwardEnd: () -> Unit,
     modifier: Modifier = Modifier,
+    isLocked: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -420,88 +441,104 @@ internal fun PlayerGestureDetector(
                     onFastForwardEnd = onFastForwardEnd,
                     onHudStateChange = { hudState = it },
                     onTriggerHudDismiss = { hideHudTrigger++ },
+                    isLocked = isLocked,
                 ),
     ) {
         content()
 
-        // 浮动 HUD 指示卡片
+        // 浮动 HUD 指示层（侧边竖向灵动微胶囊 + 顶部/中央提示）
         AnimatedVisibility(
             visible = hudState !is GestureHudState.Idle,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier.fillMaxSize(),
         ) {
-            when (val state = hudState) {
-                is GestureHudState.Brightness -> {
-                    GestureFeedbackCard(
-                        icon = Icons.Filled.BrightnessLow,
-                        label = "亮度",
-                        percent = state.percent,
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (val state = hudState) {
+                    is GestureHudState.Brightness -> {
+                        SideCapsuleIndicator(
+                            icon = Icons.Filled.BrightnessLow,
+                            percent = state.percent,
+                            modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp),
+                        )
+                    }
+                    is GestureHudState.Volume -> {
+                        SideCapsuleIndicator(
+                            icon = if (state.percent == 0) Icons.AutoMirrored.Filled.VolumeMute else Icons.AutoMirrored.Filled.VolumeUp,
+                            percent = state.percent,
+                            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp),
+                        )
+                    }
+                    is GestureHudState.Seek -> {
+                        SeekFeedbackCard(
+                            targetMs = state.targetMs,
+                            totalMs = state.totalMs,
+                            deltaMs = state.deltaMs,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
+                    is GestureHudState.FastForward -> {
+                        FastForwardChip(
+                            speed = state.speed,
+                            modifier = Modifier.align(Alignment.TopCenter),
+                        )
+                    }
+                    is GestureHudState.Idle -> {}
                 }
-                is GestureHudState.Volume -> {
-                    GestureFeedbackCard(
-                        icon = if (state.percent == 0) Icons.AutoMirrored.Filled.VolumeMute else Icons.AutoMirrored.Filled.VolumeUp,
-                        label = "音量",
-                        percent = state.percent,
-                    )
-                }
-                is GestureHudState.Seek -> {
-                    SeekFeedbackCard(
-                        targetMs = state.targetMs,
-                        totalMs = state.totalMs,
-                        deltaMs = state.deltaMs,
-                    )
-                }
-                is GestureHudState.FastForward -> {
-                    FastForwardChip(speed = state.speed)
-                }
-                is GestureHudState.Idle -> {}
             }
         }
     }
 }
 
 /**
- * 音量 / 亮度 HUD 卡片
+ * 屏幕边缘竖向微胶囊指示器（对标 iOS/B站侧边条，不遮挡画面正中视线）
  */
 @Composable
-private fun GestureFeedbackCard(
+private fun SideCapsuleIndicator(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
     percent: Int,
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Black.copy(alpha = 0.75f),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Black.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier.padding(16.dp),
+        modifier = modifier,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 14.dp),
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = label,
+                contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            // 垂直胶囊填充轨
+            Box(
+                modifier =
+                    Modifier
+                        .width(5.dp)
+                        .height(84.dp)
+                        .background(Color.White.copy(alpha = 0.25f), shape = RoundedCornerShape(2.5.dp)),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight((percent / 100f).coerceIn(0f, 1f))
+                            .background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(2.5.dp)),
+                )
+            }
             Text(
-                text = "$label $percent%",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                text = "$percent%",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
                 color = Color.White,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { percent / 100f },
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.White.copy(alpha = 0.25f),
-                modifier = Modifier.width(100.dp).height(4.dp),
             )
         }
     }
@@ -519,40 +556,46 @@ private fun SeekFeedbackCard(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = Color.Black.copy(alpha = 0.8f),
+        color = Color.Black.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
         modifier = modifier.padding(16.dp),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
         ) {
-            Icon(
-                imageVector = if (deltaMs >= 0) Icons.Filled.FastForward else Icons.Filled.FastRewind,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = if (deltaMs >= 0) Icons.Filled.FastForward else Icons.Filled.FastRewind,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                val deltaSec = (abs(deltaMs) / 1000).toInt()
+                Text(
+                    text = "${if (deltaMs >= 0) "+" else "-"}${deltaSec}s",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (deltaMs >= 0) MaterialTheme.colorScheme.primary else Color.White,
+                )
+            }
             Text(
                 text = "${formatDuration(targetMs)} / ${formatDuration(totalMs)}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-            )
-            val deltaSec = (abs(deltaMs) / 1000).toInt()
-            Text(
-                text = "${if (deltaMs >= 0) "+" else "-"}${deltaSec}s",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (deltaMs >= 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.9f),
             )
         }
     }
 }
 
 /**
- * 长按倍速微胶囊指示器
+ * 长按倍速微胶囊指示器（置于顶部中央，避免遮挡字幕）
  */
 @Composable
 private fun FastForwardChip(
@@ -561,24 +604,25 @@ private fun FastForwardChip(
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.Black.copy(alpha = 0.8f),
+        color = Color.Black.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier.padding(16.dp),
+        modifier = modifier.padding(top = 44.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.FastForward,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "${speed}x 倍速播放中",
-                style = MaterialTheme.typography.labelLarge,
+                text = "${speed}x 倍速快进中",
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             )
