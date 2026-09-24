@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -33,19 +34,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
+import androidx.compose.ui.node.DelegatingNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -84,6 +85,293 @@ private enum class DragMode {
     VERTICAL_VOLUME,
 }
 
+internal fun Modifier.playerGestures(
+    context: Context,
+    isPlaying: Boolean,
+    currentPositionMs: Long,
+    totalDurationMs: Long,
+    onSingleTap: () -> Unit,
+    onDoubleTapSeek: (Long) -> Unit,
+    onDoubleTapPlayPause: () -> Unit,
+    onSeekConfirm: (Long) -> Unit,
+    onFastForwardStart: () -> Unit,
+    onFastForwardEnd: () -> Unit,
+    onHudStateChange: (GestureHudState) -> Unit,
+    onTriggerHudDismiss: () -> Unit,
+): Modifier =
+    this then
+        PlayerGesturesElement(
+            context = context,
+            isPlaying = isPlaying,
+            currentPositionMs = currentPositionMs,
+            totalDurationMs = totalDurationMs,
+            onSingleTap = onSingleTap,
+            onDoubleTapSeek = onDoubleTapSeek,
+            onDoubleTapPlayPause = onDoubleTapPlayPause,
+            onSeekConfirm = onSeekConfirm,
+            onFastForwardStart = onFastForwardStart,
+            onFastForwardEnd = onFastForwardEnd,
+            onHudStateChange = onHudStateChange,
+            onTriggerHudDismiss = onTriggerHudDismiss,
+        )
+
+private data class PlayerGesturesElement(
+    val context: Context,
+    val isPlaying: Boolean,
+    val currentPositionMs: Long,
+    val totalDurationMs: Long,
+    val onSingleTap: () -> Unit,
+    val onDoubleTapSeek: (Long) -> Unit,
+    val onDoubleTapPlayPause: () -> Unit,
+    val onSeekConfirm: (Long) -> Unit,
+    val onFastForwardStart: () -> Unit,
+    val onFastForwardEnd: () -> Unit,
+    val onHudStateChange: (GestureHudState) -> Unit,
+    val onTriggerHudDismiss: () -> Unit,
+) : ModifierNodeElement<PlayerGesturesNode>() {
+    override fun create(): PlayerGesturesNode =
+        PlayerGesturesNode(
+            context = context,
+            isPlaying = isPlaying,
+            currentPositionMs = currentPositionMs,
+            totalDurationMs = totalDurationMs,
+            onSingleTap = onSingleTap,
+            onDoubleTapSeek = onDoubleTapSeek,
+            onDoubleTapPlayPause = onDoubleTapPlayPause,
+            onSeekConfirm = onSeekConfirm,
+            onFastForwardStart = onFastForwardStart,
+            onFastForwardEnd = onFastForwardEnd,
+            onHudStateChange = onHudStateChange,
+            onTriggerHudDismiss = onTriggerHudDismiss,
+        )
+
+    override fun update(node: PlayerGesturesNode) {
+        node.update(
+            context = context,
+            isPlaying = isPlaying,
+            currentPositionMs = currentPositionMs,
+            totalDurationMs = totalDurationMs,
+            onSingleTap = onSingleTap,
+            onDoubleTapSeek = onDoubleTapSeek,
+            onDoubleTapPlayPause = onDoubleTapPlayPause,
+            onSeekConfirm = onSeekConfirm,
+            onFastForwardStart = onFastForwardStart,
+            onFastForwardEnd = onFastForwardEnd,
+            onHudStateChange = onHudStateChange,
+            onTriggerHudDismiss = onTriggerHudDismiss,
+        )
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "playerGestures"
+        properties["isPlaying"] = isPlaying
+        properties["currentPositionMs"] = currentPositionMs
+        properties["totalDurationMs"] = totalDurationMs
+    }
+}
+
+private class PlayerGesturesNode(
+    var context: Context,
+    var isPlaying: Boolean,
+    var currentPositionMs: Long,
+    var totalDurationMs: Long,
+    var onSingleTap: () -> Unit,
+    var onDoubleTapSeek: (Long) -> Unit,
+    var onDoubleTapPlayPause: () -> Unit,
+    var onSeekConfirm: (Long) -> Unit,
+    var onFastForwardStart: () -> Unit,
+    var onFastForwardEnd: () -> Unit,
+    var onHudStateChange: (GestureHudState) -> Unit,
+    var onTriggerHudDismiss: () -> Unit,
+) : DelegatingNode() {
+    private var isFastForwarding = false
+    private var dragMode = DragMode.NONE
+    private var dragAccumulatedX = 0f
+    private var dragAccumulatedY = 0f
+    private var seekTargetMs = 0L
+    private var initialBrightness = 0.5f
+    private var initialVolume = 0f
+
+    fun update(
+        context: Context,
+        isPlaying: Boolean,
+        currentPositionMs: Long,
+        totalDurationMs: Long,
+        onSingleTap: () -> Unit,
+        onDoubleTapSeek: (Long) -> Unit,
+        onDoubleTapPlayPause: () -> Unit,
+        onSeekConfirm: (Long) -> Unit,
+        onFastForwardStart: () -> Unit,
+        onFastForwardEnd: () -> Unit,
+        onHudStateChange: (GestureHudState) -> Unit,
+        onTriggerHudDismiss: () -> Unit,
+    ) {
+        this.context = context
+        this.isPlaying = isPlaying
+        this.currentPositionMs = currentPositionMs
+        this.totalDurationMs = totalDurationMs
+        this.onSingleTap = onSingleTap
+        this.onDoubleTapSeek = onDoubleTapSeek
+        this.onDoubleTapPlayPause = onDoubleTapPlayPause
+        this.onSeekConfirm = onSeekConfirm
+        this.onFastForwardStart = onFastForwardStart
+        this.onFastForwardEnd = onFastForwardEnd
+        this.onHudStateChange = onHudStateChange
+        this.onTriggerHudDismiss = onTriggerHudDismiss
+    }
+
+    @Suppress("unused")
+    private val tapNode =
+        delegate(
+            SuspendingPointerInputModifierNode {
+                detectTapGestures(
+                    onTap = { onSingleTap() },
+                    onDoubleTap = { offset ->
+                        val width = size.width
+                        val x = offset.x
+                        val cur = currentPositionMs
+                        val total = totalDurationMs
+                        when {
+                            x < width * 0.35f -> {
+                                val target = (cur - 10000L).coerceAtLeast(0L)
+                                onDoubleTapSeek(target)
+                                onHudStateChange(GestureHudState.Seek(target, total, -10000L))
+                                onTriggerHudDismiss()
+                            }
+                            x > width * 0.65f -> {
+                                val maxPos = if (total > 0L) total else Long.MAX_VALUE
+                                val target = (cur + 10000L).coerceAtMost(maxPos)
+                                onDoubleTapSeek(target)
+                                onHudStateChange(GestureHudState.Seek(target, total, 10000L))
+                                onTriggerHudDismiss()
+                            }
+                            else -> {
+                                onDoubleTapPlayPause()
+                            }
+                        }
+                    },
+                    onLongPress = {
+                        if (isPlaying) {
+                            isFastForwarding = true
+                            onFastForwardStart()
+                            onHudStateChange(GestureHudState.FastForward(2.0f))
+                        }
+                    },
+                    onPress = {
+                        tryAwaitRelease()
+                        if (isFastForwarding) {
+                            isFastForwarding = false
+                            onFastForwardEnd()
+                            onHudStateChange(GestureHudState.Idle)
+                        }
+                    },
+                )
+            },
+        )
+
+    @Suppress("unused")
+    private val dragNode =
+        delegate(
+            SuspendingPointerInputModifierNode {
+                var startOffset = Offset.Zero
+                val thresholdPx = 14.dp.toPx()
+
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        startOffset = offset
+                        dragMode = DragMode.NONE
+                        dragAccumulatedX = 0f
+                        dragAccumulatedY = 0f
+                        seekTargetMs = currentPositionMs
+
+                        // 记录起始亮度
+                        val activity = context.findActivity()
+                        val windowLp = activity?.window?.attributes
+                        initialBrightness = windowLp?.screenBrightness?.takeIf { it in 0.01f..1f } ?: 0.5f
+
+                        // 记录起始音量
+                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                        val currentVol = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                        initialVolume = currentVol.toFloat()
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragAccumulatedX += dragAmount.x
+                        dragAccumulatedY += dragAmount.y
+
+                        val width = size.width
+                        val height = size.height
+                        val cur = currentPositionMs
+                        val total = totalDurationMs
+
+                        if (dragMode == DragMode.NONE) {
+                            if (abs(dragAccumulatedX) > abs(dragAccumulatedY) && abs(dragAccumulatedX) > thresholdPx) {
+                                dragMode = DragMode.HORIZONTAL_SEEK
+                            } else if (abs(dragAccumulatedY) > thresholdPx) {
+                                dragMode =
+                                    if (startOffset.x < width * 0.5f) {
+                                        DragMode.VERTICAL_BRIGHTNESS
+                                    } else {
+                                        DragMode.VERTICAL_VOLUME
+                                    }
+                            }
+                        }
+
+                        when (dragMode) {
+                            DragMode.HORIZONTAL_SEEK -> {
+                                if (total > 0L) {
+                                    val deltaFraction = dragAccumulatedX / width
+                                    val deltaMs = (deltaFraction * 90000L).toLong()
+                                    seekTargetMs = (cur + deltaMs).coerceIn(0L, total)
+                                    onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - cur))
+                                }
+                            }
+                            DragMode.VERTICAL_BRIGHTNESS -> {
+                                val delta = -dragAccumulatedY / height
+                                val newBrightness = (initialBrightness + delta).coerceIn(0.01f, 1f)
+                                context.findActivity()?.let { act ->
+                                    val lp = act.window.attributes
+                                    lp.screenBrightness = newBrightness
+                                    act.window.attributes = lp
+                                }
+                                onHudStateChange(GestureHudState.Brightness((newBrightness * 100).roundToInt()))
+                            }
+                            DragMode.VERTICAL_VOLUME -> {
+                                val delta = -dragAccumulatedY / height
+                                val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                                val maxVolume = audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15
+                                val targetVol = (initialVolume + delta * maxVolume).roundToInt().coerceIn(0, maxVolume)
+                                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                                val percent = if (maxVolume > 0) ((targetVol.toFloat() / maxVolume) * 100).roundToInt() else 0
+                                onHudStateChange(GestureHudState.Volume(percent))
+                            }
+                            DragMode.NONE -> {}
+                        }
+                    },
+                    onDragEnd = {
+                        val total = totalDurationMs
+                        if (dragMode == DragMode.HORIZONTAL_SEEK && total > 0L) {
+                            onSeekConfirm(seekTargetMs)
+                        }
+                        dragMode = DragMode.NONE
+                        onTriggerHudDismiss()
+                    },
+                    onDragCancel = {
+                        dragMode = DragMode.NONE
+                        onTriggerHudDismiss()
+                    },
+                )
+            },
+        )
+}
+
+private tailrec fun Context.findActivity(): Activity? =
+    when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
 /**
  * 播放器手势检测与浮动 HUD 交互层
  */
@@ -102,34 +390,8 @@ internal fun PlayerGestureDetector(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
-    val density = LocalDensity.current
-    val audioManager = remember(context) { context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager }
-
     var hudState by remember { mutableStateOf<GestureHudState>(GestureHudState.Idle) }
-    var hideHudTrigger by remember { mutableStateOf(0) }
-
-    // 拖拽手势临时态
-    var dragMode by remember { mutableStateOf(DragMode.NONE) }
-    var dragAccumulatedX by remember { mutableFloatStateOf(0f) }
-    var dragAccumulatedY by remember { mutableFloatStateOf(0f) }
-    var seekTargetMs by remember { mutableLongStateOf(0L) }
-
-    // 音量与亮度临时态
-    var initialBrightness by remember { mutableFloatStateOf(0.5f) }
-    var currentBrightness by remember { mutableFloatStateOf(0.5f) }
-    var initialVolume by remember { mutableFloatStateOf(0f) }
-    val maxVolume = remember(audioManager) { audioManager?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15 }
-
-    val currentPositionState by rememberUpdatedState(currentPositionMs)
-    val totalDurationState by rememberUpdatedState(totalDurationMs)
-    val isPlayingState by rememberUpdatedState(isPlaying)
-    val onSingleTapState by rememberUpdatedState(onSingleTap)
-    val onDoubleTapSeekState by rememberUpdatedState(onDoubleTapSeek)
-    val onDoubleTapPlayPauseState by rememberUpdatedState(onDoubleTapPlayPause)
-    val onSeekConfirmState by rememberUpdatedState(onSeekConfirm)
-    val onFastForwardStartState by rememberUpdatedState(onFastForwardStart)
-    val onFastForwardEndState by rememberUpdatedState(onFastForwardEnd)
+    var hideHudTrigger by remember { mutableIntStateOf(0) }
 
     // 手势结束后自动淡出 HUD
     LaunchedEffect(hideHudTrigger) {
@@ -145,136 +407,20 @@ internal fun PlayerGestureDetector(
         modifier =
             modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onTap = { onSingleTapState() },
-                        onDoubleTap = { offset ->
-                            val width = size.width
-                            val x = offset.x
-                            val cur = currentPositionState
-                            val total = totalDurationState
-                            when {
-                                x < width * 0.35f -> {
-                                    val target = (cur - 10000L).coerceAtLeast(0L)
-                                    onDoubleTapSeekState(target)
-                                    hudState = GestureHudState.Seek(target, total, -10000L)
-                                    hideHudTrigger++
-                                }
-                                x > width * 0.65f -> {
-                                    val maxPos = if (total > 0L) total else Long.MAX_VALUE
-                                    val target = (cur + 10000L).coerceAtMost(maxPos)
-                                    onDoubleTapSeekState(target)
-                                    hudState = GestureHudState.Seek(target, total, 10000L)
-                                    hideHudTrigger++
-                                }
-                                else -> {
-                                    onDoubleTapPlayPauseState()
-                                }
-                            }
-                        },
-                        onLongPress = {
-                            if (isPlayingState) {
-                                onFastForwardStartState()
-                                hudState = GestureHudState.FastForward(2.0f)
-                            }
-                        },
-                        onPress = {
-                            tryAwaitRelease()
-                            if (hudState is GestureHudState.FastForward) {
-                                onFastForwardEndState()
-                                hudState = GestureHudState.Idle
-                            }
-                        },
-                    )
-                }.pointerInput(Unit) {
-                    var startOffset = Offset.Zero
-                    val thresholdPx = with(density) { 14.dp.toPx() }
-
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            startOffset = offset
-                            dragMode = DragMode.NONE
-                            dragAccumulatedX = 0f
-                            dragAccumulatedY = 0f
-                            seekTargetMs = currentPositionState
-
-                            // 记录起始亮度
-                            val windowLp = activity?.window?.attributes
-                            initialBrightness = windowLp?.screenBrightness?.takeIf { it in 0.01f..1f } ?: 0.5f
-                            currentBrightness = initialBrightness
-
-                            // 记录起始音量
-                            val currentVol = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
-                            initialVolume = currentVol.toFloat()
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            dragAccumulatedX += dragAmount.x
-                            dragAccumulatedY += dragAmount.y
-
-                            val width = size.width
-                            val height = size.height
-                            val cur = currentPositionState
-                            val total = totalDurationState
-
-                            if (dragMode == DragMode.NONE) {
-                                if (abs(dragAccumulatedX) > abs(dragAccumulatedY) && abs(dragAccumulatedX) > thresholdPx) {
-                                    dragMode = DragMode.HORIZONTAL_SEEK
-                                } else if (abs(dragAccumulatedY) > thresholdPx) {
-                                    dragMode =
-                                        if (startOffset.x < width * 0.5f) {
-                                            DragMode.VERTICAL_BRIGHTNESS
-                                        } else {
-                                            DragMode.VERTICAL_VOLUME
-                                        }
-                                }
-                            }
-
-                            when (dragMode) {
-                                DragMode.HORIZONTAL_SEEK -> {
-                                    if (total > 0L) {
-                                        // 全屏横移一次约对应 90 秒快进/退
-                                        val deltaFraction = dragAccumulatedX / width
-                                        val deltaMs = (deltaFraction * 90000L).toLong()
-                                        seekTargetMs = (cur + deltaMs).coerceIn(0L, total)
-                                        hudState = GestureHudState.Seek(seekTargetMs, total, seekTargetMs - cur)
-                                    }
-                                }
-                                DragMode.VERTICAL_BRIGHTNESS -> {
-                                    val delta = -dragAccumulatedY / height
-                                    val newBrightness = (initialBrightness + delta).coerceIn(0.01f, 1f)
-                                    currentBrightness = newBrightness
-                                    activity?.let { act ->
-                                        val lp = act.window.attributes
-                                        lp.screenBrightness = newBrightness
-                                        act.window.attributes = lp
-                                    }
-                                    hudState = GestureHudState.Brightness((newBrightness * 100).roundToInt())
-                                }
-                                DragMode.VERTICAL_VOLUME -> {
-                                    val delta = -dragAccumulatedY / height
-                                    val targetVol = (initialVolume + delta * maxVolume).roundToInt().coerceIn(0, maxVolume)
-                                    audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-                                    val percent = if (maxVolume > 0) ((targetVol.toFloat() / maxVolume) * 100).roundToInt() else 0
-                                    hudState = GestureHudState.Volume(percent)
-                                }
-                                DragMode.NONE -> {}
-                            }
-                        },
-                        onDragEnd = {
-                            val total = totalDurationState
-                            if (dragMode == DragMode.HORIZONTAL_SEEK && total > 0L) {
-                                onSeekConfirmState(seekTargetMs)
-                            }
-                            dragMode = DragMode.NONE
-                            hideHudTrigger++
-                        },
-                        onDragCancel = {
-                            dragMode = DragMode.NONE
-                            hideHudTrigger++
-                        },
-                    )
-                },
+                .playerGestures(
+                    context = context,
+                    isPlaying = isPlaying,
+                    currentPositionMs = currentPositionMs,
+                    totalDurationMs = totalDurationMs,
+                    onSingleTap = onSingleTap,
+                    onDoubleTapSeek = onDoubleTapSeek,
+                    onDoubleTapPlayPause = onDoubleTapPlayPause,
+                    onSeekConfirm = onSeekConfirm,
+                    onFastForwardStart = onFastForwardStart,
+                    onFastForwardEnd = onFastForwardEnd,
+                    onHudStateChange = { hudState = it },
+                    onTriggerHudDismiss = { hideHudTrigger++ },
+                ),
     ) {
         content()
 
