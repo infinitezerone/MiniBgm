@@ -137,6 +137,7 @@ fun PlayerScreen(
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
     var userInteractionTrigger by remember { mutableIntStateOf(0) }
     var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
+    var isScreenLocked by remember { mutableStateOf(false) }
 
     // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏
     val isSystemLandscape =
@@ -155,6 +156,7 @@ fun PlayerScreen(
                 } else {
                     controller.show(WindowInsetsCompat.Type.systemBars())
                     isEpisodeDrawerOpen = false
+                    isScreenLocked = false
                 }
             }
         }
@@ -484,6 +486,7 @@ fun PlayerScreen(
                     isPlaying = isPlaying,
                     currentPositionMs = currentPosition,
                     totalDurationMs = totalDuration,
+                    isLocked = isScreenLocked,
                     onSingleTap = {
                         areControlsVisible = !areControlsVisible
                         userInteractionTrigger++
@@ -576,6 +579,8 @@ fun PlayerScreen(
                         isLandscape = true,
                         resizeMode = resizeMode,
                         errorMessage = uiState.error,
+                        isLocked = isScreenLocked,
+                        onToggleLock = { isScreenLocked = !isScreenLocked },
                         onBackClick = { toggleFullscreen(false) },
                         onPlayPauseToggle = {
                             userInteractionTrigger++
