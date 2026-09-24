@@ -62,7 +62,7 @@ internal fun PlayerProgressBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(28.dp)
+                .height(22.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onPress = { offset ->
@@ -98,7 +98,8 @@ internal fun PlayerProgressBar(
     ) {
         val width = size.width
         val height = size.height
-        val centerY = height / 2f
+        // 进度线基准居中位于距离底部 7dp 处，拖拽展开时 thumb(半径 7dp) 恰好与视频底边完全齐平
+        val centerY = height - 7.dp.toPx()
         val currentTrackHeight = trackHeight.toPx()
         val currentThumbRadius = thumbRadius.toPx()
 
@@ -108,7 +109,7 @@ internal fun PlayerProgressBar(
             start = Offset(0f, centerY),
             end = Offset(width, centerY),
             strokeWidth = currentTrackHeight,
-            cap = StrokeCap.Round,
+            cap = StrokeCap.Butt,
         )
 
         // 2. 缓冲轨 (Buffered Track)
@@ -119,26 +120,30 @@ internal fun PlayerProgressBar(
                 start = Offset(0f, centerY),
                 end = Offset(bufferedWidth, centerY),
                 strokeWidth = currentTrackHeight,
-                cap = StrokeCap.Round,
+                cap = StrokeCap.Butt,
             )
         }
 
         // 3. 播放进度主轨 (Active Progress Track)
         val activeWidth = (width * progress.coerceIn(0f, 1f)).coerceIn(0f, width)
-        drawLine(
-            color = activeColor,
-            start = Offset(0f, centerY),
-            end = Offset(activeWidth, centerY),
-            strokeWidth = currentTrackHeight,
-            cap = StrokeCap.Round,
-        )
+        if (activeWidth > 0f) {
+            drawLine(
+                color = activeColor,
+                start = Offset(0f, centerY),
+                end = Offset(activeWidth, centerY),
+                strokeWidth = currentTrackHeight,
+                cap = StrokeCap.Butt,
+            )
+        }
+
+        val clampedThumbX = activeWidth.coerceIn(currentThumbRadius, (width - currentThumbRadius).coerceAtLeast(currentThumbRadius))
 
         // 4. Thumb 外层微光晕 (Glow)
         if (glowAlpha > 0f) {
             drawCircle(
                 color = activeColor.copy(alpha = glowAlpha),
                 radius = currentThumbRadius + 4.dp.toPx(),
-                center = Offset(activeWidth, centerY),
+                center = Offset(clampedThumbX, centerY),
             )
         }
 
@@ -146,7 +151,49 @@ internal fun PlayerProgressBar(
         drawCircle(
             color = Color.White,
             radius = currentThumbRadius,
-            center = Offset(activeWidth, centerY),
+            center = Offset(clampedThumbX, centerY),
         )
+    }
+}
+
+/**
+ * 沉浸播放态常驻底边极简进度线（类似 Bilibili / YouTube）
+ * 在控制栏收起隐藏且正常播放时常驻在视频最底边
+ */
+@Composable
+internal fun PlayerBottomEdgeProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = Color.White.copy(alpha = 0.25f),
+) {
+    Canvas(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(2.5.dp),
+    ) {
+        val width = size.width
+        val currentProgress = progress.coerceIn(0f, 1f)
+
+        // 底轨
+        drawLine(
+            color = trackColor,
+            start = Offset(0f, size.height / 2f),
+            end = Offset(width, size.height / 2f),
+            strokeWidth = size.height,
+            cap = StrokeCap.Butt,
+        )
+
+        // 激活进度轨
+        if (currentProgress > 0f) {
+            drawLine(
+                color = activeColor,
+                start = Offset(0f, size.height / 2f),
+                end = Offset(width * currentProgress, size.height / 2f),
+                strokeWidth = size.height,
+                cap = StrokeCap.Butt,
+            )
+        }
     }
 }

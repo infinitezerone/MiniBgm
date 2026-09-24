@@ -559,6 +559,23 @@ fun PlayerScreen(
                     }
                 }
 
+                // 常驻底边极简进度线（控制栏收起且正常播放时常驻在视频最底边）
+                AnimatedVisibility(
+                    visible =
+                        !areControlsVisible && isPlaying && !isBuffering && !isPlaybackEnded && uiState.error == null && totalDuration > 0L,
+                    enter = fadeIn(tween(150)),
+                    exit = fadeOut(tween(150)),
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                ) {
+                    val progressFraction =
+                        if (totalDuration > 0L) {
+                            (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                    PlayerBottomEdgeProgressBar(progress = progressFraction)
+                }
+
                 AnimatedVisibility(
                     visible = areControlsVisible || !isPlaying || isBuffering || isPlaybackEnded || uiState.error != null,
                     enter = fadeIn(),
@@ -798,6 +815,24 @@ fun PlayerScreen(
                                 onRequestOpenSources = onRequestOpenSources,
                             )
                         }
+                    }
+
+                    // 常驻底边极简进度线（控制栏收起且正常播放时常驻在视频最底边）
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible =
+                            !areControlsVisible && isPlaying && !isBuffering && !isPlaybackEnded && uiState.error == null &&
+                                totalDuration > 0L,
+                        enter = fadeIn(tween(150)),
+                        exit = fadeOut(tween(150)),
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    ) {
+                        val progressFraction =
+                            if (totalDuration > 0L) {
+                                (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+                            } else {
+                                0f
+                            }
+                        PlayerBottomEdgeProgressBar(progress = progressFraction)
                     }
 
                     androidx.compose.animation.AnimatedVisibility(
