@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.net.Uri
 import android.util.Rational
 import android.view.ViewGroup
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -136,6 +138,28 @@ fun PlayerScreen(
     var userInteractionTrigger by remember { mutableIntStateOf(0) }
     var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
 
+    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏
+    val isSystemLandscape =
+        configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    LaunchedEffect(isSystemLandscape) {
+        if (isSystemLandscape != isLandscape) {
+            isLandscape = isSystemLandscape
+            if (activity != null) {
+                val window = activity.window
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                if (isSystemLandscape) {
+                    controller.hide(WindowInsetsCompat.Type.systemBars())
+                    controller.systemBarsBehavior =
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    controller.show(WindowInsetsCompat.Type.systemBars())
+                    isEpisodeDrawerOpen = false
+                }
+            }
+        }
+    }
+
     // 检测画中画状态
     val isInPipMode = activity?.isInPictureInPictureMode == true
 
@@ -160,7 +184,7 @@ fun PlayerScreen(
         }
     }
 
-    // 构造 ExoPlayer 实例并托管生命周期（配置音频焦点管理与网络请求头）
+    // 构造 ExoPlayer 实例并托管生命周期（配置音频焦点管理、拔出耳机自动暂停与网络请求头）
     val exoPlayer =
         remember(context, uiState.requestHeaders) {
             val httpDataSourceFactory =
@@ -182,6 +206,7 @@ fun PlayerScreen(
                 .Builder(context)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
                 .setAudioAttributes(audioAttributes, true)
+                .setHandleAudioBecomingNoisy(true)
                 .build()
                 .apply {
                     playWhenReady = true
@@ -216,15 +241,27 @@ fun PlayerScreen(
         }
     }
 
-    // 设置媒体数据源
+    // 设置媒体数据源：重置播放临时进度以避免切集进度条瞬时抖动
     LaunchedEffect(uiState.streamUrl) {
         if (uiState.streamUrl.isNotBlank()) {
+            isBuffering = true
+            isPlaybackEnded = false
+            currentPosition = 0L
+            totalDuration = 0L
             val mediaItem = MediaItem.fromUri(Uri.parse(uiState.streamUrl))
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
         } else {
+            isBuffering = false
             exoPlayer.stop()
             exoPlayer.clearMediaItems()
+        }
+    }
+
+    // 断点续播补发：防止磁盘 I/O 较慢时状态就绪后才载入断点位置
+    LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl) {
+        if (uiState.resumePositionMs >= MIN_RESUME_POSITION_MS && exoPlayer.playbackState == Player.STATE_READY) {
+            resumeFromSavedPositionIfNeeded()
         }
     }
 
@@ -318,7 +355,7 @@ fun PlayerScreen(
                 if (landscape) {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 } else {
-                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 }
             val window = activity.window
             val controller = WindowCompat.getInsetsController(window, window.decorView)
@@ -354,7 +391,7 @@ fun PlayerScreen(
             }
     }
 
-    // 页面退出时恢复竖屏
+    // 页面退出时恢复竖屏与系统默认亮度
     DisposableEffect(activity) {
         onDispose {
             if (activity != null) {
@@ -362,6 +399,11 @@ fun PlayerScreen(
                     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                 }
                 val window = activity.window
+                val lp = window.attributes
+                if (lp.screenBrightness >= 0f) {
+                    lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    window.attributes = lp
+                }
                 WindowCompat
                     .getInsetsController(window, window.decorView)
                     .show(WindowInsetsCompat.Type.systemBars())
@@ -424,6 +466,7 @@ fun PlayerScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -431,14 +474,11 @@ fun PlayerScreen(
             )
         },
         containerColor = if (isLandscape) Color.Black else MaterialTheme.colorScheme.background,
-    ) { paddingValues ->
+    ) { _ ->
         if (isLandscape) {
             // 全屏横屏态：纯黑背景沉浸式播放 + 手势检测与 HUD
             Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
+                modifier = Modifier.fillMaxSize(),
             ) {
                 PlayerGestureDetector(
                     isPlaying = isPlaying,
@@ -668,7 +708,6 @@ fun PlayerScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(paddingValues)
                         .statusBarsPadding()
                         .navigationBarsPadding(),
             ) {
