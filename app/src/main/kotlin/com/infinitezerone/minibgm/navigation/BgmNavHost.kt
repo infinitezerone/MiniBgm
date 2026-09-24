@@ -218,7 +218,6 @@ fun BgmNavHost(
 
                             playerEntry(
                                 onBackClick = { navState.goBack() },
-                                metadata = bgmExtraPane(),
                             )
                         },
                     ),
