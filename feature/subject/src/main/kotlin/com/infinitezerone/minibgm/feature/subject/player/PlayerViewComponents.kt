@@ -72,27 +72,64 @@ internal fun PlayerResolvingView(
         modifier = modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(16.dp),
-        ) {
-            CircularProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(40.dp),
-            )
-            Text(
-                text =
-                    if (attemptTotal > 0) {
-                        "正在从【$sourceName】嗅探视频直链...（第 $attempt/$attemptTotal 次尝试）"
-                    } else {
-                        "正在从【$sourceName】嗅探视频直链..."
-                    },
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
-            )
-        }
+        ResolvingIndicator(sourceName = sourceName, attempt = attempt, attemptTotal = attemptTotal)
+    }
+}
+
+/**
+ * 切换源/切集时的半透明嗅探遮罩：叠在**仍在播放**的旧画面上，而不是整块黑，
+ * 让用户看得到“正在换源”而不只是“卡住”。
+ */
+@Composable
+internal fun PlayerResolvingOverlay(
+    sourceName: String,
+    attempt: Int = 0,
+    attemptTotal: Int = 0,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        ResolvingIndicator(
+            sourceName = sourceName,
+            attempt = attempt,
+            attemptTotal = attemptTotal,
+            prefix = "正在切换播放源",
+        )
+    }
+}
+
+@Composable
+private fun ResolvingIndicator(
+    sourceName: String,
+    attempt: Int,
+    attemptTotal: Int,
+    prefix: String = "正在从",
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(16.dp),
+    ) {
+        CircularProgressIndicator(
+            color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(40.dp),
+        )
+        Text(
+            text =
+                if (attemptTotal > 0) {
+                    "$prefix【$sourceName】嗅探视频直链...（第 $attempt/$attemptTotal 次尝试）"
+                } else {
+                    "$prefix【$sourceName】嗅探视频直链..."
+                },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White,
+        )
     }
 }
 
@@ -401,6 +438,7 @@ internal fun PlayerEmptyView(
     errorMessage: String? = null,
     onBackClick: () -> Unit,
     onRetry: () -> Unit = {},
+    onNextSource: (() -> Unit)? = null,
     onRequestOpenSources: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -444,6 +482,11 @@ internal fun PlayerEmptyView(
                 if (errorMessage != null) {
                     Button(onClick = onRetry) {
                         Text("重试嗅探")
+                    }
+                    if (onNextSource != null) {
+                        OutlinedButton(onClick = onNextSource) {
+                            Text("换下一个源", color = Color.White)
+                        }
                     }
                 } else if (onRequestOpenSources != null) {
                     Button(onClick = onRequestOpenSources) {

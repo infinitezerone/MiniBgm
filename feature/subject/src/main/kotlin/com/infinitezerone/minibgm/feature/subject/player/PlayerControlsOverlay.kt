@@ -37,6 +37,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,6 +89,7 @@ internal fun PlayerControlsOverlay(
     onCycleResizeMode: () -> Unit,
     onEnterPip: () -> Unit,
     onRetry: () -> Unit,
+    onNextSource: (() -> Unit)? = null,
     playbackSpeed: Float,
     onCyclePlaybackSpeed: () -> Unit,
     showEpisodeQueue: Boolean,
@@ -217,6 +219,11 @@ internal fun PlayerControlsOverlay(
                     )
                     Button(onClick = onRetry) {
                         Text("重试播放")
+                    }
+                    if (onNextSource != null) {
+                        OutlinedButton(onClick = onNextSource) {
+                            Text("换下一个源", color = Color.White)
+                        }
                     }
                 }
             } else if (isBuffering) {

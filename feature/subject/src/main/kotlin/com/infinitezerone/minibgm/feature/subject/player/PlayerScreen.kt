@@ -4,9 +4,7 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.net.Uri
 import android.util.Rational
-import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -47,7 +45,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,10 +52,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -66,42 +63,31 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
+import androidx.media3.session.MediaSession
+import androidx.media3.ui.compose.ContentFrame
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-private fun classifyPlaybackError(error: PlaybackException): String =
-    when (error.errorCode) {
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-        -> "网络连接超时，请检查网络"
-        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
-        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-        -> "播放地址已失效或返回错误"
-        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-        -> "视频流格式无法解析"
-        else -> error.localizedMessage ?: "播放出现未知异常"
-    }
+private const val CONTROLS_AUTO_HIDE_MS = 3_500L
+
+private const val EPISODE_GRID_CHUNK_SIZE = 30
 
 /**
- * Kazumi 风格一体化流媒体播放页
+ * Kazumi 风格一体化流媒体播放页。
+ *
+ * 播放器所有权：本页只建一个 [ExoPlayerEngine] 与其上的 [PlayerController]（单一状态源），
+ * 渲染交给官方 Compose 节点 `PlayerSurface`，系统集成（蓝牙/媒体键、Android 12+ PiP 键）
+ * 交给随页面生命周期的轻量 `MediaSession`。所有播放器状态来自 [PlayerController.state]，
+ * 不再散落为多个 `remember { mutableStateOf }`，也不再有 UI 层轮询。
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -124,45 +110,27 @@ fun PlayerScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    var isPlaying by remember { mutableStateOf(false) }
-    var isBuffering by remember { mutableStateOf(false) }
-    var currentPosition by remember { mutableLongStateOf(0L) }
-    var totalDuration by remember { mutableLongStateOf(0L) }
-    var isScrubbing by remember { mutableStateOf(false) }
-    var scrubProgress by remember { mutableFloatStateOf(0f) }
-    var isPlaybackEnded by remember { mutableStateOf(false) }
+    // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
+    val engine = remember(context) { ExoPlayerEngine(context) }
+    val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
+    val playback by controller.state.collectAsStateWithLifecycle()
+    val player = controller.player
+
+    // 纯 UI 局部状态（与播放器无关）
     var areControlsVisible by remember { mutableStateOf(true) }
     var isLandscape by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
-    var userInteractionTrigger by remember { mutableIntStateOf(0) }
     var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
     var isScreenLocked by remember { mutableStateOf(false) }
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubProgress by remember { mutableFloatStateOf(0f) }
+    var resumedForUrl by remember { mutableStateOf("") }
+    var playerReady by remember { mutableStateOf(false) }
 
-    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏
     val isSystemLandscape =
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    LaunchedEffect(isSystemLandscape) {
-        if (isSystemLandscape != isLandscape) {
-            isLandscape = isSystemLandscape
-            if (activity != null) {
-                val window = activity.window
-                val controller = WindowCompat.getInsetsController(window, window.decorView)
-                if (isSystemLandscape) {
-                    controller.hide(WindowInsetsCompat.Type.systemBars())
-                    controller.systemBarsBehavior =
-                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                } else {
-                    controller.show(WindowInsetsCompat.Type.systemBars())
-                    isEpisodeDrawerOpen = false
-                    isScreenLocked = false
-                }
-            }
-        }
-    }
-
-    // 检测画中画状态
     val isInPipMode = activity?.isInPictureInPictureMode == true
 
     val epLabel =
@@ -174,64 +142,14 @@ fun PlayerScreen(
             }
         }
 
-    // 观察 ViewModel 一次性单发事件
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is PlayerUiEvent.ShowSnackbar -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
-                is PlayerUiEvent.MarkedWatched -> {}
-            }
-        }
-    }
-
-    // 构造 ExoPlayer 实例并托管生命周期（配置音频焦点管理、拔出耳机自动暂停与网络请求头）
-    val exoPlayer =
-        remember(context, uiState.requestHeaders) {
-            val httpDataSourceFactory =
-                DefaultHttpDataSource.Factory().apply {
-                    setAllowCrossProtocolRedirects(true)
-                    if (uiState.requestHeaders.isNotEmpty()) {
-                        setDefaultRequestProperties(uiState.requestHeaders)
-                    }
-                }
-
-            val audioAttributes =
-                AudioAttributes
-                    .Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .build()
-
-            ExoPlayer
-                .Builder(context)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
-                .setAudioAttributes(audioAttributes, true)
-                .setHandleAudioBecomingNoisy(true)
-                .build()
-                .apply {
-                    playWhenReady = true
-                }
-        }
-
-    // 倍速：分集切换重建播放器实例后同样要重新套用
-    LaunchedEffect(exoPlayer, playbackSpeed) {
-        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
-    }
-
-    // 断点续播
-    var resumedForUrl by remember { mutableStateOf("") }
-
     suspend fun resumeFromSavedPositionIfNeeded() {
-        val state = viewModel.uiState.value
-        if (resumedForUrl == state.streamUrl) return
-        resumedForUrl = state.streamUrl
-        val resume = state.resumePositionMs
+        if (resumedForUrl == uiState.streamUrl) return
+        resumedForUrl = uiState.streamUrl
+        val resume = uiState.resumePositionMs
         if (resume < MIN_RESUME_POSITION_MS) return
-        val duration = exoPlayer.duration
+        val duration = playback.durationMs
         if (duration > 0L && resume >= duration * 0.95) return
-        exoPlayer.seekTo(resume)
+        controller.seekTo(resume)
         val result =
             snackbarHostState.showSnackbar(
                 message = "已恢复到上次位置 ${formatDuration(resume)}",
@@ -239,101 +157,145 @@ fun PlayerScreen(
                 duration = SnackbarDuration.Long,
             )
         if (result == SnackbarResult.ActionPerformed) {
-            exoPlayer.seekTo(0)
+            controller.seekTo(0L)
         }
     }
 
-    // 设置媒体数据源：重置播放临时进度以避免切集进度条瞬时抖动
-    LaunchedEffect(uiState.streamUrl) {
-        if (uiState.streamUrl.isNotBlank()) {
-            isBuffering = true
-            isPlaybackEnded = false
-            currentPosition = 0L
-            totalDuration = 0L
-            val mediaItem = MediaItem.fromUri(Uri.parse(uiState.streamUrl))
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
+    fun toggleFullscreen(landscape: Boolean) {
+        if (!landscape) {
+            isEpisodeDrawerOpen = false
+        }
+        isLandscape = landscape
+        val act = activity ?: return
+        act.requestedOrientation =
+            if (landscape) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        val window = act.window
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        if (landscape) {
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            insetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         } else {
-            isBuffering = false
-            exoPlayer.stop()
-            exoPlayer.clearMediaItems()
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
-    // 断点续播补发：防止磁盘 I/O 较慢时状态就绪后才载入断点位置
-    LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl) {
-        if (uiState.resumePositionMs >= MIN_RESUME_POSITION_MS && exoPlayer.playbackState == Player.STATE_READY) {
-            resumeFromSavedPositionIfNeeded()
-        }
+    fun enterPictureInPicture() {
+        val act = activity ?: return
+        val params =
+            PictureInPictureParams
+                .Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+        act.enterPictureInPictureMode(params)
     }
 
-    // 播放器状态监听器
-    DisposableEffect(exoPlayer) {
-        val listener =
-            object : Player.Listener {
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
-                }
+    fun cycleResizeMode() {
+        resizeMode =
+            when (resizeMode) {
+                PlayerResizeMode.FIT -> PlayerResizeMode.ZOOM
+                PlayerResizeMode.ZOOM -> PlayerResizeMode.FILL
+                PlayerResizeMode.FILL -> PlayerResizeMode.FIT
+            }
+    }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    when (playbackState) {
-                        Player.STATE_BUFFERING -> {
-                            isBuffering = true
-                            isPlaybackEnded = false
-                        }
-                        Player.STATE_READY -> {
-                            isBuffering = false
-                            isPlaybackEnded = false
-                            totalDuration = exoPlayer.duration.coerceAtLeast(0L)
-                            viewModel.onPlaybackReady()
-                            coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
-                        }
-                        Player.STATE_ENDED -> {
-                            isBuffering = false
-                            isPlaybackEnded = !viewModel.onPlaybackEnded()
-                        }
-                        Player.STATE_IDLE -> {
-                            isBuffering = false
-                        }
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    isBuffering = false
-                    viewModel.onPlaybackError(classifyPlaybackError(error))
+    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏
+    LaunchedEffect(isSystemLandscape) {
+        if (isSystemLandscape != isLandscape) {
+            isLandscape = isSystemLandscape
+            val act = activity
+            if (act != null) {
+                val window = act.window
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                if (isSystemLandscape) {
+                    insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                    insetsController.systemBarsBehavior =
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                } else {
+                    insetsController.show(WindowInsetsCompat.Type.systemBars())
+                    isEpisodeDrawerOpen = false
+                    isScreenLocked = false
                 }
             }
+        }
+    }
 
-        exoPlayer.addListener(listener)
-
+    // 轻量 MediaSession：随页面创建/释放；只为系统媒体键与 Android 12+ PiP 播放键，
+    // 不做后台播放（那需要 MediaSessionService，属于后续立项）。
+    DisposableEffect(controller) {
+        val mediaSession = MediaSession.Builder(context, player).build()
         onDispose {
-            exoPlayer.removeListener(listener)
-            exoPlayer.release()
+            mediaSession.release()
+            controller.release()
         }
     }
 
-    // 周期性更新播放进度及 85% 自动打卡检测
-    LaunchedEffect(isPlaying, isPlaybackEnded) {
-        while (isPlaying && !isPlaybackEnded) {
-            if (!isScrubbing) {
-                currentPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
-                viewModel.onProgressChanged(currentPosition)
-                val dur = exoPlayer.duration
-                if (dur > 0L) {
-                    totalDuration = dur
-                    if (currentPosition.toFloat() / dur.toFloat() >= 0.85f) {
-                        viewModel.onWatchThresholdReached()
-                    }
-                }
+    // ViewModel 一次性事件 → 提示
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is PlayerUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+                is PlayerUiEvent.MarkedWatched -> Unit
             }
-            delay(500)
         }
     }
 
-    // 控制栏自动隐藏（3.5 秒无交互自动淡出）
-    LaunchedEffect(areControlsVisible, isPlaying, userInteractionTrigger) {
-        if (areControlsVisible && isPlaying && !isScrubbing) {
-            delay(3500)
+    // 播放器事件 → ViewModel（打卡、失败归因、断点恢复）
+    LaunchedEffect(controller) {
+        controller.events.collect { event ->
+            when (event) {
+                PlayerEngineEvent.Ready -> {
+                    playerReady = true
+                    viewModel.onPlaybackReady()
+                    coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
+                }
+
+                PlayerEngineEvent.Ended -> {
+                    playerReady = false
+                    viewModel.onPlaybackEnded()
+                }
+
+                is PlayerEngineEvent.Error -> viewModel.onPlaybackError(event.message)
+            }
+        }
+    }
+
+    // 状态对齐：URL / 请求头变化 → 装载媒体
+    LaunchedEffect(uiState.streamUrl, uiState.requestHeaders) {
+        if (uiState.streamUrl != playback.mediaUrl) {
+            playerReady = false
+            isScrubbing = false
+        }
+        controller.setMedia(uiState.streamUrl, uiState.requestHeaders)
+    }
+
+    // 播放位置 → ViewModel 节流落盘
+    LaunchedEffect(controller) {
+        controller.state
+            .map { it.positionMs }
+            .distinctUntilChanged()
+            .collect { viewModel.onProgressChanged(it) }
+    }
+
+    // 断点位置迟到时补发
+    LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl, playerReady) {
+        if (playerReady && uiState.resumePositionMs >= MIN_RESUME_POSITION_MS) {
+            coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
+        }
+    }
+
+    LaunchedEffect(playbackSpeed, controller) {
+        controller.setPlaybackSpeed(playbackSpeed)
+    }
+
+    // 控制栏自动隐藏
+    LaunchedEffect(areControlsVisible, playback.isPlaying, isScrubbing) {
+        if (areControlsVisible && playback.isPlaying && !isScrubbing) {
+            delay(CONTROLS_AUTO_HIDE_MS)
             areControlsVisible = false
         }
     }
@@ -346,74 +308,25 @@ fun PlayerScreen(
         }
     }
 
-    // 全屏与沉浸式沉浸栏控制
-    fun toggleFullscreen(landscape: Boolean) {
-        if (!landscape) {
-            isEpisodeDrawerOpen = false
-        }
-        isLandscape = landscape
-        if (activity != null) {
-            activity.requestedOrientation =
-                if (landscape) {
-                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                } else {
-                    ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                }
-            val window = activity.window
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            if (landscape) {
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-    }
-
-    // 画中画模式
-    fun enterPictureInPicture() {
-        if (activity != null) {
-            val params =
-                PictureInPictureParams
-                    .Builder()
-                    .setAspectRatio(Rational(16, 9))
-                    .build()
-            activity.enterPictureInPictureMode(params)
-        }
-    }
-
-    // 比例模式循环切换
-    fun cycleResizeMode() {
-        resizeMode =
-            when (resizeMode) {
-                PlayerResizeMode.FIT -> PlayerResizeMode.ZOOM
-                PlayerResizeMode.ZOOM -> PlayerResizeMode.FILL
-                PlayerResizeMode.FILL -> PlayerResizeMode.FIT
-            }
-    }
-
     // 页面退出时恢复竖屏与系统默认亮度
     DisposableEffect(activity) {
         onDispose {
-            if (activity != null) {
-                if (activity.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                }
-                val window = activity.window
-                val lp = window.attributes
-                if (lp.screenBrightness >= 0f) {
-                    lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                    window.attributes = lp
-                }
-                WindowCompat
-                    .getInsetsController(window, window.decorView)
-                    .show(WindowInsetsCompat.Type.systemBars())
+            val act = activity ?: return@onDispose
+            if (act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
+            val window = act.window
+            val lp = window.attributes
+            if (lp.screenBrightness >= 0f) {
+                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = lp
+            }
+            WindowCompat
+                .getInsetsController(window, window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
-    // 物理返回键处理
     BackHandler {
         if (isEpisodeDrawerOpen) {
             isEpisodeDrawerOpen = false
@@ -430,37 +343,20 @@ fun PlayerScreen(
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_PAUSE) {
                     if (activity?.isInPictureInPictureMode != true) {
-                        exoPlayer.pause()
+                        controller.pause()
                     }
                     viewModel.flushPlaybackPosition()
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // 画中画模式下只显示纯净视频视口
     if (isInPipMode) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    this.resizeMode =
-                        when (resizeMode) {
-                            PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                            PlayerResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                            PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                        }
-                    layoutParams =
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                }
-            },
+        PlayerVideoSurface(
+            player = player,
+            resizeMode = resizeMode,
             modifier = Modifier.fillMaxSize(),
         )
         return
@@ -478,191 +374,70 @@ fun PlayerScreen(
         containerColor = if (isLandscape) Color.Black else MaterialTheme.colorScheme.background,
     ) { _ ->
         if (isLandscape) {
-            // 全屏横屏态：纯黑背景沉浸式播放 + 手势检测与 HUD
-            Box(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                PlayerGestureDetector(
-                    isPlaying = isPlaying,
-                    currentPositionMs = currentPosition,
-                    totalDurationMs = totalDuration,
+            Box(modifier = Modifier.fillMaxSize()) {
+                PlayerVideoStage(
+                    player = player,
+                    playback = playback,
+                    streamUrl = uiState.streamUrl,
+                    isResolvingSource = uiState.isResolvingSource,
+                    resolveAttempt = uiState.resolveAttempt,
+                    resolveAttemptTotal = uiState.resolveAttemptTotal,
+                    resolvingSourceName = uiState.currentSource?.name ?: "播放源",
+                    subjectName = uiState.subjectName.ifBlank { route.subjectName },
+                    epLabel = epLabel,
+                    episodeName = uiState.episodeName,
+                    errorMessage = uiState.error,
+                    isLandscape = true,
                     isLocked = isScreenLocked,
-                    onSingleTap = {
-                        areControlsVisible = !areControlsVisible
-                        userInteractionTrigger++
+                    controlsVisible = areControlsVisible,
+                    isScrubbing = isScrubbing,
+                    scrubProgress = scrubProgress,
+                    playbackSpeed = playbackSpeed,
+                    resizeMode = resizeMode,
+                    showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
+                    onSingleTap = { areControlsVisible = !areControlsVisible },
+                    onDoubleTapSeek = controller::seekTo,
+                    onDoubleTapPlayPause = controller::togglePlayPause,
+                    onSeekConfirm = controller::seekTo,
+                    onFastForwardStart = { controller.setPlaybackSpeed(2f) },
+                    onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
+                    onPlayPauseToggle = controller::togglePlayPause,
+                    onRewind10 = { controller.seekTo((playback.positionMs - 10_000L).coerceAtLeast(0L)) },
+                    onForward10 = {
+                        val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
+                        controller.seekTo((playback.positionMs + 10_000L).coerceAtMost(maxPos))
                     },
-                    onDoubleTapSeek = { target ->
-                        exoPlayer.seekTo(target)
-                        currentPosition = target
-                        userInteractionTrigger++
-                    },
-                    onDoubleTapPlayPause = {
-                        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                        userInteractionTrigger++
-                    },
-                    onSeekConfirm = { target ->
-                        exoPlayer.seekTo(target)
-                        currentPosition = target
-                        userInteractionTrigger++
-                    },
-                    onFastForwardStart = {
-                        exoPlayer.playbackParameters = PlaybackParameters(2.0f)
-                    },
-                    onFastForwardEnd = {
-                        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
-                    },
-                ) {
-                    if (uiState.streamUrl.isNotBlank()) {
-                        AndroidView(
-                            factory = { ctx ->
-                                PlayerView(ctx).apply {
-                                    player = exoPlayer
-                                    useController = false
-                                    this.resizeMode =
-                                        when (resizeMode) {
-                                            PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                            PlayerResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                            PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                                        }
-                                    layoutParams =
-                                        ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                        )
-                                }
-                            },
-                            update = { view ->
-                                view.resizeMode =
-                                    when (resizeMode) {
-                                        PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                        PlayerResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                        PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                                    }
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else if (uiState.isResolvingSource) {
-                        PlayerResolvingView(
-                            sourceName = uiState.currentSource?.name ?: "播放源",
-                            attempt = uiState.resolveAttempt,
-                            attemptTotal = uiState.resolveAttemptTotal,
-                        )
-                    } else {
-                        PlayerEmptyView(
-                            subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                            epLabel = epLabel,
-                            errorMessage = uiState.error,
-                            onBackClick = { toggleFullscreen(false) },
-                            onRetry = { viewModel.retry() },
-                            onRequestOpenSources = onRequestOpenSources,
-                        )
-                    }
-                }
-
-                // 常驻底边极简进度线（控制栏收起且正常播放时常驻在视频最底边）
-                AnimatedVisibility(
-                    visible =
-                        !areControlsVisible && isPlaying && !isBuffering && !isPlaybackEnded && uiState.error == null && totalDuration > 0L,
-                    enter = fadeIn(tween(150)),
-                    exit = fadeOut(tween(150)),
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                ) {
-                    val progressFraction =
-                        if (totalDuration > 0L) {
-                            (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
-                        } else {
-                            0f
+                    onScrubStart = { isScrubbing = true },
+                    onScrubbing = { scrubProgress = it },
+                    onScrubEnd = { progress ->
+                        isScrubbing = false
+                        if (playback.durationMs > 0L) {
+                            controller.seekTo((progress * playback.durationMs).toLong())
                         }
-                    PlayerBottomEdgeProgressBar(progress = progressFraction)
-                }
-
-                AnimatedVisibility(
-                    visible = areControlsVisible || !isPlaying || isBuffering || isPlaybackEnded || uiState.error != null,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+                    },
+                    onBackClick = { toggleFullscreen(false) },
+                    onToggleFullscreen = { toggleFullscreen(false) },
+                    onCycleResizeMode = ::cycleResizeMode,
+                    onEnterPip = ::enterPictureInPicture,
+                    onRetry = {
+                        viewModel.retry()
+                        controller.retry()
+                    },
+                    onNextSource = viewModel::selectNextSource,
+                    onCyclePlaybackSpeed = {
+                        playbackSpeed =
+                            when (playbackSpeed) {
+                                1f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2f
+                                else -> 1f
+                            }
+                    },
+                    onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
+                    onToggleLock = { isScreenLocked = !isScreenLocked },
+                    onRequestOpenSources = onRequestOpenSources,
                     modifier = Modifier.fillMaxSize(),
-                ) {
-                    PlayerControlsOverlay(
-                        subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                        epLabel = epLabel,
-                        episodeName = uiState.episodeName,
-                        isPlaying = isPlaying,
-                        isBuffering = isBuffering,
-                        isEnded = isPlaybackEnded,
-                        currentPosition = currentPosition,
-                        totalDuration = totalDuration,
-                        isScrubbing = isScrubbing,
-                        scrubProgress = scrubProgress,
-                        isLandscape = true,
-                        resizeMode = resizeMode,
-                        errorMessage = uiState.error,
-                        isLocked = isScreenLocked,
-                        onToggleLock = { isScreenLocked = !isScreenLocked },
-                        onBackClick = { toggleFullscreen(false) },
-                        onPlayPauseToggle = {
-                            userInteractionTrigger++
-                            if (isPlaybackEnded) {
-                                exoPlayer.seekTo(0)
-                                exoPlayer.play()
-                            } else if (isPlaying) {
-                                exoPlayer.pause()
-                            } else {
-                                exoPlayer.play()
-                            }
-                        },
-                        onRewind10 = {
-                            userInteractionTrigger++
-                            val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                            exoPlayer.seekTo(newPos)
-                            currentPosition = newPos
-                        },
-                        onForward10 = {
-                            userInteractionTrigger++
-                            val dur = exoPlayer.duration
-                            val maxPos = if (dur > 0L) dur else Long.MAX_VALUE
-                            val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(maxPos)
-                            exoPlayer.seekTo(newPos)
-                            currentPosition = newPos
-                        },
-                        onScrubStart = {
-                            userInteractionTrigger++
-                            isScrubbing = true
-                        },
-                        onScrubbing = { progress -> scrubProgress = progress },
-                        onScrubEnd = { progress ->
-                            userInteractionTrigger++
-                            isScrubbing = false
-                            if (totalDuration > 0L) {
-                                val newPosition = (progress * totalDuration).toLong()
-                                exoPlayer.seekTo(newPosition)
-                                currentPosition = newPosition
-                            }
-                        },
-                        onToggleFullscreen = { toggleFullscreen(false) },
-                        onCycleResizeMode = ::cycleResizeMode,
-                        onEnterPip = ::enterPictureInPicture,
-                        onRetry = {
-                            viewModel.retry()
-                            exoPlayer.prepare()
-                            exoPlayer.play()
-                        },
-                        playbackSpeed = playbackSpeed,
-                        onCyclePlaybackSpeed = {
-                            userInteractionTrigger++
-                            playbackSpeed =
-                                when (playbackSpeed) {
-                                    1f -> 1.25f
-                                    1.25f -> 1.5f
-                                    1.5f -> 2f
-                                    else -> 1f
-                                }
-                        },
-                        showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
-                        onOpenEpisodeQueue = {
-                            isEpisodeDrawerOpen = true
-                        },
-                    )
-                }
+                )
 
                 // 全屏内右侧选集抽屉背景遮罩
                 AnimatedVisibility(
@@ -709,9 +484,7 @@ fun PlayerScreen(
                         selectedSourceIndex = uiState.selectedSourceIndex,
                         autoNextEnabled = uiState.autoNextEnabled,
                         onToggleAutoNext = viewModel::toggleAutoNext,
-                        onSelectSource = { index ->
-                            viewModel.selectSource(index)
-                        },
+                        onSelectSource = viewModel::selectSource,
                         onSelectEpisode = { ep ->
                             viewModel.selectEpisode(ep)
                             isEpisodeDrawerOpen = false
@@ -725,7 +498,7 @@ fun PlayerScreen(
                 }
             }
         } else {
-            // 竖屏常规态：Kazumi 风格一体化播放页（顶部 16:9 播放窗口 + 中间源选择 + 底部选集网格）
+            // 竖屏常规态：顶部 16:9 播放窗口 + 播放源切换 + 底部选集网格
             Column(
                 modifier =
                     Modifier
@@ -733,7 +506,6 @@ fun PlayerScreen(
                         .statusBarsPadding()
                         .navigationBarsPadding(),
             ) {
-                // 1. 顶部 16:9 播放窗口
                 Box(
                     modifier =
                         Modifier
@@ -741,195 +513,76 @@ fun PlayerScreen(
                             .aspectRatio(16f / 9f)
                             .background(Color.Black),
                 ) {
-                    PlayerGestureDetector(
-                        isPlaying = isPlaying,
-                        currentPositionMs = currentPosition,
-                        totalDurationMs = totalDuration,
-                        onSingleTap = {
-                            areControlsVisible = !areControlsVisible
-                            userInteractionTrigger++
+                    PlayerVideoStage(
+                        player = player,
+                        playback = playback,
+                        streamUrl = uiState.streamUrl,
+                        isResolvingSource = uiState.isResolvingSource,
+                        resolveAttempt = uiState.resolveAttempt,
+                        resolveAttemptTotal = uiState.resolveAttemptTotal,
+                        resolvingSourceName = uiState.currentSource?.name ?: "播放源",
+                        subjectName = uiState.subjectName.ifBlank { route.subjectName },
+                        epLabel = epLabel,
+                        episodeName = uiState.episodeName,
+                        errorMessage = uiState.error,
+                        isLandscape = false,
+                        isLocked = false,
+                        controlsVisible = areControlsVisible,
+                        isScrubbing = isScrubbing,
+                        scrubProgress = scrubProgress,
+                        playbackSpeed = playbackSpeed,
+                        resizeMode = resizeMode,
+                        showEpisodeQueue = false,
+                        onSingleTap = { areControlsVisible = !areControlsVisible },
+                        onDoubleTapSeek = controller::seekTo,
+                        onDoubleTapPlayPause = controller::togglePlayPause,
+                        onSeekConfirm = controller::seekTo,
+                        onFastForwardStart = { controller.setPlaybackSpeed(2f) },
+                        onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
+                        onPlayPauseToggle = controller::togglePlayPause,
+                        onRewind10 = { controller.seekTo((playback.positionMs - 10_000L).coerceAtLeast(0L)) },
+                        onForward10 = {
+                            val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
+                            controller.seekTo((playback.positionMs + 10_000L).coerceAtMost(maxPos))
                         },
-                        onDoubleTapSeek = { target ->
-                            exoPlayer.seekTo(target)
-                            currentPosition = target
-                            userInteractionTrigger++
-                        },
-                        onDoubleTapPlayPause = {
-                            if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                            userInteractionTrigger++
-                        },
-                        onSeekConfirm = { target ->
-                            exoPlayer.seekTo(target)
-                            currentPosition = target
-                            userInteractionTrigger++
-                        },
-                        onFastForwardStart = {
-                            exoPlayer.playbackParameters = PlaybackParameters(2.0f)
-                        },
-                        onFastForwardEnd = {
-                            exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
-                        },
-                    ) {
-                        if (uiState.streamUrl.isNotBlank()) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    PlayerView(ctx).apply {
-                                        player = exoPlayer
-                                        useController = false
-                                        this.resizeMode =
-                                            when (resizeMode) {
-                                                PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                                PlayerResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                                PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                                            }
-                                        layoutParams =
-                                            ViewGroup.LayoutParams(
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                            )
-                                    }
-                                },
-                                update = { view ->
-                                    view.resizeMode =
-                                        when (resizeMode) {
-                                            PlayerResizeMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                            PlayerResizeMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                                            PlayerResizeMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                                        }
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else if (uiState.isResolvingSource) {
-                            PlayerResolvingView(
-                                sourceName = uiState.currentSource?.name ?: "播放源",
-                                attempt = uiState.resolveAttempt,
-                                attemptTotal = uiState.resolveAttemptTotal,
-                            )
-                        } else {
-                            PlayerEmptyView(
-                                subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                                epLabel = epLabel,
-                                errorMessage = uiState.error,
-                                onBackClick = onBackClick,
-                                onRetry = { viewModel.retry() },
-                                onRequestOpenSources = onRequestOpenSources,
-                            )
-                        }
-                    }
-
-                    // 常驻底边极简进度线（控制栏收起且正常播放时常驻在视频最底边）
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible =
-                            !areControlsVisible &&
-                                isPlaying &&
-                                !isBuffering &&
-                                !isPlaybackEnded &&
-                                uiState.error == null &&
-                                totalDuration > 0L,
-                        enter = fadeIn(tween(150)),
-                        exit = fadeOut(tween(150)),
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-                    ) {
-                        val progressFraction =
-                            if (totalDuration > 0L) {
-                                (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
-                            } else {
-                                0f
+                        onScrubStart = { isScrubbing = true },
+                        onScrubbing = { scrubProgress = it },
+                        onScrubEnd = { progress ->
+                            isScrubbing = false
+                            if (playback.durationMs > 0L) {
+                                controller.seekTo((progress * playback.durationMs).toLong())
                             }
-                        PlayerBottomEdgeProgressBar(progress = progressFraction)
-                    }
-
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = areControlsVisible || !isPlaying || isBuffering || isPlaybackEnded || uiState.error != null,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        },
+                        onBackClick = onBackClick,
+                        onToggleFullscreen = { toggleFullscreen(true) },
+                        onCycleResizeMode = ::cycleResizeMode,
+                        onEnterPip = ::enterPictureInPicture,
+                        onRetry = {
+                            viewModel.retry()
+                            controller.retry()
+                        },
+                        onNextSource = viewModel::selectNextSource,
+                        onCyclePlaybackSpeed = {
+                            playbackSpeed =
+                                when (playbackSpeed) {
+                                    1f -> 1.25f
+                                    1.25f -> 1.5f
+                                    1.5f -> 2f
+                                    else -> 1f
+                                }
+                        },
+                        onOpenEpisodeQueue = {},
+                        onToggleLock = {},
+                        onRequestOpenSources = onRequestOpenSources,
                         modifier = Modifier.fillMaxSize(),
-                    ) {
-                        PlayerControlsOverlay(
-                            subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                            epLabel = epLabel,
-                            episodeName = uiState.episodeName,
-                            isPlaying = isPlaying,
-                            isBuffering = isBuffering,
-                            isEnded = isPlaybackEnded,
-                            currentPosition = currentPosition,
-                            totalDuration = totalDuration,
-                            isScrubbing = isScrubbing,
-                            scrubProgress = scrubProgress,
-                            isLandscape = false,
-                            resizeMode = resizeMode,
-                            errorMessage = uiState.error,
-                            onBackClick = onBackClick,
-                            onPlayPauseToggle = {
-                                userInteractionTrigger++
-                                if (isPlaybackEnded) {
-                                    exoPlayer.seekTo(0)
-                                    exoPlayer.play()
-                                } else if (isPlaying) {
-                                    exoPlayer.pause()
-                                } else {
-                                    exoPlayer.play()
-                                }
-                            },
-                            onRewind10 = {
-                                userInteractionTrigger++
-                                val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                                exoPlayer.seekTo(newPos)
-                                currentPosition = newPos
-                            },
-                            onForward10 = {
-                                userInteractionTrigger++
-                                val dur = exoPlayer.duration
-                                val maxPos = if (dur > 0L) dur else Long.MAX_VALUE
-                                val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(maxPos)
-                                exoPlayer.seekTo(newPos)
-                                currentPosition = newPos
-                            },
-                            onScrubStart = {
-                                userInteractionTrigger++
-                                isScrubbing = true
-                            },
-                            onScrubbing = { progress -> scrubProgress = progress },
-                            onScrubEnd = { progress ->
-                                userInteractionTrigger++
-                                isScrubbing = false
-                                if (totalDuration > 0L) {
-                                    val newPosition = (progress * totalDuration).toLong()
-                                    exoPlayer.seekTo(newPosition)
-                                    currentPosition = newPosition
-                                }
-                            },
-                            onToggleFullscreen = { toggleFullscreen(true) },
-                            onCycleResizeMode = ::cycleResizeMode,
-                            onEnterPip = ::enterPictureInPicture,
-                            onRetry = {
-                                viewModel.retry()
-                                exoPlayer.prepare()
-                                exoPlayer.play()
-                            },
-                            playbackSpeed = playbackSpeed,
-                            onCyclePlaybackSpeed = {
-                                userInteractionTrigger++
-                                playbackSpeed =
-                                    when (playbackSpeed) {
-                                        1f -> 1.25f
-                                        1.25f -> 1.5f
-                                        1.5f -> 2f
-                                        else -> 1f
-                                    }
-                            },
-                            showEpisodeQueue = false,
-                            onOpenEpisodeQueue = {},
-                        )
-                    }
+                    )
                 }
 
-                // 2. 下半部：剧集信息、播放源切换栏、选集方块网格（带长篇分页分段）
-                val chunkSize = 30
+                // 下半部：剧集信息、播放源切换栏、选集方块网格
                 val chunks =
                     remember(uiState.episodes) {
-                        if (uiState.episodes.size > chunkSize) {
-                            uiState.episodes.chunked(chunkSize)
+                        if (uiState.episodes.size > EPISODE_GRID_CHUNK_SIZE) {
+                            uiState.episodes.chunked(EPISODE_GRID_CHUNK_SIZE)
                         } else {
                             emptyList()
                         }
@@ -938,7 +591,7 @@ fun PlayerScreen(
                 val initialChunkIndex =
                     remember(uiState.episodes, uiState.episodeSort) {
                         val idx = uiState.episodes.indexOfFirst { it.sort == uiState.episodeSort }
-                        if (idx >= 0 && chunks.isNotEmpty()) idx / chunkSize else 0
+                        if (idx >= 0 && chunks.isNotEmpty()) idx / EPISODE_GRID_CHUNK_SIZE else 0
                     }
 
                 var selectedChunkIndex by remember(chunks) { mutableIntStateOf(initialChunkIndex) }
@@ -951,9 +604,7 @@ fun PlayerScreen(
 
                 val paginationLabels =
                     remember(chunks) {
-                        chunks.map { list ->
-                            "${list.first().sort.toInt()}-${list.last().sort.toInt()}"
-                        }
+                        chunks.map { list -> "${list.first().sort.toInt()}-${list.last().sort.toInt()}" }
                     }
 
                 LazyVerticalGrid(
@@ -1011,3 +662,201 @@ fun PlayerScreen(
         }
     }
 }
+
+/**
+ * 共享的视频舞台：手势层 + 渲染面 + 底边进度线 + 控制层。
+ * 横竖屏差异（返回行为、是否显示选集抽屉入口）由参数注入，避免两套重复布局。
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlayerVideoStage(
+    player: Player,
+    playback: PlaybackState,
+    streamUrl: String,
+    isResolvingSource: Boolean,
+    resolveAttempt: Int,
+    resolveAttemptTotal: Int,
+    resolvingSourceName: String,
+    subjectName: String,
+    epLabel: String,
+    episodeName: String,
+    errorMessage: String?,
+    isLandscape: Boolean,
+    isLocked: Boolean,
+    controlsVisible: Boolean,
+    isScrubbing: Boolean,
+    scrubProgress: Float,
+    playbackSpeed: Float,
+    resizeMode: PlayerResizeMode,
+    showEpisodeQueue: Boolean,
+    onSingleTap: () -> Unit,
+    onDoubleTapSeek: (Long) -> Unit,
+    onDoubleTapPlayPause: () -> Unit,
+    onSeekConfirm: (Long) -> Unit,
+    onFastForwardStart: () -> Unit,
+    onFastForwardEnd: () -> Unit,
+    onPlayPauseToggle: () -> Unit,
+    onRewind10: () -> Unit,
+    onForward10: () -> Unit,
+    onScrubStart: () -> Unit,
+    onScrubbing: (Float) -> Unit,
+    onScrubEnd: (Float) -> Unit,
+    onBackClick: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onCycleResizeMode: () -> Unit,
+    onEnterPip: () -> Unit,
+    onRetry: () -> Unit,
+    onNextSource: (() -> Unit)?,
+    onCyclePlaybackSpeed: () -> Unit,
+    onOpenEpisodeQueue: () -> Unit,
+    onToggleLock: () -> Unit,
+    onRequestOpenSources: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        PlayerGestureDetector(
+            isPlaying = playback.isPlaying,
+            currentPositionMs = playback.positionMs,
+            totalDurationMs = playback.durationMs,
+            onSingleTap = onSingleTap,
+            onDoubleTapSeek = onDoubleTapSeek,
+            onDoubleTapPlayPause = onDoubleTapPlayPause,
+            onSeekConfirm = onSeekConfirm,
+            onFastForwardStart = onFastForwardStart,
+            onFastForwardEnd = onFastForwardEnd,
+            isLocked = isLocked,
+        ) {
+            when {
+                streamUrl.isNotBlank() ->
+                    PlayerVideoSurface(
+                        player = player,
+                        resizeMode = resizeMode,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                isResolvingSource ->
+                    PlayerResolvingView(
+                        sourceName = resolvingSourceName,
+                        attempt = resolveAttempt,
+                        attemptTotal = resolveAttemptTotal,
+                    )
+
+                else ->
+                    PlayerEmptyView(
+                        subjectName = subjectName,
+                        epLabel = epLabel,
+                        errorMessage = errorMessage,
+                        onBackClick = onBackClick,
+                        onRetry = onRetry,
+                        onNextSource = onNextSource,
+                        onRequestOpenSources = onRequestOpenSources,
+                    )
+            }
+        }
+
+        // 切源/切集时叠半透明遮罩（旧画面仍在播），而不是整块黑
+        if (streamUrl.isNotBlank() && isResolvingSource) {
+            PlayerResolvingOverlay(
+                sourceName = resolvingSourceName,
+                attempt = resolveAttempt,
+                attemptTotal = resolveAttemptTotal,
+            )
+        }
+
+        // 控制栏收起且正常播放时常驻在视频最底边的极简进度线
+        AnimatedVisibility(
+            visible =
+                !controlsVisible &&
+                    playback.isPlaying &&
+                    !playback.isBuffering &&
+                    !playback.isEnded &&
+                    errorMessage == null &&
+                    playback.durationMs > 0L,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+        ) {
+            val progressFraction =
+                if (playback.durationMs > 0L) {
+                    (playback.positionMs.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            PlayerBottomEdgeProgressBar(progress = progressFraction)
+        }
+
+        AnimatedVisibility(
+            visible =
+                controlsVisible ||
+                    !playback.isPlaying ||
+                    playback.isBuffering ||
+                    playback.isEnded ||
+                    errorMessage != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            PlayerControlsOverlay(
+                subjectName = subjectName,
+                epLabel = epLabel,
+                episodeName = episodeName,
+                isPlaying = playback.isPlaying,
+                isBuffering = playback.isBuffering,
+                isEnded = playback.isEnded,
+                currentPosition = playback.positionMs,
+                totalDuration = playback.durationMs,
+                isScrubbing = isScrubbing,
+                scrubProgress = scrubProgress,
+                isLandscape = isLandscape,
+                resizeMode = resizeMode,
+                errorMessage = errorMessage,
+                onBackClick = onBackClick,
+                onPlayPauseToggle = onPlayPauseToggle,
+                onRewind10 = onRewind10,
+                onForward10 = onForward10,
+                onScrubStart = onScrubStart,
+                onScrubbing = onScrubbing,
+                onScrubEnd = onScrubEnd,
+                onToggleFullscreen = onToggleFullscreen,
+                onCycleResizeMode = onCycleResizeMode,
+                onEnterPip = onEnterPip,
+                onRetry = onRetry,
+                onNextSource = onNextSource,
+                playbackSpeed = playbackSpeed,
+                onCyclePlaybackSpeed = onCyclePlaybackSpeed,
+                showEpisodeQueue = showEpisodeQueue,
+                onOpenEpisodeQueue = onOpenEpisodeQueue,
+                isLocked = isLocked,
+                onToggleLock = onToggleLock,
+            )
+        }
+    }
+}
+
+/**
+ * 播放画面渲染面。用 media3 官方的 Compose `ContentFrame`：它 = `PlayerSurface` + `resizeWithContentScale`
+ * + 未渲染首帧时的黑色 shutter，**自带 contentScale**（正是 `PlayerSurface` 缺少的那层），
+ * 于是 FIT/ZOOM/FILL 三种比例模式得以保留。引擎是单实例，不再有旧 `AndroidView(PlayerView)` 的
+ * 重绑定黑屏问题。
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlayerVideoSurface(
+    player: Player,
+    resizeMode: PlayerResizeMode,
+    modifier: Modifier = Modifier,
+) {
+    ContentFrame(
+        player = player,
+        modifier = modifier,
+        contentScale = resizeMode.toContentScale(),
+    )
+}
+
+/** 播放器画面比例模式 → Compose ContentScale。 */
+private fun PlayerResizeMode.toContentScale(): ContentScale =
+    when (this) {
+        PlayerResizeMode.FIT -> ContentScale.Fit
+        PlayerResizeMode.ZOOM -> ContentScale.Crop
+        PlayerResizeMode.FILL -> ContentScale.FillBounds
+    }
