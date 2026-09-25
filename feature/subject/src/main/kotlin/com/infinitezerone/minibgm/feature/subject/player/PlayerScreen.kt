@@ -820,7 +820,11 @@ fun PlayerScreen(
                     // 常驻底边极简进度线（控制栏收起且正常播放时常驻在视频最底边）
                     androidx.compose.animation.AnimatedVisibility(
                         visible =
-                            !areControlsVisible && isPlaying && !isBuffering && !isPlaybackEnded && uiState.error == null &&
+                            !areControlsVisible &&
+                                isPlaying &&
+                                !isBuffering &&
+                                !isPlaybackEnded &&
+                                uiState.error == null &&
                                 totalDuration > 0L,
                         enter = fadeIn(tween(150)),
                         exit = fadeOut(tween(150)),
