@@ -44,6 +44,8 @@ const val AI_RUN_TIMEOUT_MS = 180_000L
 /** 单轮模型请求的超时：60 秒，正常推理远用不满，异常端点快速失败 */
 const val AI_REQUEST_TIMEOUT_MS = 60_000L
 
+private val agentLogger = bgmLogger("Bgm/AiAgent")
+
 /**
  * 默认智能体执行服务，基于原生 OpenAI Wire 协议与 Pi Agent 极简 ReAct 循环。
  * 零第三方 Agent 框架黑盒依赖，直接且精准地支持 tool_calls、推理模型 reasoning_content 与多轮往返。
@@ -156,12 +158,14 @@ class DefaultBgmAiAgentService(
             AiToolActivity.clear()
             AppResult.Success(response)
         } catch (e: TimeoutCancellationException) {
+            agentLogger.w(e) { "AI execution timed out: ${e.message}" }
             AiToolActivity.clear()
             AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
         } catch (e: kotlinx.coroutines.CancellationException) {
             AiToolActivity.clear()
             throw e
         } catch (e: Exception) {
+            agentLogger.e(e) { "AI execution failed: ${e.message}" }
             AiToolActivity.clear()
             AppResult.Error(e, friendlyAiError(config, e))
         }
@@ -317,7 +321,15 @@ internal suspend fun runPiAgent(
                     buildJsonObject {}
                 }
 
-            val toolResult = tools.execute(funcName, argsJson)
+            val toolResult =
+                try {
+                    tools.execute(funcName, argsJson)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
+                    "Tool $funcName failed: ${e.message ?: "unknown error"}"
+                }
             messages.add(
                 WireChatMessage.tool(
                     toolCallId = call.id,
@@ -434,7 +446,10 @@ internal fun isAuthFailure(lower: String): Boolean =
 internal fun isForbidden(lower: String): Boolean = "403" in lower || "forbidden" in lower
 
 internal fun isNetworkOrTimeout(lower: String): Boolean =
-    "timeout" in lower || "timed out" in lower || "connection" in lower || "unresolved" in lower || "refused" in lower
+    "timeout" in lower || "timed out" in lower || "connection" in lower ||
+        "unresolved" in lower || "refused" in lower || "eof" in lower ||
+        "not enough data" in lower || "socket" in lower || "broken pipe" in lower ||
+        "reset" in lower
 
 /** 从原始异常文本中尝试提取 JSON 报文里的核心 error.message 避免冗长堆栈暴露给用户 */
 internal fun extractJsonErrorMessage(raw: String): String? {
