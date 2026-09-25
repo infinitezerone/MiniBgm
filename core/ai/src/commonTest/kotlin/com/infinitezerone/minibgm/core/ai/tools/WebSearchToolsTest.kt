@@ -56,20 +56,10 @@ class WebSearchToolsTest {
         }
 
     @Test
-    fun normalizeQuery_scopes_source_queries_to_github() {
+    fun normalizeQuery_neutral_whitespace_normalization() {
         val tools = WebSearchTools(FakeWebSearchRepository())
-        // 普通资讯搜索不加限定
-        assertEquals("葬送的芙莉莲 播出时间", tools.normalizeQuery("葬送的芙莉莲 播出时间"))
-
-        // 搜源相关自动追加 GitHub TVBox 限定
-        assertEquals("site:github.com tvbox 动漫源", tools.normalizeQuery("动漫源"))
-        assertEquals("site:github.com tvbox 高质量动漫播放源", tools.normalizeQuery("高质量动漫播放源"))
-        assertEquals("site:github.com tvbox 动漫 订阅", tools.normalizeQuery("动漫 订阅"))
-
-        // 已经带有 tvbox 的词条不重复 tvbox
-        assertEquals("site:github.com tvbox 源", tools.normalizeQuery("tvbox 源"))
-
-        // 已经带有 site: 作用域的不重复添加
-        assertEquals("site:github.com tvbox 动漫", tools.normalizeQuery("site:github.com tvbox 动漫"))
+        assertEquals("葬送的芙莉莲 播出时间", tools.normalizeQuery("  葬送的芙莉莲   播出时间  "))
+        assertEquals("github bangumi-data", tools.normalizeQuery(" github   bangumi-data "))
+        assertEquals("动漫 推荐", tools.normalizeQuery("动漫  推荐"))
     }
 }

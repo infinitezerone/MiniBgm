@@ -159,7 +159,7 @@ class WebSearchServiceTest {
                     ),
                 )
 
-            val results = service.search("tvbox 源", limit = 5)
+            val results = service.search("github bangumi", limit = 5)
             assertEquals(2, results.size)
             assertEquals("Guovin/iptv-api (⭐ 25281)", results[0].title)
             assertEquals("https://github.com/Guovin/iptv-api", results[0].url)
@@ -204,7 +204,7 @@ class WebSearchServiceTest {
                     ),
                 )
 
-            val results = service.search("tvbox 动漫源")
+            val results = service.search("site:github.com fallback")
             assertEquals(1, results.size)
             assertEquals("Fallback Repo - Bing", results[0].title)
             assertEquals("https://github.com/fallback/repo", results[0].url)
@@ -214,16 +214,15 @@ class WebSearchServiceTest {
     fun isGitHubTargeted_and_extractGitHubQuery() {
         val service = WebSearchServiceImpl(HttpClient(MockEngine { respond("") }))
 
-        assertTrue(service.isGitHubTargeted("site:github.com tvbox 动漫"))
-        assertTrue(service.isGitHubTargeted("tvbox 源"))
-        assertTrue(service.isGitHubTargeted("高质量动漫源"))
-        assertTrue(service.isGitHubTargeted("动漫 订阅源"))
-        assertTrue(service.isGitHubTargeted("影视仓 接口"))
-        assertTrue(service.isGitHubTargeted("github 动漫"))
+        assertTrue(service.isGitHubTargeted("site:github.com bangumi-data"))
+        assertTrue(service.isGitHubTargeted("github anime"))
+        assertTrue(service.isGitHubTargeted("https://github.com/bangumi/api"))
+        kotlin.test.assertFalse(service.isGitHubTargeted("葬送的芙莉莲 播出时间"))
+        kotlin.test.assertFalse(service.isGitHubTargeted("动漫 推荐"))
 
-        assertEquals("tvbox 动漫", service.extractGitHubQuery("site:github.com tvbox 动漫"))
-        assertEquals("tvbox 源", service.extractGitHubQuery("site:github.com tvbox 源"))
-        assertEquals("tvbox", service.extractGitHubQuery("site:github.com"))
-        assertEquals("tvbox 推荐", service.extractGitHubQuery("github tvbox 推荐"))
+        assertEquals("bangumi-data", service.extractGitHubQuery("site:github.com bangumi-data"))
+        assertEquals("anime project", service.extractGitHubQuery("github anime project"))
+        assertEquals("", service.extractGitHubQuery("site:github.com"))
+        assertEquals("tool", service.extractGitHubQuery("github.com tool"))
     }
 }

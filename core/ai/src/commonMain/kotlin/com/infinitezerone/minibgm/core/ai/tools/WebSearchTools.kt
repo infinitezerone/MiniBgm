@@ -29,7 +29,7 @@ class WebSearchTools(
             bgmTool(
                 name = "searchWeb",
                 description =
-                    "Search the public World Wide Web for real-time information, online anime streaming websites, " +
+                    "Search the public World Wide Web or GitHub repositories for real-time information, " +
                         "release schedules, discussions, or topics beyond the local Bangumi database. " +
                         "Returns a list of search hits with page titles, direct URLs, and text snippets.",
                 parametersJsonSchema =
@@ -40,7 +40,7 @@ class WebSearchTools(
                                     "query",
                                     schemaProperty(
                                         "string",
-                                        "Search query keywords (e.g. '葬送的芙莉莲 在线观看' or '动漫 在线播放 网站 推荐')",
+                                        "Search query keywords (e.g. '葬送的芙莉莲 播出时间' or 'github bangumi-data')",
                                     ),
                                 )
                                 put(
@@ -91,7 +91,7 @@ class WebSearchTools(
             is AppResult.Success -> {
                 val list = result.data
                 if (list.isEmpty()) {
-                    "No web search results found for '$effectiveQuery'. Please try different or more general keywords (e.g. 'site:github.com tvbox 动漫' or 'site:github.com tvbox 接口')."
+                    "No web search results found for '$effectiveQuery'. Please try different or more general keywords."
                 } else {
                     json.encodeToString(list)
                 }
@@ -105,24 +105,7 @@ class WebSearchTools(
         }
     }
 
-    internal fun normalizeQuery(rawQuery: String): String {
-        val trimmed = rawQuery.trim()
-        val isSourceSearch =
-            trimmed.contains("源") ||
-                trimmed.contains("tvbox", ignoreCase = true) ||
-                trimmed.contains("订阅")
-        val hasSiteScope = trimmed.contains("site:", ignoreCase = true)
-        val hasTvbox = trimmed.contains("tvbox", ignoreCase = true)
-        return if (isSourceSearch && !hasSiteScope) {
-            if (hasTvbox) {
-                "site:github.com $trimmed"
-            } else {
-                "site:github.com tvbox $trimmed"
-            }
-        } else {
-            trimmed
-        }
-    }
+    internal fun normalizeQuery(rawQuery: String): String = rawQuery.trim().replace(Regex("""\s+"""), " ")
 
     suspend fun fetchWebContent(url: String): String {
         val trimmed = url.trim()
