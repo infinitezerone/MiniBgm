@@ -46,6 +46,24 @@ class OpenAiWireClient(
                         }
                     level = LogLevel.INFO
                 }
+                install(io.ktor.client.plugins.compression.ContentEncoding) {
+                    gzip()
+                    deflate()
+                }
+                install(io.ktor.client.plugins.HttpRequestRetry) {
+                    maxRetries = 2
+                    retryIf { _, response ->
+                        response.status.value in 500..599
+                    }
+                    retryOnExceptionIf { _, cause ->
+                        cause !is kotlinx.coroutines.CancellationException
+                    }
+                    exponentialDelay(
+                        base = 2.0,
+                        maxDelayMs = 10_000,
+                        randomizationMs = 500,
+                    )
+                }
                 install(HttpTimeout) {
                     requestTimeoutMillis = TIMEOUT_MS
                     connectTimeoutMillis = 15_000
