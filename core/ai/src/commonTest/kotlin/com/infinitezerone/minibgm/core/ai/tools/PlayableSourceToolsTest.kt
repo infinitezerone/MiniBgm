@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
+import com.infinitezerone.minibgm.core.ai.aiJson
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.Infobox
@@ -71,7 +72,7 @@ class PlayableSourceToolsTest {
             playbackResolverRepository = resolver,
         )
 
-    private fun decode(result: String): PlayableEpisodeList = Json { ignoreUnknownKeys = true }.decodeFromString(result)
+    private fun decode(result: String): PlayableEpisodeList = aiJson.decodeFromString(result)
 
     private fun sendScheduleWithLinks() {
         scheduleRepository.sendSchedules(

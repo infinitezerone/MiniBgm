@@ -19,7 +19,6 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -231,11 +230,7 @@ internal suspend fun runPiAgent(
     messages.add(WireChatMessage.user(prompt))
 
     val toolDefinitions = tools.toDefinitions().ifEmpty { null }
-    val json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
+    val json = aiJson
 
     var turns = 0
     while (turns++ < maxTurns) {
@@ -399,9 +394,15 @@ internal fun isAuthFailure(lower: String): Boolean =
 internal fun isForbidden(lower: String): Boolean = "403" in lower || "forbidden" in lower
 
 internal fun isNetworkOrTimeout(lower: String): Boolean =
-    "timeout" in lower || "timed out" in lower || "connection" in lower ||
-        "unresolved" in lower || "refused" in lower || "eof" in lower ||
-        "not enough data" in lower || "socket" in lower || "broken pipe" in lower ||
+    "timeout" in lower ||
+        "timed out" in lower ||
+        "connection" in lower ||
+        "unresolved" in lower ||
+        "refused" in lower ||
+        "eof" in lower ||
+        "not enough data" in lower ||
+        "socket" in lower ||
+        "broken pipe" in lower ||
         "reset" in lower
 
 /** 从原始异常文本中尝试提取 JSON 报文里的核心 error.message 避免冗长堆栈暴露给用户 */
@@ -479,11 +480,7 @@ internal fun buildModelsUrl(
     return resolveApiBase(rawEndpoint.trim().ifBlank { defaultBase }, provider) + "/models"
 }
 
-private val catalogJson =
-    Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+private val catalogJson = aiJson
 
 /**
  * 解析模型列表：
