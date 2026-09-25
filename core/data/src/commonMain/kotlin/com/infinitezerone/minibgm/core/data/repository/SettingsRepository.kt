@@ -10,13 +10,13 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 /**
  * 面向 UI 的用户设置投影：仅包含展示与行为偏好，不含登录态与账号数据
@@ -130,11 +130,7 @@ class SettingsRepositoryImpl(
     private val userPreferences: UserPreferencesDataSource,
     private val communitySubscriptionService: com.infinitezerone.minibgm.core.network.CommunitySubscriptionService? = null,
 ) : SettingsRepository {
-    private val json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
+    private val json = BgmHttpClient.jsonConfig
 
     override val settings: Flow<UserSettings> =
         userPreferences.userPreferences.map { prefs ->
@@ -299,22 +295,11 @@ class SettingsRepositoryImpl(
 
     private val playlistsWriteMutex = Mutex()
 
-    /**
-     * 片单信封专用编解码：schemaVersion 带默认值，必须 encodeDefaults 才能落盘，
-     * 否则重启后无法判断数据属于哪个模式版本。
-     */
-    private val playlistJson =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            encodeDefaults = true
-        }
-
     private fun decodePlaylistDocument(raw: String): PlaybackPlaylistDocument? =
         if (raw.isBlank()) {
             PlaybackPlaylistDocument(playlists = emptyList())
         } else {
-            runCatching { playlistJson.decodeFromString<PlaybackPlaylistDocument>(raw) }.getOrNull()
+            runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlaybackPlaylistDocument>(raw) }.getOrNull()
         }
 
     override val playlists: Flow<List<PlaybackPlaylist>> =
@@ -332,7 +317,7 @@ class SettingsRepositoryImpl(
                 )
             }
             val document =
-                runCatching { playlistJson.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
+                runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
                     .getOrElse {
                         return@withLock AppResult.Error(
                             IllegalStateException("JSON 解析失败：${it.message ?: "格式不合法"}（需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式）"),
@@ -362,7 +347,7 @@ class SettingsRepositoryImpl(
                 }
             }
             userPreferences.setPlaylistsJson(
-                playlistJson.encodeToString(PlaybackPlaylistDocument(playlists = merged)),
+                BgmHttpClient.jsonConfig.encodeToString(PlaybackPlaylistDocument(playlists = merged)),
             )
             AppResult.Success(PlaylistImportSummary(addedCount = added, replacedCount = replaced, issues = issues))
         }
@@ -374,7 +359,7 @@ class SettingsRepositoryImpl(
             val updated = document.playlists.filterNot { it.id == playlistId }
             if (updated.size == document.playlists.size) return@withLock
             userPreferences.setPlaylistsJson(
-                playlistJson.encodeToString(PlaybackPlaylistDocument(playlists = updated)),
+                BgmHttpClient.jsonConfig.encodeToString(PlaybackPlaylistDocument(playlists = updated)),
             )
         }
     }

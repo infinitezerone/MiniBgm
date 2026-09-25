@@ -17,7 +17,6 @@ import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
@@ -512,12 +511,6 @@ internal fun macCmsProbeCandidates(input: String): List<String> {
     return schemes.map { "$it://$host/api.php/provide/vod/?ac=list" }
 }
 
-private val probeJson =
-    Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
-
 /**
  * 判定响应体是否是 MacCMS 列表响应，并返回条目数；不是则返回 null。
  *
@@ -527,7 +520,7 @@ private val probeJson =
 internal fun countMacCmsListItems(body: String): Int? {
     val trimmed = body.trim()
     if (trimmed.isEmpty() || trimmed.first() != '{') return null
-    val root = runCatching { probeJson.parseToJsonElement(trimmed) }.getOrNull() as? JsonObject ?: return null
+    val root = runCatching { BgmHttpClient.jsonConfig.parseToJsonElement(trimmed) }.getOrNull() as? JsonObject ?: return null
     return (root["list"] as? JsonArray)?.size
 }
 

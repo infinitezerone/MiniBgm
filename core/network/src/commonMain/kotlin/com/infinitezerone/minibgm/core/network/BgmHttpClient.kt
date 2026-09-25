@@ -27,13 +27,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 object BgmHttpClient {
+    /**
+     * 全仓库共享的 JSON 序列化单例（白名单见 ArchitectureRulesTest 的 Json 红线测试）：
+     * 不可信输入宽容解析 + 编码带上默认值 + 紧凑输出。
+     * 新增 `Json { ... }` 实例前先问一句：能不能直接引用这里？
+     */
     val jsonConfig =
         Json {
             ignoreUnknownKeys = true
             isLenient = true
             coerceInputValues = true
             encodeDefaults = true
-            prettyPrint = true
         }
 
     /**

@@ -8,7 +8,6 @@ import coil3.intercept.Interceptor
 import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
-import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import io.ktor.client.HttpClient
@@ -26,7 +25,7 @@ val imageLoaderModule =
         single<HttpClient>(named("imageHttpClient")) {
             BgmHttpClient.createBaseClient(
                 engine = getOrNull(),
-                userAgent = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)",
+                userAgent = appUserAgent,
                 loggerTag = "Bgm/ImageHttp",
             ) {
                 install(HttpRedirect)

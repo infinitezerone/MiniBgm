@@ -288,6 +288,58 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun json_instances_have_a_single_home_per_scope() {
+        // 每个作用域的 JSON 序列化决策只允许有一个定义处（"家"），其余一律引用：
+        // - :core:network -> BgmHttpClient.jsonConfig（全仓库默认家）
+        // - :core:ai      -> aiJson（LLM 协议需要 explicitNulls = false）
+        // - :core:datastore -> UserPreferencesSerializer（持久化语义独立）
+        // - :feature:user -> PlaybackRulesViewModel（feature 看不到 jsonConfig，红线 2）
+        // 测试源集豁免（测试本就该能构造隔离/异构配置）。
+        val whitelist =
+            listOf(
+                "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BgmHttpClient.kt",
+                "core/ai/src/commonMain/kotlin/com/infinitezerone/minibgm/core/ai/AiJson.kt",
+                "core/datastore/src/androidMain/kotlin/com/infinitezerone/minibgm/core/datastore/UserPreferencesSerializer.kt",
+                "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/PlaybackRulesViewModel.kt",
+            )
+        val pattern = Regex("""\bJson\s*\{""")
+        val violations = mutableListOf<String>()
+        listOf("core", "feature", "app", "sync").forEach { dirName ->
+            val dir = File(projectRoot, dirName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .filter {
+                    it.isFile &&
+                        it.extension == "kt" &&
+                        !it.path.replace(File.separatorChar, '/').contains("/build/") &&
+                        !it.name.endsWith("Test.kt")
+                }.forEach { sourceFile ->
+                    val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    if (relPath in whitelist) return@forEach
+                    sourceFile.readLines().forEachIndexed { index, line ->
+                        val trimmed = line.trim()
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
+                            return@forEachIndexed
+                        }
+                        if (pattern.containsMatchIn(trimmed)) {
+                            violations.add(
+                                "$relPath:${index + 1} 手写 Json 实例 -> $trimmed（请引用作用域内的共享实例，" +
+                                    "或把本文件加入本测试的白名单并说明理由）",
+                            )
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反 JSON 单点真值规范（同一序列化决策被复制）：\n" + violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
     fun navigation_routes_are_sealed_and_declared_only_in_bgm_routes() {
         val routesFile =
             File(projectRoot, "core/navigation/src/main/kotlin/com/infinitezerone/minibgm/core/navigation/BgmRoutes.kt")

@@ -53,11 +53,7 @@ interface CommunitySubscriptionService {
 
 class CommunitySubscriptionServiceImpl(
     private val client: HttpClient,
-    private val json: Json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        },
+    private val json: Json = BgmHttpClient.jsonConfig,
 ) : CommunitySubscriptionService {
     override suspend fun validateAndTestSubscription(target: String): SubscriptionValidationReport {
         val trimmed = target.trim()

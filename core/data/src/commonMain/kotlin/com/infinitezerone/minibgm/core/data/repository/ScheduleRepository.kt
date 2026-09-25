@@ -23,6 +23,7 @@ import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
@@ -108,7 +109,7 @@ class ScheduleRepositoryImpl(
     private val bilibiliService: BilibiliService,
     private val userPreferences: UserPreferencesDataSource,
     private val collectionRepository: CollectionRepository? = null,
-    private val json: Json = Json { ignoreUnknownKeys = true },
+    private val json: Json = BgmHttpClient.jsonConfig,
 ) : ScheduleRepository {
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> =
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
