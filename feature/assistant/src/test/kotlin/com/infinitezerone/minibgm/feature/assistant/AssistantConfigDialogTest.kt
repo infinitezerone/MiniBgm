@@ -91,4 +91,43 @@ class AssistantConfigDialogTest {
             defaultProfileName(AiConfig.PROVIDER_CUSTOM, "gpt-4o-mini", ""),
         )
     }
+
+    @Test
+    fun normalizeEndpoint_fixesMissingSchemesAndTrimsTrailingSlashes() {
+        assertEquals(
+            "https://api.deepseek.com/v1",
+            com.infinitezerone.minibgm.feature.assistant.components
+                .normalizeEndpoint("  api.deepseek.com/v1/  "),
+        )
+        assertEquals(
+            "http://10.0.2.2:11434/v1",
+            com.infinitezerone.minibgm.feature.assistant.components
+                .normalizeEndpoint("10.0.2.2:11434/v1/"),
+        )
+        assertEquals(
+            "http://localhost:11434",
+            com.infinitezerone.minibgm.feature.assistant.components
+                .normalizeEndpoint("localhost:11434/"),
+        )
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            com.infinitezerone.minibgm.feature.assistant.components.normalizeEndpoint(
+                "https://generativelanguage.googleapis.com/v1beta/openai/",
+            ),
+        )
+        assertEquals(
+            "",
+            com.infinitezerone.minibgm.feature.assistant.components
+                .normalizeEndpoint("   "),
+        )
+    }
+
+    @Test
+    fun providerPresets_contain_popular_models_and_valid_endpoints() {
+        val presets = com.infinitezerone.minibgm.feature.assistant.components.PROVIDER_PRESETS
+        org.junit.Assert.assertTrue(presets.isNotEmpty())
+        org.junit.Assert.assertTrue(presets.any { it.id == "gemini" })
+        org.junit.Assert.assertTrue(presets.any { it.id == "deepseek" })
+        org.junit.Assert.assertTrue(presets.any { it.id == "ollama" })
+    }
 }
