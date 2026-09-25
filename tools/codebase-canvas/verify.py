@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 TASK_RE = re.compile(r"^>\s*Task\s+(:[^\s]+)(?:\s+(\S+))?\s*$")
 OUTCOME_MARKERS = {"FAILED", "UP-TO-DATE", "FROM-CACHE", "SKIPPED", "NO-SOURCE", "DID-NO-WORK"}
@@ -124,8 +125,7 @@ def main() -> int:
     )
     ok = exit_code == 0 and build_line.startswith("BUILD SUCCESSFUL")
 
-    with open(raw_path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines) + "\n")
+    Path(raw_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     record = {
         "at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
