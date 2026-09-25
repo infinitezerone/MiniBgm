@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
@@ -37,7 +36,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Refresh
@@ -279,7 +277,11 @@ internal fun detectModelCapabilities(modelName: String): List<ModelCapability> {
     if (name.contains("vision") || name.contains("vl") || name.contains("omni") || name.contains("4o")) {
         caps.add(ModelCapability.VISION)
     }
-    if (name.contains("flash") || name.contains("mini") || name.contains("nano") || name.contains("lite") || name.contains("small") ||
+    if (name.contains("flash") ||
+        name.contains("mini") ||
+        name.contains("nano") ||
+        name.contains("lite") ||
+        name.contains("small") ||
         name.contains("7b") ||
         name.contains("8b")
     ) {
@@ -350,7 +352,7 @@ fun AssistantConfigDialog(
     // 远端拉取到的可用模型列表（与推荐模型区分）
     var availableRemoteModels by remember { mutableStateOf<List<String>>(emptyList()) }
     var showModelPickerSheet by remember { mutableStateOf(false) }
-    var isManualModelMode by remember {
+    var isModelConfigured by remember {
         mutableStateOf(initialProfile != null && initialProfile.config.model.isNotBlank())
     }
 
@@ -375,7 +377,7 @@ fun AssistantConfigDialog(
                     "custom"
                 }
         availableRemoteModels = emptyList()
-        isManualModelMode = profile.config.model.isNotBlank()
+        isModelConfigured = profile.config.model.isNotBlank()
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -389,7 +391,7 @@ fun AssistantConfigDialog(
             model = preset.defaultModel
         }
         availableRemoteModels = emptyList()
-        isManualModelMode = false
+        isModelConfigured = false
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -402,15 +404,20 @@ fun AssistantConfigDialog(
             when (val result = onFetchModels(normalized, apiKey.trim(), selectedProvider)) {
                 is AppResult.Success -> {
                     val elapsed = System.currentTimeMillis() - startMs
-                    availableRemoteModels = result.data
-                    if (result.data.isNotEmpty()) {
-                        val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
-                        if (model.isBlank() || model !in result.data) {
-                            val preferred = currentPreset?.popularModels?.firstOrNull { it in result.data } ?: result.data.first()
+                    val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
+                    val resolvedModels =
+                        if (result.data.isNotEmpty()) {
+                            result.data
+                        } else {
+                            currentPreset?.popularModels.orEmpty()
+                        }
+                    availableRemoteModels = resolvedModels
+                    if (resolvedModels.isNotEmpty()) {
+                        if (model.isBlank() || model !in resolvedModels) {
+                            val preferred = currentPreset?.popularModels?.firstOrNull { it in resolvedModels } ?: resolvedModels.first()
                             model = preferred
                         }
-                    } else {
-                        isManualModelMode = true
+                        isModelConfigured = true
                     }
                     diagnosticState =
                         ConnectionDiagnosticState.Success(
@@ -714,84 +721,32 @@ fun AssistantConfigDialog(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // 2. 智能模型选择器：未检测出可用模型前默认隐藏，仅保留手动输入入口或待探测成功后动态展开
+                // 2. 智能模型选择卡片：未探测到可用模型前隐藏，测试连通后自动展开
                 val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
                 val isTestingConnection = diagnosticState is ConnectionDiagnosticState.Testing
-                val isModelVisible = availableRemoteModels.isNotEmpty() || isManualModelMode
+                val isModelVisible = availableRemoteModels.isNotEmpty() || isModelConfigured
 
                 if (!isModelVisible) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "💡 点击下方「测试连接」以探测并获取可用模型",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TextButton(
-                            onClick = { isManualModelMode = true },
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                        ) {
-                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("手动填写模型", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    Text(
+                        text = "💡 点击下方「测试连接」以探测并获取可用模型",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
 
                 AnimatedVisibility(visible = isModelVisible) {
                     Column {
                         Spacer(modifier = Modifier.height(10.dp))
-                        if (isManualModelMode) {
-                            OutlinedTextField(
-                                value = model,
-                                onValueChange = {
-                                    model = it
-                                    diagnosticState = ConnectionDiagnosticState.Idle
-                                },
-                                label = { Text("自定义模型名称 (Model)") },
-                                placeholder = { Text(defaultModelFor(selectedProvider)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.SmartToy,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                },
-                                trailingIcon = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (model.isNotBlank()) {
-                                            IconButton(onClick = { model = "" }) {
-                                                Icon(Icons.Filled.Clear, contentDescription = "清空模型")
-                                            }
-                                        }
-                                        if (availableRemoteModels.isNotEmpty()) {
-                                            IconButton(onClick = { isManualModelMode = false }) {
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Filled.List,
-                                                    contentDescription = "返回选择器卡片",
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        } else {
-                            ModelSelectorCard(
-                                model = model,
-                                selectedProvider = selectedProvider,
-                                selectedPreset = currentPreset,
-                                remoteModelsCount = availableRemoteModels.size,
-                                isTesting = isTestingConnection,
-                                onOpenPicker = { showModelPickerSheet = true },
-                                onSyncRemote = { startConnectionTest() },
-                                onSwitchToManual = { isManualModelMode = true },
-                            )
-                        }
+                        ModelSelectorCard(
+                            model = model,
+                            selectedProvider = selectedProvider,
+                            selectedPreset = currentPreset,
+                            remoteModelsCount = availableRemoteModels.size,
+                            isTesting = isTestingConnection,
+                            onOpenPicker = { showModelPickerSheet = true },
+                            onSyncRemote = { startConnectionTest() },
+                        )
                     }
                 }
 
@@ -982,7 +937,7 @@ fun AssistantConfigDialog(
 
 /**
  * 智能模型聚合卡片组件
- * 紧凑展示当前选中的模型、状态/来源，并提供原地探测同步与切换手输能力
+ * 紧凑展示当前选中的模型、状态/来源，并提供原地探测同步能力
  */
 @Composable
 private fun ModelSelectorCard(
@@ -993,16 +948,15 @@ private fun ModelSelectorCard(
     isTesting: Boolean,
     onOpenPicker: () -> Unit,
     onSyncRemote: () -> Unit,
-    onSwitchToManual: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val currentModelDisplay = model.ifBlank { defaultModelFor(selectedProvider) }
     val isRemoteSynced = remoteModelsCount > 0
     val subtitle =
         if (isRemoteSynced) {
-            "已同步 $remoteModelsCount 个远端可用模型 · 点击切换"
+            "已同步 $remoteModelsCount 个可用模型 · 点击切换"
         } else if (selectedPreset != null) {
-            "${selectedPreset.name} 预设推荐 · 点击选择"
+            "${selectedPreset.name} 预设推荐 · 点击切换"
         } else {
             "点击选择模型"
         }
@@ -1066,20 +1020,11 @@ private fun ModelSelectorCard(
                     } else {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "同步远端模型",
+                            contentDescription = "同步可用模型",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
                         )
                     }
-                }
-                // 切换为自由手输模式按钮
-                IconButton(onClick = onSwitchToManual) {
-                    Icon(
-                        imageVector = Icons.Filled.Edit,
-                        contentDescription = "手动输入自定义模型",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
                 }
                 // 展开指示图标
                 Icon(
