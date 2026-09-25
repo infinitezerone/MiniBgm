@@ -714,4 +714,105 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         val emptyObj = kotlinx.serialization.json.buildJsonObject {}
         assertNull(formatToolCallDetail(emptyObj))
     }
+
+    @Test
+    fun summarizeFinalOutcome_returns_model_content_on_success() =
+        runTest {
+            val engine =
+                MockEngine { _ ->
+                    respond(
+                        content =
+                            """
+                            {
+                              "id": "chatcmpl-1",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "content": "总结：已为您检索完毕。"
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val wireClient = OpenAiWireClient(HttpClient(engine))
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val result = summarizeFinalOutcome(config, wireClient, "gpt-4o-mini", emptyList())
+            assertEquals("总结：已为您检索完毕。", result)
+        }
+
+    @Test
+    fun summarizeFinalOutcome_returns_fallback_on_failure() =
+        runTest {
+            val engine =
+                MockEngine { _ ->
+                    respond(
+                        content = "",
+                        status = HttpStatusCode.InternalServerError,
+                    )
+                }
+            val wireClient = OpenAiWireClient(HttpClient(engine))
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val result = summarizeFinalOutcome(config, wireClient, "gpt-4o-mini", emptyList())
+            assertEquals(DEFAULT_SUMMARY_FALLBACK, result)
+        }
+
+    @Test
+    fun runPiAgent_breaks_loop_on_duplicate_tool_calls() =
+        runTest {
+            var callCount = 0
+            val engine =
+                MockEngine { _ ->
+                    callCount++
+                    respond(
+                        content =
+                            """
+                            {
+                              "id": "chatcmpl-loop",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "tool_calls": [
+                                      {
+                                        "id": "call_1",
+                                        "type": "function",
+                                        "function": {
+                                          "name": "searchWeb",
+                                          "arguments": "{\"query\":\"test\"}"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val wireClient = OpenAiWireClient(HttpClient(engine))
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val tool =
+                com.infinitezerone.minibgm.core.ai.tool.bgmTool(
+                    name = "searchWeb",
+                    description = "desc",
+                    parametersJsonSchema =
+                        com.infinitezerone.minibgm.core.ai.tool
+                            .schemaObject(properties = kotlinx.serialization.json.buildJsonObject {}),
+                ) { "result" }
+            val tools =
+                com.infinitezerone.minibgm.core.ai.tool
+                    .BgmToolRegistry(listOf(tool))
+            val result = runPiAgent(wireClient, config, "test prompt", tools, maxTurns = 5)
+            assertEquals(DEFAULT_SUMMARY_FALLBACK, result)
+            assertTrue(callCount <= 4)
+        }
 }

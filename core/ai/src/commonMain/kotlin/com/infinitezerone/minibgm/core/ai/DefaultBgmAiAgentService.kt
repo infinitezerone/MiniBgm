@@ -256,6 +256,8 @@ internal suspend fun runPiAgent(
     }
 
     var turns = 0
+    var previousCallsSig: String? = null
+    var duplicateCallCount = 0
     while (turns++ < maxTurns) {
         val request =
             WireChatRequest(
@@ -272,8 +274,10 @@ internal suspend fun runPiAgent(
         val turnModelStart = TimeSource.Monotonic.markNow()
         val response =
             try {
-                withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
-                    wireClient.chatCompletion(config, request)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
+                        wireClient.chatCompletion(config, request)
+                    }
                 }
             } catch (e: TimeoutCancellationException) {
                 val turnElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
@@ -312,6 +316,19 @@ internal suspend fun runPiAgent(
             "💡 Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策调用 ${toolCalls.size} 个工具 -> $callsDesc"
         }
 
+        val callsSig = toolCalls.joinToString("|") { "${it.function.name}:${it.function.arguments}" }
+        if (callsSig == previousCallsSig) {
+            duplicateCallCount++
+        } else {
+            duplicateCallCount = 0
+            previousCallsSig = callsSig
+        }
+
+        if (duplicateCallCount >= 2) {
+            agentLogger.w { "⚠️ 检测到连续发起完全相同的工具调用，跳出死循环进行总结" }
+            break
+        }
+
         for (call in toolCalls) {
             val funcName = call.function.name
             val argsJson =
@@ -327,13 +344,18 @@ internal suspend fun runPiAgent(
 
             val toolStart = TimeSource.Monotonic.markNow()
             val toolResult =
-                try {
-                    tools.execute(funcName, argsJson)
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
-                    "Tool $funcName failed: ${e.message ?: "unknown error"}"
+                if (duplicateCallCount == 1) {
+                    agentLogger.w { "⚠️ 检测到重复工具调用 [$funcName]，注入引导提示防范死循环" }
+                    "【系统提示】：该工具入参与上一轮完全相同，先前检索未返回有效播放源或新内容。请不要重复提交完全相同的入参。请尝试更换关键词（例如：'在线 动漫 网站 推荐'、'在线 动漫 导航'），或者基于已知信息直接给用户回复解答。"
+                } else {
+                    try {
+                        tools.execute(funcName, argsJson)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
+                        "Tool $funcName failed: ${e.message ?: "unknown error"}"
+                    }
                 }
             val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
             val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
@@ -348,8 +370,49 @@ internal suspend fun runPiAgent(
         }
         AiToolActivity.reportStatus("工具执行完毕，AI 正在分析结果...")
     }
-    agentLogger.w { "❌ Agent 达到最大轮次限制 ($maxTurns) 未能完成" }
-    throw IllegalStateException("Agent reached maximum turn limit ($maxTurns) without completing")
+
+    agentLogger.w { "⚠️ Agent 轮次结束 (已执行 $turns 轮)，发起最终总结" }
+    return summarizeFinalOutcome(config, wireClient, effectiveModel, messages)
+}
+
+internal const val DEFAULT_SUMMARY_FALLBACK =
+    "已尝试多轮检索与处理，但未能找到可用的播放源或未得到有效链接。建议您直接提供目标动漫网站地址，或在提问时指定更具体的番剧名称与站点。"
+
+internal suspend fun summarizeFinalOutcome(
+    config: AiConfig,
+    wireClient: OpenAiWireClient,
+    effectiveModel: String,
+    messages: List<WireChatMessage>,
+): String {
+    AiToolActivity.reportStatus("AI 正在总结结果...")
+    val summaryRequest =
+        WireChatRequest(
+            model = effectiveModel,
+            messages =
+                messages +
+                    listOf(
+                        WireChatMessage.user("请基于以上已尝试的操作与检索结果，向用户做出清晰的总结回复。如果未找到可用播放源，请向用户说明并建议其提供目标动漫网站地址。"),
+                    ),
+            tools = null,
+            temperature = 0.3,
+        )
+    val content =
+        try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
+                    wireClient
+                        .chatCompletion(config, summaryRequest)
+                        .choices
+                        .firstOrNull()
+                        ?.message
+                        ?.content
+                        ?.trim()
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    return if (!content.isNullOrBlank()) content else DEFAULT_SUMMARY_FALLBACK
 }
 
 private val DETAIL_KEYS = listOf("query", "keywords", "keyword", "name", "subjectId")
