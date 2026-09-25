@@ -511,6 +511,14 @@ class PlayerViewModel(
         resolveCurrentEpisodeStream()
     }
 
+    /** 切到下一个播放源（环绕）；解析失败时的"换一个源试试"动作 */
+    fun selectNextSource() {
+        val state = _uiState.value
+        val total = state.sources.size
+        if (total <= 1) return
+        selectSource((state.selectedSourceIndex + 1) % total)
+    }
+
     /** 选中具体分集并播放 */
     fun selectEpisode(episode: PlayerEpisodeItem) {
         val state = _uiState.value
@@ -529,6 +537,10 @@ class PlayerViewModel(
             currentIndex = queueIndex
         }
 
+        val isDirect = state.currentSource?.isDirect == true
+        val directEntry = if (isDirect && queueIndex >= 0) queue[queueIndex] else null
+        val directMissing = isDirect && directEntry == null
+
         _uiState.update {
             it.copy(
                 episodeId = episode.id,
@@ -538,15 +550,21 @@ class PlayerViewModel(
                 currentIndex = if (queueIndex >= 0) queueIndex else it.currentIndex,
                 isWatched = false,
                 autoMarked = false,
-                streamUrl = if (state.currentSource?.isDirect == true && queueIndex >= 0) queue[queueIndex].streamUrl else "",
-                requestHeaders =
-                    if (state.currentSource?.isDirect == true &&
-                        queueIndex >= 0
-                    ) {
-                        queue[queueIndex].requestHeaders
-                    } else {
-                        emptyMap()
+                // 非直链源保留当前画面（不清空），等嗅探完成再替换，避免换集瞬间黑屏；
+                // 直链源精确取队列中的对应集，未命中就如实报缺，绝不串到别的集
+                streamUrl =
+                    when {
+                        directEntry != null -> directEntry.streamUrl
+                        directMissing -> ""
+                        else -> it.streamUrl
                     },
+                requestHeaders =
+                    when {
+                        directEntry != null -> directEntry.requestHeaders
+                        directMissing -> emptyMap()
+                        else -> it.requestHeaders
+                    },
+                error = if (directMissing) "自备片单中没有该分集，请切换到其他播放源" else null,
             )
         }
         resolveCurrentEpisodeStream()
@@ -559,12 +577,13 @@ class PlayerViewModel(
         val state = _uiState.value
         val currentTab = state.sources.getOrNull(state.selectedSourceIndex) ?: return
         if (currentTab.isDirect) {
-            // 直链/自备片单：从队列或 route 中寻找
+            // 直链/自备片单：只按分集**精确匹配**。找不到就如实报无片源，
+            // 绝不再回退 queue[currentIndex]——那会把 A 集串成 B 集的画面。
             val matchingEntry =
                 state.queue.find {
                     (it.episodeId > 0 && it.episodeId == state.episodeId) ||
                         (it.episodeSort > 0 && it.episodeSort == state.episodeSort)
-                } ?: state.queue.getOrNull(state.currentIndex)
+                }
             if (matchingEntry != null && matchingEntry.streamUrl.isNotBlank()) {
                 _uiState.update {
                     it.copy(
@@ -572,6 +591,15 @@ class PlayerViewModel(
                         requestHeaders = matchingEntry.requestHeaders,
                         isResolvingSource = false,
                         error = null,
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        streamUrl = "",
+                        requestHeaders = emptyMap(),
+                        isResolvingSource = false,
+                        error = "自备片单中没有该分集，请切换到其他播放源",
                     )
                 }
             }
