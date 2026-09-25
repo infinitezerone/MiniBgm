@@ -11,3 +11,51 @@
 ## ⚠️ 架构红线与约束
 1. 纯 UI 表现层模块，严禁直接依赖数据仓库层或网络/存储基础设施。
 2. 所有组件与色彩必须遵循 Material 3 设计规范，支持 Android 12+ 动态取色（Dynamic Color）与深浅色模式自适应。
+
+## Module dependency graph
+
+<!--region graph-->
+```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: SIMPLE
+---
+graph TB
+  subgraph :core
+    direction TB
+    :core:common[common]:::kmp-library
+    :core:designsystem[designsystem]:::android-library
+  end
+
+  :core:designsystem -.-> :core:common
+
+classDef android-application fill:#CAFFBF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-feature fill:#FFD6A5,stroke:#000,stroke-width:2px,color:#000;
+classDef kmp-library fill:#9BF6FF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-library fill:#BDB2FF,stroke:#000,stroke-width:2px,color:#000;
+classDef unknown fill:#FFADAD,stroke:#000,stroke-width:2px,color:#000;
+```
+
+<details><summary>📋 Graph legend</summary>
+
+```mermaid
+graph TB
+  application[application]:::android-application
+  feature[feature]:::android-feature
+  kmp library[kmp library]:::kmp-library
+  android library[android library]:::android-library
+
+  application -.-> feature
+  library --> kmp library
+
+classDef android-application fill:#CAFFBF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-feature fill:#FFD6A5,stroke:#000,stroke-width:2px,color:#000;
+classDef kmp-library fill:#9BF6FF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-library fill:#BDB2FF,stroke:#000,stroke-width:2px,color:#000;
+classDef unknown fill:#FFADAD,stroke:#000,stroke-width:2px,color:#000;
+```
+
+</details>
+<!--endregion-->

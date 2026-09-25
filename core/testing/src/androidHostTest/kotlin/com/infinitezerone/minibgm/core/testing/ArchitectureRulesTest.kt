@@ -347,7 +347,11 @@ class ArchitectureRulesTest {
             .filter { file ->
                 file.isFile &&
                     file.extension == "kt" &&
-                    file.relativeTo(projectRoot).path.replace(File.separatorChar, '/').let { !it.contains("/build/") } &&
+                    file
+                        .relativeTo(projectRoot)
+                        .path
+                        .replace(File.separatorChar, '/')
+                        .let { !it.contains("/build/") } &&
                     file.parentFile?.name != "assistant"
             }.forEach { file ->
                 val relPath = file.relativeTo(projectRoot).path
