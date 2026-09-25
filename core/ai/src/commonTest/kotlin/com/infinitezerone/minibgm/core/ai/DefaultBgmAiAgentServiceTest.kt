@@ -284,7 +284,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val engine =
                 MockEngine { request ->
                     assertEquals("Bearer test-key", request.headers[HttpHeaders.Authorization])
-                    assertEquals("MiniBgm/1.0 (Android)", request.headers[HttpHeaders.UserAgent])
+                    assertEquals(OpenAiWireClient.DEFAULT_USER_AGENT, request.headers[HttpHeaders.UserAgent])
                     respond(
                         content = """{"data":[{"id":"qwen-2.5-7b"},{"id":"gpt-4o"}]}""",
                         status = HttpStatusCode.OK,
@@ -304,6 +304,30 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                 )
             assertIs<AppResult.Success<List<String>>>(result)
             assertEquals(listOf("qwen-2.5-7b", "gpt-4o"), result.data)
+        }
+
+    @Test
+    fun fetchAvailableModels_customUserAgent_injectedInHeaders() =
+        runTest {
+            val customUa = "MiniBgm/0.3.5 (android) (https://github.com/infinitezerone/MiniBgm)"
+            val engine =
+                MockEngine { request ->
+                    assertEquals(customUa, request.headers[HttpHeaders.UserAgent])
+                    respond(
+                        content = """{"data":[{"id":"gpt-4o"}]}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val wireClient = OpenAiWireClient(httpClient = HttpClient(engine), userAgent = customUa)
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    wireClient = wireClient,
+                )
+            val result = service.fetchAvailableModels(endpoint = "https://api.openai.com/v1")
+            assertIs<AppResult.Success<List<String>>>(result)
+            assertEquals(listOf("gpt-4o"), result.data)
         }
 
     @Test

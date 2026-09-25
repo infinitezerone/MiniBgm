@@ -2,19 +2,13 @@ package com.infinitezerone.minibgm.core.ai
 
 import com.infinitezerone.minibgm.core.model.ActionProposal
 import com.infinitezerone.minibgm.core.model.PendingAction
-import kotlinx.serialization.json.Json
 
 /**
  * 从智能体推理回复或工具调用输出中解析 [PendingAction] 提案的通用解析器。
  * 支持完整 [ActionProposal] JSON、多态 [PendingAction] JSON 以及 Markdown 内嵌 JSON 结构。
  */
 object PendingActionParser {
-    private val json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            coerceInputValues = true
-        }
+    private val json = aiJson
 
     fun extractPendingActions(text: String): List<PendingAction> {
         if (text.isBlank()) return emptyList()

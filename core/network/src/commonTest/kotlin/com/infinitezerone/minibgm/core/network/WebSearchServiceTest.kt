@@ -73,4 +73,42 @@ class WebSearchServiceTest {
             val results = service.search("test")
             assertTrue(results.isEmpty())
         }
+
+    @Test
+    fun search_captchaOrChallengePage_triggersWatchdog_andReturnsEmptyList() =
+        runTest {
+            val captchaHtml =
+                """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Bot Detection / Challenge</title></head>
+                <body>
+                    <div id="captcha-container">
+                        <p>Our systems have detected unusual traffic from your computer network.</p>
+                        <form id="challenge-form">Please complete the security verification</form>
+                    </div>
+                </body>
+                </html>
+                """.trimIndent()
+            val service = createService(captchaHtml)
+            val results = service.search("芙莉莲")
+            assertTrue(results.isEmpty())
+        }
+
+    @Test
+    fun search_domLayoutMismatch_triggersWatchdog_andReturnsEmptyList() =
+        runTest {
+            val mismatchedDomHtml =
+                buildString {
+                    append("<!DOCTYPE html><html><head><title>Bing Search</title></head><body>")
+                    append("<div class=\"new_redesigned_search_container\">")
+                    repeat(100) {
+                        append("<div class=\"new_item_class\"><h3>Some Title $it</h3><p>Description $it</p></div>")
+                    }
+                    append("</div></body></html>")
+                }
+            val service = createService(mismatchedDomHtml)
+            val results = service.search("芙莉莲")
+            assertTrue(results.isEmpty())
+        }
 }

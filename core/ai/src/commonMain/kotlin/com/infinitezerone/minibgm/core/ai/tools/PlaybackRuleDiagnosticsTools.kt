@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
+import com.infinitezerone.minibgm.core.ai.aiJson
 import com.infinitezerone.minibgm.core.ai.tool.BgmTool
 import com.infinitezerone.minibgm.core.ai.tool.bgmTool
 import com.infinitezerone.minibgm.core.ai.tool.int
@@ -53,12 +54,7 @@ internal data class StreamOutput(
  */
 class PlaybackRuleDiagnosticsTools(
     private val playbackResolverRepository: PlaybackResolverRepository,
-    private val json: Json =
-        Json {
-            prettyPrint = false
-            ignoreUnknownKeys = true
-            encodeDefaults = true
-        },
+    private val json: Json = aiJson,
     private val pendingActionStore: PendingActionStore? = null,
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
     private val sampleReplayer: PlaybackRuleSampleReplayer? = null,

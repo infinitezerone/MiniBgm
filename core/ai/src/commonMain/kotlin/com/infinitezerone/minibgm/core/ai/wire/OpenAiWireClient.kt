@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.ai.wire
 
+import com.infinitezerone.minibgm.core.ai.aiJson
 import com.infinitezerone.minibgm.core.ai.buildModelsUrl
 import com.infinitezerone.minibgm.core.ai.resolveApiBase
 import com.infinitezerone.minibgm.core.common.bgmLogger
@@ -32,32 +33,24 @@ import kotlinx.serialization.json.Json
  */
 class OpenAiWireClient(
     val httpClient: HttpClient = defaultHttpClient,
-    private val json: Json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            encodeDefaults = true
-            explicitNulls = false
-        },
+    val userAgent: String = DEFAULT_USER_AGENT,
+    private val json: Json = aiJson,
 ) {
     constructor(
         engine: HttpClientEngine,
-        json: Json =
-            Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-                encodeDefaults = true
-                explicitNulls = false
-            },
+        userAgent: String = DEFAULT_USER_AGENT,
+        json: Json = aiJson,
     ) : this(
         httpClient =
             HttpClient(engine) {
                 applyBaseAiConfig()
             },
+        userAgent = userAgent,
         json = json,
     )
 
     companion object {
+        const val DEFAULT_USER_AGENT = "MiniBgm (Android)"
         private const val TIMEOUT_MS = 120_000L
 
         internal fun HttpClientConfig<*>.applyBaseAiConfig() {
@@ -112,6 +105,7 @@ class OpenAiWireClient(
 
         val response =
             httpClient.post(chatUrl) {
+                header(HttpHeaders.UserAgent, userAgent)
                 contentType(ContentType.Application.Json)
                 if (config.apiKey.isNotBlank()) {
                     header("Authorization", "Bearer ${config.apiKey.trim()}")
@@ -135,7 +129,7 @@ class OpenAiWireClient(
         val modelsUrl = buildModelsUrl(endpoint, provider)
         val response =
             httpClient.get(modelsUrl) {
-                header(HttpHeaders.UserAgent, "MiniBgm/1.0 (Android)")
+                header(HttpHeaders.UserAgent, userAgent)
                 if (apiKey.isNotBlank()) {
                     header(HttpHeaders.Authorization, "Bearer ${apiKey.trim()}")
                 }

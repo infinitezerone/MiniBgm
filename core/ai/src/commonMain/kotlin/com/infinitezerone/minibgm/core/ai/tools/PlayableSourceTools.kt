@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PlayableSourcesStore
+import com.infinitezerone.minibgm.core.ai.aiJson
 import com.infinitezerone.minibgm.core.ai.tool.BgmTool
 import com.infinitezerone.minibgm.core.ai.tool.bgmTool
 import com.infinitezerone.minibgm.core.ai.tool.int
@@ -42,11 +43,7 @@ class PlayableSourceTools(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository,
     private val playableSourcesStore: PlayableSourcesStore? = null,
-    private val json: Json =
-        Json {
-            prettyPrint = false
-            ignoreUnknownKeys = true
-        },
+    private val json: Json = aiJson,
 ) {
     fun tools(): List<BgmTool> =
         listOf(

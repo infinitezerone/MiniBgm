@@ -20,16 +20,17 @@ import org.koin.dsl.module
 
 fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
     module {
+        val appUserAgent = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)"
         includes(
             networkModule(
                 enableNetworkLogging,
-                userAgent = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)",
+                userAgent = appUserAgent,
             ),
             databaseModule,
             datastoreModule,
             dataModule,
             platformDataModule,
-            aiModule,
+            aiModule(userAgent = appUserAgent),
             scheduleModule,
             userModule,
             subjectModule,

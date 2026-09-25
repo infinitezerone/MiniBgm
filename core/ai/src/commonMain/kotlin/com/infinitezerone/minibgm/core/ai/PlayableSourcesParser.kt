@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.core.ai
 
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
-import kotlinx.serialization.json.Json
 
 /**
  * 从智能体回答中取出 `findPlayableSources` 原样转交的播放清单 JSON。
@@ -10,12 +9,7 @@ import kotlinx.serialization.json.Json
  * 依次尝试；解析不出可播条目就返回 null，让上层按普通文本渲染。
  */
 object PlayableSourcesParser {
-    private val json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-            coerceInputValues = true
-        }
+    private val json = aiJson
 
     private val CODE_BLOCK_REGEX = Regex("""```(?:json)?\s*([\s\S]*?)```""")
 

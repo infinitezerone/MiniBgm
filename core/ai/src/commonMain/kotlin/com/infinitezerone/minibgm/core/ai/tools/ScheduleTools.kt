@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
+import com.infinitezerone.minibgm.core.ai.aiJson
 import com.infinitezerone.minibgm.core.ai.tool.BgmTool
 import com.infinitezerone.minibgm.core.ai.tool.bgmTool
 import com.infinitezerone.minibgm.core.ai.tool.int
@@ -43,11 +44,7 @@ data class AiringEventDto(
  */
 class ScheduleTools(
     private val scheduleRepository: ScheduleRepository,
-    private val json: Json =
-        Json {
-            prettyPrint = false
-            ignoreUnknownKeys = true
-        },
+    private val json: Json = aiJson,
 ) {
     fun tools(): List<BgmTool> =
         listOf(

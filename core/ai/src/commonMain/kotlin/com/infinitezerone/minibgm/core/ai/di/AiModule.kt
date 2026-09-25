@@ -11,7 +11,7 @@ import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
 import org.koin.dsl.module
 
-val aiModule =
+fun aiModule(userAgent: String? = null) =
     module {
         single { PendingActionStore() }
         single {
@@ -60,12 +60,16 @@ val aiModule =
 
         single {
             val engine = getOrNull<io.ktor.client.engine.HttpClientEngine>()
+            val ua = userAgent ?: com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient.DEFAULT_USER_AGENT
             if (engine != null) {
-                com.infinitezerone.minibgm.core.ai.wire
-                    .OpenAiWireClient(engine)
+                com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient(
+                    engine = engine,
+                    userAgent = ua,
+                )
             } else {
-                com.infinitezerone.minibgm.core.ai.wire
-                    .OpenAiWireClient()
+                com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient(
+                    userAgent = ua,
+                )
             }
         }
 
@@ -86,3 +90,5 @@ val aiModule =
             )
         }
     }
+
+val aiModule = aiModule()
