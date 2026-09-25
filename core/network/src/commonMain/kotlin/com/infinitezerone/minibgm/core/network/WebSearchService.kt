@@ -96,24 +96,16 @@ class WebSearchServiceImpl(
 
     internal fun isGitHubTargeted(query: String): Boolean {
         val lower = query.lowercase()
-        return lower.contains("github") ||
-            lower.contains("tvbox") ||
-            lower.contains("订阅源") ||
-            lower.contains("播放源") ||
-            lower.contains("影视仓") ||
-            lower.contains("接口") ||
-            (lower.contains("源") && (lower.contains("动漫") || lower.contains("番") || lower.contains("看")))
+        return lower.contains("github")
     }
 
-    internal fun extractGitHubQuery(raw: String): String {
-        val withoutSite =
-            raw
-                .replace(Regex("""site:\S*github\.com\S*""", RegexOption.IGNORE_CASE), " ")
-                .replace(Regex("""\bgithub\b""", RegexOption.IGNORE_CASE), " ")
-                .replace(Regex("""\s+"""), " ")
-                .trim()
-        return if (withoutSite.isBlank()) "tvbox" else withoutSite
-    }
+    internal fun extractGitHubQuery(raw: String): String =
+        raw
+            .replace(Regex("""site:\S*github\.com\S*""", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\bgithub\.com\b""", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\bgithub\b""", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
 
     internal suspend fun searchGitHubApi(
         query: String,
@@ -122,15 +114,7 @@ class WebSearchServiceImpl(
         val effectiveQuery = extractGitHubQuery(query)
         if (effectiveQuery.isBlank()) return emptyList()
 
-        val results = executeGitHubSearchRequest(effectiveQuery, limit)
-        if (results.isNotEmpty()) return results
-
-        // 若多余修饰词导致 0 结果，以标准 "tvbox 源" 兜底尝试一次，提升开源订阅召回率
-        if (effectiveQuery.contains("tvbox", ignoreCase = true) && effectiveQuery != "tvbox 源" && effectiveQuery != "tvbox") {
-            logger.d { "GitHub query '$effectiveQuery' yielded 0 items, retrying with 'tvbox 源'" }
-            return executeGitHubSearchRequest("tvbox 源", limit)
-        }
-        return emptyList()
+        return executeGitHubSearchRequest(effectiveQuery, limit)
     }
 
     private suspend fun executeGitHubSearchRequest(
