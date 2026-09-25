@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -32,10 +36,14 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -50,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +69,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -245,6 +255,38 @@ internal sealed interface ConnectionDiagnosticState {
     ) : ConnectionDiagnosticState
 }
 
+/**
+ * 模型特征能力标签
+ */
+internal enum class ModelCapability(
+    val label: String,
+) {
+    REASONING("推理"),
+    VISION("视觉"),
+    LIGHTWEIGHT("轻量"),
+}
+
+/**
+ * 依据模型标识符自动提取其主要能力特征
+ */
+internal fun detectModelCapabilities(modelName: String): List<ModelCapability> {
+    val name = modelName.lowercase()
+    val caps = mutableListOf<ModelCapability>()
+    if (name.contains("reasoner") || name.contains("r1") || name.contains("o1") || name.contains("o3") || name.contains("thinking")) {
+        caps.add(ModelCapability.REASONING)
+    }
+    if (name.contains("vision") || name.contains("vl") || name.contains("omni") || name.contains("4o")) {
+        caps.add(ModelCapability.VISION)
+    }
+    if (name.contains("flash") || name.contains("mini") || name.contains("nano") || name.contains("lite") || name.contains("small") ||
+        name.contains("7b") ||
+        name.contains("8b")
+    ) {
+        caps.add(ModelCapability.LIGHTWEIGHT)
+    }
+    return caps
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AssistantConfigDialog(
@@ -306,7 +348,8 @@ fun AssistantConfigDialog(
 
     // 远端拉取到的可用模型列表（与推荐模型区分）
     var availableRemoteModels by remember { mutableStateOf<List<String>>(emptyList()) }
-    var showModelSearchDialog by remember { mutableStateOf(false) }
+    var showModelPickerSheet by remember { mutableStateOf(false) }
+    var isManualModelMode by remember { mutableStateOf(false) }
 
     // 连通诊断状态
     var diagnosticState by remember { mutableStateOf<ConnectionDiagnosticState>(ConnectionDiagnosticState.Idle) }
@@ -329,6 +372,7 @@ fun AssistantConfigDialog(
                     "custom"
                 }
         availableRemoteModels = emptyList()
+        isManualModelMode = false
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -342,6 +386,7 @@ fun AssistantConfigDialog(
             model = preset.defaultModel
         }
         availableRemoteModels = emptyList()
+        isManualModelMode = false
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -654,84 +699,58 @@ fun AssistantConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // 模型名称输入框（结合手动输入与远端模型列表选择）
-                OutlinedTextField(
-                    value = model,
-                    onValueChange = {
-                        model = it
-                        diagnosticState = ConnectionDiagnosticState.Idle
-                    },
-                    label = { Text("模型名称 (Model)") },
-                    placeholder = { Text(defaultModelFor(selectedProvider)) },
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (model.isNotBlank()) {
-                                IconButton(onClick = { model = "" }) {
-                                    Icon(Icons.Filled.Clear, contentDescription = "清空模型")
+                // 2. 智能模型选择器：卡片选择器（默认）与自由手输模式无缝切换
+                val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
+                val isTestingConnection = diagnosticState is ConnectionDiagnosticState.Testing
+
+                if (isManualModelMode) {
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = {
+                            model = it
+                            diagnosticState = ConnectionDiagnosticState.Idle
+                        },
+                        label = { Text("自定义模型名称 (Model)") },
+                        placeholder = { Text(defaultModelFor(selectedProvider)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.SmartToy,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (model.isNotBlank()) {
+                                    IconButton(onClick = { model = "" }) {
+                                        Icon(Icons.Filled.Clear, contentDescription = "清空模型")
+                                    }
                                 }
-                            }
-                            if (availableRemoteModels.isNotEmpty()) {
-                                IconButton(onClick = { showModelSearchDialog = true }) {
+                                IconButton(onClick = { isManualModelMode = false }) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.List,
-                                        contentDescription = "选择远端可用模型",
+                                        contentDescription = "返回选择器卡片",
                                         tint = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                             }
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                // 快捷模型候选推荐区（远端真实模型优先；未拉取时展示主流预设模型）
-                val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
-                val presetModels = currentPreset?.popularModels.orEmpty()
-                val candidateModels = if (availableRemoteModels.isNotEmpty()) availableRemoteModels else presetModels
-                val isRemote = availableRemoteModels.isNotEmpty()
-
-                if (candidateModels.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
+                        },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = if (isRemote) "远端已同步模型 (${candidateModels.size})：" else "推荐候选模型：",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isRemote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = if (isRemote) FontWeight.SemiBold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (candidateModels.size > 6) {
-                            TextButton(
-                                onClick = { showModelSearchDialog = true },
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            ) {
-                                Text("浏览全部", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        candidateModels.take(6).forEach { candidate ->
-                            val isModelSelected = (model == candidate)
-                            FilterChip(
-                                selected = isModelSelected,
-                                onClick = {
-                                    model = candidate
-                                    diagnosticState = ConnectionDiagnosticState.Idle
-                                },
-                                label = { Text(candidate, style = MaterialTheme.typography.labelSmall) },
-                            )
-                        }
-                    }
+                    )
+                } else {
+                    ModelSelectorCard(
+                        model = model,
+                        selectedProvider = selectedProvider,
+                        selectedPreset = currentPreset,
+                        remoteModelsCount = availableRemoteModels.size,
+                        isTesting = isTestingConnection,
+                        onOpenPicker = { showModelPickerSheet = true },
+                        onSyncRemote = { startConnectionTest() },
+                        onSwitchToManual = { isManualModelMode = true },
+                    )
                 }
 
                 // 3. 连通性测试诊断卡片（状态机展示）
@@ -790,9 +809,9 @@ fun AssistantConfigDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                if (state.models.size > 6) {
+                                if (state.models.isNotEmpty()) {
                                     OutlinedButton(
-                                        onClick = { showModelSearchDialog = true },
+                                        onClick = { showModelPickerSheet = true },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     ) {
                                         Text("选择模型", style = MaterialTheme.typography.labelSmall)
@@ -873,19 +892,19 @@ fun AssistantConfigDialog(
         }
     }
 
-    // 完整模型搜索选择弹窗
-    if (showModelSearchDialog) {
+    // 智能模型搜索与选择弹窗
+    if (showModelPickerSheet) {
         val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
         val presetModels = currentPreset?.popularModels.orEmpty()
-        val allAvailable = if (availableRemoteModels.isNotEmpty()) availableRemoteModels else presetModels
-        ModelSearchDialog(
-            models = allAvailable,
-            currentModel = model,
+        ModelPickerDialog(
+            currentModel = model.ifBlank { defaultModelFor(selectedProvider) },
+            remoteModels = availableRemoteModels,
+            presetModels = presetModels,
             onSelectModel = { selected ->
                 model = selected
                 diagnosticState = ConnectionDiagnosticState.Idle
             },
-            onDismiss = { showModelSearchDialog = false },
+            onDismiss = { showModelPickerSheet = false },
         )
     }
 
@@ -920,32 +939,176 @@ fun AssistantConfigDialog(
 }
 
 /**
- * 完整模型选择与搜索弹窗
+ * 智能模型聚合卡片组件
+ * 紧凑展示当前选中的模型、状态/来源，并提供原地探测同步与切换手输能力
  */
 @Composable
-private fun ModelSearchDialog(
-    models: List<String>,
+private fun ModelSelectorCard(
+    model: String,
+    selectedProvider: String,
+    selectedPreset: ProviderPreset?,
+    remoteModelsCount: Int,
+    isTesting: Boolean,
+    onOpenPicker: () -> Unit,
+    onSyncRemote: () -> Unit,
+    onSwitchToManual: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentModelDisplay = model.ifBlank { defaultModelFor(selectedProvider) }
+    val isRemoteSynced = remoteModelsCount > 0
+    val subtitle =
+        if (isRemoteSynced) {
+            "已同步 $remoteModelsCount 个远端可用模型 · 点击切换"
+        } else if (selectedPreset != null) {
+            "${selectedPreset.name} 预设推荐 · 点击选择"
+        } else {
+            "点击选择模型"
+        }
+
+    Surface(
+        onClick = onOpenPicker,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SmartToy,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "模型 (Model)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = currentModelDisplay,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isRemoteSynced) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // 原地同步远端模型按钮
+                IconButton(
+                    onClick = onSyncRemote,
+                    enabled = !isTesting,
+                ) {
+                    if (isTesting) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "同步远端模型",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+                // 切换为自由手输模式按钮
+                IconButton(onClick = onSwitchToManual) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = "手动输入自定义模型",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                // 展开指示图标
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 完整模型选择面板弹窗：支持搜索、属性特征标签识别、远端/预设分组与直接使用输入词
+ */
+@Composable
+private fun ModelPickerDialog(
     currentModel: String,
+    remoteModels: List<String>,
+    presetModels: List<String>,
     onSelectModel: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val allUniqueModels =
+        remember(remoteModels, presetModels) {
+            (remoteModels + presetModels).distinct()
+        }
+
+    val trimmedQuery = searchQuery.trim()
+    val isSearching = trimmedQuery.isNotBlank()
+
+    // 过滤候选列表
     val filteredModels =
-        remember(models, searchQuery) {
-            if (searchQuery.isBlank()) {
-                models
+        remember(allUniqueModels, trimmedQuery) {
+            if (trimmedQuery.isBlank()) {
+                allUniqueModels
             } else {
-                models.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
+                allUniqueModels.filter { it.contains(trimmedQuery, ignoreCase = true) }
             }
+        }
+
+    val hasExactMatch =
+        remember(allUniqueModels, trimmedQuery) {
+            allUniqueModels.any { it.equals(trimmedQuery, ignoreCase = true) }
         }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("选择模型 (${models.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Column {
+                Text(
+                    text = "选择模型",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = if (remoteModels.isNotEmpty()) "已连接远端服务 · ${remoteModels.size} 个模型就绪" else "服务商推荐模型库",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+            ) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -963,46 +1126,115 @@ private fun ModelSearchDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
                 Spacer(modifier = Modifier.height(10.dp))
-                if (filteredModels.isEmpty()) {
+
+                // 如果搜索词无精确匹配，提供直接使用当前搜索词作为自定义模型的通道
+                if (isSearching && !hasExactMatch) {
+                    Surface(
+                        onClick = {
+                            onSelectModel(trimmedQuery)
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "使用「$trimmedQuery」",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = "直接填入作为自定义模型",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (filteredModels.isEmpty() && (!isSearching || hasExactMatch)) {
                     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "无匹配模型",
+                            text = "未找到可用模型",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                        items(filteredModels) { item ->
-                            val isSelected = (item == currentModel)
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
+                        // 1. 如果不在搜索模式且有远端模型：展示分组
+                        if (!isSearching && remoteModels.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "🌐 远端已同步模型 (${remoteModels.size})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                )
+                            }
+                            items(remoteModels) { item ->
+                                ModelPickerItem(
+                                    name = item,
+                                    isSelected = item == currentModel,
+                                    onSelect = {
+                                        onSelectModel(item)
+                                        onDismiss()
+                                    },
+                                )
+                            }
+                            val presetOnly = presetModels.filterNot { it in remoteModels }
+                            if (presetOnly.isNotEmpty()) {
+                                item {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "💡 推荐候选模型",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(vertical = 6.dp),
+                                    )
+                                }
+                                items(presetOnly) { item ->
+                                    ModelPickerItem(
+                                        name = item,
+                                        isSelected = item == currentModel,
+                                        onSelect = {
                                             onSelectModel(item)
                                             onDismiss()
-                                        }.padding(horizontal = 8.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = item,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = "已选择",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp),
+                                        },
                                     )
                                 }
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        } else {
+                            // 搜索结果列表或仅有预设模型
+                            items(filteredModels) { item ->
+                                ModelPickerItem(
+                                    name = item,
+                                    isSelected = item == currentModel,
+                                    onSelect = {
+                                        onSelectModel(item)
+                                        onDismiss()
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -1014,4 +1246,75 @@ private fun ModelSearchDialog(
             }
         },
     )
+}
+
+@Composable
+private fun ModelPickerItem(
+    name: String,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val capabilities = remember(name) { detectModelCapabilities(name) }
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSelect)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                )
+                if (capabilities.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        capabilities.forEach { cap ->
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color =
+                                    when (cap) {
+                                        ModelCapability.REASONING -> MaterialTheme.colorScheme.tertiaryContainer
+                                        ModelCapability.VISION -> MaterialTheme.colorScheme.secondaryContainer
+                                        ModelCapability.LIGHTWEIGHT -> MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                            ) {
+                                Text(
+                                    text = cap.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color =
+                                        when (cap) {
+                                            ModelCapability.REASONING -> MaterialTheme.colorScheme.onTertiaryContainer
+                                            ModelCapability.VISION -> MaterialTheme.colorScheme.onSecondaryContainer
+                                            ModelCapability.LIGHTWEIGHT -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "当前使用",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+    }
 }

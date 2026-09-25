@@ -130,4 +130,28 @@ class AssistantConfigDialogTest {
         org.junit.Assert.assertTrue(presets.any { it.id == "deepseek" })
         org.junit.Assert.assertTrue(presets.any { it.id == "ollama" })
     }
+
+    @Test
+    fun detectModelCapabilities_identifies_reasoning_and_vision_and_lightweight() {
+        val r1Caps =
+            com.infinitezerone.minibgm.feature.assistant.components
+                .detectModelCapabilities("deepseek-reasoner")
+        org.junit.Assert.assertTrue(r1Caps.contains(com.infinitezerone.minibgm.feature.assistant.components.ModelCapability.REASONING))
+
+        val vlCaps =
+            com.infinitezerone.minibgm.feature.assistant.components
+                .detectModelCapabilities("qwen2.5-vl-7b")
+        org.junit.Assert.assertTrue(vlCaps.contains(com.infinitezerone.minibgm.feature.assistant.components.ModelCapability.VISION))
+        org.junit.Assert.assertTrue(vlCaps.contains(com.infinitezerone.minibgm.feature.assistant.components.ModelCapability.LIGHTWEIGHT))
+
+        val flashCaps =
+            com.infinitezerone.minibgm.feature.assistant.components
+                .detectModelCapabilities("gemini-2.5-flash")
+        org.junit.Assert.assertTrue(flashCaps.contains(com.infinitezerone.minibgm.feature.assistant.components.ModelCapability.LIGHTWEIGHT))
+
+        val plainCaps =
+            com.infinitezerone.minibgm.feature.assistant.components
+                .detectModelCapabilities("custom-llm")
+        org.junit.Assert.assertTrue(plainCaps.isEmpty())
+    }
 }
