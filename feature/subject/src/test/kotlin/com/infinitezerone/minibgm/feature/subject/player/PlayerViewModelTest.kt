@@ -16,6 +16,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -455,6 +456,119 @@ class PlayerViewModelTest {
             val state = vm.uiState.value
             assertEquals(3f, state.episodeSort)
             assertEquals("https://cdn.example.com/resolved_ep3.m3u8", state.streamUrl)
+        }
+
+    @Test
+    fun selectEpisode_onRuleSource_keepsCurrentStreamWhileResolving() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "TestRule",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> {
+                        // 模拟网络耗时，以便观察到“解析中保留旧画面”的中间态
+                        delay(1_000L)
+                        return listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/ep${epNumber.toInt()}.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+                    }
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+            assertEquals("https://cdn.example.com/ep1.m3u8", vm.uiState.value.streamUrl)
+
+            vm.selectEpisode(PlayerEpisodeItem(id = 3002L, sort = 2f, name = "第二话"))
+            runCurrent()
+
+            val mid = vm.uiState.value
+            assertTrue("切换分集时应处于嗅探中", mid.isResolvingSource)
+            assertEquals("解析中必须保留旧画面，不得清空导致黑屏", "https://cdn.example.com/ep1.m3u8", mid.streamUrl)
+
+            advanceUntilIdle()
+            assertEquals("https://cdn.example.com/ep2.m3u8", vm.uiState.value.streamUrl)
+            assertFalse(vm.uiState.value.isResolvingSource)
+        }
+
+    @Test
+    fun resolveDirectSource_missingEpisode_clearsInsteadOfPlayingOtherQueueEntry() =
+        runTest {
+            val vm =
+                viewModel(
+                    route =
+                        route(
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8"),
+                        ),
+                )
+            advanceUntilIdle()
+
+            // 选中不在自备片单中的第 5 话
+            vm.selectEpisode(PlayerEpisodeItem(id = 9005L, sort = 5f, name = "第五话"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("不得回退到队列里的其它集（串集）", "", state.streamUrl)
+            assertFalse(state.isResolvingSource)
+            assertTrue("应如实给出无片源提示", state.error != null)
+        }
+
+    @Test
+    fun selectNextSource_movesToNextAndWraps() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
+                    PlaybackSourceRule(id = "r2", name = "R2", urlTemplate = "https://b/?t={title}", isEnabled = true),
+                ),
+            )
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                )
+            advanceUntilIdle()
+            assertEquals(0, vm.uiState.value.selectedSourceIndex)
+
+            vm.selectNextSource()
+            assertEquals(1, vm.uiState.value.selectedSourceIndex)
+
+            vm.selectNextSource()
+            assertEquals("应环绕回第一个源", 0, vm.uiState.value.selectedSourceIndex)
         }
 
     @Test
