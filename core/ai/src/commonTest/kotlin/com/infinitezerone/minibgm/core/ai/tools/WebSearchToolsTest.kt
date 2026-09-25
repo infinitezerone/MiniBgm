@@ -66,6 +66,9 @@ class WebSearchToolsTest {
         assertEquals("site:github.com tvbox 高质量动漫播放源", tools.normalizeQuery("高质量动漫播放源"))
         assertEquals("site:github.com tvbox 动漫 订阅", tools.normalizeQuery("动漫 订阅"))
 
+        // 已经带有 tvbox 的词条不重复 tvbox
+        assertEquals("site:github.com tvbox 源", tools.normalizeQuery("tvbox 源"))
+
         // 已经带有 site: 作用域的不重复添加
         assertEquals("site:github.com tvbox 动漫", tools.normalizeQuery("site:github.com tvbox 动漫"))
     }
