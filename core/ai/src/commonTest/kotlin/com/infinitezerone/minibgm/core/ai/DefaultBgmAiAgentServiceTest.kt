@@ -74,10 +74,6 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                             ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
                         }
                     }
-                    single<com.infinitezerone.minibgm.core.data.repository.WebSearchRepository> {
-                        com.infinitezerone.minibgm.core.testing.repository
-                            .FakeWebSearchRepository()
-                    }
                 },
             )
         }
@@ -784,7 +780,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                                         "id": "call_1",
                                         "type": "function",
                                         "function": {
-                                          "name": "searchGitHub",
+                                          "name": "mockTool",
                                           "arguments": "{\"query\":\"test\"}"
                                         }
                                       }
@@ -802,7 +798,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
             val tool =
                 com.infinitezerone.minibgm.core.ai.tool.bgmTool(
-                    name = "searchGitHub",
+                    name = "mockTool",
                     description = "desc",
                     parametersJsonSchema =
                         com.infinitezerone.minibgm.core.ai.tool

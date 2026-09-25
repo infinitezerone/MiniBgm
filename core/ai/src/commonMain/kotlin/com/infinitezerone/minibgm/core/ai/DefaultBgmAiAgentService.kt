@@ -7,7 +7,6 @@ import com.infinitezerone.minibgm.core.ai.tools.PlayableSourceTools
 import com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
-import com.infinitezerone.minibgm.core.ai.tools.WebSearchTools
 import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
 import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
 import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
@@ -48,7 +47,6 @@ class DefaultBgmAiAgentService(
     val playableSourceTools: PlayableSourceTools? = null,
     val communityTools: CommunityTools? = null,
     val playbackRuleDiagnosticsTools: PlaybackRuleDiagnosticsTools? = null,
-    val webSearchTools: WebSearchTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     override val playableSourcesStore: PlayableSourcesStore? = null,
@@ -87,7 +85,6 @@ class DefaultBgmAiAgentService(
                 playableSourceTools?.tools(),
                 communityTools?.tools(),
                 playbackRuleDiagnosticsTools?.tools(),
-                webSearchTools?.tools(),
             ).flatten(),
         )
 

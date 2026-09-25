@@ -80,8 +80,4 @@ fun networkModule(
             com.infinitezerone.minibgm.core.network
                 .CommunitySubscriptionServiceImpl(get(named("unauthenticated")))
         }
-        single<com.infinitezerone.minibgm.core.network.WebSearchService> {
-            com.infinitezerone.minibgm.core.network
-                .WebSearchServiceImpl(get(named("unauthenticated")))
-        }
     }

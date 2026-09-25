@@ -44,13 +44,6 @@ fun aiModule(userAgent: String? = null) =
                 sampleReplayer = getOrNull(),
             )
         }
-        single {
-            getOrNull<com.infinitezerone.minibgm.core.data.repository.WebSearchRepository>()?.let {
-                com.infinitezerone.minibgm.core.ai.tools.WebSearchTools(
-                    webSearchRepository = it,
-                )
-            }
-        }
         single<PendingActionExecutor> {
             DefaultPendingActionExecutor(
                 collectionRepository = get(),
@@ -82,7 +75,6 @@ fun aiModule(userAgent: String? = null) =
                 playableSourceTools = getOrNull(),
                 communityTools = getOrNull(),
                 playbackRuleDiagnosticsTools = getOrNull(),
-                webSearchTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
                 playableSourcesStore = getOrNull(),

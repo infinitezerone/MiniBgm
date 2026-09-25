@@ -120,10 +120,4 @@ val dataModule =
                 assistantSessionDao = get(),
             )
         }
-        single<com.infinitezerone.minibgm.core.data.repository.WebSearchRepository> {
-            com.infinitezerone.minibgm.core.data.repository.WebSearchRepositoryImpl(
-                webSearchService = get(),
-                pageFetchService = get(),
-            )
-        }
     }
