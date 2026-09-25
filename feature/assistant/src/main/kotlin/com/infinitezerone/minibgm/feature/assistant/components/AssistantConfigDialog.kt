@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -44,8 +43,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -259,7 +256,7 @@ fun AssistantConfigDialog(
 
     // 当前表单编辑中的方案（草稿态与激活态解耦）
     var editingProfileId by remember {
-        mutableStateOf(activeProfileId.ifBlank { aiProfiles.firstOrNull()?.id })
+        mutableStateOf(aiProfiles.firstOrNull { it.id == activeProfileId }?.id ?: aiProfiles.firstOrNull()?.id)
     }
     val initialProfile =
         remember(editingProfileId, aiProfiles) {
@@ -285,6 +282,20 @@ fun AssistantConfigDialog(
     }
     var isApiKeyVisible by remember { mutableStateOf(false) }
 
+    // 选中的预设 ID（单选排他，避免多个 custom 服务商全部高亮）
+    var selectedPresetId by remember {
+        mutableStateOf(
+            PROVIDER_PRESETS.firstOrNull { it.id != "custom" && it.endpoint == endpoint }?.id
+                ?: if (selectedProvider == AiConfig.PROVIDER_GEMINI) {
+                    "gemini"
+                } else if (selectedProvider == AiConfig.PROVIDER_OLLAMA) {
+                    "ollama"
+                } else {
+                    "custom"
+                },
+        )
+    }
+
     // 连通诊断状态
     var diagnosticState by remember { mutableStateOf<ConnectionDiagnosticState>(ConnectionDiagnosticState.Idle) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -296,10 +307,20 @@ fun AssistantConfigDialog(
         selectedProvider = profile.config.provider
         apiKey = profile.config.apiKey
         model = profile.config.model
+        selectedPresetId =
+            PROVIDER_PRESETS.firstOrNull { it.id != "custom" && it.endpoint == profile.config.endpoint }?.id
+                ?: if (profile.config.provider == AiConfig.PROVIDER_GEMINI) {
+                    "gemini"
+                } else if (profile.config.provider == AiConfig.PROVIDER_OLLAMA) {
+                    "ollama"
+                } else {
+                    "custom"
+                }
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
     fun applyPreset(preset: ProviderPreset) {
+        selectedPresetId = preset.id
         selectedProvider = preset.provider
         if (preset.endpoint.isNotBlank()) {
             endpoint = preset.endpoint
@@ -428,16 +449,13 @@ fun AssistantConfigDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     PROVIDER_PRESETS.forEach { preset ->
-                        val isMatched = (
-                            preset.id != "custom" &&
-                                (endpoint == preset.endpoint || autoDetectProvider(endpoint) == preset.provider)
-                        )
+                        val isSelected = preset.id == selectedPresetId
                         FilterChip(
-                            selected = isMatched,
+                            selected = isSelected,
                             onClick = { applyPreset(preset) },
                             label = { Text(preset.name) },
                             leadingIcon =
-                                if (isMatched) {
+                                if (isSelected) {
                                     {
                                         Icon(
                                             imageVector = Icons.Filled.Check,
@@ -450,24 +468,6 @@ fun AssistantConfigDialog(
                                 },
                         )
                     }
-                }
-
-                // 预设提示条
-                val matchedPreset =
-                    PROVIDER_PRESETS.firstOrNull {
-                        it.id != "custom" && (endpoint == it.endpoint || autoDetectProvider(endpoint) == it.provider)
-                    } ?: PROVIDER_PRESETS.last()
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                ) {
-                    Text(
-                        text = matchedPreset.tip,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -562,6 +562,9 @@ fun AssistantConfigDialog(
                     onValueChange = {
                         endpoint = it
                         selectedProvider = autoDetectProvider(it)
+                        selectedPresetId =
+                            PROVIDER_PRESETS.firstOrNull { preset -> preset.id != "custom" && preset.endpoint == it.trim() }?.id
+                                ?: "custom"
                         diagnosticState = ConnectionDiagnosticState.Idle
                     },
                     label = { Text("服务地址 (Base URL)") },
@@ -576,6 +579,7 @@ fun AssistantConfigDialog(
                         if (endpoint.isNotBlank()) {
                             IconButton(onClick = {
                                 endpoint = ""
+                                selectedPresetId = "custom"
                                 diagnosticState = ConnectionDiagnosticState.Idle
                             }) {
                                 Icon(Icons.Filled.Clear, contentDescription = "清空端点")
@@ -656,7 +660,8 @@ fun AssistantConfigDialog(
                 )
 
                 // 快捷模型候选推荐
-                val presetModels = matchedPreset.popularModels
+                val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
+                val presetModels = currentPreset?.popularModels.orEmpty()
                 if (presetModels.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -670,7 +675,9 @@ fun AssistantConfigDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         presetModels.forEach { candidate ->
-                            SuggestionChip(
+                            val isModelSelected = (model == candidate)
+                            FilterChip(
+                                selected = isModelSelected,
                                 onClick = {
                                     model = candidate
                                     diagnosticState = ConnectionDiagnosticState.Idle
@@ -733,7 +740,9 @@ fun AssistantConfigDialog(
                                         verticalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
                                         state.models.take(8).forEach { remoteModel ->
-                                            SuggestionChip(
+                                            val isSelected = (model == remoteModel)
+                                            FilterChip(
+                                                selected = isSelected,
                                                 onClick = { model = remoteModel },
                                                 label = { Text(remoteModel, style = MaterialTheme.typography.labelSmall) },
                                             )
