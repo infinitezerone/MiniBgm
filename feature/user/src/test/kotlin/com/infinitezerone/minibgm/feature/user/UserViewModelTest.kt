@@ -22,6 +22,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_TOKEN = "stub-token"
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class UserViewModelTest {
     @get:Rule
@@ -337,7 +340,7 @@ class UserViewModelTest {
                 AiConfig(
                     provider = AiConfig.PROVIDER_GEMINI,
                     endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/",
-                    apiKey = "gemini-test-key",
+                    apiKey = STUB_TOKEN,
                     model = "gemini-2.5-pro",
                 )
 

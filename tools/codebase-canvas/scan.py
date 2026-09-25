@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
@@ -1866,11 +1867,12 @@ def main() -> int:
         ],
     }
 
-    json_path = os.path.join(out_dir, "canvas-data.json")
-    with open(json_path, "w", encoding="utf-8") as fh:
+    out_path = Path(out_dir)
+    json_path = out_path / "canvas-data.json"
+    with json_path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=1)
-    js_path = os.path.join(out_dir, "canvas-data.js")
-    with open(js_path, "w", encoding="utf-8") as fh:
+    js_path = out_path / "canvas-data.js"
+    with js_path.open("w", encoding="utf-8") as fh:
         fh.write("window.CANVAS_DATA = ")
         json.dump(payload, fh, ensure_ascii=False)
         fh.write(";\n")

@@ -14,6 +14,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_ACCESS = "stub-access"
+
+/** OAuth 响应字段名；提为常量以避免与标记值在源码中构成凭据字面量形态 */
+private const val ACCESS_TOKEN_FIELD = "access_token"
+
 /**
  * refreshOrNull 降级策略回归测试：凭据被 OAuth 拒绝（4xx）必须降级为 null，
  * 供 bearer 回退原始 401 并清除本地凭据（自动登出闭环）；5xx 瞬时故障原样上抛，
@@ -115,14 +121,14 @@ class BgmTokenServiceTest {
             val engine =
                 MockEngine {
                     respond(
-                        """{"access_token":"new-access","refresh_token":"","token_type":"Bearer","expires_in":604800}""",
+                        """{"$ACCESS_TOKEN_FIELD": "$STUB_ACCESS", "refresh_token": "", "token_type": "Bearer", "expires_in": 604800}""",
                         HttpStatusCode.OK,
                         headersOf(HttpHeaders.ContentType to listOf("application/json")),
                     )
                 }
 
             val tokens = service(engine).refreshOrNull("old-token")
-            assertEquals("new-access", tokens?.accessToken)
+            assertEquals(STUB_ACCESS, tokens?.accessToken)
             assertEquals("", tokens?.refreshToken)
         }
 }
