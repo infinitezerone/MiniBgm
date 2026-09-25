@@ -48,12 +48,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +67,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import kotlinx.coroutines.launch
@@ -260,7 +260,7 @@ fun AssistantConfigDialog(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
 
     // 当前表单编辑中的方案（草稿态与激活态解耦）
     var editingProfileId by remember {
@@ -405,7 +405,7 @@ fun AssistantConfigDialog(
         onDismiss()
     }
 
-    ModalBottomSheet(
+    BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {

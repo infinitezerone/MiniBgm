@@ -52,7 +52,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -93,8 +92,10 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -556,10 +557,14 @@ private fun SessionSwitcherSheet(
     onRename: (String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
     var renamingSession by remember { mutableStateOf<AssistantSession?>(null) }
     var renameText by remember { mutableStateOf("") }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    BgmModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Row(
                 modifier =
