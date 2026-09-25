@@ -1,10 +1,12 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
+import com.infinitezerone.minibgm.core.ai.tool.string
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -13,11 +15,12 @@ import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * 播放源订阅相关的 Koog 智能体工具集。
+ * 播放源订阅相关的智能体工具集。
  *
  * 只做一件事：把**用户明确给出的**地址或规则 JSON 拉下来、端侧测速探活，
  * 组装 [PendingAction.ImportPlaybackRules] 提案等用户确认。
@@ -33,18 +36,38 @@ class CommunityTools(
             ignoreUnknownKeys = true
         },
     private val pendingActionStore: PendingActionStore? = null,
-) : ToolSet {
-    @OptIn(ExperimentalUuidApi::class)
-    @Tool
-    @LLMDescription(
-        "Fetch and test a caller-supplied remote subscription URL (TVBox / MiniBgm / JSON), single third-party anime website URL, or candidate rules JSON array, probe connectivity of all rules, and generate an import proposal for user confirmation. Only accepts addresses the user actually provided; it does not search for or discover sites on its own. (HITL SAFE)",
-    )
-    suspend fun validateAndTestSubscription(
-        @LLMDescription(
-            "The user-provided remote subscription URL (TVBox/MiniBgm), single anime site URL, or candidate rules JSON array to validate, probe and import.",
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "validateAndTestSubscription",
+                description =
+                    "Fetch and test a caller-supplied remote subscription URL (TVBox / MiniBgm / JSON), " +
+                        "single third-party anime website URL, or candidate rules JSON array, probe connectivity of all rules, " +
+                        "and generate an import proposal for user confirmation. Only accepts addresses the user actually provided; " +
+                        "it does not search for or discover sites on its own. (HITL SAFE)",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "subscriptionUrl",
+                                    schemaProperty(
+                                        "string",
+                                        "The user-provided remote subscription URL (TVBox/MiniBgm), single anime site URL, " +
+                                            "or candidate rules JSON array to validate, probe and import.",
+                                    ),
+                                )
+                            },
+                        required = listOf("subscriptionUrl"),
+                    ),
+            ) { args ->
+                validateAndTestSubscription(args.string("subscriptionUrl"))
+            },
         )
-        subscriptionUrl: String,
-    ): String {
+
+    @OptIn(ExperimentalUuidApi::class)
+    suspend fun validateAndTestSubscription(subscriptionUrl: String): String {
         val trimmed = subscriptionUrl.trim()
         if (trimmed.isBlank()) {
             return "Subscription URL must not be blank."

@@ -1,10 +1,17 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.boolean
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.intOrNull
+import com.infinitezerone.minibgm.core.ai.tool.long
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
+import com.infinitezerone.minibgm.core.ai.tool.string
+import com.infinitezerone.minibgm.core.ai.tool.stringOrNull
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
@@ -15,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 
 @Serializable
 data class UserCollectionDto(
@@ -29,7 +37,7 @@ data class UserCollectionDto(
 )
 
 /**
- * 追番与收藏进度相关 Koog 智能体工具。
+ * 追番与收藏进度相关智能体工具。
  * 包含严密的 Human-In-The-Loop (HITL) 安全机制：
  * - 只读操作（查询收藏、获取在看列表）自动安全执行；
  * - 写操作（修改条目收藏状态、更新单集打卡进度）严禁静默执行，必须生成 [PendingAction] 提案等待用户在客户端确认后方可执行。
@@ -42,13 +50,96 @@ class CollectionTools(
             ignoreUnknownKeys = true
         },
     private val pendingActionStore: PendingActionStore? = null,
-) : ToolSet {
-    @Tool
-    @LLMDescription("Query the current user's collection status and watched episode progress for an anime (READ OPERATION, auto-executes)")
-    suspend fun getCollection(
-        @LLMDescription("Bangumi subject ID")
-        subjectId: Long,
-    ): String {
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "getCollection",
+                description =
+                    "Query the current user's collection status and watched episode progress for an anime " +
+                        "(READ OPERATION, auto-executes)",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                            },
+                        required = listOf("subjectId"),
+                    ),
+            ) { args ->
+                getCollection(args.long("subjectId"))
+            },
+            bgmTool(
+                name = "getWatchingList",
+                description = "Query list of anime currently being watched by the user (READ OPERATION, auto-executes)",
+            ) {
+                getWatchingList()
+            },
+            bgmTool(
+                name = "proposeUpdateCollection",
+                description =
+                    "Propose updating an anime's collection status (WISH, DOING, COLLECT, ON_HOLD, DROPPED), " +
+                        "rating, or comment. (HITL SAFE: returns a PendingAction proposal without mutating data)",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                                put(
+                                    "collectionType",
+                                    schemaProperty(
+                                        "string",
+                                        "Target collection status: DOING (watching/在看), WISH (want to watch/想看), " +
+                                            "COLLECT (completed/看过), ON_HOLD (on hold/搁置), DROPPED (dropped/抛弃)",
+                                    ),
+                                )
+                                put("subjectTitle", schemaProperty("string", "Anime title or name for human context"))
+                                put("rating", schemaProperty("integer", "Optional rating score between 1 and 10"))
+                                put("comment", schemaProperty("string", "Optional brief review comment"))
+                                put(
+                                    "isPrivate",
+                                    schemaProperty("boolean", "Whether to mark this collection as private (only visible to self)"),
+                                )
+                            },
+                        required = listOf("subjectId", "collectionType"),
+                    ),
+            ) { args ->
+                proposeUpdateCollection(
+                    subjectId = args.long("subjectId"),
+                    subjectTitle = args.string("subjectTitle"),
+                    collectionType = args.string("collectionType"),
+                    rating = args.intOrNull("rating"),
+                    comment = args.stringOrNull("comment"),
+                    isPrivate = args.boolean("isPrivate", false),
+                )
+            },
+            bgmTool(
+                name = "proposeUpdateEpisodeProgress",
+                description =
+                    "Propose updating episode watch progress (e.g. mark episode N as watched). " +
+                        "(HITL SAFE: returns a PendingAction proposal without mutating data)",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                                put("episodeNumber", schemaProperty("integer", "Episode number (1-based)"))
+                                put("subjectTitle", schemaProperty("string", "Anime title or name for human context"))
+                                put("isWatched", schemaProperty("boolean", "True to mark as watched, false to mark as unwatched"))
+                            },
+                        required = listOf("subjectId", "episodeNumber"),
+                    ),
+            ) { args ->
+                proposeUpdateEpisodeProgress(
+                    subjectId = args.long("subjectId"),
+                    subjectTitle = args.string("subjectTitle"),
+                    episodeNumber = args.int("episodeNumber"),
+                    isWatched = args.boolean("isWatched", true),
+                )
+            },
+        )
+
+    suspend fun getCollection(subjectId: Long): String {
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
@@ -83,8 +174,6 @@ class CollectionTools(
         }
     }
 
-    @Tool
-    @LLMDescription("Query list of anime currently being watched by the user (READ OPERATION, auto-executes)")
     suspend fun getWatchingList(): String {
         AiToolActivity.report("获取在看列表", "当前追番中条目")
         val collections = collectionRepository.getCollectionsByTypeStream(CollectionType.DOING).first()
@@ -107,24 +196,12 @@ class CollectionTools(
         return json.encodeToString(dtos)
     }
 
-    @Tool
-    @LLMDescription(
-        "Propose updating an anime's collection status (WISH, DOING, COLLECT, ON_HOLD, DROPPED), rating, or comment. (HITL SAFE: returns a PendingAction proposal without mutating data)",
-    )
     suspend fun proposeUpdateCollection(
-        @LLMDescription("Bangumi subject ID")
         subjectId: Long,
-        @LLMDescription("Anime title or name for human context")
         subjectTitle: String = "",
-        @LLMDescription(
-            "Target collection status: DOING (watching/在看), WISH (want to watch/想看), COLLECT (completed/看过), ON_HOLD (on hold/搁置), DROPPED (dropped/抛弃)",
-        )
         collectionType: String,
-        @LLMDescription("Optional rating score between 1 and 10")
         rating: Int? = null,
-        @LLMDescription("Optional brief review comment")
         comment: String? = null,
-        @LLMDescription("Whether to mark this collection as private (only visible to self)")
         isPrivate: Boolean = false,
     ): String {
         if (subjectId <= 0) {
@@ -180,18 +257,10 @@ class CollectionTools(
         return json.encodeToString(proposal)
     }
 
-    @Tool
-    @LLMDescription(
-        "Propose updating episode watch progress (e.g. mark episode N as watched). (HITL SAFE: returns a PendingAction proposal without mutating data)",
-    )
     suspend fun proposeUpdateEpisodeProgress(
-        @LLMDescription("Bangumi subject ID")
         subjectId: Long,
-        @LLMDescription("Anime title or name for human context")
         subjectTitle: String = "",
-        @LLMDescription("Episode number (1-based)")
         episodeNumber: Int,
-        @LLMDescription("True to mark as watched, false to mark as unwatched")
         isWatched: Boolean = true,
     ): String {
         if (subjectId <= 0) {

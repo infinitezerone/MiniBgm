@@ -1,15 +1,20 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.long
+import com.infinitezerone.minibgm.core.ai.tool.longList
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 
 @Serializable
 data class ScheduleItemDto(
@@ -33,7 +38,7 @@ data class AiringEventDto(
 )
 
 /**
- * 放送时刻表相关 Koog 智能体工具。
+ * 放送时刻表相关智能体工具。
  * 支持按星期/今日查询番剧排播，以及查询指定条目接下来播出的单集信息。
  */
 class ScheduleTools(
@@ -43,15 +48,57 @@ class ScheduleTools(
             prettyPrint = false
             ignoreUnknownKeys = true
         },
-) : ToolSet {
-    @Tool
-    @LLMDescription(
-        "Query anime broadcast schedule for today or a specific weekday. Weekday: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun. Pass 0 for today.",
-    )
-    suspend fun getSchedule(
-        @LLMDescription("Day of the week (1-7, 0 for today)")
-        weekday: Int = 0,
-    ): String {
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "getSchedule",
+                description =
+                    "Query anime broadcast schedule for a given day of the week (1=Mon..7=Sun). " +
+                        "Defaults to today if weekday is omitted or 0.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "weekday",
+                                    schemaProperty("integer", "Day of the week: 1 for Monday to 7 for Sunday. 0 for today."),
+                                )
+                            },
+                    ),
+            ) { args ->
+                getSchedule(args.int("weekday", 0))
+            },
+            bgmTool(
+                name = "getNextEpisodeAiring",
+                description = "Query upcoming next episode air date and time for given anime subject IDs",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "subjectIds",
+                                    schemaProperty(
+                                        type = "array",
+                                        description = "List of subject IDs to check upcoming airing events for",
+                                        itemsType = "integer",
+                                    ),
+                                )
+                                put(
+                                    "hoursAhead",
+                                    schemaProperty("integer", "Hours ahead to look into the future, default 72 hours"),
+                                )
+                            },
+                        required = listOf("subjectIds"),
+                    ),
+            ) { args ->
+                val subjectIds = args.longList("subjectIds")
+                val hoursAhead = args.long("hoursAhead", 72L)
+                getNextEpisodeAiring(subjectIds, hoursAhead)
+            },
+        )
+
+    suspend fun getSchedule(weekday: Int = 0): String {
         val targetWeekday =
             if (weekday in 1..7) {
                 weekday
@@ -82,12 +129,8 @@ class ScheduleTools(
         return json.encodeToString(dtos)
     }
 
-    @Tool
-    @LLMDescription("Query upcoming next episode air date and time for given anime subject IDs")
     suspend fun getNextEpisodeAiring(
-        @LLMDescription("List of subject IDs to check upcoming airing events for")
         subjectIds: List<Long>,
-        @LLMDescription("Hours ahead to look into the future, default 72 hours")
         hoursAhead: Long = 72,
     ): String {
         val validSubjectIds = subjectIds.filter { it > 0 }

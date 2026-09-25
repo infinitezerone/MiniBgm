@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.core.ai
 
 import com.infinitezerone.minibgm.core.ai.di.aiModule
+import com.infinitezerone.minibgm.core.ai.tool.string
+import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -475,4 +477,154 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         val noMatch = "Random 429 error without delay"
         assertNull(extractRetryDelayMs(noMatch))
     }
+
+    @Test
+    fun execute_piAgent_does_not_halt_on_intermediate_text_when_tool_calls_present() =
+        runTest {
+            var requestCount = 0
+            val toolExecuted = mutableListOf<String>()
+
+            val engine =
+                MockEngine { request ->
+                    requestCount++
+                    val responseJson =
+                        if (requestCount == 1) {
+                            // Turn 1: Model outputs intermediate reasoning/introductory text AND tool calls
+                            """
+                            {
+                              "id": "chatcmpl-1",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "content": "让我先探测几个主流动漫聚合站，确认它们是否有可播放的源数据：",
+                                    "tool_calls": [
+                                      {
+                                        "id": "call_123",
+                                        "type": "function",
+                                        "function": {
+                                          "name": "mockSearch",
+                                          "arguments": "{\"query\":\"葬送的芙莉莲\"}"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        } else {
+                            // Turn 2: Model receives tool result and produces final answer
+                            """
+                            {
+                              "id": "chatcmpl-2",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "content": "检索完成，已成功解析到芙莉莲的有效播放地址！"
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        }
+
+                    respond(
+                        content = responseJson,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+
+            val mockTool =
+                com.infinitezerone.minibgm.core.ai.tool.bgmTool(
+                    name = "mockSearch",
+                    description = "Mock search tool",
+                ) { args ->
+                    val query = args.string("query")
+                    toolExecuted.add(query)
+                    """[{"url":"https://example.com/play/1","title":"芙莉莲 第1集"}]"""
+                }
+
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "test-key",
+                    model = "gpt-4o",
+                    provider = "openai",
+                ),
+            )
+
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                    agentRunner = { config, prompt, _ ->
+                        runPiAgent(
+                            wireClient = OpenAiWireClient(HttpClient(engine)),
+                            config = config,
+                            prompt = prompt,
+                            tools =
+                                com.infinitezerone.minibgm.core.ai.tool
+                                    .BgmToolRegistry(listOf(mockTool)),
+                        )
+                    },
+                )
+
+            val result = service.execute("帮我找葬送的芙莉莲")
+            assertIs<AppResult.Success<String>>(result)
+            assertEquals("检索完成，已成功解析到芙莉莲的有效播放地址！", result.data)
+            assertEquals(listOf("葬送的芙莉莲"), toolExecuted)
+            assertEquals(2, requestCount, "Agent should complete both turns without halting on intermediate text")
+        }
+
+    @Test
+    fun execute_piAgent_falls_back_to_reasoning_content_when_content_is_blank() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content =
+                            """
+                            {
+                              "id": "chatcmpl-think",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "content": "",
+                                    "reasoning_content": "DeepSeek-R1 / XingChen-4.0 思考过程得出的结论：这是一部优秀的番剧。"
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "test-key",
+                    model = "XingChenAGI/Xing4.0-29B",
+                    provider = "openai",
+                ),
+            )
+
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    httpClient = HttpClient(engine),
+                )
+
+            val result = service.execute("评价一下这部番剧")
+            assertIs<AppResult.Success<String>>(result)
+            assertEquals("DeepSeek-R1 / XingChen-4.0 思考过程得出的结论：这是一部优秀的番剧。", result.data)
+        }
 }

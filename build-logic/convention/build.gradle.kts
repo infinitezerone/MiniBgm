@@ -47,5 +47,9 @@ gradlePlugin {
             id = "minibgm.crap.check"
             implementationClass = "com.infinitezerone.minibgm.crap.CrapCheckPlugin"
         }
+        register("moduleBoundary") {
+            id = "minibgm.module.boundary"
+            implementationClass = "com.infinitezerone.minibgm.ModuleBoundaryConventionPlugin"
+        }
     }
 }

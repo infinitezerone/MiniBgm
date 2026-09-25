@@ -8,8 +8,10 @@ import kotlin.test.fail
 
 /**
  * 对应 AGENTS.md 核心架构规范与安全边界的确定性自动化测试：
- * 1. Feature 隔离：:feature:A 绝不能依赖 :feature:B
- * 2. 单一数据源：UI 层（:feature:*）严禁越级依赖或 import :core:network / :core:database / :core:datastore
+ * 1. Feature 隔离：:feature:A 绝不能依赖 :feature:B（依赖声明由根工程 ModuleBoundaryConventionPlugin
+ *    在配置期做依赖图断言，本测试不再扫描 build 脚本文本）
+ * 2. 单一数据源：UI 层（:feature:*）严禁 import :core:network / :core:database / :core:datastore 源码包
+ *    （依赖声明同样由配置期依赖图断言把关；import 级扫描保留，作为 :core:data 未来意外改用 api 泄漏的渐变报警器）
  * 3. 纯模型层：:core:model 为纯 Kotlin，严禁引入任何 android.* / androidx.* / UI 框架依赖
  * 4. MVI 单向流：所有 ViewModel 严禁对外暴露 MutableStateFlow，必须暴露不可变 StateFlow
  * 5. 凭据隔离：UserPreferences 绝不包含任何 token / 凭据字段（Token 必须走 AndroidKeyStore）
@@ -29,54 +31,15 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun feature_modules_never_depend_on_each_other() {
-        val featureDir = File(projectRoot, "feature")
-        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
-
-        val violations = mutableListOf<String>()
-        featureDir
-            .walkTopDown()
-            .filter { it.name == "build.gradle.kts" }
-            .forEach { buildScript ->
-                val moduleName = buildScript.parentFile?.name ?: "unknown"
-                val lines = buildScript.readLines()
-                lines.forEachIndexed { index, line ->
-                    if (line.contains("project(\":feature:") || line.contains("project(':feature:")) {
-                        violations.add("[$moduleName] build.gradle.kts:${index + 1} 依赖了其他 feature 模块 -> $line")
-                    }
-                }
-            }
-
-        if (violations.isNotEmpty()) {
-            fail("违反 Feature 隔离原则（:feature:A 绝不可依赖 :feature:B）：\n" + violations.joinToString("\n"))
-        }
-    }
-
-    @Test
-    fun feature_modules_never_depend_directly_on_network_or_database() {
+    fun feature_sources_never_import_network_or_database_packages() {
         val featureDir = File(projectRoot, "feature")
         assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
 
         val violations = mutableListOf<String>()
 
-        // 1. 检查 build.gradle.kts 依赖
-        featureDir
-            .walkTopDown()
-            .filter { it.name == "build.gradle.kts" }
-            .forEach { buildScript ->
-                val moduleName = buildScript.parentFile?.name ?: "unknown"
-                buildScript.readLines().forEachIndexed { index, line ->
-                    if (line.contains("project(\":core:network\")") ||
-                        line.contains("project(':core:network')") ||
-                        line.contains("project(\":core:database\")") ||
-                        line.contains("project(':core:database')")
-                    ) {
-                        violations.add("[$moduleName] build.gradle.kts:${index + 1} 越级依赖了底层库 -> $line")
-                    }
-                }
-            }
-
-        // 2. 检查源码 import（传输/存储框架 import 由 feature_sources_never_import_transport_or_storage_frameworks 单独负责）
+        // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）。
+        // 依赖当前是 implementation 封装的，这类 import 应当直接编译不过；
+        // 保留本检查是为了在 :core:data 未来意外改用 api 暴露底层库时第一时间报警
         val forbiddenPackagePrefixes =
             listOf(
                 "import com.infinitezerone.minibgm.core.network",
@@ -105,28 +68,13 @@ class ArchitectureRulesTest {
     }
 
     @Test
-    fun feature_modules_never_depend_directly_on_datastore() {
+    fun feature_sources_never_import_datastore() {
         val featureDir = File(projectRoot, "feature")
         assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
 
         val violations = mutableListOf<String>()
 
-        // 1. 检查 build.gradle.kts 依赖
-        featureDir
-            .walkTopDown()
-            .filter { it.name == "build.gradle.kts" }
-            .forEach { buildScript ->
-                val moduleName = buildScript.parentFile?.name ?: "unknown"
-                buildScript.readLines().forEachIndexed { index, line ->
-                    if (line.contains("project(\":core:datastore\")") ||
-                        line.contains("project(':core:datastore')")
-                    ) {
-                        violations.add("[$moduleName] build.gradle.kts:${index + 1} 越级依赖了 :core:datastore -> $line")
-                    }
-                }
-            }
-
-        // 2. 检查源码 import
+        // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）
         featureDir
             .walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -392,25 +340,21 @@ class ArchitectureRulesTest {
         assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
 
         val violations = mutableListOf<String>()
+        // 依赖声明层面（谁可以依赖 :core:ai）由配置期 ModuleBoundaryConventionPlugin 断言；
+        // 此处只保留源码 import 扫描作为纵深防御
         featureDir
             .walkTopDown()
-            .filter { it.parentFile?.name != "assistant" }
-            .forEach { file ->
+            .filter { file ->
+                file.isFile &&
+                    file.extension == "kt" &&
+                    file.relativeTo(projectRoot).path.replace(File.separatorChar, '/').let { !it.contains("/build/") } &&
+                    file.parentFile?.name != "assistant"
+            }.forEach { file ->
                 val relPath = file.relativeTo(projectRoot).path
-                when {
-                    file.name == "build.gradle.kts" ->
-                        file.readLines().forEachIndexed { index, line ->
-                            if (line.contains("project(\":core:ai\")") || line.contains("project(':core:ai')")) {
-                                violations.add("$relPath:${index + 1} 直接依赖 :core:ai -> $line")
-                            }
-                        }
-
-                    file.isFile && file.extension == "kt" && !relPath.contains("/build/") ->
-                        file.readLines().forEachIndexed { index, line ->
-                            if (line.contains("import com.infinitezerone.minibgm.core.ai.")) {
-                                violations.add("$relPath:${index + 1} 直接调用智能体 -> $line")
-                            }
-                        }
+                file.readLines().forEachIndexed { index, line ->
+                    if (line.contains("import com.infinitezerone.minibgm.core.ai.")) {
+                        violations.add("$relPath:${index + 1} 直接调用智能体 -> $line")
+                    }
                 }
             }
 

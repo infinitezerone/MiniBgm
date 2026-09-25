@@ -1,13 +1,17 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
+import com.infinitezerone.minibgm.core.ai.tool.string
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.WebSearchRepository
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 
 /**
  * 公网实时搜索与网页阅读工具集。
@@ -22,17 +26,60 @@ class WebSearchTools(
             prettyPrint = false
             ignoreUnknownKeys = true
         },
-) : ToolSet {
-    @Tool
-    @LLMDescription(
-        "Search the public World Wide Web for real-time information, online anime streaming websites, " +
-            "release schedules, discussions, or topics beyond the local Bangumi database. " +
-            "Returns a list of search hits with page titles, direct URLs, and text snippets.",
-    )
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "searchWeb",
+                description =
+                    "Search the public World Wide Web for real-time information, online anime streaming websites, " +
+                        "release schedules, discussions, or topics beyond the local Bangumi database. " +
+                        "Returns a list of search hits with page titles, direct URLs, and text snippets.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "query",
+                                    schemaProperty(
+                                        "string",
+                                        "Search query keywords (e.g. '葬送的芙莉莲 在线观看' or '动漫 在线播放 网站 推荐')",
+                                    ),
+                                )
+                                put(
+                                    "limit",
+                                    schemaProperty("integer", "Max number of search results to return (default 4, range 1..6)"),
+                                )
+                            },
+                        required = listOf("query"),
+                    ),
+            ) { args ->
+                searchWeb(
+                    query = args.string("query"),
+                    limit = args.int("limit", 4),
+                )
+            },
+            bgmTool(
+                name = "fetchWebContent",
+                description =
+                    "Fetch and read the plain readable text content of a specific web page URL. " +
+                        "Automatically strips HTML markup, scripts, and stylesheets. " +
+                        "Use this after searchWeb to examine the contents of a promising search result.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("url", schemaProperty("string", "The absolute HTTP/HTTPS URL of the web page to read"))
+                            },
+                        required = listOf("url"),
+                    ),
+            ) { args ->
+                fetchWebContent(args.string("url"))
+            },
+        )
+
     suspend fun searchWeb(
-        @LLMDescription("Search query keywords (e.g. '葬送的芙莉莲 在线观看' or '动漫 在线播放 网站 推荐')")
         query: String,
-        @LLMDescription("Max number of search results to return (default 4, range 1..6)")
         limit: Int = 4,
     ): String {
         val trimmed = query.trim()
@@ -60,16 +107,7 @@ class WebSearchTools(
         }
     }
 
-    @Tool
-    @LLMDescription(
-        "Fetch and read the plain readable text content of a specific web page URL. " +
-            "Automatically strips HTML markup, scripts, and stylesheets. " +
-            "Use this after searchWeb to examine the contents of a promising search result.",
-    )
-    suspend fun fetchWebContent(
-        @LLMDescription("The absolute HTTP/HTTPS URL of the web page to read")
-        url: String,
-    ): String {
+    suspend fun fetchWebContent(url: String): String {
         val trimmed = url.trim()
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             return "Invalid URL: must be an absolute http:// or https:// URL."
