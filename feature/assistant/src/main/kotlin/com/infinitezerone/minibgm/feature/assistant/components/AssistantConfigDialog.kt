@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -349,7 +350,9 @@ fun AssistantConfigDialog(
     // 远端拉取到的可用模型列表（与推荐模型区分）
     var availableRemoteModels by remember { mutableStateOf<List<String>>(emptyList()) }
     var showModelPickerSheet by remember { mutableStateOf(false) }
-    var isManualModelMode by remember { mutableStateOf(false) }
+    var isManualModelMode by remember {
+        mutableStateOf(initialProfile != null && initialProfile.config.model.isNotBlank())
+    }
 
     // 连通诊断状态
     var diagnosticState by remember { mutableStateOf<ConnectionDiagnosticState>(ConnectionDiagnosticState.Idle) }
@@ -372,7 +375,7 @@ fun AssistantConfigDialog(
                     "custom"
                 }
         availableRemoteModels = emptyList()
-        isManualModelMode = false
+        isManualModelMode = profile.config.model.isNotBlank()
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -400,6 +403,15 @@ fun AssistantConfigDialog(
                 is AppResult.Success -> {
                     val elapsed = System.currentTimeMillis() - startMs
                     availableRemoteModels = result.data
+                    if (result.data.isNotEmpty()) {
+                        val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
+                        if (model.isBlank() || model !in result.data) {
+                            val preferred = currentPreset?.popularModels?.firstOrNull { it in result.data } ?: result.data.first()
+                            model = preferred
+                        }
+                    } else {
+                        isManualModelMode = true
+                    }
                     diagnosticState =
                         ConnectionDiagnosticState.Success(
                             latencyMs = elapsed.coerceAtLeast(1),
@@ -701,56 +713,86 @@ fun AssistantConfigDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 2. 智能模型选择器：卡片选择器（默认）与自由手输模式无缝切换
+                // 2. 智能模型选择器：未检测出可用模型前默认隐藏，仅保留手动输入入口或待探测成功后动态展开
                 val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
                 val isTestingConnection = diagnosticState is ConnectionDiagnosticState.Testing
+                val isModelVisible = availableRemoteModels.isNotEmpty() || isManualModelMode
 
-                if (isManualModelMode) {
-                    OutlinedTextField(
-                        value = model,
-                        onValueChange = {
-                            model = it
-                            diagnosticState = ConnectionDiagnosticState.Idle
-                        },
-                        label = { Text("自定义模型名称 (Model)") },
-                        placeholder = { Text(defaultModelFor(selectedProvider)) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Outlined.SmartToy,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        },
-                        trailingIcon = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (model.isNotBlank()) {
-                                    IconButton(onClick = { model = "" }) {
-                                        Icon(Icons.Filled.Clear, contentDescription = "清空模型")
-                                    }
-                                }
-                                IconButton(onClick = { isManualModelMode = false }) {
+                if (!isModelVisible) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "💡 点击下方「测试连接」以探测并获取可用模型",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(
+                            onClick = { isManualModelMode = true },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        ) {
+                            Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("手动填写模型", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = isModelVisible) {
+                    Column {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (isManualModelMode) {
+                            OutlinedTextField(
+                                value = model,
+                                onValueChange = {
+                                    model = it
+                                    diagnosticState = ConnectionDiagnosticState.Idle
+                                },
+                                label = { Text("自定义模型名称 (Model)") },
+                                placeholder = { Text(defaultModelFor(selectedProvider)) },
+                                leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.List,
-                                        contentDescription = "返回选择器卡片",
+                                        imageVector = Icons.Outlined.SmartToy,
+                                        contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                     )
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    ModelSelectorCard(
-                        model = model,
-                        selectedProvider = selectedProvider,
-                        selectedPreset = currentPreset,
-                        remoteModelsCount = availableRemoteModels.size,
-                        isTesting = isTestingConnection,
-                        onOpenPicker = { showModelPickerSheet = true },
-                        onSyncRemote = { startConnectionTest() },
-                        onSwitchToManual = { isManualModelMode = true },
-                    )
+                                },
+                                trailingIcon = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (model.isNotBlank()) {
+                                            IconButton(onClick = { model = "" }) {
+                                                Icon(Icons.Filled.Clear, contentDescription = "清空模型")
+                                            }
+                                        }
+                                        if (availableRemoteModels.isNotEmpty()) {
+                                            IconButton(onClick = { isManualModelMode = false }) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                                    contentDescription = "返回选择器卡片",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            ModelSelectorCard(
+                                model = model,
+                                selectedProvider = selectedProvider,
+                                selectedPreset = currentPreset,
+                                remoteModelsCount = availableRemoteModels.size,
+                                isTesting = isTestingConnection,
+                                onOpenPicker = { showModelPickerSheet = true },
+                                onSyncRemote = { startConnectionTest() },
+                                onSwitchToManual = { isManualModelMode = true },
+                            )
+                        }
+                    }
                 }
 
                 // 3. 连通性测试诊断卡片（状态机展示）
