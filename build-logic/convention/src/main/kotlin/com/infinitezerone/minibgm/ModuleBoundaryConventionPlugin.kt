@@ -4,7 +4,9 @@ import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.configuration.BuildFeatures
 import org.gradle.kotlin.dsl.withType
+import javax.inject.Inject
 
 /**
  * 配置期模块边界校验（AGENTS.md 红线 1/2/9 的依赖图版）。
@@ -18,10 +20,20 @@ import org.gradle.kotlin.dsl.withType
  * - 检查对象是 Gradle 解析出的依赖对象，动态拼接的 project(":...") 无法逃逸；
  * - 覆盖所有 configuration（api / implementation / debugImplementation / 自定义容器）；
  * - 任何 ./gradlew 调用都自动执行，无需单独的验证任务，也不做配置期 resolve。
+ *
+ * 同时承担根工程接线职责：为所有模块注册 graphDump / graphUpdate 任务（README 依赖图）。
  */
-class ModuleBoundaryConventionPlugin : Plugin<Project> {
+abstract class ModuleBoundaryConventionPlugin : Plugin<Project> {
+    @get:Inject
+    abstract val buildFeatures: BuildFeatures
+
     override fun apply(root: Project) {
         check(root === root.rootProject) { "minibgm.module.boundary 只能应用在根工程" }
+
+        // Isolated Projects 下配置期遍历其他 Project 不被允许，与 NIA 的 RootPlugin 一样跳过
+        if (!buildFeatures.isolatedProjects.active.getOrElse(false)) {
+            root.subprojects { configureGraphTasks() }
+        }
 
         root.gradle.projectsEvaluated {
             val violations = buildList {

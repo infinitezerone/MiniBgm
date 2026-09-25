@@ -299,7 +299,7 @@ internal suspend fun runPiAgent(
             response.choices.firstOrNull()
                 ?: throw IllegalStateException("Model returned empty choices")
         val assistantMessage = choice.message
-        messages.add(assistantMessage)
+        messages.add(assistantMessage.copy(reasoningContent = null))
 
         val toolCalls = assistantMessage.toolCalls
         if (toolCalls.isNullOrEmpty()) {
@@ -321,7 +321,6 @@ internal suspend fun runPiAgent(
             messages.add(
                 WireChatMessage.tool(
                     toolCallId = call.id,
-                    name = funcName,
                     content = toolResult,
                 ),
             )

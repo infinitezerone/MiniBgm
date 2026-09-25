@@ -17,3 +17,53 @@
 1. 所有对外部网络请求必须通过本模块统一构建的 Client 发出，确保合规注入 `User-Agent` 与超时/错误重试策略。
 2. 业务 API 方法严禁暴露或接收 accessToken，所有鉴权均由底层 Auth 拦截器自动注入与透明刷新。
 3. 网络层仅负责协议通信与 DTO 序列化，不包含任何跨数据源聚合或排期仲裁逻辑（仲裁统一收口于 `:core:data`）。
+
+## Module dependency graph
+
+<!--region graph-->
+```mermaid
+---
+config:
+  layout: elk
+  elk:
+    nodePlacementStrategy: SIMPLE
+---
+graph TB
+  subgraph :core
+    direction TB
+    :core:common[common]:::kmp-library
+    :core:model[model]:::kmp-library
+    :core:network[network]:::kmp-library
+  end
+
+  :core:network -.->|commonMainImplementation| :core:common
+  :core:network -.->|commonMainImplementation| :core:model
+
+classDef android-application fill:#CAFFBF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-feature fill:#FFD6A5,stroke:#000,stroke-width:2px,color:#000;
+classDef kmp-library fill:#9BF6FF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-library fill:#BDB2FF,stroke:#000,stroke-width:2px,color:#000;
+classDef unknown fill:#FFADAD,stroke:#000,stroke-width:2px,color:#000;
+```
+
+<details><summary>📋 Graph legend</summary>
+
+```mermaid
+graph TB
+  application[application]:::android-application
+  feature[feature]:::android-feature
+  kmp library[kmp library]:::kmp-library
+  android library[android library]:::android-library
+
+  application -.-> feature
+  library --> kmp library
+
+classDef android-application fill:#CAFFBF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-feature fill:#FFD6A5,stroke:#000,stroke-width:2px,color:#000;
+classDef kmp-library fill:#9BF6FF,stroke:#000,stroke-width:2px,color:#000;
+classDef android-library fill:#BDB2FF,stroke:#000,stroke-width:2px,color:#000;
+classDef unknown fill:#FFADAD,stroke:#000,stroke-width:2px,color:#000;
+```
+
+</details>
+<!--endregion-->
