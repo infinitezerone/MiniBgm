@@ -223,6 +223,40 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         }
 
     @Test
+    fun execute_sanitizes_poisoned_history_from_prompt() =
+        runTest {
+            fakeSettingsRepository.setAiConfig(
+                AiConfig(
+                    endpoint = "https://api.openai.com/v1",
+                    apiKey = "dummy-key",
+                    model = "gpt-4o-mini",
+                    provider = "openai",
+                ),
+            )
+            var capturedPrompt = ""
+            val service =
+                DefaultBgmAiAgentService(
+                    settingsRepository = fakeSettingsRepository,
+                    agentRunner = { _, prompt ->
+                        capturedPrompt = prompt
+                        "ok"
+                    },
+                )
+            val dirtyHistory =
+                listOf(
+                    "assistant" to "<tool_call>searchWeb<param_key>query</param_key><param_value>test</param_value></tool_call>",
+                    "assistant" to "❌ 执行出错：AI 响应超时（180 秒）",
+                )
+            val result = service.execute("再次搜索", dirtyHistory)
+            assertIs<AppResult.Success<String>>(result)
+            // 毒化标签被全部清洗，若没有合法历史，直接以最新 prompt 发送
+            assertFalse(capturedPrompt.contains("<tool_call>"))
+            assertFalse(capturedPrompt.contains("<param_key>"))
+            assertFalse(capturedPrompt.contains("执行出错"))
+            assertEquals("再次搜索", capturedPrompt)
+        }
+
+    @Test
     fun execute_with_default_runner_handles_connection_failure() =
         runTest {
             fakeSettingsRepository.setAiConfig(

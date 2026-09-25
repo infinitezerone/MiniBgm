@@ -180,21 +180,29 @@ class DefaultBgmAiAgentService(
     private fun buildFinalPrompt(
         prompt: String,
         history: List<Pair<String, String>>,
-    ): String =
-        if (history.isEmpty()) {
-            prompt
-        } else {
-            buildString {
-                appendLine("以下是先前的会话历史记录（供参考上下文）：")
-                history.forEach { (role, content) ->
-                    val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
-                    appendLine("[$roleLabel] $content")
-                }
-                appendLine("---")
-                appendLine("用户当前最新输入：")
-                append(prompt)
+    ): String {
+        val cleanHistory =
+            history.filterNot { (_, content) ->
+                content.contains("<tool_call>") ||
+                    content.contains("<toolcall>") ||
+                    content.contains("<param_key>") ||
+                    content.contains("<paramkey>") ||
+                    content.startsWith("❌ 执行出错")
             }
+        if (cleanHistory.isEmpty()) {
+            return prompt
         }
+        return buildString {
+            appendLine("以下是先前的会话历史记录（供参考上下文）：")
+            cleanHistory.forEach { (role, content) ->
+                val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
+                appendLine("[$roleLabel] $content")
+            }
+            appendLine("---")
+            appendLine("用户当前最新输入：")
+            append(prompt)
+        }
+    }
 
     override suspend fun fetchAvailableModels(
         endpoint: String?,
