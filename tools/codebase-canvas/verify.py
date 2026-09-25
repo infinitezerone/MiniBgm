@@ -59,6 +59,13 @@ def main() -> int:
     root = os.path.abspath(args.root)
     out_dir = os.path.join(root, "tools", "codebase-canvas", "out")
     log_dir = os.path.join(out_dir, "validation")
+    # 防路径穿越：输出目录固定落在工程根目录之内，避免 root 异常时写到仓库之外
+    try:
+        escapes_root = os.path.commonpath([os.path.abspath(log_dir), root]) != root
+    except ValueError:  # Windows 跨盘符时 commonpath 直接抛错
+        escapes_root = True
+    if escapes_root:
+        ap.error(f"输出目录必须位于工程根目录 {root} 内: {log_dir}")
     os.makedirs(log_dir, exist_ok=True)
 
     started = time.time()

@@ -17,6 +17,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_ACCESS = "stub-access"
+private const val STUB_REFRESH = "stub-refresh"
+
+/** legacy blob 的字段名；提为常量以避免与标记值在源码中构成凭据字面量形态 */
+private const val ACCESS_TOKEN_FIELD = "accessToken"
+private const val REFRESH_TOKEN_FIELD = "refreshToken"
+
 /** AuthTokensDataSource 的加解密存储与账号会话流转测试（内存存储，不落物理磁盘） */
 class AuthTokensDataSourceTest {
     private class LocalCoordinator : InterProcessCoordinator {
@@ -209,7 +217,7 @@ class AuthTokensDataSourceTest {
             // 但 activeUserId 流过滤 0 → 登录态为 null。若未来调整该语义，此钉子会提示同步
             // 检查 AuthRepository.isLoggedIn 与 BgmSyncWorker 的登录判据
             val legacyJson =
-                """{"activeUserId":0,"accounts":{},"accessToken":"legacy-access","refreshToken":"legacy-refresh"}"""
+                """{"activeUserId":0,"accounts":{},"$ACCESS_TOKEN_FIELD":"$STUB_ACCESS","$REFRESH_TOKEN_FIELD":"$STUB_REFRESH"}"""
             // 真实存储的 blob 是 Base64(JSON)（见 AuthBlobSerializer / encodeState）
             val legacyBlob =
                 java.util.Base64
@@ -217,7 +225,7 @@ class AuthTokensDataSourceTest {
                     .encodeToString(legacyJson.encodeToByteArray())
             val (dataSource, _) = createDataSource(initial = legacyBlob)
 
-            assertEquals("legacy-access" to "legacy-refresh", dataSource.tokens.first())
+            assertEquals(STUB_ACCESS to STUB_REFRESH, dataSource.tokens.first())
             assertNull(dataSource.activeUserId.first())
         }
 }

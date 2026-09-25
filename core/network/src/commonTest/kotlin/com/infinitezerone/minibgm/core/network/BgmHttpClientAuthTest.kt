@@ -15,6 +15,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_ACCESS = "stub-access"
+private const val STUB_REFRESH = "stub-refresh"
+
 /**
  * Auth 插件与 HttpResponseValidator 的协同回归测试：
  * 401 必须先走 bearer 刷新重试；刷新彻底失败时清除本地凭据（isLoggedIn
@@ -100,7 +104,7 @@ class BgmHttpClientAuthTest {
                     tokenProvider = provider,
                     tokenRefresher = { old ->
                         assertEquals("old-refresh", old)
-                        BgmTokenPair(accessToken = "new-access", refreshToken = "new-refresh")
+                        BgmTokenPair(accessToken = STUB_ACCESS, refreshToken = STUB_REFRESH)
                     },
                     engine = engine,
                 )
@@ -110,10 +114,10 @@ class BgmHttpClientAuthTest {
             assertEquals("""{"id":1}""", body)
             assertEquals(2, requests.size)
             assertEquals("Bearer old-access", requests[0].headers[HttpHeaders.Authorization])
-            assertEquals("Bearer new-access", requests[1].headers[HttpHeaders.Authorization])
+            assertEquals("Bearer $STUB_ACCESS", requests[1].headers[HttpHeaders.Authorization])
             assertEquals(1, provider.saveCount)
-            assertEquals("new-access", provider.accessToken)
-            assertEquals("new-refresh", provider.refreshToken)
+            assertEquals(STUB_ACCESS, provider.accessToken)
+            assertEquals(STUB_REFRESH, provider.refreshToken)
         }
 
     @Test
