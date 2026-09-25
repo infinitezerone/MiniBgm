@@ -227,4 +227,40 @@ class BgmHttpClientAuthTest {
             assertEquals("""{"id":1}""", body)
             assertEquals(2, attempts)
         }
+
+    @Test
+    fun `createBaseClient 遇到 401 正常返回响应且不会触发 Token 清除或抛出登出异常`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = """{"error":"unauthorized"}""",
+                        status = HttpStatusCode.Unauthorized,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+            val client = BgmHttpClient.createBaseClient(engine = engine)
+            val response = client.get("https://example.com/api")
+            assertEquals(HttpStatusCode.Unauthorized, response.status)
+            assertEquals("""{"error":"unauthorized"}""", response.bodyAsText())
+        }
+
+    @Test
+    fun `createBaseClient 在 500 异常时自动重试`() =
+        runTest {
+            var attempts = 0
+            val engine =
+                MockEngine {
+                    attempts++
+                    if (attempts == 1) {
+                        respond("", HttpStatusCode.InternalServerError)
+                    } else {
+                        respond("""{"ok":true}""", HttpStatusCode.OK)
+                    }
+                }
+            val client = BgmHttpClient.createBaseClient(engine = engine)
+            val response = client.get("https://example.com/api")
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertEquals(2, attempts)
+        }
 }

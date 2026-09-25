@@ -37,6 +37,71 @@ object BgmHttpClient {
         }
 
     /**
+     * 为 HttpClient 安装通用的底层基础网络插件：
+     * - [ContentEncoding]：自动透明处理 gzip / deflate 响应压缩流，防止数据截断；
+     * - [HttpRequestRetry]：针对网络抖动、偶发中断及服务端 5xx 进行指数退避重试；
+     * - [Logging]：统一受控的请求日志，Debug 记录生命周期，Release 静默。
+     */
+    fun HttpClientConfig<*>.applyBaseNetworkConfig(
+        enableLogging: Boolean = false,
+        loggerTag: String = "Bgm/Network",
+    ) {
+        install(ContentEncoding) {
+            gzip()
+            deflate()
+        }
+        install(HttpRequestRetry) {
+            maxRetries = 2
+            retryIf { _, response ->
+                response.status == HttpStatusCode.TooManyRequests || response.status.value in 500..599
+            }
+            retryOnExceptionIf { _, cause ->
+                cause !is CancellationException
+            }
+            exponentialDelay(
+                base = 2.0,
+                maxDelayMs = 15000,
+                randomizationMs = 500,
+            )
+        }
+        val networkLogger = bgmLogger(loggerTag)
+        install(Logging) {
+            logger =
+                object : Logger {
+                    override fun log(message: String) {
+                        networkLogger.d { message }
+                    }
+                }
+            level = if (enableLogging) LogLevel.INFO else LogLevel.NONE
+        }
+    }
+
+    /**
+     * 创建轻量级纯净 Base HttpClient，具备完整的解压、重试与日志基础能力，
+     * 不附带 Bangumi 业务特定的 Bearer Auth 或 HttpResponseValidator。
+     */
+    fun createBaseClient(
+        engine: HttpClientEngine? = null,
+        enableLogging: Boolean = false,
+        userAgent: String? = null,
+        loggerTag: String = "Bgm/Network",
+        block: (HttpClientConfig<*>.() -> Unit)? = null,
+    ): HttpClient {
+        val config: HttpClientConfig<*>.() -> Unit = {
+            applyBaseNetworkConfig(enableLogging = enableLogging, loggerTag = loggerTag)
+            if (!userAgent.isNullOrBlank()) {
+                install(DefaultRequest) {
+                    header(HttpHeaders.UserAgent, userAgent)
+                }
+            }
+            block?.invoke(this)
+        }
+        return engine?.let {
+            HttpClient(it, config)
+        } ?: HttpClient(CIO, config)
+    }
+
+    /**
      * 构建 Ktor client。
      *
      * @param tokenRefresher 为 null 时构建"token client"：不带 Auth 插件，
@@ -63,38 +128,11 @@ object BgmHttpClient {
                 json(jsonConfig)
             }
             install(HttpCache)
-            install(ContentEncoding) {
-                gzip()
-                deflate()
-            }
+            applyBaseNetworkConfig(enableLogging = enableLogging, loggerTag = "Bgm/Network")
             install(HttpTimeout) {
                 requestTimeoutMillis = 15000
                 connectTimeoutMillis = 15000
                 socketTimeoutMillis = 15000
-            }
-            install(HttpRequestRetry) {
-                maxRetries = 2
-                retryIf { _, response ->
-                    response.status == HttpStatusCode.TooManyRequests || response.status.value in 500..599
-                }
-                retryOnExceptionIf { _, cause ->
-                    cause !is CancellationException
-                }
-                exponentialDelay(
-                    base = 2.0,
-                    maxDelayMs = 15000,
-                    randomizationMs = 500,
-                )
-            }
-            val networkLogger = bgmLogger("Bgm/Network")
-            install(Logging) {
-                logger =
-                    object : Logger {
-                        override fun log(message: String) {
-                            networkLogger.d { message }
-                        }
-                    }
-                level = if (enableLogging) LogLevel.INFO else LogLevel.NONE
             }
             install(DefaultRequest) {
                 header(HttpHeaders.UserAgent, userAgent)

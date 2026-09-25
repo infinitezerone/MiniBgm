@@ -16,6 +16,8 @@ import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.BilibiliServiceImpl
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.PageFetchServiceImpl
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.engine.cio.CIO
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -27,16 +29,18 @@ import org.koin.dsl.module
 fun networkModule(
     enableNetworkLogging: Boolean = false,
     userAgent: String,
+    engine: HttpClientEngine? = null,
 ): Module =
     module {
         single { BgmAuthConfig() }
+        single<HttpClientEngine> { engine ?: CIO.create() }
 
         // 未鉴权独立 client（无 Auth 插件），专供访问无需 Bearer Token 的外部静态 CDN 资源与 Worker 兑换/刷新
         single(named("unauthenticated")) {
-            BgmHttpClient.create(
-                userAgent = userAgent,
-                tokenProvider = get(),
+            BgmHttpClient.createBaseClient(
+                engine = get(),
                 enableLogging = enableNetworkLogging,
+                userAgent = userAgent,
             )
         }
 
@@ -50,6 +54,7 @@ fun networkModule(
                 userAgent = userAgent,
                 tokenProvider = get(),
                 enableLogging = enableNetworkLogging,
+                engine = get(),
                 // 凭据被 OAuth 拒绝（invalid_grant 等 4xx）降级为 null：client 据此
                 // 清除本地凭据（isLoggedIn 随之翻转，自动登出闭环）并沿用原始 401
                 // 上抛 Unauthorized；5xx/网络异常等瞬时故障原样上抛以免误登出

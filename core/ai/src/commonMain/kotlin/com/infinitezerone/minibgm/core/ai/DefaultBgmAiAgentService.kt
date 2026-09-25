@@ -16,17 +16,6 @@ import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.HttpHeaders
-import io.ktor.http.isSuccess
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
@@ -84,27 +73,8 @@ class DefaultBgmAiAgentService(
 
     private val catalogLogger = bgmLogger("Bgm/AiHttp")
 
-    private val activeHttpClient: HttpClient by lazy {
-        httpClient ?: HttpClient {
-            install(Logging) {
-                logger =
-                    object : Logger {
-                        override fun log(message: String) {
-                            catalogLogger.d { message }
-                        }
-                    }
-                level = LogLevel.INFO
-            }
-            install(HttpTimeout) {
-                requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS
-                connectTimeoutMillis = 15_000
-                socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS
-            }
-        }
-    }
-
     private val activeWireClient: OpenAiWireClient by lazy {
-        wireClient ?: OpenAiWireClient(activeHttpClient)
+        wireClient ?: httpClient?.let { OpenAiWireClient(it) } ?: OpenAiWireClient()
     }
 
     val toolRegistry: BgmToolRegistry =
@@ -227,25 +197,8 @@ class DefaultBgmAiAgentService(
         catalogLogger.i { "Fetching models from: $modelsUrl (provider: ${target.provider})" }
 
         return try {
-            val response: HttpResponse =
-                activeHttpClient.get(modelsUrl) {
-                    header(HttpHeaders.UserAgent, "MiniBgm/1.0 (Android)")
-                    if (target.apiKey.isNotBlank()) {
-                        header(HttpHeaders.Authorization, "Bearer ${target.apiKey}")
-                    }
-                    if (target.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) && target.apiKey.isNotBlank()) {
-                        parameter("key", target.apiKey)
-                    }
-                }
-            if (!response.status.isSuccess()) {
-                val rawBody = runCatching { response.body<String>() }.getOrNull().orEmpty()
-                val innerMsg = extractJsonErrorMessage(rawBody)
-                val fallbackMsg = catalogHttpErrorMessage(response.status.value)
-                val errorMsg = if (!innerMsg.isNullOrBlank()) "拉取模型列表失败（HTTP ${response.status.value}）：$innerMsg" else fallbackMsg
-                catalogLogger.w { "Failed to fetch models: HTTP ${response.status.value}, url: $modelsUrl, body: $rawBody" }
-                return AppResult.Error(IllegalStateException("HTTP ${response.status.value}"), errorMsg)
-            }
-            val models = parseModelsBody(response.body<String>())
+            val responseText = activeWireClient.fetchModelsRaw(target.endpoint, target.apiKey, target.provider)
+            val models = parseModelsBody(responseText)
             if (models != null) {
                 catalogLogger.i { "Successfully fetched ${models.size} models from $modelsUrl" }
                 AppResult.Success(models)
