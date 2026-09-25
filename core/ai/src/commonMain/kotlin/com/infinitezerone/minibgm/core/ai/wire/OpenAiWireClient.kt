@@ -1,21 +1,30 @@
 package com.infinitezerone.minibgm.core.ai.wire
 
+import com.infinitezerone.minibgm.core.ai.buildModelsUrl
 import com.infinitezerone.minibgm.core.ai.resolveApiBase
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.model.AiConfig
 import io.ktor.client.HttpClient
+import io.ktor.client.HttpClientConfig
+import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 /**
@@ -31,44 +40,65 @@ class OpenAiWireClient(
             explicitNulls = false
         },
 ) {
+    constructor(
+        engine: HttpClientEngine,
+        json: Json =
+            Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+                encodeDefaults = true
+                explicitNulls = false
+            },
+    ) : this(
+        httpClient =
+            HttpClient(engine) {
+                applyBaseAiConfig()
+            },
+        json = json,
+    )
+
     companion object {
         private const val TIMEOUT_MS = 120_000L
 
+        internal fun HttpClientConfig<*>.applyBaseAiConfig() {
+            val httpLogger = bgmLogger("Bgm/AiHttp")
+            install(Logging) {
+                logger =
+                    object : Logger {
+                        override fun log(message: String) {
+                            httpLogger.d { message }
+                        }
+                    }
+                level = LogLevel.INFO
+            }
+            install(ContentEncoding) {
+                gzip()
+                deflate()
+            }
+            install(HttpRequestRetry) {
+                maxRetries = 2
+                retryIf { _, response ->
+                    response.status.value in 500..599
+                }
+                retryOnExceptionIf { _, cause ->
+                    cause !is CancellationException
+                }
+                exponentialDelay(
+                    base = 2.0,
+                    maxDelayMs = 10_000,
+                    randomizationMs = 500,
+                )
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = TIMEOUT_MS
+                connectTimeoutMillis = 15_000
+                socketTimeoutMillis = TIMEOUT_MS
+            }
+        }
+
         val defaultHttpClient: HttpClient by lazy {
             HttpClient(CIO) {
-                val httpLogger = bgmLogger("Bgm/AiHttp")
-                install(Logging) {
-                    logger =
-                        object : Logger {
-                            override fun log(message: String) {
-                                httpLogger.d { message }
-                            }
-                        }
-                    level = LogLevel.INFO
-                }
-                install(io.ktor.client.plugins.compression.ContentEncoding) {
-                    gzip()
-                    deflate()
-                }
-                install(io.ktor.client.plugins.HttpRequestRetry) {
-                    maxRetries = 2
-                    retryIf { _, response ->
-                        response.status.value in 500..599
-                    }
-                    retryOnExceptionIf { _, cause ->
-                        cause !is kotlinx.coroutines.CancellationException
-                    }
-                    exponentialDelay(
-                        base = 2.0,
-                        maxDelayMs = 10_000,
-                        randomizationMs = 500,
-                    )
-                }
-                install(HttpTimeout) {
-                    requestTimeoutMillis = TIMEOUT_MS
-                    connectTimeoutMillis = 15_000
-                    socketTimeoutMillis = TIMEOUT_MS
-                }
+                applyBaseAiConfig()
             }
         }
     }
@@ -95,6 +125,29 @@ class OpenAiWireClient(
         }
 
         return json.decodeFromString(WireChatResponse.serializer(), responseText)
+    }
+
+    suspend fun fetchModelsRaw(
+        endpoint: String,
+        apiKey: String,
+        provider: String,
+    ): String {
+        val modelsUrl = buildModelsUrl(endpoint, provider)
+        val response =
+            httpClient.get(modelsUrl) {
+                header(HttpHeaders.UserAgent, "MiniBgm/1.0 (Android)")
+                if (apiKey.isNotBlank()) {
+                    header(HttpHeaders.Authorization, "Bearer ${apiKey.trim()}")
+                }
+                if (provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) && apiKey.isNotBlank()) {
+                    parameter("key", apiKey.trim())
+                }
+            }
+        val responseText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("HTTP ${response.status.value}: $responseText")
+        }
+        return responseText
     }
 
     internal fun buildChatCompletionsUrl(

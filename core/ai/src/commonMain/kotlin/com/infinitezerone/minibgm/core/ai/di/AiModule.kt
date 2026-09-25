@@ -58,6 +58,17 @@ val aiModule =
             )
         }
 
+        single {
+            val engine = getOrNull<io.ktor.client.engine.HttpClientEngine>()
+            if (engine != null) {
+                com.infinitezerone.minibgm.core.ai.wire
+                    .OpenAiWireClient(engine)
+            } else {
+                com.infinitezerone.minibgm.core.ai.wire
+                    .OpenAiWireClient()
+            }
+        }
+
         single<BgmAiAgentService> {
             DefaultBgmAiAgentService(
                 settingsRepository = get(),
@@ -71,6 +82,7 @@ val aiModule =
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
                 playableSourcesStore = getOrNull(),
+                wireClient = getOrNull(),
             )
         }
     }

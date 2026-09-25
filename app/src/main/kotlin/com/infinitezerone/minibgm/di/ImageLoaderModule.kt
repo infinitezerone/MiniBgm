@@ -10,8 +10,8 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.HttpTimeout
@@ -24,7 +24,11 @@ import org.koin.dsl.module
 val imageLoaderModule =
     module {
         single<HttpClient>(named("imageHttpClient")) {
-            HttpClient(CIO) {
+            BgmHttpClient.createBaseClient(
+                engine = getOrNull(),
+                userAgent = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)",
+                loggerTag = "Bgm/ImageHttp",
+            ) {
                 install(HttpRedirect)
                 install(HttpTimeout) {
                     connectTimeoutMillis = 10_000
@@ -32,10 +36,6 @@ val imageLoaderModule =
                     requestTimeoutMillis = 30_000
                 }
                 install(DefaultRequest) {
-                    header(
-                        HttpHeaders.UserAgent,
-                        "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)",
-                    )
                     header("Referer", "https://bgm.tv/")
                     header(HttpHeaders.Accept, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
                 }
