@@ -628,12 +628,11 @@ fun AssistantConfigDialog(
                     onValueChange = { profileName = it },
                     label = { Text("方案名称") },
                     placeholder = { Text(defaultProfileName(selectedProvider, model, endpoint)) },
-                    supportingText = { Text("保存时按此名称入池；与已有方案同名则自动覆盖") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // 端点 Base URL 输入框
                 OutlinedTextField(
@@ -649,12 +648,6 @@ fun AssistantConfigDialog(
                     },
                     label = { Text("服务地址 (Base URL)") },
                     placeholder = { Text("例如 https://api.deepseek.com/v1") },
-                    supportingText = {
-                        Text(
-                            text = "匹配协议：${providerDisplayName(selectedProvider)}",
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    },
                     trailingIcon = {
                         if (endpoint.isNotBlank()) {
                             IconButton(onClick = {
@@ -671,7 +664,7 @@ fun AssistantConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // API Key 输入框（集成安全开关与剪贴板一键粘贴）
                 OutlinedTextField(
@@ -682,13 +675,6 @@ fun AssistantConfigDialog(
                     },
                     label = { Text("API Key / 访问凭据") },
                     placeholder = { Text(if (selectedProvider == AiConfig.PROVIDER_OLLAMA) "本地 Ollama 免密钥" else "填入 API Key") },
-                    supportingText = {
-                        if (selectedProvider != AiConfig.PROVIDER_OLLAMA && apiKey.isBlank()) {
-                            Text("使用云端模型服务需配置 API 密钥", color = MaterialTheme.colorScheme.error)
-                        } else if (selectedProvider == AiConfig.PROVIDER_OLLAMA) {
-                            Text("私有部署环境可保持留空", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    },
                     singleLine = true,
                     visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -718,22 +704,10 @@ fun AssistantConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 2. 智能模型选择器：未检测出可用模型前默认隐藏，仅保留手动输入入口或待探测成功后动态展开
                 // 2. 智能模型选择卡片：未探测到可用模型前隐藏，测试连通后自动展开
                 val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
                 val isTestingConnection = diagnosticState is ConnectionDiagnosticState.Testing
                 val isModelVisible = availableRemoteModels.isNotEmpty() || isModelConfigured
-
-                if (!isModelVisible) {
-                    Text(
-                        text = "💡 点击下方「测试连接」以探测并获取可用模型",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
 
                 AnimatedVisibility(visible = isModelVisible) {
                     Column {
