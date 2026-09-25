@@ -13,16 +13,16 @@ import kotlin.test.assertTrue
 
 class WebSearchServiceTest {
     private fun createService(
-        html: String,
+        jsonContent: String,
         status: HttpStatusCode = HttpStatusCode.OK,
     ): WebSearchService =
         WebSearchServiceImpl(
             HttpClient(
                 MockEngine { _ ->
                     respond(
-                        content = html,
+                        content = jsonContent,
                         status = status,
-                        headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
                     )
                 },
             ),
@@ -31,89 +31,13 @@ class WebSearchServiceTest {
     @Test
     fun search_emptyQuery_returnsEmptyList() =
         runTest {
-            val service = createService("<html></html>")
+            val service = createService("{}")
             val results = service.search("")
             assertTrue(results.isEmpty())
         }
 
     @Test
-    fun search_parsesBingAlgoItems() =
-        runTest {
-            val sampleHtml =
-                """
-                <ol id="b_results">
-                    <li class="b_algo">
-                        <h2><a target="_blank" href="https://example.com/anime/1"><strong>葬送的芙莉莲</strong> 在线播放 - 示例站</a></h2>
-                        <div class="b_caption"><p>这是关于葬送的芙莉莲的剧情简介与在线观看说明&ensp;&amp;&ensp;更多信息</p></div>
-                    </li>
-                    <li class="b_algo">
-                        <h2><a target="_blank" href="https://anime.tv/watch/2">第二部动漫 - 番组</a></h2>
-                        <div class="b_caption"><p>第二部动漫的摘要描述</p></div>
-                    </li>
-                </ol>
-                """.trimIndent()
-
-            val service = createService(sampleHtml)
-            val results = service.search("葬送的芙莉莲", limit = 10)
-
-            assertEquals(2, results.size)
-            assertEquals("葬送的芙莉莲 在线播放 - 示例站", results[0].title)
-            assertEquals("https://example.com/anime/1", results[0].url)
-            assertTrue(results[0].snippet.contains("这是关于葬送的芙莉莲的剧情简介"))
-            assertTrue(results[0].snippet.contains("&"))
-
-            assertEquals("第二部动漫 - 番组", results[1].title)
-            assertEquals("https://anime.tv/watch/2", results[1].url)
-        }
-
-    @Test
-    fun search_httpError_returnsEmptyList() =
-        runTest {
-            val service = createService("", status = HttpStatusCode.InternalServerError)
-            val results = service.search("test")
-            assertTrue(results.isEmpty())
-        }
-
-    @Test
-    fun search_captchaOrChallengePage_triggersWatchdog_andReturnsEmptyList() =
-        runTest {
-            val captchaHtml =
-                """
-                <!DOCTYPE html>
-                <html>
-                <head><title>Bot Detection / Challenge</title></head>
-                <body>
-                    <div id="captcha-container">
-                        <p>Our systems have detected unusual traffic from your computer network.</p>
-                        <form id="challenge-form">Please complete the security verification</form>
-                    </div>
-                </body>
-                </html>
-                """.trimIndent()
-            val service = createService(captchaHtml)
-            val results = service.search("芙莉莲")
-            assertTrue(results.isEmpty())
-        }
-
-    @Test
-    fun search_domLayoutMismatch_triggersWatchdog_andReturnsEmptyList() =
-        runTest {
-            val mismatchedDomHtml =
-                buildString {
-                    append("<!DOCTYPE html><html><head><title>Bing Search</title></head><body>")
-                    append("<div class=\"new_redesigned_search_container\">")
-                    repeat(100) {
-                        append("<div class=\"new_item_class\"><h3>Some Title $it</h3><p>Description $it</p></div>")
-                    }
-                    append("</div></body></html>")
-                }
-            val service = createService(mismatchedDomHtml)
-            val results = service.search("芙莉莲")
-            assertTrue(results.isEmpty())
-        }
-
-    @Test
-    fun search_gitHubTargetedQuery_returnsParsedGitHubResults() =
+    fun search_success_parsesGitHubRepositoriesJson() =
         runTest {
             val ghJson =
                 """
@@ -121,108 +45,60 @@ class WebSearchServiceTest {
                     "total_count": 2,
                     "items": [
                         {
-                            "name": "iptv-api",
-                            "full_name": "Guovin/iptv-api",
-                            "html_url": "https://github.com/Guovin/iptv-api",
-                            "description": "高质量直播与点播源配置",
-                            "stargazers_count": 25281
+                            "name": "minibgm",
+                            "full_name": "infinitezerone/minibgm",
+                            "html_url": "https://github.com/infinitezerone/minibgm",
+                            "description": "Modern Bangumi Android Client",
+                            "stargazers_count": 520
                         },
                         {
-                            "name": "bug",
-                            "full_name": "liu673cn/bug",
-                            "html_url": "https://github.com/liu673cn/bug",
-                            "description": "TVBox 接口与配置",
-                            "stargazers_count": 10347
+                            "name": "bangumi-data",
+                            "full_name": "bangumi-data/bangumi-data",
+                            "html_url": "https://github.com/bangumi-data/bangumi-data",
+                            "description": "Anime metadata collection",
+                            "stargazers_count": 3200
                         }
                     ]
                 }
                 """.trimIndent()
 
-            val service =
-                WebSearchServiceImpl(
-                    HttpClient(
-                        MockEngine { request ->
-                            if (request.url.host == "api.github.com") {
-                                respond(
-                                    content = ghJson,
-                                    status = HttpStatusCode.OK,
-                                    headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
-                                )
-                            } else {
-                                respond(
-                                    content = "<html></html>",
-                                    status = HttpStatusCode.OK,
-                                    headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
-                                )
-                            }
-                        },
-                    ),
-                )
+            val service = createService(ghJson)
+            val results = service.search("bangumi", limit = 5)
 
-            val results = service.search("github bangumi", limit = 5)
             assertEquals(2, results.size)
-            assertEquals("Guovin/iptv-api (⭐ 25281)", results[0].title)
-            assertEquals("https://github.com/Guovin/iptv-api", results[0].url)
-            assertTrue(results[0].snippet.contains("高质量直播与点播源配置"))
-            assertTrue(results[0].snippet.contains("25281"))
+            assertEquals("infinitezerone/minibgm (⭐ 520)", results[0].title)
+            assertEquals("https://github.com/infinitezerone/minibgm", results[0].url)
+            assertTrue(results[0].snippet.contains("Modern Bangumi Android Client"))
+            assertTrue(results[0].snippet.contains("520"))
 
-            assertEquals("liu673cn/bug (⭐ 10347)", results[1].title)
-            assertEquals("https://github.com/liu673cn/bug", results[1].url)
+            assertEquals("bangumi-data/bangumi-data (⭐ 3200)", results[1].title)
+            assertEquals("https://github.com/bangumi-data/bangumi-data", results[1].url)
         }
 
     @Test
-    fun search_gitHubApiFails_fallsBackToBing() =
+    fun search_httpError_returnsEmptyList() =
         runTest {
-            val bingHtml =
-                """
-                <ol id="b_results">
-                    <li class="b_algo">
-                        <h2><a target="_blank" href="https://github.com/fallback/repo">Fallback Repo - Bing</a></h2>
-                        <div class="b_caption"><p>Fallback description</p></div>
-                    </li>
-                </ol>
-                """.trimIndent()
-
-            val service =
-                WebSearchServiceImpl(
-                    HttpClient(
-                        MockEngine { request ->
-                            if (request.url.host == "api.github.com") {
-                                respond(
-                                    content = """{"message": "API rate limit exceeded"}""",
-                                    status = HttpStatusCode.Forbidden,
-                                    headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
-                                )
-                            } else {
-                                respond(
-                                    content = bingHtml,
-                                    status = HttpStatusCode.OK,
-                                    headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
-                                )
-                            }
-                        },
-                    ),
-                )
-
-            val results = service.search("site:github.com fallback")
-            assertEquals(1, results.size)
-            assertEquals("Fallback Repo - Bing", results[0].title)
-            assertEquals("https://github.com/fallback/repo", results[0].url)
+            val service = createService("""{"message": "rate limit"}""", status = HttpStatusCode.Forbidden)
+            val results = service.search("test")
+            assertTrue(results.isEmpty())
         }
 
     @Test
-    fun isGitHubTargeted_and_extractGitHubQuery() {
-        val service = WebSearchServiceImpl(HttpClient(MockEngine { respond("") }))
+    fun search_malformedJson_returnsEmptyList() =
+        runTest {
+            val service = createService("not valid json")
+            val results = service.search("test")
+            assertTrue(results.isEmpty())
+        }
 
-        assertTrue(service.isGitHubTargeted("site:github.com bangumi-data"))
-        assertTrue(service.isGitHubTargeted("github anime"))
-        assertTrue(service.isGitHubTargeted("https://github.com/bangumi/api"))
-        kotlin.test.assertFalse(service.isGitHubTargeted("葬送的芙莉莲 播出时间"))
-        kotlin.test.assertFalse(service.isGitHubTargeted("动漫 推荐"))
+    @Test
+    fun extractGitHubQuery_cleansQueryDirectives() {
+        val service = WebSearchServiceImpl(HttpClient(MockEngine { respond("") }))
 
         assertEquals("bangumi-data", service.extractGitHubQuery("site:github.com bangumi-data"))
         assertEquals("anime project", service.extractGitHubQuery("github anime project"))
         assertEquals("", service.extractGitHubQuery("site:github.com"))
         assertEquals("tool", service.extractGitHubQuery("github.com tool"))
+        assertEquals("media-player", service.extractGitHubQuery("media-player"))
     }
 }

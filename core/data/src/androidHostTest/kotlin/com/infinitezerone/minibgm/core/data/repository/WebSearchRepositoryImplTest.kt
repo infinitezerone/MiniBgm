@@ -47,7 +47,7 @@ class WebSearchRepositoryImplTest {
     }
 
     @Test
-    fun searchWeb_success_returnsList() =
+    fun searchGitHub_success_returnsList() =
         runTest {
             val searchService =
                 FakeWebSearchService().apply {
@@ -61,7 +61,7 @@ class WebSearchRepositoryImplTest {
                         )
                 }
             val repo = WebSearchRepositoryImpl(searchService, FakePageFetchService())
-            val result = repo.searchWeb("test")
+            val result = repo.searchGitHub("test")
 
             assertIs<AppResult.Success<List<WebSearchResult>>>(result)
             assertEquals(1, result.data.size)
@@ -69,11 +69,11 @@ class WebSearchRepositoryImplTest {
         }
 
     @Test
-    fun searchWeb_failure_returnsError() =
+    fun searchGitHub_failure_returnsError() =
         runTest {
             val searchService = FakeWebSearchService().apply { shouldThrow = true }
             val repo = WebSearchRepositoryImpl(searchService, FakePageFetchService())
-            val result = repo.searchWeb("test")
+            val result = repo.searchGitHub("test")
 
             assertIs<AppResult.Error>(result)
             assertTrue(result.message.contains("Network failure"))
