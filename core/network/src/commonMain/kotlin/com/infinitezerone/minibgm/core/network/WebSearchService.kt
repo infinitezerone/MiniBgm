@@ -10,6 +10,27 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.encodeURLQueryComponent
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/**
+ * GitHub 官方代码仓库搜索 API 响应实体。
+ */
+@Serializable
+internal data class GitHubSearchResponse(
+    @SerialName("total_count") val totalCount: Int = 0,
+    val items: List<GitHubRepoItem> = emptyList(),
+)
+
+@Serializable
+internal data class GitHubRepoItem(
+    val name: String = "",
+    @SerialName("full_name") val fullName: String = "",
+    @SerialName("html_url") val htmlUrl: String = "",
+    val description: String? = null,
+    @SerialName("stargazers_count") val stargazersCount: Int = 0,
+)
 
 /**
  * 公网 Web 搜索服务接口。
@@ -42,6 +63,7 @@ interface WebSearchService {
  */
 class WebSearchServiceImpl(
     private val client: HttpClient,
+    private val json: Json = BgmHttpClient.jsonConfig,
 ) : WebSearchService {
     private val logger = bgmLogger("Bgm/WebSearch")
 
@@ -53,6 +75,118 @@ class WebSearchServiceImpl(
         if (trimmed.isBlank()) return emptyList()
 
         val boundedLimit = limit.coerceIn(1, 20)
+
+        if (isGitHubTargeted(trimmed)) {
+            try {
+                val gitHubResults = searchGitHubApi(trimmed, boundedLimit)
+                if (gitHubResults.isNotEmpty()) {
+                    logger.d { "GitHub API search returned ${gitHubResults.size} items for '$trimmed'" }
+                    return gitHubResults
+                }
+                logger.w { "GitHub API search returned 0 items for '$trimmed', falling back to Bing" }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.w { "GitHub API search error for '$trimmed': ${e.message}, falling back to Bing" }
+            }
+        }
+
+        return searchBing(trimmed, boundedLimit)
+    }
+
+    internal fun isGitHubTargeted(query: String): Boolean {
+        val lower = query.lowercase()
+        return lower.contains("github") ||
+            lower.contains("tvbox") ||
+            lower.contains("订阅源") ||
+            lower.contains("播放源") ||
+            lower.contains("影视仓") ||
+            lower.contains("接口") ||
+            (lower.contains("源") && (lower.contains("动漫") || lower.contains("番") || lower.contains("看")))
+    }
+
+    internal fun extractGitHubQuery(raw: String): String {
+        val withoutSite =
+            raw
+                .replace(Regex("""site:\S*github\.com\S*""", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("""\bgithub\b""", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+        return if (withoutSite.isBlank()) "tvbox" else withoutSite
+    }
+
+    internal suspend fun searchGitHubApi(
+        query: String,
+        limit: Int,
+    ): List<WebSearchResult> {
+        val effectiveQuery = extractGitHubQuery(query)
+        if (effectiveQuery.isBlank()) return emptyList()
+
+        val results = executeGitHubSearchRequest(effectiveQuery, limit)
+        if (results.isNotEmpty()) return results
+
+        // 若多余修饰词导致 0 结果，以标准 "tvbox 源" 兜底尝试一次，提升开源订阅召回率
+        if (effectiveQuery.contains("tvbox", ignoreCase = true) && effectiveQuery != "tvbox 源" && effectiveQuery != "tvbox") {
+            logger.d { "GitHub query '$effectiveQuery' yielded 0 items, retrying with 'tvbox 源'" }
+            return executeGitHubSearchRequest("tvbox 源", limit)
+        }
+        return emptyList()
+    }
+
+    private suspend fun executeGitHubSearchRequest(
+        query: String,
+        limit: Int,
+    ): List<WebSearchResult> {
+        val encodedQuery = query.encodeURLQueryComponent()
+        val url = "https://api.github.com/search/repositories?q=$encodedQuery&sort=stars&order=desc&per_page=$limit"
+
+        val response =
+            client.get(url) {
+                header(
+                    HttpHeaders.UserAgent,
+                    "MiniBgm-Android/1.0 (Bangumi Client)",
+                )
+                header(HttpHeaders.Accept, "application/vnd.github+json")
+            }
+
+        if (!response.status.isSuccess()) {
+            logger.w { "GitHub search HTTP ${response.status.value} for query: $query" }
+            return emptyList()
+        }
+
+        val jsonText = response.bodyAsText()
+        return parseGitHubRepositoriesJson(jsonText)
+    }
+
+    internal fun parseGitHubRepositoriesJson(jsonText: String): List<WebSearchResult> =
+        try {
+            val response = json.decodeFromString<GitHubSearchResponse>(jsonText)
+            response.items.map { item ->
+                val desc = item.description?.trim().orEmpty()
+                val snippet =
+                    buildString {
+                        if (desc.isNotBlank()) {
+                            append(desc)
+                            append(" | ")
+                        }
+                        append("⭐ Stars: ${item.stargazersCount}")
+                        append(" | GitHub 开源项目")
+                    }
+                WebSearchResult(
+                    title = "${item.fullName} (⭐ ${item.stargazersCount})",
+                    url = item.htmlUrl,
+                    snippet = snippet,
+                )
+            }
+        } catch (e: Exception) {
+            logger.w { "Failed to parse GitHub search JSON: ${e.message}" }
+            emptyList()
+        }
+
+    internal suspend fun searchBing(
+        trimmed: String,
+        boundedLimit: Int,
+    ): List<WebSearchResult> {
         val encodedQuery = trimmed.encodeURLQueryComponent()
         val url = "https://cn.bing.com/search?q=$encodedQuery"
 

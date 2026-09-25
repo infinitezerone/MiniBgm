@@ -111,4 +111,119 @@ class WebSearchServiceTest {
             val results = service.search("芙莉莲")
             assertTrue(results.isEmpty())
         }
+
+    @Test
+    fun search_gitHubTargetedQuery_returnsParsedGitHubResults() =
+        runTest {
+            val ghJson =
+                """
+                {
+                    "total_count": 2,
+                    "items": [
+                        {
+                            "name": "iptv-api",
+                            "full_name": "Guovin/iptv-api",
+                            "html_url": "https://github.com/Guovin/iptv-api",
+                            "description": "高质量直播与点播源配置",
+                            "stargazers_count": 25281
+                        },
+                        {
+                            "name": "bug",
+                            "full_name": "liu673cn/bug",
+                            "html_url": "https://github.com/liu673cn/bug",
+                            "description": "TVBox 接口与配置",
+                            "stargazers_count": 10347
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+            val service =
+                WebSearchServiceImpl(
+                    HttpClient(
+                        MockEngine { request ->
+                            if (request.url.host == "api.github.com") {
+                                respond(
+                                    content = ghJson,
+                                    status = HttpStatusCode.OK,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                                )
+                            } else {
+                                respond(
+                                    content = "<html></html>",
+                                    status = HttpStatusCode.OK,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                                )
+                            }
+                        },
+                    ),
+                )
+
+            val results = service.search("tvbox 源", limit = 5)
+            assertEquals(2, results.size)
+            assertEquals("Guovin/iptv-api (⭐ 25281)", results[0].title)
+            assertEquals("https://github.com/Guovin/iptv-api", results[0].url)
+            assertTrue(results[0].snippet.contains("高质量直播与点播源配置"))
+            assertTrue(results[0].snippet.contains("25281"))
+
+            assertEquals("liu673cn/bug (⭐ 10347)", results[1].title)
+            assertEquals("https://github.com/liu673cn/bug", results[1].url)
+        }
+
+    @Test
+    fun search_gitHubApiFails_fallsBackToBing() =
+        runTest {
+            val bingHtml =
+                """
+                <ol id="b_results">
+                    <li class="b_algo">
+                        <h2><a target="_blank" href="https://github.com/fallback/repo">Fallback Repo - Bing</a></h2>
+                        <div class="b_caption"><p>Fallback description</p></div>
+                    </li>
+                </ol>
+                """.trimIndent()
+
+            val service =
+                WebSearchServiceImpl(
+                    HttpClient(
+                        MockEngine { request ->
+                            if (request.url.host == "api.github.com") {
+                                respond(
+                                    content = """{"message": "API rate limit exceeded"}""",
+                                    status = HttpStatusCode.Forbidden,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                                )
+                            } else {
+                                respond(
+                                    content = bingHtml,
+                                    status = HttpStatusCode.OK,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                                )
+                            }
+                        },
+                    ),
+                )
+
+            val results = service.search("tvbox 动漫源")
+            assertEquals(1, results.size)
+            assertEquals("Fallback Repo - Bing", results[0].title)
+            assertEquals("https://github.com/fallback/repo", results[0].url)
+        }
+
+    @Test
+    fun isGitHubTargeted_and_extractGitHubQuery() {
+        val service = WebSearchServiceImpl(HttpClient(MockEngine { respond("") }))
+
+        assertTrue(service.isGitHubTargeted("site:github.com tvbox 动漫"))
+        assertTrue(service.isGitHubTargeted("tvbox 源"))
+        assertTrue(service.isGitHubTargeted("高质量动漫源"))
+        assertTrue(service.isGitHubTargeted("动漫 订阅源"))
+        assertTrue(service.isGitHubTargeted("影视仓 接口"))
+        assertTrue(service.isGitHubTargeted("github 动漫"))
+
+        assertEquals("tvbox 动漫", service.extractGitHubQuery("site:github.com tvbox 动漫"))
+        assertEquals("tvbox 源", service.extractGitHubQuery("site:github.com tvbox 源"))
+        assertEquals("tvbox", service.extractGitHubQuery("site:github.com"))
+        assertEquals("tvbox 推荐", service.extractGitHubQuery("github tvbox 推荐"))
+    }
 }

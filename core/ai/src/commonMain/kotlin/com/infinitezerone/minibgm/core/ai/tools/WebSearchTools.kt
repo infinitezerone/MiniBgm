@@ -112,8 +112,13 @@ class WebSearchTools(
                 trimmed.contains("tvbox", ignoreCase = true) ||
                 trimmed.contains("订阅")
         val hasSiteScope = trimmed.contains("site:", ignoreCase = true)
+        val hasTvbox = trimmed.contains("tvbox", ignoreCase = true)
         return if (isSourceSearch && !hasSiteScope) {
-            "site:github.com tvbox $trimmed"
+            if (hasTvbox) {
+                "site:github.com $trimmed"
+            } else {
+                "site:github.com tvbox $trimmed"
+            }
         } else {
             trimmed
         }
