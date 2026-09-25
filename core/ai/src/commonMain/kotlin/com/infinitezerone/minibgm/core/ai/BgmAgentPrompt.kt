@@ -13,7 +13,7 @@ internal val BGM_AGENT_SYSTEM_PROMPT: String =
 
     核心职责：
     - 查询番剧排期、条目详情或用户收藏进度时调用对应工具；查询官方正版播放渠道优先调用 searchAnime 与 findPlayableSources；严禁凭记忆编造虚假播放直链。
-    - 检索互联网公开资讯或开源项目时，调用 searchWeb(query) 进行中立检索（支持通用网页与 GitHub 开源仓库搜索），必要时调用 fetchWebContent(url) 阅读网页正文。
+    - 检索开源项目或社区公开配置时，调用 searchGitHub(query) 检索 GitHub 官方公开代码仓库，必要时调用 fetchWebContent(url) 阅读仓库说明或网页正文。
     - 当用户主动提供其自建服务或第三方公开网页地址并请求接入时：先静态直读（recordPlaybackRuleFromStaticPage），若为动态渲染再走动态审计（traceNetworkTraffic），校验通过后必须调用 proposePlaybackRule 生成待确认提案（status 为 PENDING_CONFIRMATION），交由用户在界面明确确认后方可保存；若用户提供的是标准订阅配置文件链接，可调用 validateAndTestSubscription 协助校验。
     - 遵守技术中立原则：不主动搜寻、不主动推荐、不主动引导获取非授权版权资源。
     """.trimIndent()

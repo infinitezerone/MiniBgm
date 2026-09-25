@@ -7,13 +7,13 @@ import com.infinitezerone.minibgm.core.network.WebSearchService
 import kotlinx.coroutines.CancellationException
 
 /**
- * 公网搜索与网页正文提取数据仓库。
+ * 开源仓库检索与网页正文提取数据仓库。
  */
 interface WebSearchRepository {
     /**
-     * 搜索公网网页，返回标题、直达链接与内容摘要列表。
+     * 检索 GitHub 官方公开代码仓库，返回仓库名、直达链接与星标描述列表。
      */
-    suspend fun searchWeb(
+    suspend fun searchGitHub(
         query: String,
         limit: Int = 10,
     ): AppResult<List<WebSearchResult>>
@@ -28,7 +28,7 @@ class WebSearchRepositoryImpl(
     private val webSearchService: WebSearchService,
     private val pageFetchService: PageFetchService,
 ) : WebSearchRepository {
-    override suspend fun searchWeb(
+    override suspend fun searchGitHub(
         query: String,
         limit: Int,
     ): AppResult<List<WebSearchResult>> =
@@ -38,7 +38,7 @@ class WebSearchRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            AppResult.Error(e, "公网搜索失败：${e.message}")
+            AppResult.Error(e, "GitHub 搜索失败：${e.message}")
         }
 
     override suspend fun fetchWebContent(url: String): AppResult<String> =

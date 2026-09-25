@@ -10,17 +10,17 @@ import kotlin.test.assertTrue
 
 class WebSearchToolsTest {
     @Test
-    fun searchWeb_emptyQuery_returnsError() =
+    fun searchGitHub_emptyQuery_returnsError() =
         runTest {
             val repo = FakeWebSearchRepository()
             val tools = WebSearchTools(repo)
-            val result = tools.searchWeb("")
+            val result = tools.searchGitHub("")
             assertTrue(result.contains("blank"))
             assertTrue(repo.searchCalls.isEmpty())
         }
 
     @Test
-    fun searchWeb_success_returnsJsonResults() =
+    fun searchGitHub_success_returnsJsonResults() =
         runTest {
             val repo =
                 FakeWebSearchRepository().apply {
@@ -28,17 +28,17 @@ class WebSearchToolsTest {
                         AppResult.Success(
                             listOf(
                                 WebSearchResult(
-                                    title = "测试动漫",
-                                    url = "https://example.com/play/1",
-                                    snippet = "测试播放简介",
+                                    title = "测试仓库",
+                                    url = "https://github.com/example/repo",
+                                    snippet = "测试仓库简介",
                                 ),
                             ),
                         )
                 }
             val tools = WebSearchTools(repo)
-            val result = tools.searchWeb("测试")
-            assertTrue(result.contains("https://example.com/play/1"))
-            assertTrue(result.contains("测试动漫"))
+            val result = tools.searchGitHub("测试")
+            assertTrue(result.contains("https://github.com/example/repo"))
+            assertTrue(result.contains("测试仓库"))
             assertEquals(listOf("测试"), repo.searchCalls)
         }
 

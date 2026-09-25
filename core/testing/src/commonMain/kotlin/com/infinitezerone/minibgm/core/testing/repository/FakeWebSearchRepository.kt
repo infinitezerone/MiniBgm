@@ -10,7 +10,7 @@ class FakeWebSearchRepository : WebSearchRepository {
     val searchCalls = mutableListOf<String>()
     val fetchCalls = mutableListOf<String>()
 
-    override suspend fun searchWeb(
+    override suspend fun searchGitHub(
         query: String,
         limit: Int,
     ): AppResult<List<WebSearchResult>> {

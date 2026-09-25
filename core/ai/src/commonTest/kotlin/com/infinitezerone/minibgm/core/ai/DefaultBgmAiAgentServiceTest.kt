@@ -784,7 +784,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                                         "id": "call_1",
                                         "type": "function",
                                         "function": {
-                                          "name": "searchWeb",
+                                          "name": "searchGitHub",
                                           "arguments": "{\"query\":\"test\"}"
                                         }
                                       }
@@ -802,7 +802,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
             val tool =
                 com.infinitezerone.minibgm.core.ai.tool.bgmTool(
-                    name = "searchWeb",
+                    name = "searchGitHub",
                     description = "desc",
                     parametersJsonSchema =
                         com.infinitezerone.minibgm.core.ai.tool

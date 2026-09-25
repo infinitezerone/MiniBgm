@@ -27,11 +27,10 @@ class WebSearchTools(
     fun tools(): List<BgmTool> =
         listOf(
             bgmTool(
-                name = "searchWeb",
+                name = "searchGitHub",
                 description =
-                    "Search the public World Wide Web or GitHub repositories for real-time information, " +
-                        "release schedules, discussions, or topics beyond the local Bangumi database. " +
-                        "Returns a list of search hits with page titles, direct URLs, and text snippets.",
+                    "Search public GitHub code repositories via GitHub's official search API. " +
+                        "Returns a list of repositories sorted by Stars with repository names, direct URLs, Star counts, and descriptions.",
                 parametersJsonSchema =
                     schemaObject(
                         properties =
@@ -40,7 +39,7 @@ class WebSearchTools(
                                     "query",
                                     schemaProperty(
                                         "string",
-                                        "Search query keywords (e.g. '葬送的芙莉莲 播出时间' or 'github bangumi-data')",
+                                        "Search query keywords (e.g. 'bangumi', 'anime player', 'iptv')",
                                     ),
                                 )
                                 put(
@@ -51,7 +50,7 @@ class WebSearchTools(
                         required = listOf("query"),
                     ),
             ) { args ->
-                searchWeb(
+                searchGitHub(
                     query = args.string("query"),
                     limit = args.int("limit", 4),
                 )
@@ -59,9 +58,9 @@ class WebSearchTools(
             bgmTool(
                 name = "fetchWebContent",
                 description =
-                    "Fetch and read the plain readable text content of a specific web page URL. " +
+                    "Fetch and read the plain readable text content of a specific web page URL (such as a repository README). " +
                         "Automatically strips HTML markup, scripts, and stylesheets. " +
-                        "Use this after searchWeb to examine the contents of a promising search result.",
+                        "Use this after searchGitHub to examine repository READMEs or web contents.",
                 parametersJsonSchema =
                     schemaObject(
                         properties =
@@ -75,7 +74,7 @@ class WebSearchTools(
             },
         )
 
-    suspend fun searchWeb(
+    suspend fun searchGitHub(
         query: String,
         limit: Int = 4,
     ): String {
@@ -84,23 +83,23 @@ class WebSearchTools(
             return "Search query must not be blank."
         }
         val effectiveQuery = normalizeQuery(trimmed)
-        AiToolActivity.report("公网搜索", "关键词：$effectiveQuery")
+        AiToolActivity.report("GitHub 检索", "关键词：$effectiveQuery")
         val boundedLimit = limit.coerceIn(1, 6)
 
-        return when (val result = webSearchRepository.searchWeb(effectiveQuery, boundedLimit)) {
+        return when (val result = webSearchRepository.searchGitHub(effectiveQuery, boundedLimit)) {
             is AppResult.Success -> {
                 val list = result.data
                 if (list.isEmpty()) {
-                    "No web search results found for '$effectiveQuery'. Please try different or more general keywords."
+                    "No GitHub repositories found for '$effectiveQuery'. Please try different or more general keywords."
                 } else {
                     json.encodeToString(list)
                 }
             }
             is AppResult.Error -> {
-                "Web search failed: ${result.throwable.message ?: "network error"}"
+                "GitHub search failed: ${result.throwable.message ?: "network error"}"
             }
             is AppResult.Loading -> {
-                "Web search in progress, please retry."
+                "GitHub search in progress, please retry."
             }
         }
     }
