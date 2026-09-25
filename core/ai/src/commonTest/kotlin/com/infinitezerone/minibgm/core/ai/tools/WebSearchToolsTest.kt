@@ -1,0 +1,57 @@
+package com.infinitezerone.minibgm.core.ai.tools
+
+import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.WebSearchResult
+import com.infinitezerone.minibgm.core.testing.repository.FakeWebSearchRepository
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class WebSearchToolsTest {
+    @Test
+    fun searchWeb_emptyQuery_returnsError() =
+        runTest {
+            val repo = FakeWebSearchRepository()
+            val tools = WebSearchTools(repo)
+            val result = tools.searchWeb("")
+            assertTrue(result.contains("blank"))
+            assertTrue(repo.searchCalls.isEmpty())
+        }
+
+    @Test
+    fun searchWeb_success_returnsJsonResults() =
+        runTest {
+            val repo =
+                FakeWebSearchRepository().apply {
+                    searchResult =
+                        AppResult.Success(
+                            listOf(
+                                WebSearchResult(
+                                    title = "测试动漫",
+                                    url = "https://example.com/play/1",
+                                    snippet = "测试播放简介",
+                                ),
+                            ),
+                        )
+                }
+            val tools = WebSearchTools(repo)
+            val result = tools.searchWeb("测试")
+            assertTrue(result.contains("https://example.com/play/1"))
+            assertTrue(result.contains("测试动漫"))
+            assertEquals(listOf("测试"), repo.searchCalls)
+        }
+
+    @Test
+    fun fetchWebContent_validUrl_returnsContent() =
+        runTest {
+            val repo =
+                FakeWebSearchRepository().apply {
+                    fetchResult = AppResult.Success("这是网页正文内容")
+                }
+            val tools = WebSearchTools(repo)
+            val result = tools.fetchWebContent("https://example.com/article")
+            assertEquals("这是网页正文内容", result)
+            assertEquals(listOf("https://example.com/article"), repo.fetchCalls)
+        }
+}

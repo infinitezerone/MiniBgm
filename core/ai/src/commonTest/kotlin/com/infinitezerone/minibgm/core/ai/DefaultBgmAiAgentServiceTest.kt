@@ -72,6 +72,10 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                             ): List<com.infinitezerone.minibgm.core.model.PlayableSource> = emptyList()
                         }
                     }
+                    single<com.infinitezerone.minibgm.core.data.repository.WebSearchRepository> {
+                        com.infinitezerone.minibgm.core.testing.repository
+                            .FakeWebSearchRepository()
+                    }
                 },
             )
         }

@@ -44,6 +44,13 @@ val aiModule =
                 sampleReplayer = getOrNull(),
             )
         }
+        single {
+            getOrNull<com.infinitezerone.minibgm.core.data.repository.WebSearchRepository>()?.let {
+                com.infinitezerone.minibgm.core.ai.tools.WebSearchTools(
+                    webSearchRepository = it,
+                )
+            }
+        }
         single<PendingActionExecutor> {
             DefaultPendingActionExecutor(
                 collectionRepository = get(),
@@ -60,6 +67,7 @@ val aiModule =
                 playableSourceTools = getOrNull(),
                 communityTools = getOrNull(),
                 playbackRuleDiagnosticsTools = getOrNull(),
+                webSearchTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
                 playableSourcesStore = getOrNull(),
