@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +53,23 @@ data class SiteProbeUiState(
 )
 
 /**
+ * 订阅导入对话框状态。
+ *
+ * TVBox / MiniBgm 订阅的导入是**可判定的**标准流水线（拉取 → 解析 → 探活测速 → 落库），
+ * 不进模型：贴 URL → 检测出报告 → 用户按报告勾选 → 导入，全程确定性。
+ */
+data class SubscriptionImportUiState(
+    val isVisible: Boolean = false,
+    val input: String = "",
+    val isValidating: Boolean = false,
+    /** 检测通过后的报告；null 表示尚未检测或检测失败 */
+    val report: SubscriptionValidationReport? = null,
+    /** 用户勾选的来源下标（对应 [SubscriptionValidationReport.sources]），默认勾选探活通过的 */
+    val selected: Set<Int> = emptySet(),
+    val errorMessage: String? = null,
+)
+
+/**
  * 播放规则单发事件
  */
 sealed interface PlaybackRulesUiEvent {
@@ -85,6 +103,11 @@ class PlaybackRulesViewModel(
 
     /** 站点探测状态；与主列表相互独立，探测过程不该让规则列表重建 */
     val siteProbe: StateFlow<SiteProbeUiState> = _siteProbe.asStateFlow()
+
+    private val _subscriptionImport = MutableStateFlow(SubscriptionImportUiState())
+
+    /** 订阅导入状态；与站点探测、主列表相互独立 */
+    val subscriptionImport: StateFlow<SubscriptionImportUiState> = _subscriptionImport.asStateFlow()
 
     private val _events = Channel<PlaybackRulesUiEvent>(Channel.BUFFERED)
     val events: Flow<PlaybackRulesUiEvent> = _events.receiveAsFlow()
@@ -228,6 +251,103 @@ class PlaybackRulesViewModel(
             _siteProbe.value = SiteProbeUiState()
             sendSnackbar("已添加规则：${probed.siteName}")
         }
+    }
+
+    /** 打开「订阅导入」对话框（清掉上一次的输入与报告，避免误当成这次的） */
+    fun openSubscriptionImport() {
+        _subscriptionImport.value = SubscriptionImportUiState(isVisible = true)
+    }
+
+    fun closeSubscriptionImport() {
+        _subscriptionImport.value = SubscriptionImportUiState()
+    }
+
+    fun onSubscriptionInputChanged(text: String) {
+        _subscriptionImport.update { it.copy(input = text, errorMessage = null, report = null, selected = emptySet()) }
+    }
+
+    /**
+     * 检测订阅地址：拉取、解析、逐条探活测速，产出可勾选的报告。
+     *
+     * 不健康或没有可导入来源时报告原因并保持对话框，不出确认按钮。
+     */
+    fun validateSubscription() {
+        val input = _subscriptionImport.value.input.trim()
+        if (input.isBlank()) {
+            _subscriptionImport.update { it.copy(errorMessage = "请填写订阅地址") }
+            return
+        }
+        viewModelScope.launch {
+            _subscriptionImport.update { it.copy(isValidating = true, errorMessage = null, report = null, selected = emptySet()) }
+            when (val result = settingsRepository.validateAndTestSubscription(input)) {
+                is AppResult.Success -> {
+                    val report = result.data
+                    val defaultSelected =
+                        report.sources
+                            .withIndex()
+                            .filter { it.value.isAlive }
+                            .map { it.index }
+                            .toSet()
+                    if (!report.isHealthy || report.sources.isEmpty() || defaultSelected.isEmpty()) {
+                        _subscriptionImport.update {
+                            it.copy(
+                                isValidating = false,
+                                report = null,
+                                selected = emptySet(),
+                                errorMessage = describeUnhealthy(report),
+                            )
+                        }
+                    } else {
+                        _subscriptionImport.update {
+                            it.copy(isValidating = false, report = report, selected = defaultSelected, errorMessage = null)
+                        }
+                    }
+                }
+                is AppResult.Error ->
+                    _subscriptionImport.update {
+                        it.copy(isValidating = false, report = null, selected = emptySet(), errorMessage = result.message)
+                    }
+                is AppResult.Loading -> _subscriptionImport.update { it.copy(isValidating = false) }
+            }
+        }
+    }
+
+    fun toggleSubscriptionSource(index: Int) {
+        _subscriptionImport.update { state ->
+            state.copy(selected = if (index in state.selected) state.selected - index else state.selected + index)
+        }
+    }
+
+    /** 把勾选的来源落成规则；落库路径与待确认提案执行器（ImportPlaybackRules）一致 */
+    @OptIn(ExperimentalUuidApi::class)
+    fun confirmSubscriptionImport() {
+        val state = _subscriptionImport.value
+        val report = state.report ?: return
+        if (state.selected.isEmpty()) return
+        val rules =
+            state.selected
+                .mapNotNull { report.sources.getOrNull(it) }
+                .map { it.toPlaybackSourceRule(id = Uuid.random().toString()) }
+        if (rules.isEmpty()) return
+        viewModelScope.launch {
+            settingsRepository.importPlaybackRules(rules)
+            _subscriptionImport.value = SubscriptionImportUiState()
+            sendSnackbar("已导入 ${rules.size} 条订阅播放源规则")
+        }
+    }
+
+    /** 检测未通过时的内联说明：能说清是地址问题还是来源全被跳过 */
+    private fun describeUnhealthy(report: SubscriptionValidationReport): String {
+        report.errorMessage?.let { return it }
+        if (report.sources.isEmpty()) {
+            val skipped =
+                buildList {
+                    if (report.skippedUnsupportedSites > 0) add("${report.skippedUnsupportedSites} 条爬虫/扩展源本应用不支持")
+                    if (report.skippedMalformedSites > 0) add("${report.skippedMalformedSites} 条条目信息不完整")
+                }
+            return if (skipped.isEmpty()) "订阅里没有可导入的来源" else "订阅里没有可导入的来源（${skipped.joinToString("，")}）"
+        }
+        return "订阅里探活通过的来源为 0（共 ${report.totalRules} 条），请检查地址或稍后重试"
     }
 
     @OptIn(ExperimentalUuidApi::class)

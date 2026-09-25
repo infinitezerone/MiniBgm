@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
@@ -9,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.flow.first
@@ -152,6 +154,153 @@ class PlaybackRulesViewModelTest {
                     .orEmpty()
                     .contains("请填写"),
             )
+        }
+
+    @Test
+    fun subscriptionImport_success_previewsReportDefaultsToAliveAndImportsSelection() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 3,
+                        aliveRules = 2,
+                        averageLatencyMs = 120L,
+                        sources =
+                            listOf(
+                                DiscoveredSource(
+                                    name = "源A",
+                                    urlTemplate = "https://a.example.tv/api.php/provide/vod/?wd={title}",
+                                    latencyMs = 80L,
+                                    kind = PlaybackRuleKind.SOURCE,
+                                    parserType = RuleParserType.MACCMS,
+                                ),
+                                DiscoveredSource(
+                                    name = "源B",
+                                    urlTemplate = "https://b.example.tv/api.php/provide/vod/?wd={title}",
+                                    latencyMs = 200L,
+                                ),
+                                DiscoveredSource(name = "源C", urlTemplate = "https://c.example.tv/x", isAlive = false),
+                            ),
+                        skippedUnsupportedSites = 1,
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("  https://example.com/tvbox.json  ")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            val imported = viewModel.subscriptionImport.value
+            assertFalse(imported.isValidating)
+            assertTrue(imported.report != null)
+            // 默认只勾选探活通过的来源（源A、源B），未连通的源C不选
+            assertEquals(setOf(0, 1), imported.selected)
+
+            // 用户取消勾选源B后确认：只有源A落库，对话框关闭
+            viewModel.toggleSubscriptionSource(1)
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+
+            val rules = fakeRepo.playbackRules.first()
+            assertEquals(listOf("源A"), rules.map { it.name })
+            // 来源自带什么形态就落什么形态：TVBox 接口端点是 SOURCE，落成 PAGE 会在播放时丢专用解析器
+            assertEquals(PlaybackRuleKind.SOURCE, rules.single().kind)
+            assertEquals(RuleParserType.MACCMS, rules.single().parserType)
+            assertFalse(viewModel.subscriptionImport.value.isVisible)
+        }
+
+    @Test
+    fun subscriptionImport_failure_keepsDialogOpenWithReasonAndImportsNothing() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult = AppResult.Error(IllegalStateException("bad url"), "订阅地址无法访问（HTTP 404）。")
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("https://broken.example.com/rules.json")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            val state = viewModel.subscriptionImport.value
+            assertTrue(state.isVisible)
+            assertTrue(state.report == null)
+            assertTrue(
+                "错误原因应回显给用户：${state.errorMessage}",
+                state.errorMessage.orEmpty().contains("HTTP 404"),
+            )
+
+            // 没有报告时点确认不应落库
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+            assertTrue(fakeRepo.playbackRules.first().isEmpty())
+        }
+
+    @Test
+    fun subscriptionImport_allSourcesSkipped_reportsReasonInsteadOfReport() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 2,
+                        skippedUnsupportedSites = 1,
+                        skippedMalformedSites = 1,
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("https://example.com/tvbox.json")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            val state = viewModel.subscriptionImport.value
+            // 报告不出、原因如实（跳过计数对用户可见），确认按钮无从出现
+            assertTrue(state.report == null)
+            assertTrue(
+                "跳过原因应回显给用户：${state.errorMessage}",
+                state.errorMessage.orEmpty().contains("爬虫/扩展源"),
+            )
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+            assertTrue(fakeRepo.playbackRules.first().isEmpty())
+        }
+
+    @Test
+    fun subscriptionImport_blankInput_doesNotValidateOrImport() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            // 若误调仓库，这份健康报告会被展示；短路行为下 report 必须保持 null
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "",
+                        sources = listOf(DiscoveredSource(name = "源A", urlTemplate = "https://a.example.tv/x")),
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("   ")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.subscriptionImport.value.report == null)
+            assertTrue(
+                viewModel.subscriptionImport.value.errorMessage
+                    .orEmpty()
+                    .contains("请填写"),
+            )
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+            assertTrue(fakeRepo.playbackRules.first().isEmpty())
         }
 
     @get:Rule

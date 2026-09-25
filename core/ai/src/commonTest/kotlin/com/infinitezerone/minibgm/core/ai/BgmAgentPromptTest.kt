@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.ai
 
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BgmAgentPromptTest {
@@ -8,6 +9,22 @@ class BgmAgentPromptTest {
     fun `system prompt requires tool grounded playback data`() {
         assertTrue(BGM_AGENT_SYSTEM_PROMPT.contains("findPlayableSources"), "找源必须显式绑定到工具")
         assertTrue(BGM_AGENT_SYSTEM_PROMPT.contains("编造"), "必须禁止凭记忆拼 URL")
+    }
+
+    /**
+     * 订阅导入已整体迁出智能体（设置页固定流程）：提示词不得再承诺订阅校验工具，
+     * 只允许把用户引导到设置页——防止工具删了话术又漂回来。
+     */
+    @Test
+    fun `system prompt routes subscription import to settings instead of tools`() {
+        assertFalse(
+            BGM_AGENT_SYSTEM_PROMPT.contains("validateAndTestSubscription"),
+            "订阅导入不得再以工具形式出现在提示词中",
+        )
+        assertTrue(
+            BGM_AGENT_SYSTEM_PROMPT.contains("订阅导入"),
+            "提示词必须指引用户到设置页的订阅导入流程",
+        )
     }
 
     /**

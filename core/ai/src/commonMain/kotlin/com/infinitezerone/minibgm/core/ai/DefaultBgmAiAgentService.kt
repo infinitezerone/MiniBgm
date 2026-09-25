@@ -2,11 +2,11 @@ package com.infinitezerone.minibgm.core.ai
 
 import com.infinitezerone.minibgm.core.ai.tool.BgmToolRegistry
 import com.infinitezerone.minibgm.core.ai.tools.CollectionTools
-import com.infinitezerone.minibgm.core.ai.tools.CommunityTools
 import com.infinitezerone.minibgm.core.ai.tools.PlayableSourceTools
 import com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
+import com.infinitezerone.minibgm.core.ai.wire.AiEndpointException
 import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
 import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
 import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
@@ -45,7 +45,6 @@ class DefaultBgmAiAgentService(
     val subjectTools: SubjectTools? = null,
     val collectionTools: CollectionTools? = null,
     val playableSourceTools: PlayableSourceTools? = null,
-    val communityTools: CommunityTools? = null,
     val playbackRuleDiagnosticsTools: PlaybackRuleDiagnosticsTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
@@ -83,7 +82,6 @@ class DefaultBgmAiAgentService(
                 subjectTools?.tools(),
                 collectionTools?.tools(),
                 playableSourceTools?.tools(),
-                communityTools?.tools(),
                 playbackRuleDiagnosticsTools?.tools(),
             ).flatten(),
         )
@@ -160,12 +158,17 @@ class DefaultBgmAiAgentService(
             } catch (e: Exception) {
                 lastException = e
                 val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
-                val is429 = isRateLimitOrQuota(raw.lowercase())
+                // 优先读结构化状态码；字符串匹配只兜底非 HTTP 异常（如 agentRunner 自造的 429 文案）
+                val is429 = (e as? AiEndpointException)?.status == 429 || isRateLimitOrQuota(raw.lowercase())
                 if (is429 && attempt < maxAttempts) {
-                    val delayMs = extractRetryDelayMs(raw) ?: (attempt * 6000L)
-                    val delaySec = (delayMs / 1000).coerceAtLeast(1)
+                    val delayMs =
+                        (e as? AiEndpointException)?.retryAfterMs
+                            ?: extractRetryDelayMs(raw)
+                            ?: (attempt * 6000L)
+                    val boundedDelay = delayMs.coerceIn(1000L, 60_000L)
+                    val delaySec = (boundedDelay / 1000).coerceAtLeast(1)
                     AiToolActivity.reportStatus("AI 触发速率限制（429），等待重试（${delaySec}秒）...")
-                    kotlinx.coroutines.delay(delayMs)
+                    kotlinx.coroutines.delay(boundedDelay)
                 } else {
                     throw e
                 }
@@ -248,6 +251,7 @@ internal suspend fun runPiAgent(
     val toolDefinitions = tools.toDefinitions().ifEmpty { null }
     val json = aiJson
     val effectiveModel = config.model.ifBlank { defaultModel(config) }
+    val temperature = requestTemperature(effectiveModel)
     agentLogger.i {
         "🤖 Pi Agent 循环启动 (model=$effectiveModel, 可用工具: ${toolDefinitions?.map { it.function.name } ?: emptyList()})"
     }
@@ -261,7 +265,7 @@ internal suspend fun runPiAgent(
                 model = effectiveModel,
                 messages = messages,
                 tools = toolDefinitions,
-                temperature = 0.3,
+                temperature = temperature,
             )
 
         val turnStatusText = if (turns == 1) "AI 正在分析意图与调度工具..." else "AI 正在分析工具结果 (第 $turns 轮)..."
@@ -305,15 +309,19 @@ internal suspend fun runPiAgent(
             agentLogger.i {
                 "✅ Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策直接回复 (回答字数: ${content.length}, 思考字数: ${reasoning.length})"
             }
+            if (content.isBlank() && reasoning.isBlank() && choice.finishReason == "length") {
+                // 截断的空回复若照常返回，用户只会看到一条空气泡；显式失败并给出可行动提示
+                throw IllegalStateException("模型回复因长度上限被截断（finish_reason=length），请重试、精简提问，或在 AI 设置更换模型。")
+            }
             return content.ifBlank { reasoning }
         }
 
-        val callsDesc = toolCalls.joinToString { "${it.function.name}(${it.function.arguments.take(40)})" }
+        val callsDesc = toolCalls.joinToString { "${it.function.name}(${it.function.arguments.orEmpty().take(40)})" }
         agentLogger.i {
             "💡 Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策调用 ${toolCalls.size} 个工具 -> $callsDesc"
         }
 
-        val callsSig = toolCalls.joinToString("|") { "${it.function.name}:${it.function.arguments}" }
+        val callsSig = toolCalls.joinToString("|") { "${it.function.name}:${it.function.arguments.orEmpty()}" }
         if (callsSig == previousCallsSig) {
             duplicateCallCount++
         } else {
@@ -328,22 +336,27 @@ internal suspend fun runPiAgent(
 
         for (call in toolCalls) {
             val funcName = call.function.name
+            // 正常路径 arguments 已在解码层归一化；这里兜底 orEmpty 是对绕过归一化的构造方留余地
+            val rawArguments =
+                call.function.arguments
+                    .orEmpty()
+                    .ifBlank { "{}" }
             val argsJson =
                 try {
-                    json.parseToJsonElement(call.function.arguments).jsonObject
+                    json.parseToJsonElement(rawArguments).jsonObject
                 } catch (e: Exception) {
                     buildJsonObject {}
                 }
 
             val detailSummary = formatToolCallDetail(argsJson)
             AiToolActivity.report(funcName, detailSummary)
-            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: ${call.function.arguments}" }
+            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: $rawArguments" }
 
             val toolStart = TimeSource.Monotonic.markNow()
             val toolResult =
                 if (duplicateCallCount == 1) {
                     agentLogger.w { "⚠️ 检测到重复工具调用 [$funcName]，注入引导提示防范死循环" }
-                    "【系统提示】：该工具入参与上一轮完全相同，先前检索未返回有效播放源或新内容。请不要重复提交完全相同的入参。请尝试更换关键词（例如：'在线 动漫 网站 推荐'、'在线 动漫 导航'），或者基于已知信息直接给用户回复解答。"
+                    "【系统提示】：该工具入参与上一轮完全相同，再次执行不会有新结果。请不要重复提交完全相同的入参；改为更换关键词或调整参数，若已无新信息可基于已知结果直接向用户作答。"
                 } else {
                     try {
                         tools.execute(funcName, argsJson)
@@ -358,9 +371,14 @@ internal suspend fun runPiAgent(
             val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
             agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (${toolElapsedMs}ms), 结果预览: $resultPreview" }
 
+            // 正常路径 id 已在解码层归一化；此兜底针对绕过归一化的构造方，合成 id 须全局唯一
+            val toolCallId =
+                @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
+                call.id
+                    ?: "call_${kotlin.uuid.Uuid.random()}"
             messages.add(
                 WireChatMessage.tool(
-                    toolCallId = call.id,
+                    toolCallId = toolCallId,
                     content = toolResult,
                 ),
             )
@@ -373,7 +391,7 @@ internal suspend fun runPiAgent(
 }
 
 internal const val DEFAULT_SUMMARY_FALLBACK =
-    "已尝试多轮检索与处理，但未能找到可用的播放源或未得到有效链接。建议您直接提供目标动漫网站地址，或在提问时指定更具体的番剧名称与站点。"
+    "已尝试多轮处理，但未能得到明确结果。建议补充更具体的名称、地址或要求后重试；涉及播放源导入的操作也可以在 设置 → 播放源 中直接完成。"
 
 internal suspend fun summarizeFinalOutcome(
     config: AiConfig,
@@ -388,10 +406,10 @@ internal suspend fun summarizeFinalOutcome(
             messages =
                 messages +
                     listOf(
-                        WireChatMessage.user("请基于以上已尝试的操作与检索结果，向用户做出清晰的总结回复。如果未找到可用播放源，请向用户说明并建议其提供目标动漫网站地址。"),
+                        WireChatMessage.user("请基于以上已尝试的操作与结果，向用户做出清晰的总结回复：已确认了什么、还缺什么、用户接下来可以怎么做（如补充信息、提供地址，或改在设置页完成固定流程）。"),
                     ),
             tools = null,
-            temperature = 0.3,
+            temperature = requestTemperature(effectiveModel),
         )
     val content =
         try {
@@ -430,6 +448,15 @@ internal fun defaultModel(config: AiConfig): String =
         else -> "gpt-4o-mini"
     }
 
+/**
+ * 推理模型（OpenAI o 系列等）显式拒绝 temperature 参数，请求里带上会直接 400；
+ * 其余模型保留低温采样。靠模型名判定是保守解：误判漏网时由「参数不被接受」的服务商
+ * 报错兜底，误杀多杀一个不带 temperature 的模型也无碍（默认温度本来就是多数端点的常态）。
+ */
+internal fun requestTemperature(model: String): Double? = if (TEMPERATURE_UNSUPPORTED_PATTERN.containsMatchIn(model.trim())) null else 0.3
+
+private val TEMPERATURE_UNSUPPORTED_PATTERN = Regex("""^(o\d([\s.\-_]|$)|gpt-5)""", RegexOption.IGNORE_CASE)
+
 internal data class TargetModelConfig(
     val endpoint: String,
     val apiKey: String,
@@ -461,6 +488,10 @@ internal fun friendlyAiError(
     config: AiConfig,
     e: Exception,
 ): String {
+    // 结构化路径优先：HTTP 状态码是一等事实，不猜文案
+    if (e is AiEndpointException) {
+        friendlyEndpointError(config, e)?.let { return it }
+    }
     val raw = (e.message ?: "").let { m -> m + (e.cause?.message?.let { " $it" } ?: "") }
     val lowered = raw.lowercase()
     return when {
@@ -481,6 +512,32 @@ internal fun friendlyAiError(
                 "AI 服务商返回错误：$innerMsg"
             } ?: raw.ifBlank { e.toString() }
         }
+    }
+}
+
+/**
+ * 按 HTTP 状态码给出用户提示；返回 null 表示该状态码没有专属语义，交给字符串匹配兜底。
+ */
+private fun friendlyEndpointError(
+    config: AiConfig,
+    e: AiEndpointException,
+): String? {
+    val modelLabel = config.model.ifBlank { "（未填写）" }
+    return when (e.status) {
+        401 -> "鉴权失败（HTTP 401）：API 密钥无效或已过期，请到 AI 设置更新密钥。"
+        403 -> formatForbiddenError(config)
+        404 ->
+            if (isModelRouteNotFound(e.responseBody.lowercase())) {
+                "模型「$modelLabel」不可用（服务商提示 model route not found / HTTP 404，该模型可能已下线或不支持对话路由）。请在 AI 设置中点击「获取可用模型」并选择最新的可用模型。"
+            } else {
+                "端点未找到（HTTP 404）：请检查 Base URL 是否正确。"
+            }
+        429 -> formatRateLimitError(e.responseBody, config)
+        in 500..599 -> {
+            val inner = extractJsonErrorMessage(e.responseBody)
+            if (inner != null) "AI 服务商服务端错误（HTTP ${e.status}）：$inner" else "AI 服务商服务端错误（HTTP ${e.status}），请稍后重试。"
+        }
+        else -> null
     }
 }
 

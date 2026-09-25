@@ -43,11 +43,6 @@ class ToolRegistryIntegrationTest {
                     },
             )
 
-        val communityTools =
-            CommunityTools(
-                settingsRepository = FakeSettingsRepository(),
-            )
-
         val diagnosticsTools =
             PlaybackRuleDiagnosticsTools(
                 playbackResolverRepository =
@@ -76,7 +71,6 @@ class ToolRegistryIntegrationTest {
                     subjectTools.tools(),
                     collectionTools.tools(),
                     playableSourceTools.tools(),
-                    communityTools.tools(),
                     diagnosticsTools.tools(),
                 ).flatten(),
             )
@@ -101,8 +95,11 @@ class ToolRegistryIntegrationTest {
         assertNotNull(getScheduleTool)
         assertTrue(getScheduleTool.description.contains("broadcast schedule"))
 
-        // Community tools：只允许"验证用户给出的地址"，不得存在任何自行检索社区的入口
-        assertTrue(toolNames.contains("validateAndTestSubscription"))
+        // 订阅导入已整体迁出智能体（设置页固定流程）：聊天路径不得存在任何订阅/社区源工具
+        assertFalse(
+            toolNames.contains("validateAndTestSubscription"),
+            "订阅导入是确定性流水线，必须走设置页向导，不得经模型中转",
+        )
         assertFalse(
             toolNames.contains("searchCommunitySubscriptions"),
             "模型不得自行检索社区源（目录属社区、机制属 App）",

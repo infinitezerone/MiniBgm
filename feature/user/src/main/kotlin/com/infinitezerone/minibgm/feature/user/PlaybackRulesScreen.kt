@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -90,6 +93,7 @@ fun PlaybackRulesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val siteProbeState by viewModel.siteProbe.collectAsStateWithLifecycle()
+    val subscriptionImportState by viewModel.subscriptionImport.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -283,24 +287,29 @@ fun PlaybackRulesScreen(
                                     "已配置 ${uiState.rules.size} 条规则"
                                 },
                             trailing = {
-                                if (showAdvancedRules) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
-                                            Text("探测")
-                                        }
-                                        TextButton(onClick = { isImportingRuleJson = true }) {
-                                            Text("导入")
-                                        }
-                                        TextButton(onClick = { isAddingRule = true }) {
-                                            Text("添加")
-                                        }
-                                    }
-                                }
+                                // 尾部只留展开/收起：操作按钮放下面的独立行，
+                                // 全塞进尾部会把标题列挤成竖排单字
                                 TextButton(onClick = { showAdvancedRules = !showAdvancedRules }) {
                                     Text(if (showAdvancedRules) "收起" else "展开")
                                 }
                             },
                         )
+                        if (showAdvancedRules) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { viewModel.openSubscriptionImport() }) {
+                                    Text("订阅")
+                                }
+                                TextButton(onClick = { viewModel.openSiteProbe() }) {
+                                    Text("探测")
+                                }
+                                TextButton(onClick = { isImportingRuleJson = true }) {
+                                    Text("导入")
+                                }
+                                TextButton(onClick = { isAddingRule = true }) {
+                                    Text("添加")
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -379,6 +388,18 @@ fun PlaybackRulesScreen(
             onProbe = viewModel::startSiteProbe,
             onConfirm = viewModel::addProbedRule,
             onDismiss = viewModel::closeSiteProbe,
+        )
+    }
+
+    // 订阅导入对话框：贴订阅 URL → 检测出报告 → 按报告勾选 → 导入
+    if (subscriptionImportState.isVisible) {
+        SubscriptionImportDialog(
+            state = subscriptionImportState,
+            onInputChanged = viewModel::onSubscriptionInputChanged,
+            onValidate = viewModel::validateSubscription,
+            onToggleSource = viewModel::toggleSubscriptionSource,
+            onConfirm = viewModel::confirmSubscriptionImport,
+            onDismiss = viewModel::closeSubscriptionImport,
         )
     }
 
@@ -1220,6 +1241,162 @@ private fun SiteProbeDialog(
             }
         },
     )
+}
+
+/**
+ * 订阅导入对话框：贴订阅 URL → 检测出报告 → 按报告勾选 → 导入。
+ *
+ * 检测与导入全程确定性（拉取 → 解析 → 探活测速 → 落库），不经过 AI：
+ * 报告里收下几条、跳过几条、为什么跳过都如实展示，与站点探测对话框同一形态。
+ */
+@Composable
+private fun SubscriptionImportDialog(
+    state: SubscriptionImportUiState,
+    onInputChanged: (String) -> Unit,
+    onValidate: () -> Unit,
+    onToggleSource: (Int) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val report = state.report
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("订阅导入") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = "填入 TVBox / MiniBgm 订阅地址，检测通过后按报告勾选要导入的来源。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = state.input,
+                    onValueChange = onInputChanged,
+                    singleLine = true,
+                    enabled = !state.isValidating,
+                    placeholder = {
+                        Text("https://example.com/tvbox.json", style = MaterialTheme.typography.bodySmall)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (state.isValidating) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("正在检测…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                report?.let { result ->
+                    Surface(
+                        shape = BgmShapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(12.dp),
+                        ) {
+                            Text(
+                                text = "✓ 检测通过：有效连通 ${result.aliveRules}/${result.totalRules}，平均延迟 ${result.averageLatencyMs}ms",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            result.sources.forEachIndexed { index, source ->
+                                SubscriptionSourceRow(
+                                    index = index,
+                                    name = source.name,
+                                    latencyMs = source.latencyMs,
+                                    isAlive = source.isAlive,
+                                    isSelected = index in state.selected,
+                                    onToggle = { onToggleSource(index) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                state.errorMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (report != null) {
+                Button(
+                    onClick = onConfirm,
+                    enabled = state.selected.isNotEmpty(),
+                ) {
+                    Text("导入所选（${state.selected.size}）")
+                }
+            } else {
+                Button(
+                    onClick = onValidate,
+                    enabled = !state.isValidating && state.input.isNotBlank(),
+                ) {
+                    Text("检测")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        },
+    )
+}
+
+/** 订阅报告里的单条来源：勾选导入与否；未探活通过的默认不勾，但仍可手动选 */
+@Composable
+private fun SubscriptionSourceRow(
+    index: Int,
+    name: String,
+    latencyMs: Long,
+    isAlive: Boolean,
+    isSelected: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = { onToggle() },
+        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text =
+                    buildString {
+                        append(if (isAlive) "✓ 连通" else "✗ 未连通")
+                        if (latencyMs > 0L) append(" · ${latencyMs}ms")
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+            )
+        }
+    }
 }
 
 /** 续播记录单条：展示主机名与上次观看位置，可单条清除 */
