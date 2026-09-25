@@ -147,6 +147,7 @@ class WebSearchServiceImpl(
             val rawTitle = titleMatch.groupValues[2]
             val cleanTitle = cleanHtmlText(rawTitle)
             if (cleanTitle.isBlank()) continue
+            if (isDictionaryOrMapNoise(cleanTitle, rawUrl)) continue
 
             val captionMatch = captionRegex.find(itemHtml)
             val cleanSnippet = captionMatch?.let { cleanHtmlText(it.groupValues[1]) }.orEmpty()
@@ -161,6 +162,29 @@ class WebSearchServiceImpl(
             if (results.size >= limit) break
         }
         return results
+    }
+
+    private fun isDictionaryOrMapNoise(
+        title: String,
+        url: String,
+    ): Boolean {
+        if (url.contains("/zidian/") ||
+            url.contains("zdic.net") ||
+            url.contains("gaode.com") ||
+            url.contains("map.baidu.com") ||
+            url.contains("dict.revised.moe.edu.tw")
+        ) {
+            return true
+        }
+        val lower = title.lowercase()
+        return lower.contains("（汉语文字）") ||
+            lower.contains("（汉语汉字）") ||
+            lower.contains("（中国姓氏）") ||
+            lower.contains("字源辞典") ||
+            lower.contains("新华字典") ||
+            lower.contains("康熙字典") ||
+            lower.contains("辭典檢視") ||
+            lower.contains("字典-意思-解释")
     }
 
     private fun cleanHtmlText(input: String): String =

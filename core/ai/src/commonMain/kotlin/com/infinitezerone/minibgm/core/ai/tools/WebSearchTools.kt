@@ -90,7 +90,7 @@ class WebSearchTools(
             is AppResult.Success -> {
                 val list = result.data
                 if (list.isEmpty()) {
-                    "No web search results found for '$trimmed'."
+                    "No web search results found for '$trimmed'. Please try different or more general keywords (e.g. '在线 动漫 播放 网站' or '在线 动漫 导航')."
                 } else {
                     json.encodeToString(list)
                 }
