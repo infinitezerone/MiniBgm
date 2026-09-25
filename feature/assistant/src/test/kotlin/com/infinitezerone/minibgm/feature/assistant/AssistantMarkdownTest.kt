@@ -101,4 +101,23 @@ class AssistantMarkdownTest {
         assertTrue(!text.contains("**加粗文字**"))
         assertTrue(!text.contains("[Bangumi](https://bgm.tv)"))
     }
+
+    @Test
+    fun parseMarkdownBlocks_handlesMultipleDividersAndParagraphSeparation() {
+        val markdown =
+            """
+            段落一
+            ***
+            段落二
+            ___
+            段落三
+            """.trimIndent()
+        val blocks = parseMarkdownBlocks(markdown)
+        assertEquals(5, blocks.size)
+        assertTrue(blocks[0] is MarkdownBlock.Paragraph)
+        assertTrue(blocks[1] is MarkdownBlock.Divider)
+        assertTrue(blocks[2] is MarkdownBlock.Paragraph)
+        assertTrue(blocks[3] is MarkdownBlock.Divider)
+        assertTrue(blocks[4] is MarkdownBlock.Paragraph)
+    }
 }

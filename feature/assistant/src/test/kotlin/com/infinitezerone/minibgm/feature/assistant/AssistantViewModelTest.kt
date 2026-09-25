@@ -573,7 +573,7 @@ class AssistantViewModelTest {
                 viewModel.uiState.value.messages
                     .last()
             assertTrue(last.playableSources != null)
-            assertEquals("WebView 深度解析", last.playableSources?.source)
+            assertEquals("WebView 深度解析", last.playableSources.source)
         }
 
     @Test

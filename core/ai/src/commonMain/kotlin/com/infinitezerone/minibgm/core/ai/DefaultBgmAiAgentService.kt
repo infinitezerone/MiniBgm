@@ -406,7 +406,11 @@ internal fun friendlyAiError(
         isAuthFailure(lowered) ->
             "鉴权失败（HTTP 401）：API 密钥无效或已过期，请到 AI 设置更新密钥。"
         isForbidden(lowered) ->
-            "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
+            if (config.endpoint.contains("groq.com", ignoreCase = true)) {
+                "端点拒绝了访问（HTTP 403）：Groq 对中国大陆 IP 存在访问地域限制，请配置代理访问，或切换至 DeepSeek、智谱 GLM、阿里百炼等国内直连服务商。"
+            } else {
+                "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
+            }
         isNetworkOrTimeout(lowered) ->
             "无法连接到 AI 端点或请求超时：请检查网络与 Base URL 是否可达。"
         else -> {

@@ -204,6 +204,8 @@ class AssistantViewModel(
             _uiState.update { it.copy(showSessionSwitcher = false) }
             return
         }
+        agentService.pendingActionStore?.clear()
+        agentService.playableSourcesStore?.clear()
         activeSessionId.value = sessionId
         _uiState.update {
             it.copy(
@@ -261,6 +263,8 @@ class AssistantViewModel(
         job.cancel()
         runJob = null
         AiToolActivity.clear()
+        agentService.pendingActionStore?.clear()
+        agentService.playableSourcesStore?.clear()
         val stoppedMessage =
             AssistantMessage(
                 id = UUID.randomUUID().toString(),
@@ -381,6 +385,8 @@ class AssistantViewModel(
                         }
                     }
                     is AppResult.Error -> {
+                        agentService.pendingActionStore?.clear()
+                        agentService.playableSourcesStore?.clear()
                         val errorMsg =
                             result.message.ifBlank {
                                 result.throwable.message ?: "智能体执行失败"
@@ -547,6 +553,7 @@ class AssistantViewModel(
     fun clearConversation() {
         _uiState.update { it.copy(messages = emptyList()) }
         agentService.pendingActionStore?.clear()
+        agentService.playableSourcesStore?.clear()
         val sessionId = activeSessionId.value
         if (sessionId.isBlank()) return
         viewModelScope.launch {

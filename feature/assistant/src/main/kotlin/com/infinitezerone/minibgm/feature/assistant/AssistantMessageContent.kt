@@ -47,7 +47,7 @@ private val THINKING_TAG_REGEX = Regex("""(?s)<think>(.*?)(?:</think>|$)""")
 internal fun parseThinkingProcess(rawContent: String): ParsedMessageContent {
     val match = THINKING_TAG_REGEX.find(rawContent) ?: return ParsedMessageContent(null, rawContent)
     val thinkingText = match.groupValues[1].trim()
-    val mainText = rawContent.replace(match.value, "").trim()
+    val mainText = rawContent.removeRange(match.range).trim()
     return ParsedMessageContent(
         thinking = thinkingText.takeIf { it.isNotBlank() },
         mainContent = mainText,
