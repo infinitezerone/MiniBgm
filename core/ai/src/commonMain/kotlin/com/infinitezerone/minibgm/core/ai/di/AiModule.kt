@@ -31,12 +31,6 @@ fun aiModule(userAgent: String? = null) =
             )
         }
         single {
-            com.infinitezerone.minibgm.core.ai.tools.CommunityTools(
-                settingsRepository = get(),
-                pendingActionStore = get<PendingActionStore>(),
-            )
-        }
-        single {
             com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools(
                 playbackResolverRepository = get(),
                 pendingActionStore = get<PendingActionStore>(),
@@ -73,7 +67,6 @@ fun aiModule(userAgent: String? = null) =
                 subjectTools = getOrNull(),
                 collectionTools = getOrNull(),
                 playableSourceTools = getOrNull(),
-                communityTools = getOrNull(),
                 playbackRuleDiagnosticsTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),

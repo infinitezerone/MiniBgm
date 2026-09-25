@@ -30,6 +30,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_TOKEN = "stub-token"
+
 class DefaultBgmAiAgentServiceTest : KoinTest {
     private val fakeSettingsRepository = FakeSettingsRepository()
 
@@ -120,7 +123,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "http://localhost:11434/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "qwen2.5:7b",
                     provider = "ollama",
                 ),
@@ -141,7 +144,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "http://localhost:11434/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "qwen2.5:7b",
                     provider = "ollama",
                 ),
@@ -162,7 +165,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "gpt-4o-mini",
                     provider = "openai",
                 ),
@@ -191,7 +194,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "gpt-4o-mini",
                     provider = "openai",
                 ),
@@ -224,7 +227,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "gpt-4o-mini",
                     provider = "openai",
                 ),
@@ -258,7 +261,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "http://localhost:11434/v1",
-                    apiKey = "dummy-key",
+                    apiKey = STUB_TOKEN,
                     model = "qwen2.5:7b",
                     provider = "ollama",
                 ),
@@ -293,7 +296,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "http://127.0.0.1:9999/v1",
-                    apiKey = "sk-test",
+                    apiKey = STUB_TOKEN,
                     model = "DeepSeek-V4-Flash-Vision-Exp",
                     provider = "custom",
                 ),
@@ -313,7 +316,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         runTest {
             val engine =
                 MockEngine { request ->
-                    assertEquals("Bearer test-key", request.headers[HttpHeaders.Authorization])
+                    assertEquals("Bearer $STUB_TOKEN", request.headers[HttpHeaders.Authorization])
                     assertEquals(OpenAiWireClient.DEFAULT_USER_AGENT, request.headers[HttpHeaders.UserAgent])
                     respond(
                         content = """{"data":[{"id":"qwen-2.5-7b"},{"id":"gpt-4o"}]}""",
@@ -329,7 +332,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val result =
                 service.fetchAvailableModels(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "test-key",
+                    apiKey = STUB_TOKEN,
                     provider = "custom",
                 )
             assertIs<AppResult.Success<List<String>>>(result)
@@ -606,7 +609,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "test-key",
+                    apiKey = STUB_TOKEN,
                     model = "gpt-4o",
                     provider = "openai",
                 ),
@@ -665,7 +668,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "test-key",
+                    apiKey = STUB_TOKEN,
                     model = "XingChenAGI/Xing4.0-29B",
                     provider = "openai",
                 ),
@@ -737,7 +740,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     )
                 }
             val wireClient = OpenAiWireClient(HttpClient(engine))
-            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
             val result = summarizeFinalOutcome(config, wireClient, "gpt-4o-mini", emptyList())
             assertEquals("总结：已为您检索完毕。", result)
         }
@@ -753,7 +756,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     )
                 }
             val wireClient = OpenAiWireClient(HttpClient(engine))
-            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
             val result = summarizeFinalOutcome(config, wireClient, "gpt-4o-mini", emptyList())
             assertEquals(DEFAULT_SUMMARY_FALLBACK, result)
         }
@@ -795,7 +798,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     )
                 }
             val wireClient = OpenAiWireClient(HttpClient(engine))
-            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "key")
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
             val tool =
                 com.infinitezerone.minibgm.core.ai.tool.bgmTool(
                     name = "mockTool",

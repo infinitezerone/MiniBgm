@@ -1708,6 +1708,13 @@ def main() -> int:
 
     root = os.path.abspath(args.root)
     out_dir = os.path.abspath(args.out or os.path.join(root, "tools", "codebase-canvas", "out"))
+    # 防路径穿越：out_dir 只允许落在工程根目录内，禁止借 --out 写到仓库之外
+    try:
+        escapes_root = os.path.commonpath([out_dir, root]) != root
+    except ValueError:  # Windows 跨盘符时 commonpath 直接抛错
+        escapes_root = True
+    if escapes_root:
+        ap.error(f"--out 必须位于工程根目录 {root} 内: {out_dir}")
     os.makedirs(out_dir, exist_ok=True)
 
     print(f"[scan] root = {root}", file=sys.stderr)

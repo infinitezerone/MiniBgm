@@ -31,6 +31,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
+private const val STUB_TOKEN = "stub-token"
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AssistantViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
@@ -396,7 +399,7 @@ class AssistantViewModelTest {
             val newConfig =
                 AiConfig(
                     provider = AiConfig.PROVIDER_GEMINI,
-                    apiKey = "gemini-key",
+                    apiKey = STUB_TOKEN,
                     model = "gemini-2.5-pro",
                 )
             viewModel.saveAiConfig(newConfig)
@@ -404,7 +407,7 @@ class AssistantViewModelTest {
 
             val saved = fakeSettingsRepository.aiConfig.first()
             assertEquals(AiConfig.PROVIDER_GEMINI, saved.provider)
-            assertEquals("gemini-key", saved.apiKey)
+            assertEquals(STUB_TOKEN, saved.apiKey)
             assertEquals("gemini-2.5-pro", saved.model)
             assertFalse(viewModel.uiState.value.showConfigDialog)
         }
@@ -674,14 +677,14 @@ class AssistantViewModelTest {
             val result =
                 viewModel.fetchAvailableModels(
                     endpoint = "https://api.openai.com/v1",
-                    apiKey = "test-key",
+                    apiKey = STUB_TOKEN,
                     provider = "custom",
                 )
 
             assertIs<AppResult.Success<List<String>>>(result)
             assertEquals(listOf("gpt-4o", "gpt-4o-mini"), result.data)
             assertEquals("https://api.openai.com/v1", agentService.lastFetchEndpoint)
-            assertEquals("test-key", agentService.lastFetchApiKey)
+            assertEquals(STUB_TOKEN, agentService.lastFetchApiKey)
             assertEquals("custom", agentService.lastFetchProvider)
         }
 

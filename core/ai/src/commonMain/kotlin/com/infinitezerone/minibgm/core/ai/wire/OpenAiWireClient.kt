@@ -20,6 +20,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -115,10 +116,16 @@ class OpenAiWireClient(
 
         val responseText = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw IllegalStateException("HTTP ${response.status.value}: $responseText")
+            throw AiEndpointException(
+                status = response.status.value,
+                responseBody = responseText,
+                retryAfterMs = response.retryAfterMs(),
+            )
         }
 
-        return json.decodeFromString(WireChatResponse.serializer(), responseText)
+        return json
+            .decodeFromString(WireChatResponse.serializer(), responseText)
+            .normalizeDirtyFields()
     }
 
     suspend fun fetchModelsRaw(
@@ -139,10 +146,20 @@ class OpenAiWireClient(
             }
         val responseText = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            throw IllegalStateException("HTTP ${response.status.value}: $responseText")
+            throw AiEndpointException(
+                status = response.status.value,
+                responseBody = responseText,
+                retryAfterMs = response.retryAfterMs(),
+            )
         }
         return responseText
     }
+
+    /** 只解析秒数形式的 Retry-After；HTTP-date 形式返回 null（由上层退避策略兜底） */
+    private fun HttpResponse.retryAfterMs(): Long? =
+        headers[HttpHeaders.RetryAfter]?.trim()?.toLongOrNull()?.let { seconds ->
+            (seconds * 1000L).takeIf { it > 0 }
+        }
 
     internal fun buildChatCompletionsUrl(
         rawEndpoint: String,
