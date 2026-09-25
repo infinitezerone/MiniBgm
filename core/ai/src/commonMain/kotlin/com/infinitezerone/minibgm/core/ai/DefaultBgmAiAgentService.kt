@@ -263,8 +263,10 @@ class DefaultBgmAiAgentService(
                             val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
                             val is429 = isRateLimitOrQuota(raw.lowercase())
                             if (is429 && attempt < maxAttempts) {
-                                AiToolActivity.reportStatus("AI 请求较频繁（429 限流），等待刷新（${attempt * 2}秒）...")
-                                kotlinx.coroutines.delay(attempt * 2000L)
+                                val delayMs = extractRetryDelayMs(raw) ?: (attempt * 6000L)
+                                val delaySec = (delayMs / 1000).coerceAtLeast(1)
+                                AiToolActivity.reportStatus("AI 触发速率限制（429），等待重试（${delaySec}秒）...")
+                                kotlinx.coroutines.delay(delayMs)
                             } else {
                                 throw e
                             }
@@ -403,16 +405,10 @@ internal fun friendlyAiError(
             }}」不可用（服务商提示 model route not found / HTTP 404，该模型可能已下线或不支持对话路由）。请在 AI 设置中点击「获取可用模型」并选择最新的可用模型。"
         isModelUnavailable(lowered) ->
             "模型「${config.model.ifBlank { "（未填写）" }}」在端点上不可用（可能已下线或改名）。请到 AI 设置更换模型——可先点「获取可用模型」查看端点上实际可用的模型。"
-        isRateLimitOrQuota(lowered) ->
-            "请求已被服务商限制（HTTP 429）：服务商提示配额不足或超过并发频率限制（TPM/RPM Limit），请稍后重试或更换模型/端点。"
+        isRateLimitOrQuota(lowered) -> formatRateLimitError(raw, config)
         isAuthFailure(lowered) ->
             "鉴权失败（HTTP 401）：API 密钥无效或已过期，请到 AI 设置更新密钥。"
-        isForbidden(lowered) ->
-            if (config.endpoint.contains("groq.com", ignoreCase = true)) {
-                "端点拒绝了访问（HTTP 403）：Groq 对中国大陆 IP 存在访问地域限制，请配置代理访问，或切换至 DeepSeek、智谱 GLM、阿里百炼等国内直连服务商。"
-            } else {
-                "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
-            }
+        isForbidden(lowered) -> formatForbiddenError(config)
         isNetworkOrTimeout(lowered) ->
             "无法连接到 AI 端点或请求超时：请检查网络与 Base URL 是否可达。"
         else -> {
@@ -420,6 +416,36 @@ internal fun friendlyAiError(
                 "AI 服务商返回错误：$innerMsg"
             } ?: raw.ifBlank { e.toString() }
         }
+    }
+}
+
+internal fun formatRateLimitError(
+    raw: String,
+    config: AiConfig,
+): String {
+    val detail = extractJsonErrorMessage(raw)
+    val prefix = if (!detail.isNullOrBlank()) "：$detail" else "：超出速率或配额限制（TPM/RPM Limit）"
+    val suffix =
+        if (config.endpoint.contains("groq.com", ignoreCase = true)) {
+            "。Groq 免费层限制为每分钟 8,000 Token，包含多轮工具调用时较易触发。请稍等约 10 秒后重试，或在 AI 设置中更换高并发服务商（如 DeepSeek、硅基流动、智谱 GLM 等）。"
+        } else {
+            "。请稍后重试，或在 AI 设置中更换模型/端点。"
+        }
+    return "请求已被服务商限制（HTTP 429）$prefix$suffix"
+}
+
+internal fun formatForbiddenError(config: AiConfig): String =
+    if (config.endpoint.contains("groq.com", ignoreCase = true)) {
+        "端点拒绝了访问（HTTP 403）：Groq 对中国大陆 IP 存在访问地域限制，请配置代理访问，或切换至 DeepSeek、智谱 GLM、阿里百炼等国内直连服务商。"
+    } else {
+        "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
+    }
+
+internal fun extractRetryDelayMs(raw: String): Long? {
+    val match = Regex("""try again in\s+(\d+(?:\.\d+)?)\s*s""", RegexOption.IGNORE_CASE).find(raw)
+    return match?.let {
+        val seconds = it.groupValues[1].toDoubleOrNull() ?: return@let null
+        ((seconds + 1.0) * 1000).toLong().coerceIn(3000L, 25000L)
     }
 }
 

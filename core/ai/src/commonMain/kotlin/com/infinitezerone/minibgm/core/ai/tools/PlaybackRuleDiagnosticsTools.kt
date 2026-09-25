@@ -51,7 +51,7 @@ class PlaybackRuleDiagnosticsTools(
     private val playbackResolverRepository: PlaybackResolverRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
             encodeDefaults = true
         },

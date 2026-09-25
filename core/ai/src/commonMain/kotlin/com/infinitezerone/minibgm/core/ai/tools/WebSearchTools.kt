@@ -19,7 +19,7 @@ class WebSearchTools(
     private val webSearchRepository: WebSearchRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
 ) : ToolSet {
@@ -32,15 +32,15 @@ class WebSearchTools(
     suspend fun searchWeb(
         @LLMDescription("Search query keywords (e.g. '葬送的芙莉莲 在线观看' or '动漫 在线播放 网站 推荐')")
         query: String,
-        @LLMDescription("Max number of search results to return (default 6, range 1..10)")
-        limit: Int = 6,
+        @LLMDescription("Max number of search results to return (default 4, range 1..6)")
+        limit: Int = 4,
     ): String {
         val trimmed = query.trim()
         if (trimmed.isBlank()) {
             return "Search query must not be blank."
         }
         AiToolActivity.report("公网搜索", "关键词：$trimmed")
-        val boundedLimit = limit.coerceIn(1, 10)
+        val boundedLimit = limit.coerceIn(1, 6)
 
         return when (val result = webSearchRepository.searchWeb(trimmed, boundedLimit)) {
             is AppResult.Success -> {
@@ -78,7 +78,7 @@ class WebSearchTools(
 
         return when (val result = webSearchRepository.fetchWebContent(trimmed)) {
             is AppResult.Success -> {
-                val text = result.data
+                val text = result.data.take(1500)
                 if (text.isBlank()) {
                     "Web page was loaded but returned no readable text content."
                 } else {

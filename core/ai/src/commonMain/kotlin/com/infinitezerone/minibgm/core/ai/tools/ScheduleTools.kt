@@ -40,7 +40,7 @@ class ScheduleTools(
     private val scheduleRepository: ScheduleRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
 ) : ToolSet {

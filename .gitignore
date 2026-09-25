@@ -13,4 +13,4 @@ captures/
 .kotlin/
 keystore/
 keystore.properties
-
+.mimosa/

@@ -137,14 +137,7 @@ class AssistantViewModel(
         val trimmed = prompt.trim()
         if (trimmed.isBlank() || _uiState.value.isLoading) return
 
-        val history =
-            _uiState.value.messages
-                .filter { !it.isError && it.content.isNotBlank() }
-                .takeLast(6)
-                .map { msg ->
-                    val role = if (msg.role == MessageRole.USER) "user" else "assistant"
-                    role to msg.content
-                }
+        val history = buildHistoryContext(_uiState.value.messages)
 
         val userMessage =
             AssistantMessage(
@@ -245,10 +238,23 @@ class AssistantViewModel(
     /** 删除会话及其消息；删的是激活会话时，会话收集器自愈到剩余最近会话（全空则新建） */
     fun deleteSession(sessionId: String) {
         viewModelScope.launch {
+            if (sessionId == activeSessionId.value) {
+                agentService.pendingActionStore?.clear()
+                agentService.playableSourcesStore?.clear()
+            }
             assistantRepository?.deleteSession(sessionId)
-            _uiState.update { it.copy(showSessionSwitcher = false) }
         }
     }
+
+    private fun buildHistoryContext(messages: List<AssistantMessage>): List<Pair<String, String>> =
+        messages
+            .filter { !it.isError && it.content.isNotBlank() }
+            .takeLast(4)
+            .map { msg ->
+                val role = if (msg.role == MessageRole.USER) "user" else "assistant"
+                val text = if (msg.content.length > 300) msg.content.take(300) + "..." else msg.content
+                role to text
+            }
 
     fun toggleSessionSwitcher(show: Boolean) {
         _uiState.update { it.copy(showSessionSwitcher = show) }
@@ -292,15 +298,7 @@ class AssistantViewModel(
                 ?.content
                 ?: return
 
-        val history =
-            messages
-                .take(errorIndex)
-                .filter { !it.isError && it.content.isNotBlank() }
-                .takeLast(6)
-                .map { msg ->
-                    val role = if (msg.role == MessageRole.USER) "user" else "assistant"
-                    role to msg.content
-                }
+        val history = buildHistoryContext(messages.take(errorIndex))
 
         _uiState.update { it.copy(isLoading = true) }
         runAgent(prompt, history, retriedErrorId = errorId)
@@ -558,6 +556,7 @@ class AssistantViewModel(
         if (sessionId.isBlank()) return
         viewModelScope.launch {
             assistantRepository?.clearMessages(sessionId)
+            assistantRepository?.renameSession(sessionId, NEW_SESSION_TITLE)
         }
     }
 

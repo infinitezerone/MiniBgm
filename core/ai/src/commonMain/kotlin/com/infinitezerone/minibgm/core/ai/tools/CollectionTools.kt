@@ -38,7 +38,7 @@ class CollectionTools(
     private val collectionRepository: CollectionRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
     private val pendingActionStore: PendingActionStore? = null,

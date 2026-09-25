@@ -448,4 +448,31 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         val plainText = "Plain error without json"
         assertNull(extractJsonErrorMessage(plainText))
     }
+
+    @Test
+    fun formatRateLimitError_provides_groq_and_generic_guidance() {
+        val groqConfig = AiConfig(endpoint = "https://api.groq.com/openai/v1", model = "qwen/qwen3.8-27b")
+        val groqError = "429: {\"error\":{\"message\":\"Rate limit reached on TPM: Limit 8000, Used 7900\"}}"
+        val groqMsg = formatRateLimitError(groqError, groqConfig)
+        assertTrue(groqMsg.contains("Rate limit reached on TPM"))
+        assertTrue(groqMsg.contains("Groq 免费层"))
+        assertTrue(groqMsg.contains("8,000 Token"))
+
+        val genericConfig = AiConfig(endpoint = "https://api.deepseek.com/v1", model = "deepseek-chat")
+        val genericError = "429 Too Many Requests"
+        val genericMsg = formatRateLimitError(genericError, genericConfig)
+        assertTrue(genericMsg.contains("超出速率或配额限制"))
+        assertFalse(genericMsg.contains("Groq 免费层"))
+    }
+
+    @Test
+    fun extractRetryDelayMs_parses_seconds_correctly() {
+        val raw = "Rate limit reached on TPM. Please try again in 5.812s."
+        val delay = extractRetryDelayMs(raw)
+        assertNotNull(delay)
+        assertTrue(delay in 6000L..8000L)
+
+        val noMatch = "Random 429 error without delay"
+        assertNull(extractRetryDelayMs(noMatch))
+    }
 }

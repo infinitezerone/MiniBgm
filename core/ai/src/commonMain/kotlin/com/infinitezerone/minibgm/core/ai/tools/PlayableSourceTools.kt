@@ -39,7 +39,7 @@ class PlayableSourceTools(
     private val playableSourcesStore: com.infinitezerone.minibgm.core.ai.PlayableSourcesStore? = null,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
 ) : ToolSet {
