@@ -1,6 +1,6 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.ToolRegistry
+import com.infinitezerone.minibgm.core.ai.tool.BgmToolRegistry
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
@@ -70,14 +70,16 @@ class ToolRegistryIntegrationTest {
             )
 
         val registry =
-            ToolRegistry {
-                tools(scheduleTools)
-                tools(subjectTools)
-                tools(collectionTools)
-                tools(playableSourceTools)
-                tools(communityTools)
-                tools(diagnosticsTools)
-            }
+            BgmToolRegistry(
+                listOf(
+                    scheduleTools.tools(),
+                    subjectTools.tools(),
+                    collectionTools.tools(),
+                    playableSourceTools.tools(),
+                    communityTools.tools(),
+                    diagnosticsTools.tools(),
+                ).flatten(),
+            )
 
         val toolNames = registry.tools.map { it.name }
         // Schedule tools
@@ -95,9 +97,9 @@ class ToolRegistryIntegrationTest {
         assertTrue(toolNames.contains("proposeUpdateCollection"))
         assertTrue(toolNames.contains("proposeUpdateEpisodeProgress"))
 
-        val getScheduleDescriptor = registry.getTool("getSchedule").descriptor
-        assertNotNull(getScheduleDescriptor)
-        assertTrue(getScheduleDescriptor.description.contains("broadcast schedule"))
+        val getScheduleTool = registry.getTool("getSchedule")
+        assertNotNull(getScheduleTool)
+        assertTrue(getScheduleTool.description.contains("broadcast schedule"))
 
         // Community tools：只允许"验证用户给出的地址"，不得存在任何自行检索社区的入口
         assertTrue(toolNames.contains("validateAndTestSubscription"))
@@ -120,9 +122,9 @@ class ToolRegistryIntegrationTest {
 
         // 找源工具：描述必须写明"返回结构化可播数据、且模型只能转述工具结果"
         assertTrue(toolNames.contains("findPlayableSources"))
-        val playableDescriptor = registry.getTool("findPlayableSources").descriptor
-        assertNotNull(playableDescriptor)
-        assertTrue(playableDescriptor.description.contains("structured playback data"))
-        assertTrue(playableDescriptor.description.contains("never invent"))
+        val playableTool = registry.getTool("findPlayableSources")
+        assertNotNull(playableTool)
+        assertTrue(playableTool.description.contains("structured playback data"))
+        assertTrue(playableTool.description.contains("never invent"))
     }
 }

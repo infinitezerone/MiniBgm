@@ -1,21 +1,16 @@
 package com.infinitezerone.minibgm.core.ai
 
-import ai.koog.agents.core.agent.AIAgent
-import ai.koog.agents.core.tools.ToolRegistry
-import ai.koog.http.client.ktor.KtorKoogHttpClient
-import ai.koog.prompt.executor.clients.ConnectionTimeoutConfig
-import ai.koog.prompt.executor.clients.LLMClient
-import ai.koog.prompt.executor.clients.openai.OpenAIClientSettings
-import ai.koog.prompt.executor.clients.openai.OpenAILLMClient
-import ai.koog.prompt.executor.llms.MultiLLMPromptExecutor
-import ai.koog.prompt.executor.ollama.client.OllamaClient
-import ai.koog.prompt.llm.LLMCapability
-import ai.koog.prompt.llm.LLMProvider
-import ai.koog.prompt.llm.LLModel
+import com.infinitezerone.minibgm.core.ai.tool.BgmToolRegistry
 import com.infinitezerone.minibgm.core.ai.tools.CollectionTools
+import com.infinitezerone.minibgm.core.ai.tools.CommunityTools
 import com.infinitezerone.minibgm.core.ai.tools.PlayableSourceTools
+import com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools
 import com.infinitezerone.minibgm.core.ai.tools.ScheduleTools
 import com.infinitezerone.minibgm.core.ai.tools.SubjectTools
+import com.infinitezerone.minibgm.core.ai.tools.WebSearchTools
+import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
+import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
+import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -39,60 +34,19 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /** 单次 AI 执行的硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
 const val AI_RUN_TIMEOUT_MS = 180_000L
 
-/**
- * 单轮模型请求的超时。koog 的 [ConnectionTimeoutConfig] 默认 requestTimeout 是 900 秒（15 分钟），
- * 端点不响应时会一直挂到外层 [AI_RUN_TIMEOUT_MS] 兜底——用户面对的是整整 3 分钟的无反馈等待。
- * 单轮给 60 秒：正常推理远用不满，死端点则快速失败并给出可读错误。
- */
+/** 单轮模型请求的超时：60 秒，正常推理远用不满，异常端点快速失败 */
 const val AI_REQUEST_TIMEOUT_MS = 60_000L
 
-/** 单轮模型请求的超时配置：见 [AI_REQUEST_TIMEOUT_MS] 的说明 */
-private val aiTimeoutConfig =
-    ConnectionTimeoutConfig(
-        requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS,
-        connectTimeoutMillis = 15_000,
-        socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS,
-    )
-
 /**
- * koog 与模型端点通信用的 HTTP client 工厂。
- *
- * 必须显式构造 baseClient 并装上 Logging：koog 自带的内部日志走 kotlin-logging，
- * 在没有 SLF4J 后端的 Android 上会静默丢弃——不装这个，"第二轮请求发出去了没有、端点回了什么"
- * 在 logcat 里完全不可见（排查过一次 3 分钟黑洞，全部日志只有一句 TimeoutCancellationException）。
- * LogLevel.INFO 只记录请求生命周期与状态码，不含 header 与 body，不会泄漏 API key。
- */
-private val koogClientFactory: KtorKoogHttpClient.Factory by lazy {
-    KtorKoogHttpClient.Factory(
-        baseClient =
-            HttpClient {
-                val httpLogger = bgmLogger("Bgm/AiHttp")
-                install(Logging) {
-                    logger =
-                        object : Logger {
-                            override fun log(message: String) {
-                                httpLogger.d { message }
-                            }
-                        }
-                    level = LogLevel.INFO
-                }
-                install(HttpTimeout) {
-                    requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS
-                    connectTimeoutMillis = 15_000
-                    socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS
-                }
-            },
-    )
-}
-
-/**
- * 默认智能体执行服务，利用 JetBrains Koog 框架与 SettingsRepository 提供的 AI 配置进行交互。
- * 整合放送时刻表、条目检索、收藏进度与找源等 Koog 工具集，并在写操作执行中引入 HITL 安全保护机制。
+ * 默认智能体执行服务，基于原生 OpenAI Wire 协议与 Pi Agent 极简 ReAct 循环。
+ * 零第三方 Agent 框架黑盒依赖，直接且精准地支持 tool_calls、推理模型 reasoning_content 与多轮往返。
  */
 class DefaultBgmAiAgentService(
     private val settingsRepository: SettingsRepository,
@@ -100,90 +54,16 @@ class DefaultBgmAiAgentService(
     val subjectTools: SubjectTools? = null,
     val collectionTools: CollectionTools? = null,
     val playableSourceTools: PlayableSourceTools? = null,
-    val communityTools: com.infinitezerone.minibgm.core.ai.tools.CommunityTools? = null,
-    val playbackRuleDiagnosticsTools: com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools? = null,
-    val webSearchTools: com.infinitezerone.minibgm.core.ai.tools.WebSearchTools? = null,
+    val communityTools: CommunityTools? = null,
+    val playbackRuleDiagnosticsTools: PlaybackRuleDiagnosticsTools? = null,
+    val webSearchTools: WebSearchTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
     override val playableSourcesStore: PlayableSourcesStore? = null,
     httpClient: HttpClient? = null,
-    private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
-        val client: LLMClient =
-            when {
-                config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true) -> {
-                    OllamaClient(
-                        httpClientFactory = koogClientFactory,
-                        baseUrl = config.endpoint.ifBlank { OllamaClient.DEFAULT_BASE_URL },
-                    )
-                }
-                else -> {
-                    val isGemini = config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true)
-                    val endpoint =
-                        config.endpoint.ifBlank {
-                            if (isGemini) {
-                                "https://generativelanguage.googleapis.com/v1beta/openai"
-                            } else {
-                                "https://api.openai.com/v1"
-                            }
-                        }
-                    OpenAILLMClient(
-                        apiKey = config.apiKey,
-                        settings =
-                            OpenAIClientSettings(
-                                baseUrl = resolveApiBase(endpoint, config.provider),
-                                // 版本段（/v1、/v4、/v1beta/openai…）属于 baseUrl，路径只补最后一段
-                                chatCompletionsPath = "chat/completions",
-                                timeoutConfig = aiTimeoutConfig,
-                            ),
-                        httpClientFactory = koogClientFactory,
-                    )
-                }
-            }
-
-        val defaultModel =
-            when {
-                config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true) -> "qwen2.5:7b"
-                config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) -> "gemini-2.5-flash"
-                else -> "gpt-4o-mini"
-            }
-
-        val capabilities =
-            if (config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) {
-                listOf(
-                    LLMCapability.Tools,
-                    LLMCapability.Completion,
-                    LLMCapability.Temperature,
-                )
-            } else {
-                listOf(
-                    LLMCapability.OpenAIEndpoint.Completions,
-                    LLMCapability.Tools,
-                    LLMCapability.Completion,
-                    LLMCapability.Temperature,
-                )
-            }
-
-        val llmModel =
-            LLModel(
-                provider =
-                    if (config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) {
-                        LLMProvider.Ollama
-                    } else {
-                        LLMProvider.OpenAI
-                    },
-                id = config.model.ifBlank { defaultModel },
-                capabilities = capabilities,
-            )
-        val executor = MultiLLMPromptExecutor(client)
-        val agent =
-            AIAgent(
-                promptExecutor = executor,
-                llmModel = llmModel,
-                toolRegistry = tools,
-                systemPrompt = BGM_AGENT_SYSTEM_PROMPT,
-            )
-        agent.run(prompt)
-    },
+    wireClient: OpenAiWireClient? = null,
+    private val coroutineDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
+    agentRunner: (suspend (config: AiConfig, prompt: String, tools: BgmToolRegistry) -> String)? = null,
 ) : BgmAiAgentService {
     constructor(
         settingsRepository: SettingsRepository,
@@ -200,99 +80,9 @@ class DefaultBgmAiAgentService(
         agentRunner = { config, prompt, _ -> agentRunner(config, prompt) },
     )
 
-    val toolRegistry: ToolRegistry =
-        ToolRegistry {
-            scheduleTools?.let { tools(it) }
-            subjectTools?.let { tools(it) }
-            collectionTools?.let { tools(it) }
-            playableSourceTools?.let { tools(it) }
-            communityTools?.let { tools(it) }
-            playbackRuleDiagnosticsTools?.let { tools(it) }
-            webSearchTools?.let { tools(it) }
-        }
+    private val catalogLogger = bgmLogger("Bgm/AiHttp")
 
-    override suspend fun execute(
-        prompt: String,
-        history: List<Pair<String, String>>,
-    ): AppResult<String> {
-        if (prompt.isBlank()) {
-            return AppResult.Error(IllegalArgumentException("Prompt must not be blank."))
-        }
-        val config = settingsRepository.aiConfig.first()
-        if (config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) {
-            // Ollama can run with local defaults and doesn't require an API key
-        } else {
-            if (config.apiKey.isBlank()) {
-                return AppResult.Error(
-                    IllegalStateException("API key is missing for provider '${config.provider}'. Please configure it in AI settings."),
-                )
-            }
-        }
-
-        val finalPrompt =
-            if (history.isEmpty()) {
-                prompt
-            } else {
-                buildString {
-                    appendLine("以下是先前的会话历史记录（供参考上下文）：")
-                    history.forEach { (role, content) ->
-                        val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
-                        appendLine("[$roleLabel] $content")
-                    }
-                    appendLine("---")
-                    appendLine("用户当前最新输入：")
-                    append(prompt)
-                }
-            }
-
-        AiToolActivity.clear()
-        AiToolActivity.reportStatus("AI 正在思考并检索...")
-        return try {
-            // 推理模型多轮往返较慢（实测 1~3 分钟），但必须有硬上限防挂死；支持 429 限流退避重试
-            val response =
-                withTimeout(AI_RUN_TIMEOUT_MS) {
-                    var lastException: Exception? = null
-                    var result: String? = null
-                    val maxAttempts = 3
-                    for (attempt in 1..maxAttempts) {
-                        try {
-                            result = agentRunner(config, finalPrompt, toolRegistry)
-                            break
-                        } catch (e: Exception) {
-                            lastException = e
-                            val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
-                            val is429 = isRateLimitOrQuota(raw.lowercase())
-                            if (is429 && attempt < maxAttempts) {
-                                val delayMs = extractRetryDelayMs(raw) ?: (attempt * 6000L)
-                                val delaySec = (delayMs / 1000).coerceAtLeast(1)
-                                AiToolActivity.reportStatus("AI 触发速率限制（429），等待重试（${delaySec}秒）...")
-                                kotlinx.coroutines.delay(delayMs)
-                            } else {
-                                throw e
-                            }
-                        }
-                    }
-                    result ?: throw (lastException ?: IllegalStateException("Agent execution failed"))
-                }
-            AiToolActivity.clear()
-            AppResult.Success(response)
-        } catch (e: TimeoutCancellationException) {
-            AiToolActivity.clear()
-            AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // 用户主动停止（或外层作用域取消）：取消必须继续传播，
-            // 吞掉它会破坏结构化并发，还会把"已停止"伪装成一条错误消息追加进会话（真机实测踩过）
-            AiToolActivity.clear()
-            throw e
-        } catch (e: Exception) {
-            AiToolActivity.clear()
-            AppResult.Error(e, friendlyAiError(config, e))
-        }
-    }
-
-    private val catalogLogger = bgmLogger("Bgm/AiCatalog")
-
-    private val catalogClient: HttpClient by lazy {
+    private val activeHttpClient: HttpClient by lazy {
         httpClient ?: HttpClient {
             install(Logging) {
                 logger =
@@ -304,13 +94,124 @@ class DefaultBgmAiAgentService(
                 level = LogLevel.INFO
             }
             install(HttpTimeout) {
-                requestTimeoutMillis = 20_000
-                connectTimeoutMillis = 10_000
+                requestTimeoutMillis = AI_REQUEST_TIMEOUT_MS
+                connectTimeoutMillis = 15_000
+                socketTimeoutMillis = AI_REQUEST_TIMEOUT_MS
             }
         }
     }
 
-    /** 拉取端点可用模型列表：优先 OpenAI 兼容 /models，兼容 Ollama /api/tags 的 models[].name */
+    private val activeWireClient: OpenAiWireClient by lazy {
+        wireClient ?: OpenAiWireClient(activeHttpClient)
+    }
+
+    val toolRegistry: BgmToolRegistry =
+        BgmToolRegistry(
+            listOfNotNull(
+                scheduleTools?.tools(),
+                subjectTools?.tools(),
+                collectionTools?.tools(),
+                playableSourceTools?.tools(),
+                communityTools?.tools(),
+                playbackRuleDiagnosticsTools?.tools(),
+                webSearchTools?.tools(),
+            ).flatten(),
+        )
+
+    private val effectiveAgentRunner: suspend (config: AiConfig, prompt: String, tools: BgmToolRegistry) -> String =
+        agentRunner ?: { config, prompt, tools ->
+            runPiAgent(
+                wireClient = activeWireClient,
+                config = config,
+                prompt = prompt,
+                tools = tools,
+            )
+        }
+
+    override suspend fun execute(
+        prompt: String,
+        history: List<Pair<String, String>>,
+    ): AppResult<String> {
+        if (prompt.isBlank()) {
+            return AppResult.Error(IllegalArgumentException("Prompt must not be blank."))
+        }
+        val config = settingsRepository.aiConfig.first()
+        if (!config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true) && config.apiKey.isBlank()) {
+            return AppResult.Error(
+                IllegalStateException("API key is missing for provider '${config.provider}'. Please configure it in AI settings."),
+            )
+        }
+
+        val finalPrompt = buildFinalPrompt(prompt, history)
+        AiToolActivity.clear()
+        AiToolActivity.reportStatus("AI 正在思考并检索...")
+
+        return try {
+            val response =
+                kotlinx.coroutines.withContext(coroutineDispatcher) {
+                    withTimeout(AI_RUN_TIMEOUT_MS) {
+                        executeWithRetry(config, finalPrompt)
+                    }
+                }
+            AiToolActivity.clear()
+            AppResult.Success(response)
+        } catch (e: TimeoutCancellationException) {
+            AiToolActivity.clear()
+            AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            AiToolActivity.clear()
+            throw e
+        } catch (e: Exception) {
+            AiToolActivity.clear()
+            AppResult.Error(e, friendlyAiError(config, e))
+        }
+    }
+
+    private suspend fun executeWithRetry(
+        config: AiConfig,
+        finalPrompt: String,
+    ): String {
+        var lastException: Exception? = null
+        val maxAttempts = 3
+        for (attempt in 1..maxAttempts) {
+            try {
+                return effectiveAgentRunner(config, finalPrompt, toolRegistry)
+            } catch (e: Exception) {
+                lastException = e
+                val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
+                val is429 = isRateLimitOrQuota(raw.lowercase())
+                if (is429 && attempt < maxAttempts) {
+                    val delayMs = extractRetryDelayMs(raw) ?: (attempt * 6000L)
+                    val delaySec = (delayMs / 1000).coerceAtLeast(1)
+                    AiToolActivity.reportStatus("AI 触发速率限制（429），等待重试（${delaySec}秒）...")
+                    kotlinx.coroutines.delay(delayMs)
+                } else {
+                    throw e
+                }
+            }
+        }
+        throw (lastException ?: IllegalStateException("Agent execution failed"))
+    }
+
+    private fun buildFinalPrompt(
+        prompt: String,
+        history: List<Pair<String, String>>,
+    ): String =
+        if (history.isEmpty()) {
+            prompt
+        } else {
+            buildString {
+                appendLine("以下是先前的会话历史记录（供参考上下文）：")
+                history.forEach { (role, content) ->
+                    val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
+                    appendLine("[$roleLabel] $content")
+                }
+                appendLine("---")
+                appendLine("用户当前最新输入：")
+                append(prompt)
+            }
+        }
+
     override suspend fun fetchAvailableModels(
         endpoint: String?,
         apiKey: String?,
@@ -323,7 +224,7 @@ class DefaultBgmAiAgentService(
 
         return try {
             val response: HttpResponse =
-                catalogClient.get(modelsUrl) {
+                activeHttpClient.get(modelsUrl) {
                     header(HttpHeaders.UserAgent, "MiniBgm/1.0 (Android)")
                     if (target.apiKey.isNotBlank()) {
                         header(HttpHeaders.Authorization, "Bearer ${target.apiKey}")
@@ -336,12 +237,7 @@ class DefaultBgmAiAgentService(
                 val rawBody = runCatching { response.body<String>() }.getOrNull().orEmpty()
                 val innerMsg = extractJsonErrorMessage(rawBody)
                 val fallbackMsg = catalogHttpErrorMessage(response.status.value)
-                val errorMsg =
-                    if (!innerMsg.isNullOrBlank()) {
-                        "拉取模型列表失败（HTTP ${response.status.value}）：$innerMsg"
-                    } else {
-                        fallbackMsg
-                    }
+                val errorMsg = if (!innerMsg.isNullOrBlank()) "拉取模型列表失败（HTTP ${response.status.value}）：$innerMsg" else fallbackMsg
                 catalogLogger.w { "Failed to fetch models: HTTP ${response.status.value}, url: $modelsUrl, body: $rawBody" }
                 return AppResult.Error(IllegalStateException("HTTP ${response.status.value}"), errorMsg)
             }
@@ -359,11 +255,87 @@ class DefaultBgmAiAgentService(
             AppResult.Error(e, friendly.ifBlank { "拉取模型列表失败：${e.message}" })
         }
     }
-
-    companion object {
-        // Internal for unit testing
-    }
 }
+
+/**
+ * Pi Agent 架构的极简 ReAct 循环：
+ * 只要模型返回 tool_calls，立即派发执行并以 role="tool" 追加上下文，绝不因模型输出过程文本而早退。
+ * 当无 tool_calls 时，提取 content（或兼容思考模型的 reasoning_content）作为最终回答。
+ */
+internal suspend fun runPiAgent(
+    wireClient: OpenAiWireClient,
+    config: AiConfig,
+    prompt: String,
+    tools: BgmToolRegistry,
+    maxTurns: Int = 10,
+): String {
+    val messages = mutableListOf<WireChatMessage>()
+    messages.add(WireChatMessage.system(BGM_AGENT_SYSTEM_PROMPT))
+    messages.add(WireChatMessage.user(prompt))
+
+    val toolDefinitions = tools.toDefinitions().ifEmpty { null }
+    val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
+
+    var turns = 0
+    while (turns++ < maxTurns) {
+        val request =
+            WireChatRequest(
+                model = config.model.ifBlank { defaultModel(config) },
+                messages = messages,
+                tools = toolDefinitions,
+                temperature = 0.3,
+            )
+
+        val response = wireClient.chatCompletion(config, request)
+        if (response.error != null && !response.error.message.isNullOrBlank()) {
+            throw IllegalStateException(response.error.message)
+        }
+
+        val choice =
+            response.choices.firstOrNull()
+                ?: throw IllegalStateException("Model returned empty choices")
+        val assistantMessage = choice.message
+        messages.add(assistantMessage)
+
+        val toolCalls = assistantMessage.toolCalls
+        if (toolCalls.isNullOrEmpty()) {
+            val content = assistantMessage.content?.trim().orEmpty()
+            val reasoning = assistantMessage.reasoningContent?.trim().orEmpty()
+            return content.ifBlank { reasoning }
+        }
+
+        for (call in toolCalls) {
+            val funcName = call.function.name
+            val argsJson =
+                try {
+                    json.parseToJsonElement(call.function.arguments).jsonObject
+                } catch (e: Exception) {
+                    buildJsonObject {}
+                }
+
+            val toolResult = tools.execute(funcName, argsJson)
+            messages.add(
+                WireChatMessage.tool(
+                    toolCallId = call.id,
+                    name = funcName,
+                    content = toolResult,
+                ),
+            )
+        }
+    }
+    throw IllegalStateException("Agent reached maximum turn limit ($maxTurns) without completing")
+}
+
+internal fun defaultModel(config: AiConfig): String =
+    when {
+        config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true) -> "qwen2.5:7b"
+        config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) -> "gemini-2.5-flash"
+        else -> "gpt-4o-mini"
+    }
 
 internal data class TargetModelConfig(
     val endpoint: String,
@@ -498,11 +470,6 @@ private val API_VERSION_SEGMENT = Regex("""/(?:v\d+[a-z0-9]*|openai)(?:/|$)""", 
 
 /**
  * 从用户填写的端点推导「API 基址」——chat 与 models 两条路径共用，避免各拼各的。
- *
- * 约定：**端点里已有版本段就原样用，没有才补 `/v1`**。不能假设版本段一定是 `/v1`：
- * 智谱是 `…/api/paas/v4`、Gemini 是 `…/v1beta/openai`、通义是 `…/compatible-mode/v1`，
- * 硬拼 `/v1` 会得到一个不存在的路径（实测智谱 `…/v4/v1/chat/completions` 请求 60 秒无响应，
- * 而正确路径是 `…/v4/chat/completions`）。
  */
 internal fun resolveApiBase(
     rawEndpoint: String,
@@ -511,7 +478,6 @@ internal fun resolveApiBase(
     var base = rawEndpoint.trim().trimEnd('/')
     base = base.removeSuffix("/chat/completions").removeSuffix("/models").trimEnd('/')
     if (base.isBlank()) return ""
-    // Ollama 走原生 /api/*，不带 OpenAI 版本段
     if (provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)) return base
     return if (API_VERSION_SEGMENT.containsMatchIn(base)) base else "$base/v1"
 }
@@ -556,10 +522,6 @@ private val catalogJson =
  * 解析模型列表：
  * 兼容 OpenAI（data[].id）、Ollama（models[].name / models[].model）、
  * Gemini 原生（models[].name 去除 "models/" 前缀）、以及各类代理返回的字符串列表或根数组。
- *
- * 智能过滤：自动过滤纯生图（output_modalities 仅包含 image）、向量 Embedding、语音及 Moderation 等非对话模型。
- * 智能排序：优先将支持 Chat/Instruct/Flash/Pro 的最新主流对话模型排在前面。
- * 若无有效模型则返回 null。
  */
 internal fun parseModelsBody(body: String): List<String>? =
     runCatching {
@@ -593,7 +555,6 @@ internal fun parseModelsBody(body: String): List<String>? =
             val trimmed = id.trim().removePrefix("models/")
             if (trimmed.isBlank() || isNonChatModel(trimmed)) return
 
-            // 检查输出模态（例如纯生图模型 output_modalities: ["image"]）
             val outputModalities = obj["output_modalities"]
             if (outputModalities is JsonArray) {
                 val hasText =

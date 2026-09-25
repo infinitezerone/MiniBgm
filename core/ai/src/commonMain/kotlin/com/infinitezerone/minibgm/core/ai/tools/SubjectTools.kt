@@ -1,15 +1,20 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.long
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
+import com.infinitezerone.minibgm.core.ai.tool.string
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 
 @Serializable
 data class SubjectSearchResultDto(
@@ -45,7 +50,7 @@ data class EpisodeDto(
 )
 
 /**
- * 条目详情与搜索相关 Koog 智能体工具。
+ * 条目详情与搜索相关智能体工具。
  * 支持按关键字搜索动画条目、获取条目完整详情与剧集列表。
  */
 class SubjectTools(
@@ -56,13 +61,59 @@ class SubjectTools(
             prettyPrint = false
             ignoreUnknownKeys = true
         },
-) : ToolSet {
-    @Tool
-    @LLMDescription("Search anime by title or keyword")
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "searchAnime",
+                description = "Search anime by title or keyword",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("query", schemaProperty("string", "Search query keyword"))
+                                put("limit", schemaProperty("integer", "Maximum number of results to return (default 5)"))
+                            },
+                        required = listOf("query"),
+                    ),
+            ) { args ->
+                searchAnime(
+                    query = args.string("query"),
+                    limit = args.int("limit", 5),
+                )
+            },
+            bgmTool(
+                name = "getSubjectDetail",
+                description = "Get comprehensive details for a specific anime by subject ID",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                            },
+                        required = listOf("subjectId"),
+                    ),
+            ) { args ->
+                getSubjectDetail(args.long("subjectId"))
+            },
+            bgmTool(
+                name = "getSubjectEpisodes",
+                description = "Get episode list for a specific anime by subject ID",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                            },
+                        required = listOf("subjectId"),
+                    ),
+            ) { args ->
+                getSubjectEpisodes(args.long("subjectId"))
+            },
+        )
+
     suspend fun searchAnime(
-        @LLMDescription("Search query keyword")
         query: String,
-        @LLMDescription("Maximum number of results to return (default 5)")
         limit: Int = 5,
     ): String {
         if (query.isBlank()) {
@@ -99,12 +150,7 @@ class SubjectTools(
         }
     }
 
-    @Tool
-    @LLMDescription("Get comprehensive details for a specific anime by subject ID")
-    suspend fun getSubjectDetail(
-        @LLMDescription("Bangumi subject ID")
-        subjectId: Long,
-    ): String {
+    suspend fun getSubjectDetail(subjectId: Long): String {
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }
@@ -134,12 +180,7 @@ class SubjectTools(
         }
     }
 
-    @Tool
-    @LLMDescription("Get episode list for a specific anime by subject ID")
-    suspend fun getSubjectEpisodes(
-        @LLMDescription("Bangumi subject ID")
-        subjectId: Long,
-    ): String {
+    suspend fun getSubjectEpisodes(subjectId: Long): String {
         if (subjectId <= 0) {
             return "Invalid subject ID: $subjectId. Subject ID must be a positive integer."
         }

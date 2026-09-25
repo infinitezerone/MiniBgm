@@ -16,7 +16,6 @@ kotlin {
             implementation(project(":core:common"))
             implementation(project(":core:data"))
 
-            implementation(libs.koog.agents)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.cio)
             implementation(libs.ktor.client.logging)

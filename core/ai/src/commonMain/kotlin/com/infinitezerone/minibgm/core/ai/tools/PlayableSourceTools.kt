@@ -1,9 +1,13 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
+import com.infinitezerone.minibgm.core.ai.PlayableSourcesStore
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.long
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
@@ -23,9 +27,10 @@ import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 
 /**
- * AI 找源 Koog 工具集：产出可以直接喂给播放器的结构化播放数据。
+ * AI 找源工具集：产出可以直接喂给播放器的结构化播放数据。
  *
  * 取数顺序固定为「用户自备片单 → 用户配置的第三方取源接口 → 排期记录的来源站页面解析」，
  * 每一步都只读已有数据或按其 URL 发一次请求，不做站点遍历与批量抓取。
@@ -36,26 +41,49 @@ class PlayableSourceTools(
     private val subjectRepository: SubjectRepository,
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository,
-    private val playableSourcesStore: com.infinitezerone.minibgm.core.ai.PlayableSourcesStore? = null,
+    private val playableSourcesStore: PlayableSourcesStore? = null,
     private val json: Json =
         Json {
             prettyPrint = false
             ignoreUnknownKeys = true
         },
-) : ToolSet {
-    @Tool
-    @LLMDescription(
-        "Resolve playable media for an anime and return structured playback data: for every episode " +
-            "a stream URL together with the request headers needed to play it, plus the episode labels. " +
-            "It first uses the playlists the user imported, then the third-party source APIs the user configured, " +
-            "and finally the streaming-site pages recorded for the entry resolved into playable addresses. " +
-            "Use this whenever the user wants to watch something or asks where to watch it. " +
-            "Report only what this tool returns — never invent, guess or modify a URL, and if it finds nothing, say so.",
-    )
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "findPlayableSources",
+                description =
+                    "Resolve playable media for an anime and return structured playback data: for every episode " +
+                        "a stream URL together with the request headers needed to play it, plus the episode labels. " +
+                        "It first uses the playlists the user imported, then the third-party source APIs the user configured, " +
+                        "and finally the streaming-site pages recorded for the entry resolved into playable addresses. " +
+                        "Use this whenever the user wants to watch something or asks where to watch it. " +
+                        "Report only what this tool returns — never invent, guess or modify a URL, and if it finds nothing, say so.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("subjectId", schemaProperty("integer", "Bangumi subject ID"))
+                                put(
+                                    "epNumber",
+                                    schemaProperty(
+                                        "integer",
+                                        "Episode number, 0 when the whole series / episode list is meant or the number is unknown",
+                                    ),
+                                )
+                            },
+                        required = listOf("subjectId"),
+                    ),
+            ) { args ->
+                findPlayableSources(
+                    subjectId = args.long("subjectId"),
+                    epNumber = args.int("epNumber", 0),
+                )
+            },
+        )
+
     suspend fun findPlayableSources(
-        @LLMDescription("Bangumi subject ID")
         subjectId: Long,
-        @LLMDescription("Episode number, 0 when the whole series / episode list is meant or the number is unknown")
         epNumber: Int = 0,
     ): String {
         if (subjectId <= 0L) {

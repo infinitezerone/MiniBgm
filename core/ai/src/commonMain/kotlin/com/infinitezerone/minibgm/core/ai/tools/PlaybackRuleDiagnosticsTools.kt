@@ -1,10 +1,13 @@
 package com.infinitezerone.minibgm.core.ai.tools
 
-import ai.koog.agents.core.tools.annotations.LLMDescription
-import ai.koog.agents.core.tools.annotations.Tool
-import ai.koog.agents.core.tools.reflect.ToolSet
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
+import com.infinitezerone.minibgm.core.ai.tool.BgmTool
+import com.infinitezerone.minibgm.core.ai.tool.bgmTool
+import com.infinitezerone.minibgm.core.ai.tool.int
+import com.infinitezerone.minibgm.core.ai.tool.schemaObject
+import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
+import com.infinitezerone.minibgm.core.ai.tool.string
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleRecorder
@@ -22,6 +25,7 @@ import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -58,37 +62,247 @@ class PlaybackRuleDiagnosticsTools(
     private val pendingActionStore: PendingActionStore? = null,
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
     private val sampleReplayer: PlaybackRuleSampleReplayer? = null,
-) : ToolSet {
-    @Tool
-    @LLMDescription(
-        "Probe a website's health, title, search parameters, and automatically find a sample playable episode page URL. " +
-            "Use this as the FIRST STEP when adapting or reversing a new playback website.",
-    )
-    suspend fun probeSiteAndFindSample(
-        @LLMDescription("The base HTTP/HTTPS URL of the target anime website, e.g. https://example.com/")
-        siteUrl: String,
-        @LLMDescription(
-            "An anime title KNOWN to be listed on that site — pass the title the user is actually looking for " +
-                "(its aliases work too). Leave empty only when nothing is known; the probe then picks a real " +
-                "entry from the site's own home page as the sample.",
+) {
+    fun tools(): List<BgmTool> =
+        listOf(
+            bgmTool(
+                name = "probeSiteAndFindSample",
+                description =
+                    "Probe a website's health, title, search parameters, and automatically find a sample playable episode page URL. " +
+                        "Use this as the FIRST STEP when adapting or reversing a new playback website.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "siteUrl",
+                                    schemaProperty(
+                                        "string",
+                                        "The base HTTP/HTTPS URL of the target anime website, e.g. https://example.com/",
+                                    ),
+                                )
+                                put(
+                                    "sampleAnime",
+                                    schemaProperty(
+                                        "string",
+                                        "An anime title KNOWN to be listed on that site — pass the title the user is " +
+                                            "actually looking for (its aliases work too). Leave empty only when nothing is known; " +
+                                            "the probe then picks a real entry from the site's own home page as the sample.",
+                                    ),
+                                )
+                            },
+                        required = listOf("siteUrl"),
+                    ),
+            ) { args ->
+                probeSiteAndFindSample(
+                    siteUrl = args.string("siteUrl"),
+                    sampleAnime = args.string("sampleAnime"),
+                )
+            },
+            bgmTool(
+                name = "traceNetworkTraffic",
+                description =
+                    "Execute dynamic headless network traffic auditing on a playback page URL. " +
+                        "Renders the page in an isolated environment, triggers video playback, " +
+                        "and captures all video media streams (.m3u8, .mp4) " +
+                        "and intermediate XHR/Fetch API calls with their request headers and cookies. " +
+                        "Use this to observe what requests the site makes to resolve the actual video stream.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "playbackPageUrl",
+                                    schemaProperty("string", "The absolute URL of the playback episode page to audit"),
+                                )
+                                put(
+                                    "durationSeconds",
+                                    schemaProperty("integer", "Audit duration in seconds (defaults to 8, min 3, max 15)"),
+                                )
+                            },
+                        required = listOf("playbackPageUrl"),
+                    ),
+            ) { args ->
+                traceNetworkTraffic(
+                    playbackPageUrl = args.string("playbackPageUrl"),
+                    durationSeconds = args.int("durationSeconds", 8),
+                )
+            },
+            bgmTool(
+                name = "inspectPageStructure",
+                description =
+                    "Inspect the multimedia structure of a web page (e.g. video tags, custom attributes like data-apireq, " +
+                        "iframes, MacCMS patterns, response headers). Use this to analyze a website when creating or debugging playback rules.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("url", schemaProperty("string", "The absolute HTTP/HTTPS URL of the target web page to inspect"))
+                            },
+                        required = listOf("url"),
+                    ),
+            ) { args ->
+                inspectPageStructure(args.string("url"))
+            },
+            bgmTool(
+                name = "recordPlaybackRuleFromTrace",
+                description =
+                    "Turn a network audit trace (what traceNetworkTraffic just returned) into a rule skeleton. " +
+                        "It extracts the REAL request sequence (page -> API calls -> media) with the exact URLs, methods " +
+                        "and replayable headers that were observed, substituting {title}/{ep} into them. " +
+                        "Call this INSTEAD OF inventing an interface URL from scratch. " +
+                        "It also REPLAYS the audited GET API calls (same site only) and returns their real response " +
+                        "bodies in apiSamples — write the EXTRACT_STREAM regex against that sample, do not invent field " +
+                        "names. EXTRACT_STREAM is list-aware: capture the stream URL in group 1 and optionally the " +
+                        "episode label text in group 2; the engine picks the requested episode from all candidates — " +
+                        "do not anchor {ep} into the regex. POST calls and requests that only fire after a click cannot " +
+                        "be replayed; the notes say so. After filling the regex, run testPlaybackRule.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "traceJson",
+                                    schemaProperty("string", "JSON string previously returned by traceNetworkTraffic"),
+                                )
+                                put(
+                                    "sampleTitle",
+                                    schemaProperty(
+                                        "string",
+                                        "The anime title used during tracing; substituted as {title} in the skeleton",
+                                    ),
+                                )
+                                put(
+                                    "sampleEp",
+                                    schemaProperty("integer", "Episode number substituted as {ep}; pass 0 to omit"),
+                                )
+                            },
+                        required = listOf("traceJson", "sampleTitle"),
+                    ),
+            ) { args ->
+                recordPlaybackRuleFromTrace(
+                    traceJson = args.string("traceJson"),
+                    sampleTitle = args.string("sampleTitle"),
+                    sampleEp = args.int("sampleEp", 1),
+                )
+            },
+            bgmTool(
+                name = "recordPlaybackRuleFromStaticPage",
+                description =
+                    "Induce a playback rule skeleton by reading the STATIC page source of a playback page URL " +
+                        "(one plain HTTP fetch, no browser). If the media URL (.m3u8/.mp4/...) is present in the " +
+                        "HTML, the draft carries the exact source-code context around it — write the EXTRACT_STREAM " +
+                        "regex against that context, do not invent field names. If the page carries multiple media " +
+                        "URLs (episodes or lines), capture the stream URL in regex group 1 and the episode label in " +
+                        "group 2 — the engine picks the requested episode from all candidates. TRY THIS FIRST for ordinary sites: " +
+                        "it is much cheaper and faster than traceNetworkTraffic. Fall back to traceNetworkTraffic " +
+                        "only when the draft notes say the page is JS-rendered or the stream only appears at runtime. " +
+                        "After filling the regex, run testPlaybackRule.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "playbackPageUrl",
+                                    schemaProperty("string", "The absolute URL of the playback episode page"),
+                                )
+                                put(
+                                    "sampleTitle",
+                                    schemaProperty(
+                                        "string",
+                                        "The anime title used during recording; substituted as {title} in the skeleton",
+                                    ),
+                                )
+                                put(
+                                    "sampleEp",
+                                    schemaProperty("integer", "Episode number substituted as {ep}; pass 0 to omit"),
+                                )
+                            },
+                        required = listOf("playbackPageUrl", "sampleTitle"),
+                    ),
+            ) { args ->
+                recordPlaybackRuleFromStaticPage(
+                    playbackPageUrl = args.string("playbackPageUrl"),
+                    sampleTitle = args.string("sampleTitle"),
+                    sampleEp = args.int("sampleEp", 1),
+                )
+            },
+            bgmTool(
+                name = "testPlaybackRule",
+                description =
+                    "Dry-run and test a PlaybackSourceRule in a sandboxed execution environment. " +
+                        "Pass the complete JSON string of PlaybackSourceRule together with a sample anime title and episode number. " +
+                        "Returns whether a valid stream URL and headers were successfully resolved.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put("ruleJson", schemaProperty("string", "Serialized JSON string of the PlaybackSourceRule to test"))
+                                put("sampleTitle", schemaProperty("string", "Sample anime title to substitute into {title}"))
+                                put("sampleEp", schemaProperty("integer", "Sample episode number to substitute into {ep}, e.g. 1"))
+                            },
+                        required = listOf("ruleJson", "sampleTitle"),
+                    ),
+            ) { args ->
+                testPlaybackRule(
+                    ruleJson = args.string("ruleJson"),
+                    sampleTitle = args.string("sampleTitle"),
+                    sampleEp = args.int("sampleEp", 1),
+                )
+            },
+            bgmTool(
+                name = "proposePlaybackRule",
+                description =
+                    "Propose a PlaybackSourceRule for the user to import into their local playback rules. " +
+                        "REQUIRES sampleTitle/sampleEp: this tool re-runs the rule itself and probes the resolved " +
+                        "stream's first response, so the proposal carries real evidence rather than your claim. " +
+                        "If it resolves nothing, or the address turns out not to be playable, NO proposal is created — " +
+                        "fix the rule and try again. This does NOT store anything: it returns a PENDING_CONFIRMATION " +
+                        "proposal, and the rule reaches the user's settings only if they approve the card.",
+                parametersJsonSchema =
+                    schemaObject(
+                        properties =
+                            buildJsonObject {
+                                put(
+                                    "ruleJson",
+                                    schemaProperty(
+                                        "string",
+                                        "Serialized JSON string of the PlaybackSourceRule to propose for import",
+                                    ),
+                                )
+                                put(
+                                    "sampleTitle",
+                                    schemaProperty(
+                                        "string",
+                                        "Sample anime title to substitute into {title} while re-running the rule",
+                                    ),
+                                )
+                                put(
+                                    "sampleEp",
+                                    schemaProperty("integer", "Sample episode number to substitute into {ep}, e.g. 1"),
+                                )
+                            },
+                        required = listOf("ruleJson", "sampleTitle"),
+                    ),
+            ) { args ->
+                proposePlaybackRule(
+                    ruleJson = args.string("ruleJson"),
+                    sampleTitle = args.string("sampleTitle"),
+                    sampleEp = args.int("sampleEp", 1),
+                )
+            },
         )
+
+    suspend fun probeSiteAndFindSample(
+        siteUrl: String,
         sampleAnime: String = "",
     ): String {
         val result = playbackResolverRepository.probeSite(siteUrl, sampleAnime)
         return json.encodeToString(result)
     }
 
-    @Tool
-    @LLMDescription(
-        "Execute dynamic headless network traffic auditing on a playback page URL. " +
-            "Renders the page in an isolated environment, triggers video playback, and captures all video media streams (.m3u8, .mp4) " +
-            "and intermediate XHR/Fetch API calls with their request headers and cookies. " +
-            "Use this to observe what requests the site makes to resolve the actual video stream.",
-    )
     suspend fun traceNetworkTraffic(
-        @LLMDescription("The absolute URL of the playback episode page to audit")
         playbackPageUrl: String,
-        @LLMDescription("Audit duration in seconds (defaults to 8, min 3, max 15)")
         durationSeconds: Int = 8,
     ): String {
         val boundedDuration = durationSeconds.coerceIn(3, 15) * 1000L
@@ -96,39 +310,14 @@ class PlaybackRuleDiagnosticsTools(
         return json.encodeToString(result)
     }
 
-    @Tool
-    @LLMDescription(
-        "Inspect the multimedia structure of a web page (e.g. video tags, custom attributes like data-apireq, " +
-            "iframes, MacCMS patterns, response headers). Use this to analyze a website when creating or debugging playback rules.",
-    )
-    suspend fun inspectPageStructure(
-        @LLMDescription("The absolute HTTP/HTTPS URL of the target web page to inspect")
-        url: String,
-    ): String {
+    suspend fun inspectPageStructure(url: String): String {
         val result: PageInspectionResult = playbackResolverRepository.inspectPage(url)
         return json.encodeToString(result)
     }
 
-    @Tool
-    @LLMDescription(
-        "Turn a network audit trace (what traceNetworkTraffic just returned) into a rule skeleton. " +
-            "It extracts the REAL request sequence (page -> API calls -> media) with the exact URLs, methods " +
-            "and replayable headers that were observed, substituting {title}/{ep} into them. " +
-            "Call this INSTEAD OF inventing an interface URL from scratch. " +
-            "It also REPLAYS the audited GET API calls (same site only) and returns their real response " +
-            "bodies in apiSamples — write the EXTRACT_STREAM regex against that sample, do not invent field " +
-            "names. EXTRACT_STREAM is list-aware: capture the stream URL in group 1 and optionally the " +
-            "episode label text in group 2; the engine picks the requested episode from all candidates — " +
-            "do not anchor {ep} into the regex. POST calls and requests that only fire after a click cannot " +
-            "be replayed; the notes say so. " +
-            "After filling the regex, run testPlaybackRule.",
-    )
     suspend fun recordPlaybackRuleFromTrace(
-        @LLMDescription("JSON string previously returned by traceNetworkTraffic")
         traceJson: String,
-        @LLMDescription("The anime title used during tracing; substituted as {title} in the skeleton")
         sampleTitle: String,
-        @LLMDescription("Episode number substituted as {ep}; pass 0 to omit")
         sampleEp: Int = 1,
     ): String {
         AiToolActivity.report("录制规则骨架", "归纳审计到的真实请求序列")
@@ -157,7 +346,6 @@ class PlaybackRuleDiagnosticsTools(
         return json.encodeToString(draft)
     }
 
-    /** 站名只从本轮观测到的 URL 里取，不内置任何站点清单 */
     private fun ruleNameFromTrace(trace: NetworkAuditTrace): String = ruleNameFromUrl(trace.finalUrl.ifBlank { trace.pageUrl })
 
     private fun ruleNameFromUrl(url: String): String =
@@ -166,24 +354,9 @@ class PlaybackRuleDiagnosticsTools(
             .substringBefore('/')
             .ifBlank { "录制规则" }
 
-    @Tool
-    @LLMDescription(
-        "Induce a playback rule skeleton by reading the STATIC page source of a playback page URL " +
-            "(one plain HTTP fetch, no browser). If the media URL (.m3u8/.mp4/...) is present in the " +
-            "HTML, the draft carries the exact source-code context around it — write the EXTRACT_STREAM " +
-            "regex against that context, do not invent field names. If the page carries multiple media " +
-            "URLs (episodes or lines), capture the stream URL in regex group 1 and the episode label in " +
-            "group 2 — the engine picks the requested episode from all candidates. TRY THIS FIRST for ordinary sites: " +
-            "it is much cheaper and faster than traceNetworkTraffic. Fall back to traceNetworkTraffic " +
-            "only when the draft notes say the page is JS-rendered or the stream only appears at runtime. " +
-            "After filling the regex, run testPlaybackRule.",
-    )
     suspend fun recordPlaybackRuleFromStaticPage(
-        @LLMDescription("The absolute URL of the playback episode page")
         playbackPageUrl: String,
-        @LLMDescription("The anime title used during recording; substituted as {title} in the skeleton")
         sampleTitle: String,
-        @LLMDescription("Episode number substituted as {ep}; pass 0 to omit")
         sampleEp: Int = 1,
     ): String {
         AiToolActivity.report("静态页录制", "直读播放页源码归纳规则")
@@ -205,18 +378,9 @@ class PlaybackRuleDiagnosticsTools(
         return json.encodeToString(draft)
     }
 
-    @Tool
-    @LLMDescription(
-        "Dry-run and test a PlaybackSourceRule in a sandboxed execution environment. " +
-            "Pass the complete JSON string of PlaybackSourceRule together with a sample anime title and episode number. " +
-            "Returns whether a valid stream URL and headers were successfully resolved.",
-    )
     suspend fun testPlaybackRule(
-        @LLMDescription("Serialized JSON string of the PlaybackSourceRule to test")
         ruleJson: String,
-        @LLMDescription("Sample anime title to substitute into {title}")
         sampleTitle: String,
-        @LLMDescription("Sample episode number to substitute into {ep}, e.g. 1")
         sampleEp: Int = 1,
     ): String {
         val rule =
@@ -293,21 +457,9 @@ class PlaybackRuleDiagnosticsTools(
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    @Tool
-    @LLMDescription(
-        "Propose a PlaybackSourceRule for the user to import into their local playback rules. " +
-            "REQUIRES sampleTitle/sampleEp: this tool re-runs the rule itself and probes the resolved " +
-            "stream's first response, so the proposal carries real evidence rather than your claim. " +
-            "If it resolves nothing, or the address turns out not to be playable, NO proposal is created — " +
-            "fix the rule and try again. This does NOT store anything: it returns a PENDING_CONFIRMATION " +
-            "proposal, and the rule reaches the user's settings only if they approve the card.",
-    )
     suspend fun proposePlaybackRule(
-        @LLMDescription("Serialized JSON string of the PlaybackSourceRule to propose for import")
         ruleJson: String,
-        @LLMDescription("Sample anime title to substitute into {title} while re-running the rule")
         sampleTitle: String,
-        @LLMDescription("Sample episode number to substitute into {ep}, e.g. 1")
         sampleEp: Int = 1,
     ): String {
         AiToolActivity.report("生成导入提案", "重跑验证后等待用户确认")
@@ -411,7 +563,6 @@ class PlaybackRuleDiagnosticsTools(
         )
     }
 
-    /** 对解析结果里首个直链做首包断言；没有直链候选或未接入验证器时返回 null（按"未验证"处理） */
     private suspend fun verifyFirstPlayable(sources: List<PlayableSource>): StreamVerification? {
         val verifier = playbackSourceVerifier ?: return null
         val first = sources.firstOrNull { it.kind == PlaylistEntryKind.DIRECT } ?: return null
@@ -419,7 +570,6 @@ class PlaybackRuleDiagnosticsTools(
     }
 }
 
-/** 首包断言的说明文案：通过则无需解释，未探测或不通过都要说清原因 */
 private fun StreamVerification?.note(): String? =
     when (this) {
         null, StreamVerification.Unverified ->
