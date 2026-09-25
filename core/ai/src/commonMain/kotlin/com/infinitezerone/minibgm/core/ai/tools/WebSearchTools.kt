@@ -83,14 +83,15 @@ class WebSearchTools(
         if (trimmed.isBlank()) {
             return "Search query must not be blank."
         }
-        AiToolActivity.report("公网搜索", "关键词：$trimmed")
+        val effectiveQuery = normalizeQuery(trimmed)
+        AiToolActivity.report("公网搜索", "关键词：$effectiveQuery")
         val boundedLimit = limit.coerceIn(1, 6)
 
-        return when (val result = webSearchRepository.searchWeb(trimmed, boundedLimit)) {
+        return when (val result = webSearchRepository.searchWeb(effectiveQuery, boundedLimit)) {
             is AppResult.Success -> {
                 val list = result.data
                 if (list.isEmpty()) {
-                    "No web search results found for '$trimmed'. Please try different or more general keywords (e.g. '在线 动漫 播放 网站' or '在线 动漫 导航')."
+                    "No web search results found for '$effectiveQuery'. Please try different or more general keywords (e.g. 'site:github.com tvbox 动漫' or 'site:github.com tvbox 接口')."
                 } else {
                     json.encodeToString(list)
                 }
@@ -101,6 +102,20 @@ class WebSearchTools(
             is AppResult.Loading -> {
                 "Web search in progress, please retry."
             }
+        }
+    }
+
+    internal fun normalizeQuery(rawQuery: String): String {
+        val trimmed = rawQuery.trim()
+        val isSourceSearch =
+            trimmed.contains("源") ||
+                trimmed.contains("tvbox", ignoreCase = true) ||
+                trimmed.contains("订阅")
+        val hasSiteScope = trimmed.contains("site:", ignoreCase = true)
+        return if (isSourceSearch && !hasSiteScope) {
+            "site:github.com tvbox $trimmed"
+        } else {
+            trimmed
         }
     }
 

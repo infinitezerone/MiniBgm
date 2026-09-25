@@ -54,4 +54,19 @@ class WebSearchToolsTest {
             assertEquals("这是网页正文内容", result)
             assertEquals(listOf("https://example.com/article"), repo.fetchCalls)
         }
+
+    @Test
+    fun normalizeQuery_scopes_source_queries_to_github() {
+        val tools = WebSearchTools(FakeWebSearchRepository())
+        // 普通资讯搜索不加限定
+        assertEquals("葬送的芙莉莲 播出时间", tools.normalizeQuery("葬送的芙莉莲 播出时间"))
+
+        // 搜源相关自动追加 GitHub TVBox 限定
+        assertEquals("site:github.com tvbox 动漫源", tools.normalizeQuery("动漫源"))
+        assertEquals("site:github.com tvbox 高质量动漫播放源", tools.normalizeQuery("高质量动漫播放源"))
+        assertEquals("site:github.com tvbox 动漫 订阅", tools.normalizeQuery("动漫 订阅"))
+
+        // 已经带有 site: 作用域的不重复添加
+        assertEquals("site:github.com tvbox 动漫", tools.normalizeQuery("site:github.com tvbox 动漫"))
+    }
 }
