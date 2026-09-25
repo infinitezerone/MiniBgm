@@ -18,9 +18,11 @@ import com.infinitezerone.minibgm.feature.widget.di.widgetModule
 import com.infinitezerone.minibgm.sync.work.di.syncWorkModule
 import org.koin.dsl.module
 
+/** 全 app 统一的 User-Agent 模板（API 请求与图片下载共用一个决策），版本随 BuildConfig 自动更新 */
+val appUserAgent: String = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)"
+
 fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
     module {
-        val appUserAgent = "MiniBgm/${BuildConfig.VERSION_NAME} (android) (https://github.com/infinitezerone/MiniBgm)"
         includes(
             networkModule(
                 enableNetworkLogging,

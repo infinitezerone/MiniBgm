@@ -25,12 +25,14 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.time.TimeSource
 
-/** 单次 AI 执行的硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
+/** 单次 AI 执行的总硬超时：推理模型多轮工具调用实测 1~3 分钟，上限给足余量 */
 const val AI_RUN_TIMEOUT_MS = 180_000L
 
-/** 单轮模型请求的超时：60 秒，正常推理远用不满，异常端点快速失败 */
-const val AI_REQUEST_TIMEOUT_MS = 60_000L
+/** 单轮模型请求的硬超时：避免单轮模型排队或推理耗尽全局配额（90 秒） */
+const val AI_SINGLE_TURN_TIMEOUT_MS = 90_000L
 
 private val agentLogger = bgmLogger("Bgm/AiAgent")
 
@@ -113,9 +115,12 @@ class DefaultBgmAiAgentService(
             )
         }
 
+        val effectiveModel = config.model.ifBlank { defaultModel(config) }
+        agentLogger.i { "🚀 开始执行 Agent 任务: prompt=\"${prompt.take(60)}\", provider=${config.provider}, model=$effectiveModel" }
+        val startMark = TimeSource.Monotonic.markNow()
         val finalPrompt = buildFinalPrompt(prompt, history)
         AiToolActivity.clear()
-        AiToolActivity.reportStatus("AI 正在思考并检索...")
+        AiToolActivity.reportStatus("AI 正在思考意图与调度工具...")
 
         return try {
             val response =
@@ -124,17 +129,23 @@ class DefaultBgmAiAgentService(
                         executeWithRetry(config, finalPrompt)
                     }
                 }
+            val elapsedMs = startMark.elapsedNow().inWholeMilliseconds
+            agentLogger.i { "🏁 Agent 任务成功完成 (总耗时: ${elapsedMs}ms, 回复长度: ${response.length} 字符)" }
             AiToolActivity.clear()
             AppResult.Success(response)
         } catch (e: TimeoutCancellationException) {
-            agentLogger.w(e) { "AI execution timed out: ${e.message}" }
+            val elapsedMs = startMark.elapsedNow().inWholeMilliseconds
+            agentLogger.w(e) { "⏱️ AI 执行总体超时 (耗时: ${elapsedMs}ms): ${e.message}" }
             AiToolActivity.clear()
             AppResult.Error(e, "AI 响应超时（${AI_RUN_TIMEOUT_MS / 1000} 秒）：请重试，或更换更快的模型/端点。")
         } catch (e: kotlinx.coroutines.CancellationException) {
+            val elapsedMs = startMark.elapsedNow().inWholeMilliseconds
+            agentLogger.i { "🛑 AI 任务被取消 (耗时: ${elapsedMs}ms)" }
             AiToolActivity.clear()
             throw e
         } catch (e: Exception) {
-            agentLogger.e(e) { "AI execution failed: ${e.message}" }
+            val elapsedMs = startMark.elapsedNow().inWholeMilliseconds
+            agentLogger.e(e) { "❌ AI 执行失败 (耗时: ${elapsedMs}ms): ${e.message}" }
             AiToolActivity.clear()
             AppResult.Error(e, friendlyAiError(config, e))
         }
@@ -231,19 +242,44 @@ internal suspend fun runPiAgent(
 
     val toolDefinitions = tools.toDefinitions().ifEmpty { null }
     val json = aiJson
+    val effectiveModel = config.model.ifBlank { defaultModel(config) }
+    agentLogger.i {
+        "🤖 Pi Agent 循环启动 (model=$effectiveModel, 可用工具: ${toolDefinitions?.map { it.function.name } ?: emptyList()})"
+    }
 
     var turns = 0
     while (turns++ < maxTurns) {
         val request =
             WireChatRequest(
-                model = config.model.ifBlank { defaultModel(config) },
+                model = effectiveModel,
                 messages = messages,
                 tools = toolDefinitions,
                 temperature = 0.3,
             )
 
-        val response = wireClient.chatCompletion(config, request)
+        val turnStatusText = if (turns == 1) "AI 正在分析意图与调度工具..." else "AI 正在分析工具结果 (第 $turns 轮)..."
+        AiToolActivity.reportStatus(turnStatusText)
+        agentLogger.i { "🔄 Turn $turns/$maxTurns: 发送模型请求 (上下文消息数: ${messages.size})..." }
+
+        val turnModelStart = TimeSource.Monotonic.markNow()
+        val response =
+            try {
+                withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
+                    wireClient.chatCompletion(config, request)
+                }
+            } catch (e: TimeoutCancellationException) {
+                val turnElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
+                agentLogger.w(e) { "⏱️ Turn $turns 单轮模型请求超时 (${turnElapsedMs}ms, 限制: ${AI_SINGLE_TURN_TIMEOUT_MS}ms)" }
+                throw IllegalStateException(
+                    "单轮模型响应超时（${AI_SINGLE_TURN_TIMEOUT_MS / 1000} 秒）：模型推理耗时过长或服务排队严重，建议切换更快的模型（如 DeepSeek-V3）或检查端点。",
+                    e,
+                )
+            }
+
+        val turnModelElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
+
         if (response.error != null && !response.error.message.isNullOrBlank()) {
+            agentLogger.e { "❌ Turn $turns 模型返回错误: ${response.error.message}" }
             throw IllegalStateException(response.error.message)
         }
 
@@ -257,7 +293,15 @@ internal suspend fun runPiAgent(
         if (toolCalls.isNullOrEmpty()) {
             val content = assistantMessage.content?.trim().orEmpty()
             val reasoning = assistantMessage.reasoningContent?.trim().orEmpty()
+            agentLogger.i {
+                "✅ Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策直接回复 (回答字数: ${content.length}, 思考字数: ${reasoning.length})"
+            }
             return content.ifBlank { reasoning }
+        }
+
+        val callsDesc = toolCalls.joinToString { "${it.function.name}(${it.function.arguments.take(40)})" }
+        agentLogger.i {
+            "💡 Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策调用 ${toolCalls.size} 个工具 -> $callsDesc"
         }
 
         for (call in toolCalls) {
@@ -269,6 +313,11 @@ internal suspend fun runPiAgent(
                     buildJsonObject {}
                 }
 
+            val detailSummary = formatToolCallDetail(argsJson)
+            AiToolActivity.report(funcName, detailSummary)
+            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: ${call.function.arguments}" }
+
+            val toolStart = TimeSource.Monotonic.markNow()
             val toolResult =
                 try {
                     tools.execute(funcName, argsJson)
@@ -278,6 +327,10 @@ internal suspend fun runPiAgent(
                     agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
                     "Tool $funcName failed: ${e.message ?: "unknown error"}"
                 }
+            val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
+            val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
+            agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (${toolElapsedMs}ms), 结果预览: $resultPreview" }
+
             messages.add(
                 WireChatMessage.tool(
                     toolCallId = call.id,
@@ -285,8 +338,21 @@ internal suspend fun runPiAgent(
                 ),
             )
         }
+        AiToolActivity.reportStatus("工具执行完毕，AI 正在分析结果...")
     }
+    agentLogger.w { "❌ Agent 达到最大轮次限制 ($maxTurns) 未能完成" }
     throw IllegalStateException("Agent reached maximum turn limit ($maxTurns) without completing")
+}
+
+private val DETAIL_KEYS = listOf("query", "keywords", "keyword", "name", "subjectId")
+
+internal fun formatToolCallDetail(args: JsonObject): String? {
+    for (key in DETAIL_KEYS) {
+        val value = args[key]?.jsonPrimitive?.contentOrNull
+        if (!value.isNullOrBlank()) return value
+    }
+    val str = args.toString()
+    return if (str.length > 2 && str != "{}") str.take(40) else null
 }
 
 internal fun defaultModel(config: AiConfig): String =

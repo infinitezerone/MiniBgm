@@ -72,6 +72,9 @@ class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
 ) : ViewModel() {
+    // feature 层看不到 :core:network 的 jsonConfig（红线 2 禁止越级依赖），这里是
+    // feature 作用域唯一的 Json 实例（ArchitectureRulesTest 白名单登记处），仅用于
+    // 解析用户粘贴的规则 JSON；如需新增用例请复用本实例而不是再建
     private val json =
         Json {
             ignoreUnknownKeys = true

@@ -651,4 +651,33 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             assertIs<AppResult.Success<String>>(result)
             assertEquals("DeepSeek-R1 / XingChen-4.0 思考过程得出的结论：这是一部优秀的番剧。", result.data)
         }
+
+    @Test
+    fun formatToolCallDetail_extracts_known_keys_and_fallbacks() {
+        // 匹配 query
+        val queryObj =
+            kotlinx.serialization.json.buildJsonObject {
+                put("query", kotlinx.serialization.json.JsonPrimitive("葬送的芙莉莲"))
+            }
+        assertEquals("葬送的芙莉莲", formatToolCallDetail(queryObj))
+
+        // 匹配 name
+        val nameObj =
+            kotlinx.serialization.json.buildJsonObject {
+                put("name", kotlinx.serialization.json.JsonPrimitive("进击的巨人"))
+            }
+        assertEquals("进击的巨人", formatToolCallDetail(nameObj))
+
+        // 未知 key 回退到 JSON 字符串
+        val otherObj =
+            kotlinx.serialization.json.buildJsonObject {
+                put("customKey", kotlinx.serialization.json.JsonPrimitive("value123"))
+            }
+        assertNotNull(formatToolCallDetail(otherObj))
+        assertTrue(formatToolCallDetail(otherObj)?.contains("customKey") == true)
+
+        // 空对象返回 null
+        val emptyObj = kotlinx.serialization.json.buildJsonObject {}
+        assertNull(formatToolCallDetail(emptyObj))
+    }
 }

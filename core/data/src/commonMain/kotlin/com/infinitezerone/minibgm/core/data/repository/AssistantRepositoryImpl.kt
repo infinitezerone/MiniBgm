@@ -9,18 +9,11 @@ import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.model.ChatMessageRole
 import com.infinitezerone.minibgm.core.model.PendingActionCard
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
-
-private val assistantJson =
-    Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        encodeDefaults = true
-    }
 
 class AssistantRepositoryImpl(
     private val assistantMessageDao: AssistantMessageDao,
@@ -84,13 +77,13 @@ internal fun AssistantSessionEntity.toModel(): AssistantSession =
 internal fun AssistantChatMessage.toEntity(sessionId: String): AssistantMessageEntity {
     val actionsJson =
         if (pendingActions.isNotEmpty()) {
-            runCatching { assistantJson.encodeToString(pendingActions) }.getOrNull()
+            runCatching { BgmHttpClient.jsonConfig.encodeToString(pendingActions) }.getOrNull()
         } else {
             null
         }
     val sourcesJson =
         playableSources?.let {
-            runCatching { assistantJson.encodeToString(it) }.getOrNull()
+            runCatching { BgmHttpClient.jsonConfig.encodeToString(it) }.getOrNull()
         }
     return AssistantMessageEntity(
         id = id,
@@ -115,11 +108,11 @@ internal fun AssistantMessageEntity.toModel(): AssistantChatMessage {
         pendingActionsJson
             ?.takeIf { it.isNotBlank() }
             ?.let { raw ->
-                runCatching { assistantJson.decodeFromString<List<PendingActionCard>>(raw) }.getOrNull()
+                runCatching { BgmHttpClient.jsonConfig.decodeFromString<List<PendingActionCard>>(raw) }.getOrNull()
             }.orEmpty()
     val sources =
         playableSourcesJson?.takeIf { it.isNotBlank() }?.let { raw ->
-            runCatching { assistantJson.decodeFromString<PlayableEpisodeList>(raw) }.getOrNull()
+            runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlayableEpisodeList>(raw) }.getOrNull()
         }
     return AssistantChatMessage(
         id = id,
