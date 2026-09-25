@@ -133,6 +133,39 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             popularModels = listOf("Qwen/Qwen2.5-7B-Instruct", "deepseek-ai/DeepSeek-V3", "THUDM/glm-4-9b-chat"),
         ),
         ProviderPreset(
+            id = "zhipu",
+            name = "智谱 GLM",
+            badge = "国产标杆",
+            endpoint = "https://open.bigmodel.cn/api/paas/v4",
+            defaultModel = "glm-4-flash",
+            provider = AiConfig.PROVIDER_CUSTOM,
+            isApiKeyRequired = true,
+            tip = "清华系自研基座大模型，glm-4-flash 高并发免费调用",
+            popularModels = listOf("glm-4-flash", "glm-4-air", "glm-4-plus"),
+        ),
+        ProviderPreset(
+            id = "dashscope",
+            name = "阿里百炼",
+            badge = "通义千问",
+            endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            defaultModel = "qwen-plus",
+            provider = AiConfig.PROVIDER_CUSTOM,
+            isApiKeyRequired = true,
+            tip = "阿里巴巴通义系列千亿级模型，兼容 OpenAI 规范",
+            popularModels = listOf("qwen-plus", "qwen-turbo", "qwen-max"),
+        ),
+        ProviderPreset(
+            id = "moonshot",
+            name = "月之暗面 Kimi",
+            badge = "长上下文",
+            endpoint = "https://api.moonshot.cn/v1",
+            defaultModel = "moonshot-v1-8k",
+            provider = AiConfig.PROVIDER_CUSTOM,
+            isApiKeyRequired = true,
+            tip = "超长上下文与深度文本理解能力",
+            popularModels = listOf("moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"),
+        ),
+        ProviderPreset(
             id = "ollama",
             name = "Ollama 本地",
             badge = "私有化",
@@ -173,19 +206,8 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             defaultModel = "llama-3.3-70b-versatile",
             provider = AiConfig.PROVIDER_CUSTOM,
             isApiKeyRequired = true,
-            tip = "LPU 硬件加速，极低延迟秒级响应",
+            tip = "LPU 硬件加速，极低延迟秒级响应（需海外代理，不支持大陆/香港 IP）",
             popularModels = listOf("llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b"),
-        ),
-        ProviderPreset(
-            id = "ollama",
-            name = "Ollama 本地",
-            badge = "私有化",
-            endpoint = "http://10.0.2.2:11434/v1",
-            defaultModel = "qwen2.5:7b",
-            provider = AiConfig.PROVIDER_OLLAMA,
-            isApiKeyRequired = false,
-            tip = "本地或局域网 NAS 私有部署，免 API Key，隐私安全",
-            popularModels = listOf("qwen2.5:7b", "llama3.1:8b", "deepseek-r1:7b"),
         ),
         ProviderPreset(
             id = "custom",
@@ -213,14 +235,29 @@ internal fun detectProviderFromApiKey(apiKey: String): ProviderPreset? {
             key.startsWith("sk-or-v1-") -> "openrouter"
             // OpenAI 官方 Project / Service / Admin Key (sk-proj-, sk-admin-, sk-svcacct-)
             key.startsWith("sk-proj-") || key.startsWith("sk-admin-") || key.startsWith("sk-svcacct-") -> "openai"
+            // OpenAI 经典个人 Key (sk- 开头接 48 或 51 位字符)
+            key.matches(Regex("""^sk-[A-Za-z0-9]{48,51}$""")) -> "openai"
             // Groq (以 gsk_ 开头)
             key.startsWith("gsk_") -> "groq"
+            // 智谱开放平台 API Key (通常为 32位十六进制/字符加点再加16-32位字符)
+            key.matches(Regex("""^[0-9a-zA-Z]{32}\.[0-9a-zA-Z]{16,32}$""")) -> "zhipu"
             // DeepSeek 官方 API Key (格式固定为 sk- 加上 32 位十六进制字符，总长 35 位)
             key.matches(Regex("^sk-[0-9a-fA-F]{32}$")) -> "deepseek"
             else -> null
         } ?: return null
 
     return PROVIDER_PRESETS.firstOrNull { it.id == targetId }
+}
+
+/**
+ * 检查模型是否已知在官方端点暂不支持 Tool Calling（函数调用 / 智能体工具执行）。
+ * 若已知不支持，UI 渲染轻量警示，避免用户误选后导致查时刻表或打卡报错。
+ */
+internal fun isModelKnownUnsupportedToolCall(modelName: String): Boolean {
+    val lower = modelName.trim().lowercase()
+    return lower == "deepseek-reasoner" ||
+        lower == "o1-preview" ||
+        lower == "o1-mini"
 }
 
 /** 根据输入的 Base URL 自动解析并匹配协议提供商 */
@@ -233,27 +270,66 @@ internal fun autoDetectProvider(endpoint: String): String {
     }
 }
 
-/** 规范化 Base URL：自动补齐 scheme 并剔除末尾多余斜杠 */
+/** 规范化 Base URL：自动补齐 scheme、剥离多余的 chat/models 路径并剔除尾部斜杠 */
 internal fun normalizeEndpoint(rawEndpoint: String): String {
     val trimmed = rawEndpoint.trim()
     if (trimmed.isBlank()) return ""
+    val cleaned =
+        trimmed
+            .removeSuffix("/chat/completions")
+            .removeSuffix("/chat/completions/")
+            .removeSuffix("/models")
+            .removeSuffix("/models/")
+            .trimEnd('/')
+
     val withScheme =
-        if (!trimmed.startsWith("http://", ignoreCase = true) &&
-            !trimmed.startsWith("https://", ignoreCase = true)
+        if (!cleaned.startsWith("http://", ignoreCase = true) &&
+            !cleaned.startsWith("https://", ignoreCase = true)
         ) {
-            if (trimmed.startsWith("localhost", ignoreCase = true) ||
-                trimmed.startsWith("127.0.0.1") ||
-                trimmed.startsWith("10.0.2.2") ||
-                trimmed.startsWith("192.168.")
+            if (cleaned.startsWith("localhost", ignoreCase = true) ||
+                cleaned.startsWith("127.0.0.1") ||
+                cleaned.startsWith("10.0.2.2") ||
+                cleaned.startsWith("192.168.")
             ) {
-                "http://$trimmed"
+                "http://$cleaned"
             } else {
-                "https://$trimmed"
+                "https://$cleaned"
             }
         } else {
-            trimmed
+            cleaned
         }
     return withScheme.trimEnd('/')
+}
+
+/** 校验模型名称与端点/服务商是否疑似错配 */
+internal fun checkModelProviderMismatch(
+    endpoint: String,
+    model: String,
+    provider: String,
+): String? {
+    val ep = endpoint.trim().lowercase()
+    val m = model.trim().lowercase()
+    if (m.isBlank() || ep.isBlank()) return null
+
+    // 端点是 DeepSeek，模型却填了 gemini 或 gpt
+    if ("deepseek" in ep && ("gemini" in m || "gpt-" in m || "claude" in m)) {
+        return "当前端点为 DeepSeek，模型疑似错配，建议切换为 deepseek-chat 或 deepseek-reasoner"
+    }
+    // 端点是 Google Gemini，模型却填了 deepseek / qwen / gpt
+    if (("generativelanguage.googleapis.com" in ep || provider == AiConfig.PROVIDER_GEMINI) &&
+        ("deepseek" in m || "qwen" in m || "gpt-" in m || "claude" in m)
+    ) {
+        return "当前端点为 Google Gemini，模型疑似错配，建议切换为 gemini-2.5-flash"
+    }
+    // 端点是 OpenAI 官方，模型填了 deepseek / gemini / qwen
+    if ("api.openai.com" in ep && ("deepseek" in m || "gemini" in m || "qwen" in m)) {
+        return "当前端点为 OpenAI 官方，模型疑似错配，建议切换为 gpt-4o-mini"
+    }
+    // 端点是 智谱，模型填了 gemini / gpt / deepseek
+    if ("bigmodel.cn" in ep && ("gemini" in m || "gpt-" in m || "deepseek" in m)) {
+        return "当前端点为智谱 GLM，模型疑似错配，建议切换为 glm-4-flash"
+    }
+    return null
 }
 
 internal fun defaultModelFor(provider: String): String =
@@ -501,12 +577,26 @@ fun AssistantConfigDialog(
                     val summary =
                         when {
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "鉴权失败 (HTTP 401)"
+                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
+                                if ("groq" in normalized.lowercase()) {
+                                    "访问受限 (HTTP 403：Groq 限制大陆/香港 IP)"
+                                } else {
+                                    "访问受限 (HTTP 403)"
+                                }
+                            }
                             "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "连接超时 / 无法访问"
                             else -> "连通失败"
                         }
                     val detail =
                         when {
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "API Key 无效、已过期或无权访问该模型，请检查密钥"
+                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
+                                if ("groq" in normalized.lowercase()) {
+                                    "Groq 官方在 Cloudflare 边缘阻断了中国大陆及香港 IP 请求。请在设备上开启科学上网/VPN 并切换至美区/日区/新加坡等支持节点，或使用第三方中转代理。"
+                                } else {
+                                    "端点拒绝访问（HTTP 403），请检查账号权限或 IP 地域限制"
+                                }
+                            }
                             "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "请检查网络代理环境或服务地址是否拼写正确"
                             rawMsg.isNotBlank() -> rawMsg
                             else -> "请确认端点与网络可用性后重试"
@@ -676,7 +766,21 @@ fun AssistantConfigDialog(
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            TextButton(onClick = {
+                                editingProfileId = null
+                                profileName = if (profileName.isNotBlank()) "$profileName (副本)" else ""
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("克隆为新方案")
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
                             TextButton(onClick = { showDeleteConfirmDialog = true }) {
                                 Icon(
                                     imageVector = Icons.Filled.DeleteOutline,
@@ -788,6 +892,36 @@ fun AssistantConfigDialog(
                             onOpenPicker = { showModelPickerSheet = true },
                             onSyncRemote = { startConnectionTest() },
                         )
+                        val mismatchWarning =
+                            remember(endpoint, model, selectedProvider) {
+                                checkModelProviderMismatch(endpoint, model, selectedProvider)
+                            }
+                        if (mismatchWarning != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mismatchWarning,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1044,6 +1178,15 @@ private fun ModelSelectorCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (isModelKnownUnsupportedToolCall(currentModelDisplay)) {
+                    Text(
+                        text = "⚠️ 官方暂不支持工具调用（无法查番或打卡）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
@@ -1091,9 +1234,19 @@ private fun ModelPickerDialog(
     onDismiss: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedCapabilityFilter by remember { mutableStateOf<ModelCapability?>(null) }
     val allUniqueModels =
         remember(remoteModels, presetModels) {
             (remoteModels + presetModels).distinct()
+        }
+
+    val capabilityFilteredModels =
+        remember(allUniqueModels, selectedCapabilityFilter) {
+            if (selectedCapabilityFilter == null) {
+                allUniqueModels
+            } else {
+                allUniqueModels.filter { detectModelCapabilities(it).contains(selectedCapabilityFilter) }
+            }
         }
 
     val trimmedQuery = searchQuery.trim()
@@ -1101,11 +1254,11 @@ private fun ModelPickerDialog(
 
     // 过滤候选列表
     val filteredModels =
-        remember(allUniqueModels, trimmedQuery) {
+        remember(capabilityFilteredModels, trimmedQuery) {
             if (trimmedQuery.isBlank()) {
-                allUniqueModels
+                capabilityFilteredModels
             } else {
-                allUniqueModels.filter { it.contains(trimmedQuery, ignoreCase = true) }
+                capabilityFilteredModels.filter { it.contains(trimmedQuery, ignoreCase = true) }
             }
         }
 
@@ -1135,7 +1288,7 @@ private fun ModelPickerDialog(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp),
+                        .heightIn(max = 440.dp),
             ) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -1155,7 +1308,30 @@ private fun ModelPickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = selectedCapabilityFilter == null,
+                        onClick = { selectedCapabilityFilter = null },
+                        label = { Text("全部", style = MaterialTheme.typography.labelSmall) },
+                    )
+                    ModelCapability.entries.forEach { cap ->
+                        val isSelected = selectedCapabilityFilter == cap
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedCapabilityFilter = if (isSelected) null else cap
+                            },
+                            label = { Text(cap.label, style = MaterialTheme.typography.labelSmall) },
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // 如果搜索词无精确匹配，提供直接使用当前搜索词作为自定义模型的通道
                 if (isSearching && !hasExactMatch) {
@@ -1200,15 +1376,15 @@ private fun ModelPickerDialog(
                 if (filteredModels.isEmpty() && (!isSearching || hasExactMatch)) {
                     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "未找到可用模型",
+                            text = "未找到匹配模型",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                        // 1. 如果不在搜索模式且有远端模型：展示分组
-                        if (!isSearching && remoteModels.isNotEmpty()) {
+                        // 1. 如果无搜索且无能力筛选，且有远端模型：展示分组
+                        if (!isSearching && selectedCapabilityFilter == null && remoteModels.isNotEmpty()) {
                             item {
                                 Text(
                                     text = "🌐 远端已同步模型 (${remoteModels.size})",
@@ -1252,7 +1428,7 @@ private fun ModelPickerDialog(
                                 }
                             }
                         } else {
-                            // 搜索结果列表或仅有预设模型
+                            // 搜索结果列表或筛选结果
                             items(filteredModels) { item ->
                                 ModelPickerItem(
                                     name = item,
@@ -1283,6 +1459,7 @@ private fun ModelPickerItem(
     onSelect: () -> Unit,
 ) {
     val capabilities = remember(name) { detectModelCapabilities(name) }
+    val isUnsupportedTool = remember(name) { isModelKnownUnsupportedToolCall(name) }
     Column(
         modifier =
             Modifier
@@ -1301,12 +1478,25 @@ private fun ModelPickerItem(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 )
-                if (capabilities.isNotEmpty()) {
+                if (capabilities.isNotEmpty() || isUnsupportedTool) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        if (isUnsupportedTool) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                            ) {
+                                Text(
+                                    text = "⚠️ 官方暂无工具调用支持",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                )
+                            }
+                        }
                         capabilities.forEach { cap ->
                             Surface(
                                 shape = RoundedCornerShape(4.dp),

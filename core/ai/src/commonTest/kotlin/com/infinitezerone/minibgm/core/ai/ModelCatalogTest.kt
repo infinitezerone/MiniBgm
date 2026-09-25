@@ -109,4 +109,19 @@ class ModelCatalogTest {
         assertNull(parseModelsBody(""))
         assertNull(parseModelsBody("{}"))
     }
+
+    @Test
+    fun extractJsonErrorMessage_extractsNestedMessage() {
+        val openAiError = """{"error":{"message":"Invalid API key provided","type":"invalid_request_error"}}"""
+        assertEquals("Invalid API key provided", extractJsonErrorMessage(openAiError))
+
+        val flatError = """{"error":"Rate limit reached"}"""
+        assertEquals("Rate limit reached", extractJsonErrorMessage(flatError))
+
+        val directMessage = """{"message":"Service temporarily unavailable"}"""
+        assertEquals("Service temporarily unavailable", extractJsonErrorMessage(directMessage))
+
+        assertNull(extractJsonErrorMessage("Plain text error"))
+        assertNull(extractJsonErrorMessage(""))
+    }
 }

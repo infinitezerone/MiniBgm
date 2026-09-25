@@ -129,6 +129,27 @@ class AssistantConfigDialogTest {
         org.junit.Assert.assertTrue(presets.any { it.id == "gemini" })
         org.junit.Assert.assertTrue(presets.any { it.id == "deepseek" })
         org.junit.Assert.assertTrue(presets.any { it.id == "ollama" })
+        org.junit.Assert.assertTrue(presets.any { it.id == "zhipu" })
+        org.junit.Assert.assertTrue(presets.any { it.id == "dashscope" })
+        org.junit.Assert.assertTrue(presets.any { it.id == "moonshot" })
+
+        // 验证预设列表 ID 必须全局唯一，杜绝重复项
+        assertEquals(presets.size, presets.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun isModelKnownUnsupportedToolCall_identifies_incompatible_models() {
+        val isUnsupported = { model: String ->
+            com.infinitezerone.minibgm.feature.assistant.components
+                .isModelKnownUnsupportedToolCall(model)
+        }
+        org.junit.Assert.assertTrue(isUnsupported("deepseek-reasoner"))
+        org.junit.Assert.assertTrue(isUnsupported("o1-preview"))
+        org.junit.Assert.assertTrue(isUnsupported("o1-mini"))
+        org.junit.Assert.assertFalse(isUnsupported("deepseek-chat"))
+        org.junit.Assert.assertFalse(isUnsupported("gemini-2.5-flash"))
+        org.junit.Assert.assertFalse(isUnsupported("gpt-4o-mini"))
+        org.junit.Assert.assertFalse(isUnsupported("qwen2.5:7b"))
     }
 
     @Test
@@ -180,11 +201,22 @@ class AssistantConfigDialogTest {
         assertEquals("openai", openAiPreset?.id)
         assertEquals("https://api.openai.com/v1", openAiPreset?.endpoint)
 
+        // OpenAI (Classic Personal Key, 48 chars)
+        val openAiClassicPreset = detect("sk-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV")
+        org.junit.Assert.assertNotNull(openAiClassicPreset)
+        assertEquals("openai", openAiClassicPreset?.id)
+
         // Groq
         val groqPreset = detect("gsk_1234567890abcdefghijklmnopqrstuvwxyz")
         org.junit.Assert.assertNotNull(groqPreset)
         assertEquals("groq", groqPreset?.id)
         assertEquals("https://api.groq.com/openai/v1", groqPreset?.endpoint)
+
+        // 智谱 GLM API Key (32-hex.16~32-chars)
+        val zhipuPreset = detect("0123456789abcdef0123456789abcdef.abcdefghijklmnopqrstuvwx")
+        org.junit.Assert.assertNotNull(zhipuPreset)
+        assertEquals("zhipu", zhipuPreset?.id)
+        assertEquals("https://open.bigmodel.cn/api/paas/v4", zhipuPreset?.endpoint)
 
         // DeepSeek (32 hex characters)
         val deepseekPreset = detect("sk-0123456789abcdef0123456789abcdef")

@@ -333,15 +333,17 @@ class AssistantViewModel(
                                 PendingActionCardState(action = it, status = ActionStatus.PENDING)
                             }
 
-                        val playableSources = PlayableSourcesParser.extract(rawContent)
+                        val storePlayableSources = agentService.playableSourcesStore?.pop()
+                        val parsedPlayableSources = PlayableSourcesParser.extract(rawContent)
+                        val playableSources = storePlayableSources ?: parsedPlayableSources
 
-                        // 卡片和正文里的是同一份提案，正文那份去掉；剩下的自然语言照常保留
+                        // 卡片和正文里的是同一份提案或播放数据，正文那份去掉；剩下的自然语言照常保留
                         val messageBody =
-                            stripDuplicatedJsonBlock(rawContent, combinedActions.isNotEmpty())
+                            stripDuplicatedJsonBlock(rawContent, combinedActions.isNotEmpty() || playableSources != null)
 
                         val displayContent =
                             when {
-                                playableSources != null -> {
+                                playableSources != null && (messageBody.isBlank() || rawContent.trim().startsWith("{")) -> {
                                     val source = playableSources.source
                                     val suffix = if (source.isBlank()) "" else "（来源：$source）"
                                     "为你找到 ${playableSources.episodes.size} 条可播放来源$suffix："

@@ -29,3 +29,27 @@ internal fun stripDuplicatedJsonBlock(
             if (body.startsWith("{") || body.startsWith("[")) "" else match.value
         }.trim()
 }
+
+/**
+ * 消息内容解析结果：分离思维链思考内容与实际主正文。
+ */
+internal data class ParsedMessageContent(
+    val thinking: String? = null,
+    val mainContent: String,
+)
+
+private val THINKING_TAG_REGEX = Regex("""(?s)<think>(.*?)(?:</think>|$)""")
+
+/**
+ * 从模型回复中提取 `<think>...</think>` 思维链内容。
+ * 针对 DeepSeek-R1、Qwen-QwQ 等推理模型，分离思考过程与最终输出。
+ */
+internal fun parseThinkingProcess(rawContent: String): ParsedMessageContent {
+    val match = THINKING_TAG_REGEX.find(rawContent) ?: return ParsedMessageContent(null, rawContent)
+    val thinkingText = match.groupValues[1].trim()
+    val mainText = rawContent.replace(match.value, "").trim()
+    return ParsedMessageContent(
+        thinking = thinkingText.takeIf { it.isNotBlank() },
+        mainContent = mainText,
+    )
+}
