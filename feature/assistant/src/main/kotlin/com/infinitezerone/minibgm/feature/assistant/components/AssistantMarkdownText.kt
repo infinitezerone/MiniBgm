@@ -103,6 +103,16 @@ internal fun parseMarkdownBlocks(raw: String): List<MarkdownBlock> {
     return blocks
 }
 
+private fun isSpecialMarkdownLine(trimmed: String): Boolean =
+    trimmed.startsWith("#") ||
+        trimmed.startsWith("- ") ||
+        trimmed.startsWith("* ") ||
+        trimmed.startsWith("> ") ||
+        trimmed.matches(Regex("""^\d+\.\s+.*""")) ||
+        trimmed == "---" ||
+        trimmed == "***" ||
+        trimmed == "___"
+
 private fun parseTextLines(
     text: String,
     out: MutableList<MarkdownBlock>,
@@ -153,12 +163,7 @@ private fun parseTextLines(
                 val paragraphLines = mutableListOf(line)
                 while (i + 1 < lines.size &&
                     lines[i + 1].isNotBlank() &&
-                    !lines[i + 1].trim().startsWith("#") &&
-                    !lines[i + 1].trim().startsWith("- ") &&
-                    !lines[i + 1].trim().startsWith("* ") &&
-                    !lines[i + 1].trim().startsWith("> ") &&
-                    !lines[i + 1].trim().matches(Regex("""^\d+\.\s+.*""")) &&
-                    lines[i + 1].trim() != "---"
+                    !isSpecialMarkdownLine(lines[i + 1].trim())
                 ) {
                     i++
                     paragraphLines.add(lines[i].trimEnd())
@@ -306,7 +311,7 @@ fun AssistantMarkdownText(
                             content = block.text,
                             linkColor = linkColor,
                             codeBgColor = codeBgColor,
-                            onOpenUrl = { uriHandler.openUri(it) },
+                            onOpenUrl = { url -> runCatching { uriHandler.openUri(url) } },
                         )
                     Text(text = annotated, style = style)
                 }
@@ -322,7 +327,7 @@ fun AssistantMarkdownText(
                             content = block.text,
                             linkColor = linkColor,
                             codeBgColor = codeBgColor,
-                            onOpenUrl = { uriHandler.openUri(it) },
+                            onOpenUrl = { url -> runCatching { uriHandler.openUri(url) } },
                         )
                     Text(text = annotated, style = headingStyle)
                 }
@@ -358,7 +363,7 @@ fun AssistantMarkdownText(
                                 content = block.text,
                                 linkColor = linkColor,
                                 codeBgColor = codeBgColor,
-                                onOpenUrl = { uriHandler.openUri(it) },
+                                onOpenUrl = { url -> runCatching { uriHandler.openUri(url) } },
                             )
                         Text(
                             text = annotated,
@@ -371,7 +376,7 @@ fun AssistantMarkdownText(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                     ) {
                         Box(
                             modifier =
@@ -385,11 +390,12 @@ fun AssistantMarkdownText(
                                 content = block.text,
                                 linkColor = linkColor,
                                 codeBgColor = codeBgColor,
-                                onOpenUrl = { uriHandler.openUri(it) },
+                                onOpenUrl = { url -> runCatching { uriHandler.openUri(url) } },
                             )
                         Text(
                             text = annotated,
                             style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)),
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }

@@ -1052,11 +1052,6 @@ private fun AssistantLoadingBubble(
     }
 }
 
-/** 助手回答里的裸 URL（找源结果就是链接本身，必须可点） */
-private val URL_PATTERN = Regex("https?://\\S+")
-
-private val TRAILING_PUNCTUATION = charArrayOf('，', '。', '、', '）', ')', '】', '」', '’', '"', '.', ',')
-
 /** 助手消息支持完整 Markdown 富文本渲染与可点击超链接 */
 @Composable
 private fun LinkifiedMessageText(
