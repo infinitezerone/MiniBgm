@@ -45,4 +45,28 @@ class AssistantMessageContentTest {
         val content = "提案如下\n```\n$proposalJson\n```"
         assertEquals("提案如下", stripDuplicatedJsonBlock(content, hasActionCards = true))
     }
+
+    @Test
+    fun parseThinkingProcess_extractsThinkingAndLeavesMainContent() {
+        val raw = "<think>\n考虑用户的追番偏好：推荐《葬送的芙莉莲》\n分析开播时间\n</think>\n推荐你观看《葬送的芙莉莲》，制作精良。"
+        val parsed = parseThinkingProcess(raw)
+        assertEquals("考虑用户的追番偏好：推荐《葬送的芙莉莲》\n分析开播时间", parsed.thinking)
+        assertEquals("推荐你观看《葬送的芙莉莲》，制作精良。", parsed.mainContent)
+    }
+
+    @Test
+    fun parseThinkingProcess_withoutThinkingTag_returnsOriginal() {
+        val raw = "今天更新的番剧有《迷宫饭》。"
+        val parsed = parseThinkingProcess(raw)
+        org.junit.Assert.assertNull(parsed.thinking)
+        assertEquals(raw, parsed.mainContent)
+    }
+
+    @Test
+    fun parseThinkingProcess_emptyThinkingTag_returnsNullThinking() {
+        val raw = "<think></think>直接回答正文"
+        val parsed = parseThinkingProcess(raw)
+        org.junit.Assert.assertNull(parsed.thinking)
+        assertEquals("直接回答正文", parsed.mainContent)
+    }
 }

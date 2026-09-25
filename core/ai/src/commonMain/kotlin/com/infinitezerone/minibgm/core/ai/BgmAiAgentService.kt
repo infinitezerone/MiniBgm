@@ -39,4 +39,10 @@ interface BgmAiAgentService {
      */
     val pendingActionStore: PendingActionStore?
         get() = null
+
+    /**
+     * 播放资源解析结果暂存区。
+     */
+    val playableSourcesStore: PlayableSourcesStore?
+        get() = null
 }

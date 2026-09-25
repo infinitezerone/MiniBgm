@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.assistant
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -36,10 +38,14 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.SmartToy
@@ -75,20 +81,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
@@ -775,11 +776,65 @@ private fun ChatMessageItem(
     modifier: Modifier = Modifier,
 ) {
     val isUser = message.role == MessageRole.USER
+    val parsedContent = remember(message.content) { parseThinkingProcess(message.content) }
+    var isThinkingExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
+        // 推理模型思考过程可折叠卡片
+        if (!isUser && parsedContent.thinking != null) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.55f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                modifier =
+                    Modifier
+                        .widthIn(max = 320.dp)
+                        .padding(bottom = 6.dp)
+                        .clickable { isThinkingExpanded = !isThinkingExpanded },
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "🧠 思考过程",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = if (isThinkingExpanded) "收起" else "展开",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Icon(
+                            imageVector = if (isThinkingExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    AnimatedVisibility(visible = isThinkingExpanded) {
+                        Column {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = parsedContent.thinking,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Surface(
             shape =
                 RoundedCornerShape(
@@ -813,22 +868,55 @@ private fun ChatMessageItem(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             } else {
+                val displayContent =
+                    if (parsedContent.thinking != null && parsedContent.mainContent.isBlank()) {
+                        "（已完成思考，请展开上方查看）"
+                    } else {
+                        parsedContent.mainContent
+                    }
                 LinkifiedMessageText(
-                    content = message.content,
+                    content = displayContent,
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }
         }
 
-        // 错误回复：给一键重试入口（取该错误之前最近一条用户输入原样重发）。
-        // 仅最新一条错误显示——重试成功后该气泡会被整体移除
-        if (showRetry) {
-            TextButton(
-                onClick = { onRetryMessage(message.id) },
-                modifier = Modifier.padding(top = 2.dp),
-            ) {
-                Text("重试", style = MaterialTheme.typography.labelLarge)
+        // 助手消息辅助操作（一键复制）与错误回复一键重试
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 2.dp),
+        ) {
+            if (!isUser && !message.isError && message.content.isNotBlank()) {
+                val clipboardManager = LocalClipboardManager.current
+                var copied by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = {
+                        val textToCopy = parsedContent.mainContent.ifBlank { message.content }
+                        clipboardManager.setText(AnnotatedString(textToCopy))
+                        copied = true
+                    },
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                        contentDescription = "复制回答",
+                        tint =
+                            if (copied) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            },
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
+            if (showRetry) {
+                TextButton(
+                    onClick = { onRetryMessage(message.id) },
+                ) {
+                    Text("重试", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
 
@@ -969,40 +1057,16 @@ private val URL_PATTERN = Regex("https?://\\S+")
 
 private val TRAILING_PUNCTUATION = charArrayOf('，', '。', '、', '）', ')', '】', '」', '’', '"', '.', ',')
 
-/** 助手消息按纯文本渲染，但把其中的 URL 变成可点击链接（系统提示词要求一行一个链接） */
+/** 助手消息支持完整 Markdown 富文本渲染与可点击超链接 */
 @Composable
 private fun LinkifiedMessageText(
     content: String,
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    val uriHandler = LocalUriHandler.current
-    val linkColor = MaterialTheme.colorScheme.primary
-    val annotated =
-        buildAnnotatedString {
-            var cursor = 0
-            URL_PATTERN.findAll(content).forEach { match ->
-                append(content, cursor, match.range.first)
-                val url = match.value.trimEnd { it in TRAILING_PUNCTUATION }
-                withLink(
-                    LinkAnnotation.Url(
-                        url = url,
-                        styles =
-                            TextLinkStyles(
-                                style =
-                                    SpanStyle(
-                                        color = linkColor,
-                                        textDecoration = TextDecoration.Underline,
-                                    ),
-                            ),
-                        linkInteractionListener = { uriHandler.openUri(url) },
-                    ),
-                ) {
-                    append(url)
-                }
-                cursor = match.range.first + match.value.length
-            }
-            append(content, cursor, content.length)
-        }
-    Text(text = annotated, style = style, modifier = modifier)
+    com.infinitezerone.minibgm.feature.assistant.components.AssistantMarkdownText(
+        content = content,
+        style = style,
+        modifier = modifier,
+    )
 }

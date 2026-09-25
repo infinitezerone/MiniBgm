@@ -36,6 +36,7 @@ class PlayableSourceTools(
     private val subjectRepository: SubjectRepository,
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository,
+    private val playableSourcesStore: com.infinitezerone.minibgm.core.ai.PlayableSourcesStore? = null,
     private val json: Json =
         Json {
             prettyPrint = true
@@ -205,15 +206,17 @@ class PlayableSourceTools(
         title: String,
         source: String,
         episodes: List<PlayableSource>,
-    ): String =
-        json.encodeToString(
+    ): String {
+        val list =
             PlayableEpisodeList(
                 subjectId = subjectId,
                 title = title,
                 source = source,
                 episodes = episodes.distinctBy { it.url },
-            ),
-        )
+            )
+        playableSourcesStore?.set(list)
+        return json.encodeToString(list)
+    }
 
     /** 排期记录里的片名（优先中文名）；没有记录时为空 */
     private fun scheduleTitle(schedule: AirSchedule?): String = schedule?.titleCn.orEmpty().ifBlank { schedule?.title.orEmpty() }

@@ -104,6 +104,7 @@ class DefaultBgmAiAgentService(
     val playbackRuleDiagnosticsTools: com.infinitezerone.minibgm.core.ai.tools.PlaybackRuleDiagnosticsTools? = null,
     override val pendingActionExecutor: PendingActionExecutor? = null,
     override val pendingActionStore: PendingActionStore? = null,
+    override val playableSourcesStore: PlayableSourcesStore? = null,
     httpClient: HttpClient? = null,
     private val agentRunner: suspend (config: AiConfig, prompt: String, tools: ToolRegistry) -> String = { config, prompt, tools ->
         val client: LLMClient =
@@ -194,6 +195,7 @@ class DefaultBgmAiAgentService(
         playableSourceTools = null,
         pendingActionExecutor = null,
         pendingActionStore = null,
+        playableSourcesStore = null,
         agentRunner = { config, prompt, _ -> agentRunner(config, prompt) },
     )
 
@@ -284,8 +286,19 @@ class DefaultBgmAiAgentService(
         }
     }
 
+    private val catalogLogger = bgmLogger("Bgm/AiCatalog")
+
     private val catalogClient: HttpClient by lazy {
         httpClient ?: HttpClient {
+            install(Logging) {
+                logger =
+                    object : Logger {
+                        override fun log(message: String) {
+                            catalogLogger.d { message }
+                        }
+                    }
+                level = LogLevel.INFO
+            }
             install(HttpTimeout) {
                 requestTimeoutMillis = 20_000
                 connectTimeoutMillis = 10_000
@@ -302,6 +315,7 @@ class DefaultBgmAiAgentService(
         val config = settingsRepository.aiConfig.first()
         val target = resolveTargetConfig(config, endpoint, apiKey, provider)
         val modelsUrl = buildModelsUrl(target.endpoint, target.provider)
+        catalogLogger.i { "Fetching models from: $modelsUrl (provider: ${target.provider})" }
 
         return try {
             val response: HttpResponse =
@@ -315,16 +329,28 @@ class DefaultBgmAiAgentService(
                     }
                 }
             if (!response.status.isSuccess()) {
-                val errorMsg = catalogHttpErrorMessage(response.status.value)
+                val rawBody = runCatching { response.body<String>() }.getOrNull().orEmpty()
+                val innerMsg = extractJsonErrorMessage(rawBody)
+                val fallbackMsg = catalogHttpErrorMessage(response.status.value)
+                val errorMsg =
+                    if (!innerMsg.isNullOrBlank()) {
+                        "拉取模型列表失败（HTTP ${response.status.value}）：$innerMsg"
+                    } else {
+                        fallbackMsg
+                    }
+                catalogLogger.w { "Failed to fetch models: HTTP ${response.status.value}, url: $modelsUrl, body: $rawBody" }
                 return AppResult.Error(IllegalStateException("HTTP ${response.status.value}"), errorMsg)
             }
             val models = parseModelsBody(response.body<String>())
             if (models != null) {
+                catalogLogger.i { "Successfully fetched ${models.size} models from $modelsUrl" }
                 AppResult.Success(models)
             } else {
+                catalogLogger.w { "Empty model list returned from $modelsUrl" }
                 AppResult.Error(IllegalStateException("empty model list"), "端点未返回任何可用模型，请确认服务已正常运行")
             }
         } catch (e: Exception) {
+            catalogLogger.e(e) { "Exception while fetching models from $modelsUrl" }
             val friendly = friendlyAiError(config.copy(endpoint = target.endpoint, provider = target.provider), e)
             AppResult.Error(e, friendly.ifBlank { "拉取模型列表失败：${e.message}" })
         }

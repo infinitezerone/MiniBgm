@@ -14,6 +14,10 @@ import org.koin.dsl.module
 val aiModule =
     module {
         single { PendingActionStore() }
+        single {
+            com.infinitezerone.minibgm.core.ai
+                .PlayableSourcesStore()
+        }
         single { ScheduleTools(scheduleRepository = get()) }
         single { SubjectTools(searchRepository = get(), subjectRepository = get()) }
         single { CollectionTools(collectionRepository = get(), pendingActionStore = get<PendingActionStore>()) }
@@ -23,6 +27,7 @@ val aiModule =
                 subjectRepository = get(),
                 settingsRepository = get(),
                 playbackResolverRepository = get(),
+                playableSourcesStore = get<com.infinitezerone.minibgm.core.ai.PlayableSourcesStore>(),
             )
         }
         single {
@@ -57,6 +62,7 @@ val aiModule =
                 playbackRuleDiagnosticsTools = getOrNull(),
                 pendingActionExecutor = getOrNull(),
                 pendingActionStore = getOrNull(),
+                playableSourcesStore = getOrNull(),
             )
         }
     }
