@@ -53,7 +53,7 @@ class SubjectTools(
     private val subjectRepository: SubjectRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
 ) : ToolSet {
@@ -62,14 +62,14 @@ class SubjectTools(
     suspend fun searchAnime(
         @LLMDescription("Search query keyword")
         query: String,
-        @LLMDescription("Maximum number of results to return (default 10)")
-        limit: Int = 10,
+        @LLMDescription("Maximum number of results to return (default 5)")
+        limit: Int = 5,
     ): String {
         if (query.isBlank()) {
             return "Search query must not be empty."
         }
         AiToolActivity.report("搜索动画条目", "关键词：$query")
-        val resolvedLimit = if (limit <= 0) 10 else limit.coerceAtMost(50)
+        val resolvedLimit = if (limit <= 0) 5 else limit.coerceAtMost(20)
         return when (val result = searchRepository.searchSubjects(query = query.trim(), type = 2, limit = resolvedLimit)) {
             is AppResult.Success -> {
                 val items =
@@ -81,7 +81,7 @@ class SubjectTools(
                             score = it.rating?.score ?: 0.0,
                             airDate = it.airDate,
                             eps = it.eps.takeIf { ep -> ep > 0 } ?: it.totalEpisodes,
-                            summary = it.summary.take(200),
+                            summary = it.summary.take(80),
                         )
                     }
                 if (items.isEmpty()) {

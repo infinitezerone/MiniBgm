@@ -29,7 +29,7 @@ class CommunityTools(
     private val settingsRepository: SettingsRepository,
     private val json: Json =
         Json {
-            prettyPrint = true
+            prettyPrint = false
             ignoreUnknownKeys = true
         },
     private val pendingActionStore: PendingActionStore? = null,

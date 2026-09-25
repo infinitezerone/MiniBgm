@@ -28,10 +28,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -39,7 +41,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
@@ -221,6 +222,36 @@ fun AssistantScreenContent(
         }
     }
 
+    var showDeleteCurrentSessionDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteCurrentSessionDialog) {
+        val activeTitle =
+            uiState.sessions
+                .firstOrNull { it.id == uiState.activeSessionId }
+                ?.title
+                ?.ifBlank { "当前会话" } ?: "当前会话"
+        AlertDialog(
+            onDismissRequest = { showDeleteCurrentSessionDialog = false },
+            title = { Text("删除会话") },
+            text = { Text("确定要删除会话「$activeTitle」及其所有聊天记录吗？删除后无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteCurrentSessionDialog = false
+                        onDeleteSession(uiState.activeSessionId)
+                    },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCurrentSessionDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -263,10 +294,10 @@ fun AssistantScreenContent(
                         )
                     }
                     if (uiState.messages.isNotEmpty()) {
-                        IconButton(onClick = onClearConversation) {
+                        IconButton(onClick = { showDeleteCurrentSessionDialog = true }) {
                             Icon(
-                                imageVector = Icons.Filled.DeleteSweep,
-                                contentDescription = "清空对话",
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = "删除当前会话",
                             )
                         }
                     }
@@ -562,11 +593,18 @@ private fun SessionSwitcherSheet(
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
     var renamingSession by remember { mutableStateOf<AssistantSession?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var deletingSession by remember { mutableStateOf<AssistantSession?>(null) }
     BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+                    .verticalScroll(rememberScrollState()),
+        ) {
             Row(
                 modifier =
                     Modifier
@@ -643,7 +681,7 @@ private fun SessionSwitcherSheet(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { onDelete(session.id) }) {
+                    IconButton(onClick = { deletingSession = session }) {
                         Icon(
                             imageVector = Icons.Outlined.Delete,
                             contentDescription = "删除会话",
@@ -679,6 +717,29 @@ private fun SessionSwitcherSheet(
                 },
                 dismissButton = {
                     TextButton(onClick = { renamingSession = null }) {
+                        Text("取消")
+                    }
+                },
+            )
+        }
+
+        deletingSession?.let { session ->
+            AlertDialog(
+                onDismissRequest = { deletingSession = null },
+                title = { Text("删除会话") },
+                text = { Text("确定要删除会话「${session.title}」及其所有记录吗？删除后无法恢复。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onDelete(session.id)
+                            deletingSession = null
+                        },
+                    ) {
+                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deletingSession = null }) {
                         Text("取消")
                     }
                 },
