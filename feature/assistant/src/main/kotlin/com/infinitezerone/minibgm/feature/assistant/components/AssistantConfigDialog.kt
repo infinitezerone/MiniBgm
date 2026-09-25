@@ -1,22 +1,29 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
@@ -26,6 +33,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -296,6 +304,10 @@ fun AssistantConfigDialog(
         )
     }
 
+    // 远端拉取到的可用模型列表（与推荐模型区分）
+    var availableRemoteModels by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showModelSearchDialog by remember { mutableStateOf(false) }
+
     // 连通诊断状态
     var diagnosticState by remember { mutableStateOf<ConnectionDiagnosticState>(ConnectionDiagnosticState.Idle) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -316,6 +328,7 @@ fun AssistantConfigDialog(
                 } else {
                     "custom"
                 }
+        availableRemoteModels = emptyList()
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -328,6 +341,7 @@ fun AssistantConfigDialog(
         if (preset.defaultModel.isNotBlank()) {
             model = preset.defaultModel
         }
+        availableRemoteModels = emptyList()
         diagnosticState = ConnectionDiagnosticState.Idle
     }
 
@@ -340,6 +354,7 @@ fun AssistantConfigDialog(
             when (val result = onFetchModels(normalized, apiKey.trim(), selectedProvider)) {
                 is AppResult.Success -> {
                     val elapsed = System.currentTimeMillis() - startMs
+                    availableRemoteModels = result.data
                     diagnosticState =
                         ConnectionDiagnosticState.Success(
                             latencyMs = elapsed.coerceAtLeast(1),
@@ -565,6 +580,7 @@ fun AssistantConfigDialog(
                         selectedPresetId =
                             PROVIDER_PRESETS.firstOrNull { preset -> preset.id != "custom" && preset.endpoint == it.trim() }?.id
                                 ?: "custom"
+                        availableRemoteModels = emptyList()
                         diagnosticState = ConnectionDiagnosticState.Idle
                     },
                     label = { Text("服务地址 (Base URL)") },
@@ -580,6 +596,7 @@ fun AssistantConfigDialog(
                             IconButton(onClick = {
                                 endpoint = ""
                                 selectedPresetId = "custom"
+                                availableRemoteModels = emptyList()
                                 diagnosticState = ConnectionDiagnosticState.Idle
                             }) {
                                 Icon(Icons.Filled.Clear, contentDescription = "清空端点")
@@ -639,7 +656,7 @@ fun AssistantConfigDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 模型名称输入框
+                // 模型名称输入框（结合手动输入与远端模型列表选择）
                 OutlinedTextField(
                     value = model,
                     onValueChange = {
@@ -649,9 +666,20 @@ fun AssistantConfigDialog(
                     label = { Text("模型名称 (Model)") },
                     placeholder = { Text(defaultModelFor(selectedProvider)) },
                     trailingIcon = {
-                        if (model.isNotBlank()) {
-                            IconButton(onClick = { model = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = "清空模型")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (model.isNotBlank()) {
+                                IconButton(onClick = { model = "" }) {
+                                    Icon(Icons.Filled.Clear, contentDescription = "清空模型")
+                                }
+                            }
+                            if (availableRemoteModels.isNotEmpty()) {
+                                IconButton(onClick = { showModelSearchDialog = true }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.List,
+                                        contentDescription = "选择远端可用模型",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                         }
                     },
@@ -659,22 +687,40 @@ fun AssistantConfigDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // 快捷模型候选推荐
+                // 快捷模型候选推荐区（远端真实模型优先；未拉取时展示主流预设模型）
                 val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
                 val presetModels = currentPreset?.popularModels.orEmpty()
-                if (presetModels.isNotEmpty()) {
+                val candidateModels = if (availableRemoteModels.isNotEmpty()) availableRemoteModels else presetModels
+                val isRemote = availableRemoteModels.isNotEmpty()
+
+                if (candidateModels.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "推荐候选模型：",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (isRemote) "远端已同步模型 (${candidateModels.size})：" else "推荐候选模型：",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isRemote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isRemote) FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (candidateModels.size > 6) {
+                            TextButton(
+                                onClick = { showModelSearchDialog = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            ) {
+                                Text("浏览全部", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        presetModels.forEach { candidate ->
+                        candidateModels.take(6).forEach { candidate ->
                             val isModelSelected = (model == candidate)
                             FilterChip(
                                 selected = isModelSelected,
@@ -703,7 +749,7 @@ fun AssistantConfigDialog(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("正在探测端点连通性并拉取可用模型...", style = MaterialTheme.typography.bodySmall)
+                                Text("正在探测端点连通性并同步可用模型...", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -715,38 +761,41 @@ fun AssistantConfigDialog(
                                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
                                 ),
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "连通正常 · 延迟 ${state.latencyMs}ms · 发现 ${state.models.size} 个可用模型",
+                                        text = "连通正常 · 延迟 ${state.latencyMs}ms",
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
                                     )
+                                    Text(
+                                        text =
+                                            if (state.models.isNotEmpty()) {
+                                                "已成功同步 ${state.models.size} 个可用模型至上方列表"
+                                            } else {
+                                                "端点响应正常，但未返回模型列表"
+                                            },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
-                                if (state.models.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("点击可用模型直接应用：", style = MaterialTheme.typography.labelSmall)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                if (state.models.size > 6) {
+                                    OutlinedButton(
+                                        onClick = { showModelSearchDialog = true },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     ) {
-                                        state.models.take(8).forEach { remoteModel ->
-                                            val isSelected = (model == remoteModel)
-                                            FilterChip(
-                                                selected = isSelected,
-                                                onClick = { model = remoteModel },
-                                                label = { Text(remoteModel, style = MaterialTheme.typography.labelSmall) },
-                                            )
-                                        }
+                                        Text("选择模型", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -824,6 +873,22 @@ fun AssistantConfigDialog(
         }
     }
 
+    // 完整模型搜索选择弹窗
+    if (showModelSearchDialog) {
+        val currentPreset = PROVIDER_PRESETS.firstOrNull { it.id == selectedPresetId }
+        val presetModels = currentPreset?.popularModels.orEmpty()
+        val allAvailable = if (availableRemoteModels.isNotEmpty()) availableRemoteModels else presetModels
+        ModelSearchDialog(
+            models = allAvailable,
+            currentModel = model,
+            onSelectModel = { selected ->
+                model = selected
+                diagnosticState = ConnectionDiagnosticState.Idle
+            },
+            onDismiss = { showModelSearchDialog = false },
+        )
+    }
+
     // 删除方案确认防误触弹窗
     if (showDeleteConfirmDialog && editingProfileId != null) {
         val targetName = profileName.ifBlank { "当前方案" }
@@ -852,4 +917,101 @@ fun AssistantConfigDialog(
             },
         )
     }
+}
+
+/**
+ * 完整模型选择与搜索弹窗
+ */
+@Composable
+private fun ModelSearchDialog(
+    models: List<String>,
+    currentModel: String,
+    onSelectModel: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredModels =
+        remember(models, searchQuery) {
+            if (searchQuery.isBlank()) {
+                models
+            } else {
+                models.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
+            }
+        }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("选择模型 (${models.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("搜索模型名称...") },
+                    leadingIcon = {
+                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "清除搜索")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                if (filteredModels.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "无匹配模型",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                        items(filteredModels) { item ->
+                            val isSelected = (item == currentModel)
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onSelectModel(item)
+                                            onDismiss()
+                                        }.padding(horizontal = 8.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = item,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = "已选择",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        },
+    )
 }
