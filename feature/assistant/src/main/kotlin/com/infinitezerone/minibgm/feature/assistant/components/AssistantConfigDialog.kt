@@ -155,6 +155,39 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             popularModels = listOf("google/gemini-2.5-flash", "deepseek/deepseek-chat", "meta-llama/llama-3.3-70b-instruct"),
         ),
         ProviderPreset(
+            id = "openai",
+            name = "OpenAI",
+            badge = "行业标杆",
+            endpoint = "https://api.openai.com/v1",
+            defaultModel = "gpt-4o-mini",
+            provider = AiConfig.PROVIDER_CUSTOM,
+            isApiKeyRequired = true,
+            tip = "OpenAI 官方 API 服务",
+            popularModels = listOf("gpt-4o-mini", "gpt-4o", "o3-mini"),
+        ),
+        ProviderPreset(
+            id = "groq",
+            name = "Groq",
+            badge = "极速推理",
+            endpoint = "https://api.groq.com/openai/v1",
+            defaultModel = "llama-3.3-70b-versatile",
+            provider = AiConfig.PROVIDER_CUSTOM,
+            isApiKeyRequired = true,
+            tip = "LPU 硬件加速，极低延迟秒级响应",
+            popularModels = listOf("llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b"),
+        ),
+        ProviderPreset(
+            id = "ollama",
+            name = "Ollama 本地",
+            badge = "私有化",
+            endpoint = "http://10.0.2.2:11434/v1",
+            defaultModel = "qwen2.5:7b",
+            provider = AiConfig.PROVIDER_OLLAMA,
+            isApiKeyRequired = false,
+            tip = "本地或局域网 NAS 私有部署，免 API Key，隐私安全",
+            popularModels = listOf("qwen2.5:7b", "llama3.1:8b", "deepseek-r1:7b"),
+        ),
+        ProviderPreset(
             id = "custom",
             name = "自定义端点",
             badge = "OpenAI 兼容",
@@ -166,6 +199,29 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             popularModels = emptyList(),
         ),
     )
+
+/** 根据输入的 API Key 格式特征智能匹配对应的服务商预设 */
+internal fun detectProviderFromApiKey(apiKey: String): ProviderPreset? {
+    val key = apiKey.trim()
+    if (key.isBlank()) return null
+
+    val targetId =
+        when {
+            // Google Gemini AI Studio (以 AIzaSy 开头，通常 39 位)
+            key.startsWith("AIzaSy") -> "gemini"
+            // OpenRouter (以 sk-or-v1- 开头)
+            key.startsWith("sk-or-v1-") -> "openrouter"
+            // OpenAI 官方 Project / Service / Admin Key (sk-proj-, sk-admin-, sk-svcacct-)
+            key.startsWith("sk-proj-") || key.startsWith("sk-admin-") || key.startsWith("sk-svcacct-") -> "openai"
+            // Groq (以 gsk_ 开头)
+            key.startsWith("gsk_") -> "groq"
+            // DeepSeek 官方 API Key (格式固定为 sk- 加上 32 位十六进制字符，总长 35 位)
+            key.matches(Regex("^sk-[0-9a-fA-F]{32}$")) -> "deepseek"
+            else -> null
+        } ?: return null
+
+    return PROVIDER_PRESETS.firstOrNull { it.id == targetId }
+}
 
 /** 根据输入的 Base URL 自动解析并匹配协议提供商 */
 internal fun autoDetectProvider(endpoint: String): String {
@@ -393,6 +449,21 @@ fun AssistantConfigDialog(
         availableRemoteModels = emptyList()
         isModelConfigured = false
         diagnosticState = ConnectionDiagnosticState.Idle
+    }
+
+    fun onApiKeyUpdated(newKey: String) {
+        apiKey = newKey
+        diagnosticState = ConnectionDiagnosticState.Idle
+
+        val detected = detectProviderFromApiKey(newKey)
+        if (detected != null) {
+            val isEndpointEmptyOrDefault =
+                endpoint.isBlank() ||
+                    PROVIDER_PRESETS.any { it.endpoint.isNotBlank() && it.endpoint == endpoint.trim() }
+            if (isEndpointEmptyOrDefault && selectedPresetId != detected.id) {
+                applyPreset(detected)
+            }
+        }
     }
 
     fun startConnectionTest() {
@@ -669,10 +740,7 @@ fun AssistantConfigDialog(
                 // API Key 输入框（集成安全开关与剪贴板一键粘贴）
                 OutlinedTextField(
                     value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        diagnosticState = ConnectionDiagnosticState.Idle
-                    },
+                    onValueChange = { onApiKeyUpdated(it) },
                     label = { Text("API Key / 访问凭据") },
                     placeholder = { Text(if (selectedProvider == AiConfig.PROVIDER_OLLAMA) "本地 Ollama 免密钥" else "填入 API Key") },
                     singleLine = true,
@@ -687,8 +755,7 @@ fun AssistantConfigDialog(
                                         .orEmpty()
                                         .trim()
                                 if (pasted.isNotBlank()) {
-                                    apiKey = pasted
-                                    diagnosticState = ConnectionDiagnosticState.Idle
+                                    onApiKeyUpdated(pasted)
                                 }
                             }) {
                                 Icon(Icons.Filled.ContentPaste, contentDescription = "粘贴剪贴板内容")

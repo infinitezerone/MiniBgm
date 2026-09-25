@@ -154,4 +154,48 @@ class AssistantConfigDialogTest {
                 .detectModelCapabilities("custom-llm")
         org.junit.Assert.assertTrue(plainCaps.isEmpty())
     }
+
+    @Test
+    fun detectProviderFromApiKey_identifies_known_providers() {
+        val detect = { key: String ->
+            com.infinitezerone.minibgm.feature.assistant.components
+                .detectProviderFromApiKey(key)
+        }
+
+        // Google Gemini
+        val geminiPreset = detect("AIzaSyD-1234567890abcdefghijklmnopqrstuv")
+        org.junit.Assert.assertNotNull(geminiPreset)
+        assertEquals("gemini", geminiPreset?.id)
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/openai/", geminiPreset?.endpoint)
+
+        // OpenRouter
+        val openRouterPreset = detect("sk-or-v1-abcdef1234567890abcdef1234567890")
+        org.junit.Assert.assertNotNull(openRouterPreset)
+        assertEquals("openrouter", openRouterPreset?.id)
+        assertEquals("https://openrouter.ai/api/v1", openRouterPreset?.endpoint)
+
+        // OpenAI (Project Key)
+        val openAiPreset = detect("sk-proj-abcde1234567890_some_project_key")
+        org.junit.Assert.assertNotNull(openAiPreset)
+        assertEquals("openai", openAiPreset?.id)
+        assertEquals("https://api.openai.com/v1", openAiPreset?.endpoint)
+
+        // Groq
+        val groqPreset = detect("gsk_1234567890abcdefghijklmnopqrstuvwxyz")
+        org.junit.Assert.assertNotNull(groqPreset)
+        assertEquals("groq", groqPreset?.id)
+        assertEquals("https://api.groq.com/openai/v1", groqPreset?.endpoint)
+
+        // DeepSeek (32 hex characters)
+        val deepseekPreset = detect("sk-0123456789abcdef0123456789abcdef")
+        org.junit.Assert.assertNotNull(deepseekPreset)
+        assertEquals("deepseek", deepseekPreset?.id)
+        assertEquals("https://api.deepseek.com/v1", deepseekPreset?.endpoint)
+
+        // Unknown / Non-standard / Blank
+        org.junit.Assert.assertNull(detect(""))
+        org.junit.Assert.assertNull(detect("   "))
+        org.junit.Assert.assertNull(detect("sk-too-short"))
+        org.junit.Assert.assertNull(detect("random-custom-token-123"))
+    }
 }
