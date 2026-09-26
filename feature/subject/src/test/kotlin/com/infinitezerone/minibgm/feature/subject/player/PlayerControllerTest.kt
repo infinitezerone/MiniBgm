@@ -246,12 +246,12 @@ class PlayerControllerTest {
             engine.play()
             advanceTimeBy(600L)
 
-            assertEquals(1234L, controller.state.value.positionMs)
+            assertEquals(1234L, controller.positionMs.value)
             assertEquals(10_000L, controller.state.value.durationMs)
             assertTrue(controller.state.value.isPlaying)
 
             engine.pause()
-            assertEquals(1234L, controller.state.value.positionMs)
+            assertEquals(1234L, controller.positionMs.value)
         }
 
     @Test

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.PictureInPictureParams
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.util.Rational
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -53,6 +54,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -71,8 +74,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -114,6 +116,7 @@ fun PlayerScreen(
     val engine = remember(context) { ExoPlayerEngine(context) }
     val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
     val playback by controller.state.collectAsStateWithLifecycle()
+    val position = controller.positionMs
     val player = controller.player
 
     // 纯 UI 局部状态（与播放器无关）
@@ -127,6 +130,9 @@ fun PlayerScreen(
     var scrubProgress by remember { mutableFloatStateOf(0f) }
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
+
+    // 视频区域在窗口中的矩形：作为 PiP 的 sourceRectHint，让进出 PiP 从画面本身无缝过渡
+    var videoSourceRect by remember { mutableStateOf<Rect?>(null) }
 
     val isSystemLandscape =
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -184,14 +190,20 @@ fun PlayerScreen(
         }
     }
 
+    fun buildPipParams(autoEnter: Boolean): PictureInPictureParams =
+        PictureInPictureParams
+            .Builder()
+            .setAspectRatio(Rational(16, 9))
+            .setAutoEnterEnabled(autoEnter)
+            // 无缝缩放：进出 PiP 时画面平滑过渡而非瞬间跳变（API 31+）
+            .setSeamlessResizeEnabled(true)
+            // 以视频区域为过渡起点，让动画从画面本身收进/展开
+            .apply { videoSourceRect?.let { setSourceRectHint(it) } }
+            .build()
+
     fun enterPictureInPicture() {
         val act = activity ?: return
-        val params =
-            PictureInPictureParams
-                .Builder()
-                .setAspectRatio(Rational(16, 9))
-                .build()
-        act.enterPictureInPictureMode(params)
+        act.enterPictureInPictureMode(buildPipParams(autoEnter = true))
     }
 
     fun cycleResizeMode() {
@@ -273,12 +285,9 @@ fun PlayerScreen(
         controller.setMedia(uiState.streamUrl, uiState.requestHeaders)
     }
 
-    // 播放位置 → ViewModel 节流落盘
+    // 播放位置 → ViewModel 节流落盘（StateFlow 自身已去重，无需 distinctUntilChanged）
     LaunchedEffect(controller) {
-        controller.state
-            .map { it.positionMs }
-            .distinctUntilChanged()
-            .collect { viewModel.onProgressChanged(it) }
+        controller.positionMs.collect { viewModel.onProgressChanged(it) }
     }
 
     // 断点位置迟到时补发
@@ -337,15 +346,23 @@ fun PlayerScreen(
         }
     }
 
-    // 生命周期联动：离开前台时自动暂停并立即落盘
+    // Android 12+：播放中「划回桌面」自动进入 PiP；暂停/结束时关闭自动进入。
+    // 只在正在播放时开启，避免「后台暂停了却还弹进 PiP」的奇怪行为。
+    DisposableEffect(activity, playback.isPlaying, videoSourceRect) {
+        activity?.setPictureInPictureParams(buildPipParams(autoEnter = playback.isPlaying))
+        onDispose { }
+    }
+
+    // 生命周期联动：ON_PAUSE 落盘续播点；ON_STOP 才暂停。
+    // PiP 中 Activity 只到 Paused、不会 Stop，因此用 ON_STOP 判定“真正离开前台”，
+    // 避免进 PiP 瞬间 onPause 早于 isInPictureInPictureMode 置位而误暂停音频。
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_PAUSE) {
-                    if (activity?.isInPictureInPictureMode != true) {
-                        controller.pause()
-                    }
-                    viewModel.flushPlaybackPosition()
+                when (event) {
+                    Lifecycle.Event.ON_PAUSE -> viewModel.flushPlaybackPosition()
+                    Lifecycle.Event.ON_STOP -> controller.pause()
+                    else -> Unit
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -378,6 +395,7 @@ fun PlayerScreen(
                 PlayerVideoStage(
                     player = player,
                     playback = playback,
+                    position = position,
                     streamUrl = uiState.streamUrl,
                     isResolvingSource = uiState.isResolvingSource,
                     resolveAttempt = uiState.resolveAttempt,
@@ -402,10 +420,10 @@ fun PlayerScreen(
                     onFastForwardStart = { controller.setPlaybackSpeed(2f) },
                     onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
                     onPlayPauseToggle = controller::togglePlayPause,
-                    onRewind10 = { controller.seekTo((playback.positionMs - 10_000L).coerceAtLeast(0L)) },
+                    onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
                     onForward10 = {
                         val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
-                        controller.seekTo((playback.positionMs + 10_000L).coerceAtMost(maxPos))
+                        controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
                     },
                     onScrubStart = { isScrubbing = true },
                     onScrubbing = { scrubProgress = it },
@@ -436,7 +454,12 @@ fun PlayerScreen(
                     onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
                     onToggleLock = { isScreenLocked = !isScreenLocked },
                     onRequestOpenSources = onRequestOpenSources,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned { coords ->
+                                videoSourceRect = coords.boundsInWindow().toAndroidRect()
+                            },
                 )
 
                 // 全屏内右侧选集抽屉背景遮罩
@@ -516,6 +539,7 @@ fun PlayerScreen(
                     PlayerVideoStage(
                         player = player,
                         playback = playback,
+                        position = position,
                         streamUrl = uiState.streamUrl,
                         isResolvingSource = uiState.isResolvingSource,
                         resolveAttempt = uiState.resolveAttempt,
@@ -540,10 +564,10 @@ fun PlayerScreen(
                         onFastForwardStart = { controller.setPlaybackSpeed(2f) },
                         onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
                         onPlayPauseToggle = controller::togglePlayPause,
-                        onRewind10 = { controller.seekTo((playback.positionMs - 10_000L).coerceAtLeast(0L)) },
+                        onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
                         onForward10 = {
                             val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
-                            controller.seekTo((playback.positionMs + 10_000L).coerceAtMost(maxPos))
+                            controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
                         },
                         onScrubStart = { isScrubbing = true },
                         onScrubbing = { scrubProgress = it },
@@ -574,7 +598,12 @@ fun PlayerScreen(
                         onOpenEpisodeQueue = {},
                         onToggleLock = {},
                         onRequestOpenSources = onRequestOpenSources,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned { coords ->
+                                    videoSourceRect = coords.boundsInWindow().toAndroidRect()
+                                },
                     )
                 }
 
@@ -672,6 +701,7 @@ fun PlayerScreen(
 private fun PlayerVideoStage(
     player: Player,
     playback: PlaybackState,
+    position: StateFlow<Long>,
     streamUrl: String,
     isResolvingSource: Boolean,
     resolveAttempt: Int,
@@ -716,8 +746,8 @@ private fun PlayerVideoStage(
     Box(modifier = modifier) {
         PlayerGestureDetector(
             isPlaying = playback.isPlaying,
-            currentPositionMs = playback.positionMs,
-            totalDurationMs = playback.durationMs,
+            currentPositionMs = { position.value },
+            totalDurationMs = { playback.durationMs },
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
@@ -741,11 +771,14 @@ private fun PlayerVideoStage(
                         attemptTotal = resolveAttemptTotal,
                     )
 
+                // 错误态由控制层统一渲染，这里不再重复一块错误占位
+                errorMessage != null -> Unit
+
                 else ->
                     PlayerEmptyView(
                         subjectName = subjectName,
                         epLabel = epLabel,
-                        errorMessage = errorMessage,
+                        errorMessage = null,
                         onBackClick = onBackClick,
                         onRetry = onRetry,
                         onNextSource = onNextSource,
@@ -776,9 +809,11 @@ private fun PlayerVideoStage(
             exit = fadeOut(tween(150)),
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
         ) {
+            // 位置单独订阅：只有底边进度线随 500ms 位置跳重组
+            val currentPosition by position.collectAsStateWithLifecycle()
             val progressFraction =
                 if (playback.durationMs > 0L) {
-                    (playback.positionMs.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
+                    (currentPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
                 } else {
                     0f
                 }
@@ -803,7 +838,7 @@ private fun PlayerVideoStage(
                 isPlaying = playback.isPlaying,
                 isBuffering = playback.isBuffering,
                 isEnded = playback.isEnded,
-                currentPosition = playback.positionMs,
+                position = position,
                 totalDuration = playback.durationMs,
                 isScrubbing = isScrubbing,
                 scrubProgress = scrubProgress,
@@ -822,6 +857,7 @@ private fun PlayerVideoStage(
                 onEnterPip = onEnterPip,
                 onRetry = onRetry,
                 onNextSource = onNextSource,
+                onRequestOpenSources = onRequestOpenSources,
                 playbackSpeed = playbackSpeed,
                 onCyclePlaybackSpeed = onCyclePlaybackSpeed,
                 showEpisodeQueue = showEpisodeQueue,
@@ -850,6 +886,9 @@ private fun PlayerVideoSurface(
         player = player,
         modifier = modifier,
         contentScale = resizeMode.toContentScale(),
+        // 进/出 PiP 与轨道变化时保留上一帧，避免黑色 shutter 盖住画面造成瞬间黑闪
+        keepContentOnReset = true,
+        shutter = {},
     )
 }
 
@@ -860,3 +899,6 @@ private fun PlayerResizeMode.toContentScale(): ContentScale =
         PlayerResizeMode.ZOOM -> ContentScale.Crop
         PlayerResizeMode.FILL -> ContentScale.FillBounds
     }
+
+/** Compose 几何矩形 → Android `Rect`（供 PiP `sourceRectHint` 使用）。 */
+private fun androidx.compose.ui.geometry.Rect.toAndroidRect(): Rect = Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())

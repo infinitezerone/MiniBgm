@@ -91,8 +91,8 @@ private enum class DragMode {
 internal fun Modifier.playerGestures(
     context: Context,
     isPlaying: Boolean,
-    currentPositionMs: Long,
-    totalDurationMs: Long,
+    currentPositionMs: () -> Long,
+    totalDurationMs: () -> Long,
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
     onDoubleTapPlayPause: () -> Unit,
@@ -123,8 +123,8 @@ internal fun Modifier.playerGestures(
 private data class PlayerGesturesElement(
     val context: Context,
     val isPlaying: Boolean,
-    val currentPositionMs: Long,
-    val totalDurationMs: Long,
+    val currentPositionMs: () -> Long,
+    val totalDurationMs: () -> Long,
     val onSingleTap: () -> Unit,
     val onDoubleTapSeek: (Long) -> Unit,
     val onDoubleTapPlayPause: () -> Unit,
@@ -182,8 +182,8 @@ private data class PlayerGesturesElement(
 private class PlayerGesturesNode(
     var context: Context,
     var isPlaying: Boolean,
-    var currentPositionMs: Long,
-    var totalDurationMs: Long,
+    var currentPositionMs: () -> Long,
+    var totalDurationMs: () -> Long,
     var onSingleTap: () -> Unit,
     var onDoubleTapSeek: (Long) -> Unit,
     var onDoubleTapPlayPause: () -> Unit,
@@ -205,8 +205,8 @@ private class PlayerGesturesNode(
     fun update(
         context: Context,
         isPlaying: Boolean,
-        currentPositionMs: Long,
-        totalDurationMs: Long,
+        currentPositionMs: () -> Long,
+        totalDurationMs: () -> Long,
         onSingleTap: () -> Unit,
         onDoubleTapSeek: (Long) -> Unit,
         onDoubleTapPlayPause: () -> Unit,
@@ -242,8 +242,8 @@ private class PlayerGesturesNode(
                         if (isLocked) return@detectTapGestures
                         val width = size.width
                         val x = offset.x
-                        val cur = currentPositionMs
-                        val total = totalDurationMs
+                        val cur = currentPositionMs()
+                        val total = totalDurationMs()
                         when {
                             x < width * 0.35f -> {
                                 val target = (cur - 10000L).coerceAtLeast(0L)
@@ -299,7 +299,7 @@ private class PlayerGesturesNode(
                         dragMode = DragMode.NONE
                         dragAccumulatedX = 0f
                         dragAccumulatedY = 0f
-                        seekTargetMs = currentPositionMs
+                        seekTargetMs = currentPositionMs()
 
                         // 记录起始亮度
                         val activity = context.findActivity()
@@ -319,8 +319,8 @@ private class PlayerGesturesNode(
 
                         val width = size.width
                         val height = size.height
-                        val cur = currentPositionMs
-                        val total = totalDurationMs
+                        val cur = currentPositionMs()
+                        val total = totalDurationMs()
 
                         if (dragMode == DragMode.NONE) {
                             if (abs(dragAccumulatedX) > abs(dragAccumulatedY) && abs(dragAccumulatedX) > thresholdPx) {
@@ -368,7 +368,7 @@ private class PlayerGesturesNode(
                     },
                     onDragEnd = {
                         if (isLocked) return@detectDragGestures
-                        val total = totalDurationMs
+                        val total = totalDurationMs()
                         if (dragMode == DragMode.HORIZONTAL_SEEK && total > 0L) {
                             onSeekConfirm(seekTargetMs)
                         }
@@ -398,8 +398,8 @@ private tailrec fun Context.findActivity(): Activity? =
 @Composable
 internal fun PlayerGestureDetector(
     isPlaying: Boolean,
-    currentPositionMs: Long,
-    totalDurationMs: Long,
+    currentPositionMs: () -> Long,
+    totalDurationMs: () -> Long,
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
     onDoubleTapPlayPause: () -> Unit,

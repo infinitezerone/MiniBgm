@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -40,14 +42,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * 播放器画面缩放模式
@@ -71,7 +78,7 @@ internal fun PlayerControlsOverlay(
     isPlaying: Boolean,
     isBuffering: Boolean,
     isEnded: Boolean,
-    currentPosition: Long,
+    position: StateFlow<Long>,
     totalDuration: Long,
     isScrubbing: Boolean,
     scrubProgress: Float,
@@ -90,6 +97,7 @@ internal fun PlayerControlsOverlay(
     onEnterPip: () -> Unit,
     onRetry: () -> Unit,
     onNextSource: (() -> Unit)? = null,
+    onRequestOpenSources: (() -> Unit)? = null,
     playbackSpeed: Float,
     onCyclePlaybackSpeed: () -> Unit,
     showEpisodeQueue: Boolean,
@@ -104,6 +112,20 @@ internal fun PlayerControlsOverlay(
                 .fillMaxSize()
                 .background(if (isLocked) Color.Transparent else Color.Black.copy(alpha = 0.32f)),
     ) {
+        // 播放错误态：只保留返回 + 错误文案 + 动作，隐藏所有控制台
+        // （进度条/播放键/比例/倍速/PiP/全屏），避免画面被多种控件挤成一团。
+        if (errorMessage != null) {
+            PlayerErrorState(
+                errorMessage = errorMessage,
+                isLandscape = isLandscape,
+                onBackClick = onBackClick,
+                onRetry = onRetry,
+                onNextSource = onNextSource,
+                onRequestOpenSources = onRequestOpenSources,
+            )
+            return@Box
+        }
+
         // 横屏锁屏切换按钮（浮动于屏幕左侧中央边缘）
         if (isLandscape) {
             Surface(
@@ -206,27 +228,7 @@ internal fun PlayerControlsOverlay(
             modifier = Modifier.align(Alignment.Center),
             contentAlignment = Alignment.Center,
         ) {
-            if (errorMessage != null) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(
-                        text = errorMessage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                    )
-                    Button(onClick = onRetry) {
-                        Text("重试播放")
-                    }
-                    if (onNextSource != null) {
-                        OutlinedButton(onClick = onNextSource) {
-                            Text("换下一个源", color = Color.White)
-                        }
-                    }
-                }
-            } else if (isBuffering) {
+            if (isBuffering) {
                 CircularProgressIndicator(
                     color = MaterialTheme.colorScheme.primary,
                     strokeWidth = 3.dp,
@@ -312,6 +314,8 @@ internal fun PlayerControlsOverlay(
             }
 
         Column(modifier = bottomBarModifier) {
+            // 位置单独订阅：只有底部栏（且仅在可见时才组合）随 500ms 位置跳重组
+            val currentPosition by position.collectAsStateWithLifecycle()
             val progress =
                 if (isScrubbing) {
                     scrubProgress
@@ -457,6 +461,69 @@ internal fun PlayerControlsOverlay(
                     onScrubbing = onScrubbing,
                     onScrubEnd = onScrubEnd,
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 纯错误态：只保留返回、错误文案与动作按钮。
+ * 播放/解析失败时不叠进度条与控制台，避免画面被多种控件挤成一团。
+ */
+@Composable
+private fun BoxScope.PlayerErrorState(
+    errorMessage: String,
+    isLandscape: Boolean,
+    onBackClick: () -> Unit,
+    onRetry: () -> Unit,
+    onNextSource: (() -> Unit)?,
+    onRequestOpenSources: (() -> Unit)?,
+) {
+    IconButton(
+        onClick = onBackClick,
+        modifier =
+            Modifier
+                .align(Alignment.TopStart)
+                .displayCutoutPadding()
+                .padding(if (isLandscape) 16.dp else 4.dp),
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "返回",
+            tint = Color.White,
+        )
+    }
+
+    Column(
+        modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            tint = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.size(40.dp),
+        )
+        Text(
+            text = errorMessage,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (onNextSource != null) {
+                OutlinedButton(onClick = onNextSource) {
+                    Text("换下一个源", color = Color.White)
+                }
+            }
+            Button(onClick = onRetry) {
+                Text("重试播放")
+            }
+        }
+        if (onRequestOpenSources != null) {
+            TextButton(onClick = onRequestOpenSources) {
+                Text("管理播放源", color = Color.White.copy(alpha = 0.8f))
             }
         }
     }
