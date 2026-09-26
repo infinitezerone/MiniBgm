@@ -316,7 +316,9 @@ class PlayerViewModel(
                         null
                     }
                 _uiState.update { state ->
-                    // 仅在“首次构建源列表”时应用上次可用源，避免之后覆盖用户的手动选择
+                    // 仅在首次构建源列表且入口未携带直链/片单时应用上次可用源：
+                    // 直链是用户显式给进来的（自备片单/助手），直链始终优先，记忆源只对无直链入口兜底；
+                    // 同时避免之后覆盖用户的手动选择
                     val preferredIndex =
                         if (route.initialRuleId.isBlank() &&
                             preferredSourceId.isNotBlank() &&

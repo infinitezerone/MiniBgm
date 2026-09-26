@@ -24,7 +24,9 @@ import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
+import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -157,6 +159,26 @@ class SubjectDetailViewModel(
             _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))
         }
     }
+
+    /** 计算「下一待看」分集：按打卡进度与续看位置推断，无匹配时回退第一集 */
+    fun nextEpisodeToWatch(): Episode? {
+        val state = _uiState.value
+        return state.episodes.firstOrNull {
+            isEpisodeNextToWatch(it, state.collection?.epStatus ?: 0, hasProgress = state.collection != null)
+        } ?: state.episodes.firstOrNull()
+    }
+
+    /** 为指定分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */
+    fun buildPlayerRoute(episode: Episode): PlayerRoute =
+        buildEpisodePlayerRoute(
+            subjectId = subjectId,
+            subjectName =
+                _uiState.value.subject
+                    ?.displayName
+                    .orEmpty(),
+            episode = episode,
+            playlists = _uiState.value.playlists,
+        )
 
     private val isLoggedIn =
         authRepository.isLoggedIn

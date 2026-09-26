@@ -526,7 +526,7 @@ private fun BoxScope.PlayerErrorState(
         }
         if (onRequestOpenSources != null) {
             TextButton(onClick = onRequestOpenSources) {
-                Text("管理播放源", color = Color.White.copy(alpha = 0.8f))
+                Text("AI 找源", color = Color.White.copy(alpha = 0.8f))
             }
         }
     }

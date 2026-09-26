@@ -21,7 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Check
@@ -60,10 +62,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
+import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -87,6 +91,9 @@ fun EpisodeDetailScreen(
     onCharacterClick: (Long) -> Unit,
     onPersonClick: (Long) -> Unit,
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
+    onPlayClick: (PlayerRoute) -> Unit = {},
+    onSourceSearch: (String) -> Unit = {},
+    onManageRules: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: EpisodeDetailViewModel =
         koinViewModel(
@@ -104,10 +111,12 @@ fun EpisodeDetailScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is EpisodeDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+                is EpisodeDetailUiEvent.OpenSourceSearch -> onSourceSearch(event.prefillPrompt)
             }
         }
     }
     var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var showSourcesSheet by remember { mutableStateOf(false) }
 
     val episode = uiState.episode
     val group = episode?.let { EpisodeGroup.fromType(it.type) } ?: EpisodeGroup.MAIN
@@ -316,86 +325,116 @@ fun EpisodeDetailScreen(
                         }
                     }
 
-                    // 3. 打卡操作面板
+                    // 3. 播放与打卡操作面板
                     if (episode != null) {
                         item(key = "episode_actions") {
-                            if (uiState.isWatched) {
-                                FilledTonalButton(
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                        viewModel.toggleWatched(episode, false)
-                                    },
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(text = "已看过 · 点击取消打卡")
-                                }
-                            } else {
-                                val epNum = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                                if (epNum > 1) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    Button(
+                                        onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
+                                        modifier = Modifier.weight(1f),
                                     ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.PlayArrow,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = "播放本集")
+                                    }
+                                    FilledTonalButton(
+                                        onClick = { showSourcesSheet = true },
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.CloudQueue,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(text = "播放源")
+                                    }
+                                }
+
+                                if (uiState.isWatched) {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            viewModel.toggleWatched(episode, false)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(text = "已看过 · 点击取消打卡")
+                                    }
+                                } else {
+                                    val epNum = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                    if (epNum > 1) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                                    viewModel.toggleWatched(episode, true)
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(text = "标记此集")
+                                            }
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                                    viewModel.markWatchedUpTo(episode)
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(text = "看到本集")
+                                            }
+                                        }
+                                    } else {
                                         Button(
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                                 viewModel.toggleWatched(episode, true)
                                             },
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Outlined.Check,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp),
                                             )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "标记此集")
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(text = "标记为看过 (打卡)")
                                         }
-                                        FilledTonalButton(
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                viewModel.markWatchedUpTo(episode)
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "看到本集")
-                                        }
-                                    }
-                                } else {
-                                    Button(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                            viewModel.toggleWatched(episode, true)
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(text = "标记为看过 (打卡)")
                                     }
                                 }
                             }
                         }
-                    }
 
-                    // 4. 剧情梗概 (Full desc)
-                    if (episode != null && episode.desc.isNotBlank()) {
+                        // 4. 剧情梗概 (Full desc)                    if (episode != null && episode.desc.isNotBlank()) {
                         item(key = "episode_desc") {
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
@@ -539,6 +578,36 @@ fun EpisodeDetailScreen(
                     Text("取消")
                 }
             },
+        )
+    }
+
+    val currentEpisode = uiState.episode
+    val currentSubject = uiState.subject
+    if (showSourcesSheet && currentSubject != null && currentEpisode != null) {
+        SubjectSourcesBottomSheet(
+            subject = currentSubject,
+            episode = currentEpisode,
+            onDismissRequest = { showSourcesSheet = false },
+            onOpenUrl = { url ->
+                context.launchStreamingUrl(
+                    url = url,
+                    onAppNotInstalled = { appName, webUrl ->
+                        appNotInstalledPrompt = appName to webUrl
+                    },
+                )
+            },
+            onInternalPlayClick = { route ->
+                showSourcesSheet = false
+                onPlayClick(route)
+            },
+            onAiSourceSearch = { viewModel.requestSourceSearch() },
+            onManageRules = {
+                showSourcesSheet = false
+                onManageRules?.invoke()
+            },
+            playbackRules = uiState.playbackRules,
+            playlists = uiState.playlists,
+            failedSourceReasons = uiState.failedSourceReasons,
         )
     }
 

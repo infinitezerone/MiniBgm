@@ -10,14 +10,17 @@ import com.infinitezerone.minibgm.feature.subject.player.PlayerScreen
  */
 fun EntryProviderScope<NavKey>.playerEntry(
     onBackClick: () -> Unit,
-    onRequestOpenSources: (() -> Unit)? = null,
+    /** 播放器内「AI 找源」逃生口；携带路由以生成上下文化的找源提问 */
+    onRequestOpenSources: ((PlayerRoute) -> Unit)? = null,
+    onManageRules: (() -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<PlayerRoute>(metadata = metadata) { route ->
         PlayerScreen(
             route = route,
             onBackClick = onBackClick,
-            onRequestOpenSources = onRequestOpenSources,
+            onRequestOpenSources = onRequestOpenSources?.let { callback -> ({ callback(route) }) },
+            onManageRules = onManageRules,
         )
     }
 }

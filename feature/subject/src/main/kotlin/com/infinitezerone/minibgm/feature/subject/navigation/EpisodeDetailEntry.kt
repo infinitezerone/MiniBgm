@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.navigation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailScreen
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 
@@ -14,6 +15,9 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
     onCharacterClick: (Long) -> Unit = {},
     onPersonClick: (Long) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
+    onPlayClick: (PlayerRoute) -> Unit = {},
+    onSourceSearch: (String) -> Unit = {},
+    onManageRules: (() -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<EpisodeDetailRoute>(metadata = metadata) { route ->
@@ -49,6 +53,9 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
             onCharacterClick = onCharacterClick,
             onPersonClick = onPersonClick,
             onTopicClick = onTopicClick,
+            onPlayClick = onPlayClick,
+            onSourceSearch = onSourceSearch,
+            onManageRules = onManageRules,
         )
     }
 }

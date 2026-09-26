@@ -104,6 +104,7 @@ fun PlayerScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     onRequestOpenSources: (() -> Unit)? = null,
+    onManageRules: (() -> Unit)? = null,
     viewModel: PlayerViewModel =
         koinViewModel(
             parameters = { parametersOf(route) },
@@ -747,6 +748,7 @@ fun PlayerScreen(
                                 selectedIndex = uiState.selectedSourceIndex,
                                 onSelectSource = viewModel::selectSource,
                                 onRequestOpenSources = onRequestOpenSources,
+                                onManageRules = onManageRules,
                             )
                         }
                     }

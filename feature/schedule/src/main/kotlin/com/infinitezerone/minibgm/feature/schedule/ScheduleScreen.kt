@@ -53,6 +53,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPerm
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
@@ -79,6 +80,7 @@ fun ScheduleScreen(
     onSearchClick: () -> Unit = {},
     onAssistantClick: () -> Unit = {},
     onSourceSearch: (String) -> Unit = {},
+    onPlayClick: (PlayerRoute) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
@@ -354,6 +356,7 @@ fun ScheduleScreen(
                     "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
                 )
             },
+            onInternalPlayClick = onPlayClick,
         )
     }
 

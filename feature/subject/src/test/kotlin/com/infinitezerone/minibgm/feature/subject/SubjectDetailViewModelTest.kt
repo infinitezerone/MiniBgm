@@ -1535,4 +1535,43 @@ class SubjectDetailViewModelTest {
             assertEquals(listOf("pl-1"), state.playlists.map { it.id })
             assertEquals("网络不可达", state.failedSourceReasons["https://cdn.example.com/a.m3u8"])
         }
+
+    @Test
+    fun buildPlayerRoute_matchesPlaylistDirectLinkAndFallsBackToSniffing() =
+        runTest {
+            val settingsRepository = FakeSettingsRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository().apply { sendSubject(sampleSubject) },
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settingsRepository,
+                )
+
+            val episode = sampleEpisodeList.first()
+
+            // 无片单：直链为空，交由播放器内的规则嗅探
+            val fallbackRoute = viewModel.buildPlayerRoute(episode)
+            assertTrue(fallbackRoute.streamUrl.isBlank())
+            assertEquals(episode.id, fallbackRoute.episodeId)
+            assertEquals(episode.ep, fallbackRoute.episodeSort)
+
+            settingsRepository.setPlaylists(
+                listOf(
+                    PlaybackPlaylist(
+                        id = "pl-1",
+                        name = "我的片源",
+                        bgmSubjectId = sampleSubject.id,
+                        entries = listOf(PlaylistEntry(label = "01", url = "https://cdn.example.com/a.m3u8")),
+                    ),
+                ),
+            )
+
+            viewModel.uiState.first { it.playlists.isNotEmpty() }
+            val route = viewModel.buildPlayerRoute(episode)
+            assertEquals("https://cdn.example.com/a.m3u8", route.streamUrl)
+            assertEquals(sampleSubject.displayName, route.subjectName)
+        }
 }

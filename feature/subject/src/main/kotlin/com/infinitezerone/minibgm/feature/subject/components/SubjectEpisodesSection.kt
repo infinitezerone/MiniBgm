@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.GridView
@@ -74,6 +75,7 @@ fun EpisodesSectionHeader(
     isGridView: Boolean,
     onToggleView: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlayNext: (() -> Unit)? = null,
     onOpenSources: (() -> Unit)? = null,
 ) {
     val headerTitle =
@@ -122,6 +124,32 @@ fun EpisodesSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            if (onPlayNext != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
+                Surface(
+                    onClick = onPlayNext,
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "播放下一集",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
             if (onOpenSources != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
                 Surface(
                     onClick = onOpenSources,
@@ -133,7 +161,7 @@ fun EpisodesSectionHeader(
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.PlayArrow,
+                            imageVector = Icons.Filled.CloudQueue,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary,

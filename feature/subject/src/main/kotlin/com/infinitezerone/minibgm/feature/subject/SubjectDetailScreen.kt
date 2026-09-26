@@ -70,7 +70,6 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.SubjectType
-import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
@@ -84,7 +83,6 @@ import com.infinitezerone.minibgm.feature.subject.components.EpisodeGrid
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroupFilterChips
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeListItem
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeSourceGuideBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.EpisodesSectionHeader
 import com.infinitezerone.minibgm.feature.subject.components.PersonDetailBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.RatingDistributionCard
@@ -513,52 +511,17 @@ fun SubjectDetailScreen(
                                     }
                                 },
                                 onPlayEpisode = { episode ->
-                                    val matchingEntry =
-                                        uiState.playlists
-                                            .matchesForEpisode(subjectId, if (episode.ep > 0f) episode.ep else episode.sort)
-                                            .firstOrNull()
-                                            ?.entry
-                                    val route =
-                                        PlayerRoute(
-                                            subjectId = subjectId,
-                                            episodeId = episode.id,
-                                            streamUrl = matchingEntry?.url.orEmpty(),
-                                            requestHeaders = matchingEntry?.headers.orEmpty(),
-                                            episodeName = episode.nameCn.ifBlank { episode.name },
-                                            subjectName = displaySubject?.displayName.orEmpty(),
-                                            episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
-                                            episodeType = episode.type,
-                                        )
-                                    onPlayClick(route)
+                                    onPlayClick(viewModel.buildPlayerRoute(episode))
+                                },
+                                onPlayNextEpisode = {
+                                    viewModel.nextEpisodeToWatch()?.let { nextEp ->
+                                        onPlayClick(viewModel.buildPlayerRoute(nextEp))
+                                    }
                                 },
                                 onOpenSources = {
-                                    val watchedCount = uiState.collection?.epStatus ?: 0
-                                    val targetEp =
-                                        currentEpisodes.firstOrNull {
-                                            isEpisodeNextToWatch(it, watchedCount, hasProgress = uiState.collection != null)
-                                        } ?: currentEpisodes.firstOrNull()
-                                    if (targetEp != null) {
-                                        val matchingEntry =
-                                            uiState.playlists
-                                                .matchesForEpisode(subjectId, if (targetEp.ep > 0f) targetEp.ep else targetEp.sort)
-                                                .firstOrNull()
-                                                ?.entry
-                                        val route =
-                                            PlayerRoute(
-                                                subjectId = subjectId,
-                                                episodeId = targetEp.id,
-                                                streamUrl = matchingEntry?.url.orEmpty(),
-                                                requestHeaders = matchingEntry?.headers.orEmpty(),
-                                                episodeName = targetEp.nameCn.ifBlank { targetEp.name },
-                                                subjectName = displaySubject?.displayName.orEmpty(),
-                                                episodeSort = if (targetEp.ep > 0f) targetEp.ep else targetEp.sort,
-                                                episodeType = targetEp.type,
-                                            )
-                                        onPlayClick(route)
-                                    } else {
-                                        selectedEpisodeForSources = null
-                                        showSourcesBottomSheet = true
-                                    }
+                                    // 「播放源」只负责打开来源向导；带出下一待看集以启用分集级匹配
+                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
+                                    showSourcesBottomSheet = true
                                 },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
@@ -745,54 +708,29 @@ fun SubjectDetailScreen(
 
     if (showSourcesBottomSheet && displaySubject != null) {
         val selectedEpisode = selectedEpisodeForSources
-        if (selectedEpisode != null) {
-            EpisodeSourceGuideBottomSheet(
-                subject = displaySubject,
-                episode = selectedEpisode,
-                onDismissRequest = {
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                },
-                onOpenUrl = handleStreamingUrl,
-                onInternalPlayClick = { route ->
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                    onPlayClick(route)
-                },
-                onAiSourceSearch = { viewModel.requestSourceSearch(selectedEpisode) },
-                onManageRules = {
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                    onManageRules?.invoke()
-                },
-                playbackRules = uiState.playbackRules,
-                playlists = uiState.playlists,
-                failedSourceReasons = uiState.failedSourceReasons,
-            )
-        } else {
-            SubjectSourcesBottomSheet(
-                subject = displaySubject,
-                onDismissRequest = {
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                },
-                onOpenUrl = handleStreamingUrl,
-                onInternalPlayClick = { route ->
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                    onPlayClick(route)
-                },
-                onAiSourceSearch = { viewModel.requestSourceSearch() },
-                onManageRules = {
-                    showSourcesBottomSheet = false
-                    selectedEpisodeForSources = null
-                    onManageRules?.invoke()
-                },
-                playbackRules = uiState.playbackRules,
-                playlists = uiState.playlists,
-                failedSourceReasons = uiState.failedSourceReasons,
-            )
-        }
+        SubjectSourcesBottomSheet(
+            subject = displaySubject,
+            episode = selectedEpisode,
+            onDismissRequest = {
+                showSourcesBottomSheet = false
+                selectedEpisodeForSources = null
+            },
+            onOpenUrl = handleStreamingUrl,
+            onInternalPlayClick = { route ->
+                showSourcesBottomSheet = false
+                selectedEpisodeForSources = null
+                onPlayClick(route)
+            },
+            onAiSourceSearch = { viewModel.requestSourceSearch(selectedEpisode) },
+            onManageRules = {
+                showSourcesBottomSheet = false
+                selectedEpisodeForSources = null
+                onManageRules?.invoke()
+            },
+            playbackRules = uiState.playbackRules,
+            playlists = uiState.playlists,
+            failedSourceReasons = uiState.failedSourceReasons,
+        )
     }
 }
 
@@ -829,6 +767,7 @@ private fun SubjectDetailContent(
     isTransitionStabilizing: Boolean,
     onBatchMarkEpisode: (Episode) -> Unit,
     onPlayEpisode: (Episode) -> Unit = {},
+    onPlayNextEpisode: () -> Unit = {},
     onOpenSources: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -964,6 +903,7 @@ private fun SubjectDetailContent(
                             subjectType = subjectType,
                             isGridView = isGridView,
                             onToggleView = onToggleGridView,
+                            onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
                             onOpenSources = onOpenSources,
                         )
                     }
