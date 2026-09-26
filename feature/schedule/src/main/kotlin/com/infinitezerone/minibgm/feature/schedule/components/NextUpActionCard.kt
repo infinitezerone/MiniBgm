@@ -36,11 +36,15 @@ import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.model.NextUpAction
 import com.infinitezerone.minibgm.core.model.NextUpUrgency
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 
 @Composable
 fun NextUpActionCard(
     action: NextUpAction,
     onPlayClick: (String) -> Unit,
+    /** 应用内直达路由：非 null 时「播放」直接进内置播放器，否则退回外部跳转 */
+    playRoute: PlayerRoute?,
+    onPlayInApp: (PlayerRoute) -> Unit,
     onMarkWatched: (Long, Int) -> Unit,
     onDismiss: () -> Unit,
     onClick: () -> Unit,
@@ -188,9 +192,15 @@ fun NextUpActionCard(
                                 }
                             }
 
-                            if (playLink != null) {
+                            if (playLink != null || playRoute != null) {
                                 Button(
-                                    onClick = { onPlayClick(playLink.playUrl) },
+                                    onClick = {
+                                        if (playRoute != null) {
+                                            onPlayInApp(playRoute)
+                                        } else {
+                                            onPlayClick(playLink?.playUrl.orEmpty())
+                                        }
+                                    },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     modifier = Modifier.height(28.dp),
                                 ) {

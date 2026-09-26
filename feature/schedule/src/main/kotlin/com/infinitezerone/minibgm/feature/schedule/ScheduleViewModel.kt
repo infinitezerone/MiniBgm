@@ -3,16 +3,24 @@ package com.infinitezerone.minibgm.feature.schedule
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
+import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.NextUpAction
 import com.infinitezerone.minibgm.core.model.NextUpUrgency
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +29,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -62,6 +73,8 @@ data class ScheduleUiState(
     val catchupItems: List<CatchupScheduleItem> = emptyList(),
     val yesterdaySchedules: List<AirSchedule> = emptyList(),
     val nextUpAction: NextUpAction? = null,
+    /** 续看卡的应用内直达路由：按追番进度定位下一待看集（null = 数据未就绪，卡片退回外部跳转） */
+    val nextUpPlayRoute: PlayerRoute? = null,
     val isActionDismissed: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val isLoggedIn: Boolean = false,
@@ -164,8 +177,9 @@ data class ScheduleUiState(
 class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
-    private val settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository,
-    private val authRepository: com.infinitezerone.minibgm.core.data.repository.AuthRepository,
+    private val settingsRepository: SettingsRepository,
+    private val authRepository: AuthRepository,
+    private val subjectRepository: SubjectRepository,
 ) : ViewModel() {
     private val selectedWeekday = MutableStateFlow(currentLocalDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
@@ -265,7 +279,7 @@ class ScheduleViewModel(
             ExtraScheduleState(delayMinutes, dismissed, showLogin, loggedIn)
         }
 
-    val uiState: StateFlow<ScheduleUiState> =
+    private val baseUiState: StateFlow<ScheduleUiState> =
         combine(
             weeklySchedulesFlow,
             collectionsStateFlow,
@@ -473,6 +487,39 @@ class ScheduleViewModel(
                 },
         )
 
+    /**
+     * 续看卡的应用内直达路由：跟随 nextUpAction 的条目，响应式合成
+     * 「下一待看分集 + 片单直链」。数据未就绪时为 null，卡片退回外部跳转。
+     */
+    private val nextUpPlayRouteFlow: Flow<PlayerRoute?> =
+        baseUiState
+            .map { it.nextUpAction?.subjectId }
+            .distinctUntilChanged()
+            .flatMapLatest { subjectId ->
+                if (subjectId == null || subjectId <= 0L) {
+                    flowOf(null)
+                } else {
+                    // 分集列表仅在 fetchEpisodes 成功后进入本地缓存流，先兜底拉取
+                    subjectRepository.fetchEpisodes(subjectId)
+                    combine(
+                        subjectRepository.getEpisodesStream(subjectId),
+                        collectionRepository.getCollectionStream(subjectId),
+                        settingsRepository.playlists,
+                    ) { episodes, collection, playlists ->
+                        buildNextUpRoute(subjectId, episodes, collection, playlists)
+                    }
+                }
+            }.distinctUntilChanged()
+
+    val uiState: StateFlow<ScheduleUiState> =
+        combine(baseUiState, nextUpPlayRouteFlow) { state, route ->
+            if (state.nextUpPlayRoute == route) state else state.copy(nextUpPlayRoute = route)
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = baseUiState.value,
+        )
+
     init {
         viewModelScope.launch {
             if (scheduleRepository.getScheduleDefaultOnlyWatching()) {
@@ -511,6 +558,74 @@ class ScheduleViewModel(
 
     fun dismissNextUpAction() {
         isActionDismissed.value = true
+    }
+
+    /** 来源 sheet 的「应用内播放」：按追番进度定位下一集；无分集数据时回退一体化路由（由播放器自主嗅探） */
+    suspend fun resolvePlayRoute(schedule: AirSchedule): PlayerRoute {
+        val subjectId = schedule.bgmId
+        val episodes =
+            when (val result = subjectRepository.fetchEpisodes(subjectId)) {
+                is AppResult.Success -> result.data
+                else -> subjectRepository.getEpisodesStream(subjectId).first()
+            }
+        val playlists = settingsRepository.playlists.first()
+        val collection = collectionRepository.getCollectionStream(subjectId).first()
+        val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0)
+        if (target == null) {
+            return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.titleCn.ifBlank { schedule.title })
+        }
+        return buildEpisodeRoute(subjectId, schedule.titleCn.ifBlank { schedule.title }, target, playlists)
+    }
+
+    private fun buildNextUpRoute(
+        subjectId: Long,
+        episodes: List<Episode>,
+        collection: UserCollection?,
+        playlists: List<PlaybackPlaylist>,
+    ): PlayerRoute? {
+        val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0) ?: return null
+        val schedule =
+            baseUiState.value.weeklySchedules.values
+                .flatten()
+                .firstOrNull { it.bgmId == subjectId }
+        val subjectName = schedule?.let { it.titleCn.ifBlank { it.title } }.orEmpty()
+        return buildEpisodeRoute(subjectId, subjectName, target, playlists)
+    }
+
+    /** 下一待看集：进度 +1 优先，回退第一个未看正篇，再回退第一集 */
+    private fun resolveTargetEpisode(
+        episodes: List<Episode>,
+        watchedCount: Int,
+    ): Episode? {
+        val mainEpisodes = episodes.filter { it.type == 0 }.sortedBy { it.sort }
+
+        fun epNumber(ep: Episode): Int = if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()
+        return mainEpisodes.firstOrNull { epNumber(it) == watchedCount + 1 }
+            ?: mainEpisodes.firstOrNull { epNumber(it) > watchedCount }
+            ?: mainEpisodes.firstOrNull()
+    }
+
+    private fun buildEpisodeRoute(
+        subjectId: Long,
+        subjectName: String,
+        episode: Episode,
+        playlists: List<PlaybackPlaylist>,
+    ): PlayerRoute {
+        val matchedEntry =
+            playlists
+                .matchesForEpisode(subjectId, if (episode.ep > 0f) episode.ep else episode.sort)
+                .firstOrNull()
+                ?.entry
+        return PlayerRoute(
+            subjectId = subjectId,
+            episodeId = episode.id,
+            streamUrl = matchedEntry?.url.orEmpty(),
+            requestHeaders = matchedEntry?.headers.orEmpty(),
+            episodeName = episode.nameCn.ifBlank { episode.name },
+            subjectName = subjectName,
+            episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+            episodeType = episode.type,
+        )
     }
 
     /** 1-tap 快捷追番/移出追番（支持 0ms 本地即时乐观更新与失败自动回滚，未登录时拦截弹窗） */

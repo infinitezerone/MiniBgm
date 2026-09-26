@@ -335,6 +335,7 @@ fun ScheduleScreen(
                                 onDismissNextUpAction = viewModel::dismissNextUpAction,
                                 onShowSources = { selectedScheduleForSources = it },
                                 onPlayClick = handleLaunchStreamingUrl,
+                                onPlayInApp = onPlayClick,
                                 onSwitchToAll = viewModel::toggleOnlyWatching,
                                 listState = listState,
                             )
@@ -356,7 +357,12 @@ fun ScheduleScreen(
                     "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
                 )
             },
-            onInternalPlayClick = onPlayClick,
+            onInternalPlayClick = {
+                // 由 ViewModel 按追番进度定位下一集并匹配片单直链（失败时回退一体化路由）
+                coroutineScope.launch {
+                    onPlayClick(viewModel.resolvePlayRoute(schedule))
+                }
+            },
         )
     }
 
@@ -460,6 +466,7 @@ private fun DayScheduleList(
     onDismissNextUpAction: () -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     onPlayClick: (String) -> Unit,
+    onPlayInApp: (PlayerRoute) -> Unit,
     onSwitchToAll: () -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -485,6 +492,8 @@ private fun DayScheduleList(
                     NextUpActionCard(
                         action = uiState.nextUpAction,
                         onPlayClick = onPlayClick,
+                        playRoute = uiState.nextUpPlayRoute?.takeIf { it.subjectId == uiState.nextUpAction.subjectId },
+                        onPlayInApp = onPlayInApp,
                         onMarkWatched = onMarkEpisodeWatched,
                         onDismiss = onDismissNextUpAction,
                         onClick = { onSubjectClick(SubjectDetailRoute(uiState.nextUpAction.subjectId)) },
