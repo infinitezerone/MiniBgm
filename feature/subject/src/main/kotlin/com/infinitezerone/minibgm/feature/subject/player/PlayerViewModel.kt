@@ -8,12 +8,11 @@ import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
-import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.CancellationException
@@ -29,7 +28,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 断点续播落盘节流：进度回调约 500ms 一跳，每 20 跳（约 10 秒）落盘一次。
@@ -194,6 +192,9 @@ class PlayerViewModel(
     private var progressTicksSinceSave = 0
 
     private var subjectOriginalName: String = ""
+
+    /** 与 AI 找源共用的「规则 × 标题候选 → 直链」编排；未注入解析仓库时为 null */
+    private val episodeStreamResolver = playbackResolverRepository?.let(::EpisodeStreamResolver)
 
     /**
      * 条目的片名别名（台译/港译/英文名/罗马音），来自已缓存 Subject 的 infobox。
@@ -635,8 +636,8 @@ class PlayerViewModel(
         }
 
         val rule = currentTab.rule ?: return
-        val resolver = playbackResolverRepository
-        if (resolver == null) {
+        val streamResolver = episodeStreamResolver
+        if (streamResolver == null) {
             _uiState.update {
                 it.copy(
                     isResolvingSource = false,
@@ -659,19 +660,8 @@ class PlayerViewModel(
                 }
                 try {
                     val epSort = _uiState.value.episodeSort
-                    val epNumStr =
-                        if (epSort == epSort.toInt().toFloat()) {
-                            epSort.toInt().toString()
-                        } else {
-                            epSort.toString()
-                        }
                     val primaryTitle = _uiState.value.subjectName.ifBlank { route.subjectName }
-                    // 片名候选与助手侧同源（searchTitles：主标题 → 别名 → 日文原名），不再各拼一套。
-                    // 顺序有实测依据——3 个采集站 × 4 部番的命中数：
-                    // 原样（简体）11/12、繁体 5/12、日文原名 2/12，其中两个站是**纯简体**（繁体 0 命中）。
-                    // 所以「原样」必须排第一：把繁体排前面等于每轮固定白费一发请求。
-                    // 别名（Bangumi infobox 的台译/港译/英文名/罗马音）是采集站标题上真正写的字，
-                    // 中文字形优先、拉丁字母垫后，总数由 MAX_SEARCH_TITLES 封顶。
+                    // 片名候选与助手侧同源（searchTitles：主标题 → 别名 → 日文原名），总数由 MAX_SEARCH_TITLES 封顶
                     val baseTitles =
                         ChineseConverter.searchTitles(
                             primary = primaryTitle,
@@ -679,78 +669,28 @@ class PlayerViewModel(
                             origin = subjectOriginalName,
                         )
 
-                    // 关键词策略按规则形态分流——两者的搜索语义完全不同：
-                    // - SOURCE（取源接口）：`wd=` 多为**标题模糊搜索**，一次就返回整部片子（含全部分集），
-                    //   集号由解析器在结果里本地匹配。把集号写进关键词反而匹配不上，
-                    //   故纯标题优先；个别只认「标题+集号」的非标准接口作为回退兜底。
-                    // - PAGE（网页搜索页）：文章以「标题 集号」命名，带集号能直接命中单集页，保持集号优先。
-                    val episodeQuerySuffixes =
-                        if (!rule.urlTemplate.contains("{ep}") && epSort > 0f) {
-                            val padded = epSort.toInt().toString().padStart(2, '0')
-                            if (padded != epNumStr) listOf(padded, epNumStr) else listOf(padded)
-                        } else {
-                            emptyList()
-                        }
-                    val episodeQueries =
-                        baseTitles.flatMap { title -> episodeQuerySuffixes.map { suffix -> "$title $suffix" } }
-                    val queryTitles =
-                        (
-                            if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                baseTitles + episodeQueries
-                            } else {
-                                episodeQueries + baseTitles
-                            }
-                        ).distinct().ifEmpty { listOf("") }
-
-                    var playable: com.infinitezerone.minibgm.core.model.PlayableSource? = null
-                    var attempted = 0
-                    val attemptTotal = queryTitles.size
-                    // 用超时包住整个试探循环，而不是在循环头检查时钟——后者只在两次尝试
-                    // 之间生效，单次请求卡住时仍要等对方自己超时（可能很久）。
-                    // withTimeout 能真正打断挂起的请求。
-                    withTimeoutOrNull(RESOLVE_TOTAL_TIMEOUT_MS) {
-                        for (queryTitle in queryTitles) {
-                            attempted++
+                    // 候选顺序/集号策略/超时/命中判定统一收敛在 EpisodeStreamResolver（与 AI 找源共用）
+                    var lastAttempted = 0
+                    var lastTotal = 0
+                    val outcome =
+                        streamResolver.probeRule(
+                            rule = rule,
+                            baseTitles = baseTitles,
+                            epSort = epSort,
+                            subjectId = _uiState.value.subjectId,
+                            episodeId = _uiState.value.episodeId,
+                            timeoutMs = RESOLVE_TOTAL_TIMEOUT_MS,
+                        ) { attempted, attemptTotal ->
+                            lastAttempted = attempted
+                            lastTotal = attemptTotal
                             // 串行试探期间把进度透出去，避免用户对着转圈不知道在等什么
                             _uiState.update {
                                 it.copy(resolveAttempt = attempted, resolveAttemptTotal = attemptTotal)
                             }
-
-                            val targetUrl =
-                                rule.resolveUrl(
-                                    title = queryTitle,
-                                    ep = epNumStr,
-                                    subjectId = _uiState.value.subjectId,
-                                    episodeId = _uiState.value.episodeId,
-                                )
-
-                            val candidates =
-                                if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                    resolver.resolveRule(
-                                        rule = rule,
-                                        title = queryTitle,
-                                        epNumber = epSort,
-                                        subjectId = _uiState.value.subjectId,
-                                        episodeId = _uiState.value.episodeId,
-                                    )
-                                } else {
-                                    resolver.resolvePages(
-                                        pageUrls = listOf(targetUrl),
-                                        epNumber = epSort,
-                                        siteName = rule.name,
-                                        title = queryTitle,
-                                    )
-                                }
-
-                            val directCandidate = candidates.firstOrNull { it.kind == PlaylistEntryKind.DIRECT }
-                            if (directCandidate != null && directCandidate.url.isNotBlank()) {
-                                playable = directCandidate
-                                break
-                            }
                         }
-                    }
+                    val playable = outcome?.directSource
 
-                    if (playable != null && playable.url.isNotBlank()) {
+                    if (playable != null) {
                         _uiState.update {
                             it.copy(
                                 streamUrl = playable.url,
@@ -764,10 +704,11 @@ class PlayerViewModel(
                     } else {
                         // 区分"试完不命中"与"没试完就超时"：前者多半是站点没这部片，
                         // 后者多半是站点慢/挂了——两种给用户的动作不同，不能笼统说一句"没嗅探到"。
-                        val timedOut = attempted < attemptTotal
+                        val attempted = outcome?.attempted ?: lastAttempted
+                        val attemptTotal = outcome?.attemptTotal ?: lastTotal
                         val targetLabel = primaryTitle.ifBlank { "当前条目" }
                         val reason =
-                            if (timedOut) {
+                            if (outcome == null) {
                                 "在【${rule.name}】中尝试 $attempted/$attemptTotal 个关键词后超时" +
                                     "（${RESOLVE_TOTAL_TIMEOUT_MS / 1000} 秒），站点可能响应过慢或不可用"
                             } else {

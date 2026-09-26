@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.ai.tool.schemaObject
 import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.ChineseConverter
+import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -43,6 +44,8 @@ class PlayableSourceTools(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository,
     private val playableSourcesStore: PlayableSourcesStore? = null,
+    private val episodeStreamResolver: EpisodeStreamResolver =
+        EpisodeStreamResolver(playbackResolverRepository),
     private val json: Json = aiJson,
 ) {
     fun tools(): List<BgmTool> =
@@ -162,25 +165,24 @@ class PlayableSourceTools(
     ): Pair<String, List<PlayableSource>>? {
         val sourceRules = rules.filter { it.kind == PlaybackRuleKind.SOURCE }
         // 港台站常只认繁体片名，简体名搜不到时会回落到无关列表，所以每条规则都要把候选试完；
-        // 候选顺序（主标题优先、别名按中文字形优先、日文原名垫底）与播放器侧同源。
+        // 候选构造/集号组合/超时/命中判定与播放器侧共用 EpisodeStreamResolver，不再各拼一套。
         val queryTitles =
             ChineseConverter
                 .searchTitles(
                     primary = titles.primary,
                     aliases = titles.aliases,
                     origin = titles.origin,
-                ).ifEmpty { listOf("") }
+                )
+        val epSort = if (epNumber > 0) epNumber.toFloat() else 0f
         for (rule in sourceRules) {
-            for (queryTitle in queryTitles) {
-                val hits =
-                    playbackResolverRepository.resolveRule(
-                        rule = rule,
-                        title = queryTitle,
-                        epNumber = if (epNumber > 0) epNumber.toFloat() else 0f,
-                        subjectId = subjectId,
-                    )
-                if (hits.isNotEmpty()) return rule.name to hits
-            }
+            val outcome =
+                episodeStreamResolver.probeRule(
+                    rule = rule,
+                    baseTitles = queryTitles,
+                    epSort = epSort,
+                    subjectId = subjectId,
+                ) ?: continue
+            if (outcome.sources.isNotEmpty()) return rule.name to outcome.sources
         }
         return null
     }
