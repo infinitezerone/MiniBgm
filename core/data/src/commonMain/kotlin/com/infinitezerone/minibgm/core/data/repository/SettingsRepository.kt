@@ -31,6 +31,8 @@ data class UserSettings(
     val aiConfig: AiConfig = AiConfig(),
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
+    /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
+    val pipEnabled: Boolean = true,
 )
 
 interface SettingsRepository {
@@ -49,6 +51,9 @@ interface SettingsRepository {
 
     /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
     suspend fun setAmoledDarkMode(enabled: Boolean)
+
+    /** 画中画（PiP）开关 */
+    suspend fun setPipEnabled(enabled: Boolean)
 
     /** 更新 AI 服务配置 */
     suspend fun setAiConfig(config: AiConfig)
@@ -156,6 +161,7 @@ class SettingsRepositoryImpl(
                         provider = prefs.aiProvider,
                     ),
                 amoledDarkMode = prefs.amoledDarkMode,
+                pipEnabled = prefs.pipEnabled,
             )
         }
 
@@ -197,6 +203,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setAmoledDarkMode(enabled: Boolean) {
         userPreferences.setAmoledDarkMode(enabled)
+    }
+
+    override suspend fun setPipEnabled(enabled: Boolean) {
+        userPreferences.setPipEnabled(enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {

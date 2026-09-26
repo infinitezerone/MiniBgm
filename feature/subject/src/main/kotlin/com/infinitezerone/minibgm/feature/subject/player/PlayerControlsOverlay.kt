@@ -102,6 +102,7 @@ internal fun PlayerControlsOverlay(
     onCyclePlaybackSpeed: () -> Unit,
     showEpisodeQueue: Boolean,
     onOpenEpisodeQueue: () -> Unit,
+    showPipButton: Boolean = true,
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
@@ -214,12 +215,14 @@ internal fun PlayerControlsOverlay(
             }
 
             // 画中画模式
-            IconButton(onClick = onEnterPip) {
-                Icon(
-                    imageVector = Icons.Filled.PictureInPictureAlt,
-                    contentDescription = "画中画",
-                    tint = Color.White,
-                )
+            if (showPipButton) {
+                IconButton(onClick = onEnterPip) {
+                    Icon(
+                        imageVector = Icons.Filled.PictureInPictureAlt,
+                        contentDescription = "画中画",
+                        tint = Color.White,
+                    )
+                }
             }
         }
 

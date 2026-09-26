@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
@@ -95,6 +96,8 @@ internal fun SettingsSection(
     onOpenPlaybackRules: () -> Unit = {},
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
+    pipEnabled: Boolean = true,
+    onTogglePipEnabled: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -151,7 +154,41 @@ internal fun SettingsSection(
             }
         }
 
-        // Group 1: 数据同步与提醒
+        // Group 1: 播放设置
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                Text(
+                    text = "播放设置",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.PictureInPictureAlt,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "自动画中画",
+                    subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
+                    onClick = { onTogglePipEnabled(!pipEnabled) },
+                    trailing = {
+                        Switch(
+                            checked = pipEnabled,
+                            onCheckedChange = onTogglePipEnabled,
+                        )
+                    },
+                )
+            }
+        }
+
+        // Group 2: 数据同步与提醒
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
@@ -666,6 +703,8 @@ private fun SettingsSectionPreview() {
             onLogoutAllClick = {},
             amoledDarkMode = true,
             onToggleAmoledDarkMode = {},
+            pipEnabled = true,
+            onTogglePipEnabled = {},
         )
     }
 }

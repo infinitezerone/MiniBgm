@@ -31,6 +31,8 @@ class FakeSettingsRepository(
         private set
     var setAmoledDarkModeCallCount: Int = 0
         private set
+    var setPipEnabledCallCount: Int = 0
+        private set
 
     fun setSettings(settings: UserSettings) {
         settingsState.value = settings
@@ -58,6 +60,11 @@ class FakeSettingsRepository(
     override suspend fun setAmoledDarkMode(enabled: Boolean) {
         setAmoledDarkModeCallCount++
         settingsState.value = settingsState.value.copy(amoledDarkMode = enabled)
+    }
+
+    override suspend fun setPipEnabled(enabled: Boolean) {
+        setPipEnabledCallCount++
+        settingsState.value = settingsState.value.copy(pipEnabled = enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {

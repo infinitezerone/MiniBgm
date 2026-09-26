@@ -1,12 +1,14 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
-import android.app.Activity
 import android.app.PictureInPictureParams
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.util.Rational
 import android.view.WindowManager
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
@@ -44,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +62,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.app.PictureInPictureModeChangedInfo
+import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -67,6 +72,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.compose.ContentFrame
@@ -104,7 +110,7 @@ fun PlayerScreen(
         ),
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val activity = remember(context) { context.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -131,13 +137,50 @@ fun PlayerScreen(
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
 
-    // 视频区域在窗口中的矩形：作为 PiP 的 sourceRectHint，让进出 PiP 从画面本身无缝过渡
-    var videoSourceRect by remember { mutableStateOf<Rect?>(null) }
+    // 视频真实宽高比：监听播放器尺寸事件，限制在 Android PiP 合法比例 (1/2.39 ~ 2.39)
+    var videoAspectRatio by remember { mutableStateOf<Rational?>(null) }
+    DisposableEffect(player) {
+        val listener =
+            object : Player.Listener {
+                override fun onVideoSizeChanged(videoSize: VideoSize) {
+                    if (videoSize.width > 0 && videoSize.height > 0) {
+                        val ratio = videoSize.width.toFloat() / videoSize.height.toFloat()
+                        if (ratio in 0.41841f..2.39f) {
+                            videoAspectRatio = Rational(videoSize.width, videoSize.height)
+                        }
+                    }
+                }
+            }
+        val initialSize = player.videoSize
+        if (initialSize.width > 0 && initialSize.height > 0) {
+            val ratio = initialSize.width.toFloat() / initialSize.height.toFloat()
+            if (ratio in 0.41841f..2.39f) {
+                videoAspectRatio = Rational(initialSize.width, initialSize.height)
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    val targetAspectRatio = videoAspectRatio ?: Rational(16, 9)
+
+    // 视频区域在窗口中的矩形：剔除黑边后作为 PiP 的 sourceRectHint，让进出 PiP 从画面本身无缝过渡
+    var rawStageBounds by remember { mutableStateOf<Rect?>(null) }
+    val videoSourceRect =
+        remember(rawStageBounds, targetAspectRatio, resizeMode) {
+            rawStageBounds?.let {
+                calculateVideoSourceRect(
+                    containerBounds = it,
+                    aspectRatio = targetAspectRatio,
+                    resizeMode = resizeMode,
+                )
+            }
+        }
 
     val isSystemLandscape =
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    val isInPipMode = activity?.isInPictureInPictureMode == true
+    val isInPipMode = rememberIsInPipMode()
 
     val epLabel =
         remember(uiState.episodeSort, uiState.episodeType) {
@@ -193,16 +236,20 @@ fun PlayerScreen(
     fun buildPipParams(autoEnter: Boolean): PictureInPictureParams =
         PictureInPictureParams
             .Builder()
-            .setAspectRatio(Rational(16, 9))
+            .setAspectRatio(targetAspectRatio)
             .setAutoEnterEnabled(autoEnter)
             // 无缝缩放：进出 PiP 时画面平滑过渡而非瞬间跳变（API 31+）
             .setSeamlessResizeEnabled(true)
-            // 以视频区域为过渡起点，让动画从画面本身收进/展开
+            // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致
             .apply { videoSourceRect?.let { setSourceRectHint(it) } }
             .build()
 
     fun enterPictureInPicture() {
+        if (!uiState.pipEnabled) return
         val act = activity ?: return
+        if (act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
         act.enterPictureInPictureMode(buildPipParams(autoEnter = true))
     }
 
@@ -215,8 +262,9 @@ fun PlayerScreen(
             }
     }
 
-    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏
-    LaunchedEffect(isSystemLandscape) {
+    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏（PiP 模式下忽略小窗配置方向）
+    LaunchedEffect(isSystemLandscape, isInPipMode) {
+        if (isInPipMode) return@LaunchedEffect
         if (isSystemLandscape != isLandscape) {
             isLandscape = isSystemLandscape
             val act = activity
@@ -232,6 +280,17 @@ fun PlayerScreen(
                     isEpisodeDrawerOpen = false
                     isScreenLocked = false
                 }
+            }
+        }
+    }
+
+    // 进入 PiP 后释放方向锁定并关闭抽屉，使得后续点击小窗恢复时根据用户当前手机物理朝向自适应展开且不遮挡画面
+    LaunchedEffect(isInPipMode) {
+        if (isInPipMode) {
+            isEpisodeDrawerOpen = false
+            val act = activity
+            if (act != null && act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
     }
@@ -346,11 +405,18 @@ fun PlayerScreen(
         }
     }
 
-    // Android 12+：播放中「划回桌面」自动进入 PiP；暂停/结束时关闭自动进入。
-    // 只在正在播放时开启，避免「后台暂停了却还弹进 PiP」的奇怪行为。
-    DisposableEffect(activity, playback.isPlaying, videoSourceRect) {
-        activity?.setPictureInPictureParams(buildPipParams(autoEnter = playback.isPlaying))
-        onDispose { }
+    // Android 12+：播放中且画中画开关开启时「划回桌面」自动进入 PiP；暂停/结束/开关关闭时关闭自动进入。
+    // 离开播放页时在 onDispose 中彻底重置 autoEnterEnabled，防止退回详情页/首页后误入画中画。
+    DisposableEffect(activity, playback.isPlaying, videoSourceRect, targetAspectRatio, uiState.pipEnabled) {
+        activity?.setPictureInPictureParams(buildPipParams(autoEnter = playback.isPlaying && uiState.pipEnabled))
+        onDispose {
+            activity?.setPictureInPictureParams(
+                PictureInPictureParams
+                    .Builder()
+                    .setAutoEnterEnabled(false)
+                    .build(),
+            )
+        }
     }
 
     // 生命周期联动：ON_PAUSE 落盘续播点；ON_STOP 才暂停。
@@ -369,13 +435,29 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // 单实例渲染节点：利用 movableContentOf 在常规树与 PiP 极简树之间无损转移 Surface，
+    // 彻底杜绝销毁重建引发的黑闪与解码器 Surface 重附着开销。
+    val videoSurface =
+        remember(player) {
+            movableContentOf {
+                PlayerVideoSurface(
+                    player = player,
+                    resizeMode = resizeMode,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
     // 画中画模式下只显示纯净视频视口
     if (isInPipMode) {
-        PlayerVideoSurface(
-            player = player,
-            resizeMode = resizeMode,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+        ) {
+            videoSurface()
+        }
         return
     }
 
@@ -393,7 +475,7 @@ fun PlayerScreen(
         if (isLandscape) {
             Box(modifier = Modifier.fillMaxSize()) {
                 PlayerVideoStage(
-                    player = player,
+                    videoContent = videoSurface,
                     playback = playback,
                     position = position,
                     streamUrl = uiState.streamUrl,
@@ -454,11 +536,12 @@ fun PlayerScreen(
                     onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
                     onToggleLock = { isScreenLocked = !isScreenLocked },
                     onRequestOpenSources = onRequestOpenSources,
+                    showPipButton = uiState.pipEnabled,
                     modifier =
                         Modifier
                             .fillMaxSize()
                             .onGloballyPositioned { coords ->
-                                videoSourceRect = coords.boundsInWindow().toAndroidRect()
+                                rawStageBounds = coords.boundsInWindow().toAndroidRect()
                             },
                 )
 
@@ -537,7 +620,7 @@ fun PlayerScreen(
                             .background(Color.Black),
                 ) {
                     PlayerVideoStage(
-                        player = player,
+                        videoContent = videoSurface,
                         playback = playback,
                         position = position,
                         streamUrl = uiState.streamUrl,
@@ -598,11 +681,12 @@ fun PlayerScreen(
                         onOpenEpisodeQueue = {},
                         onToggleLock = {},
                         onRequestOpenSources = onRequestOpenSources,
+                        showPipButton = uiState.pipEnabled,
                         modifier =
                             Modifier
                                 .fillMaxSize()
                                 .onGloballyPositioned { coords ->
-                                    videoSourceRect = coords.boundsInWindow().toAndroidRect()
+                                    rawStageBounds = coords.boundsInWindow().toAndroidRect()
                                 },
                     )
                 }
@@ -699,7 +783,7 @@ fun PlayerScreen(
 @OptIn(UnstableApi::class)
 @Composable
 private fun PlayerVideoStage(
-    player: Player,
+    videoContent: @Composable () -> Unit,
     playback: PlaybackState,
     position: StateFlow<Long>,
     streamUrl: String,
@@ -741,6 +825,7 @@ private fun PlayerVideoStage(
     onOpenEpisodeQueue: () -> Unit,
     onToggleLock: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
+    showPipButton: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -757,12 +842,7 @@ private fun PlayerVideoStage(
             isLocked = isLocked,
         ) {
             when {
-                streamUrl.isNotBlank() ->
-                    PlayerVideoSurface(
-                        player = player,
-                        resizeMode = resizeMode,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                streamUrl.isNotBlank() -> videoContent()
 
                 isResolvingSource ->
                     PlayerResolvingView(
@@ -862,6 +942,7 @@ private fun PlayerVideoStage(
                 onCyclePlaybackSpeed = onCyclePlaybackSpeed,
                 showEpisodeQueue = showEpisodeQueue,
                 onOpenEpisodeQueue = onOpenEpisodeQueue,
+                showPipButton = showPipButton,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
             )
@@ -902,3 +983,77 @@ private fun PlayerResizeMode.toContentScale(): ContentScale =
 
 /** Compose 几何矩形 → Android `Rect`（供 PiP `sourceRectHint` 使用）。 */
 private fun androidx.compose.ui.geometry.Rect.toAndroidRect(): Rect = Rect(left.toInt(), top.toInt(), right.toInt(), bottom.toInt())
+
+/**
+ * 计算实际视频画面在窗口中的物理矩形，供 PiP `sourceRectHint` 使用。
+ * 针对 FIT 模式自动剔除黑边（letterbox/pillarbox），保证 sourceRectHint 宽高比与 PiP 宽高比一致。
+ */
+private fun calculateVideoSourceRect(
+    containerBounds: Rect,
+    aspectRatio: Rational,
+    resizeMode: PlayerResizeMode,
+): Rect {
+    if (resizeMode != PlayerResizeMode.FIT) return containerBounds
+    val containerWidth = containerBounds.width().toFloat()
+    val containerHeight = containerBounds.height().toFloat()
+    if (containerWidth <= 0 || containerHeight <= 0) return containerBounds
+
+    val videoRatio = aspectRatio.numerator.toFloat() / aspectRatio.denominator.toFloat()
+    val containerRatio = containerWidth / containerHeight
+
+    return if (containerRatio > videoRatio) {
+        // 容器比视频更宽（如横屏 20:9 播 16:9），左右有黑边（pillarbox）
+        val actualWidth = containerHeight * videoRatio
+        val horizontalPadding = (containerWidth - actualWidth) / 2f
+        Rect(
+            (containerBounds.left + horizontalPadding).toInt(),
+            containerBounds.top,
+            (containerBounds.right - horizontalPadding).toInt(),
+            containerBounds.bottom,
+        )
+    } else {
+        // 容器比视频更高，上下有黑边（letterbox）
+        val actualHeight = containerWidth / videoRatio
+        val verticalPadding = (containerHeight - actualHeight) / 2f
+        Rect(
+            containerBounds.left,
+            (containerBounds.top + verticalPadding).toInt(),
+            containerBounds.right,
+            (containerBounds.bottom - verticalPadding).toInt(),
+        )
+    }
+}
+
+/** 递归解包 ContextWrapper，安全提取 ComponentActivity。 */
+private tailrec fun Context.findActivity(): ComponentActivity? =
+    when (this) {
+        is ComponentActivity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
+    }
+
+/**
+ * 响应式监听当前 Activity 是否处于画中画（PiP）模式。
+ */
+@Composable
+private fun rememberIsInPipMode(): Boolean {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() } ?: return false
+
+    var isInPipMode by remember(activity) {
+        mutableStateOf(activity.isInPictureInPictureMode)
+    }
+
+    DisposableEffect(activity) {
+        val listener =
+            Consumer<PictureInPictureModeChangedInfo> { info ->
+                isInPipMode = info.isInPictureInPictureMode
+            }
+        activity.addOnPictureInPictureModeChangedListener(listener)
+        onDispose {
+            activity.removeOnPictureInPictureModeChangedListener(listener)
+        }
+    }
+
+    return isInPipMode
+}

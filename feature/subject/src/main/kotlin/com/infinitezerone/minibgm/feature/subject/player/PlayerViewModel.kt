@@ -113,6 +113,8 @@ data class PlayerUiState(
     val resolveAttempt: Int = 0,
     /** 本次解析的关键词尝试总次数；0 表示未在解析 */
     val resolveAttemptTotal: Int = 0,
+    /** 画中画（PiP）开关 */
+    val pipEnabled: Boolean = true,
 ) {
     val hasNext: Boolean
         get() {
@@ -401,6 +403,13 @@ class PlayerViewModel(
                 subjectRepository?.fetchEpisodes(route.subjectId)
                 if (route.subjectName.isBlank()) {
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
+                }
+            }
+
+            // 3. 订阅画中画开关偏好
+            viewModelScope.launch {
+                settingsRepository.settings.collect { settings ->
+                    _uiState.update { it.copy(pipEnabled = settings.pipEnabled) }
                 }
             }
         }

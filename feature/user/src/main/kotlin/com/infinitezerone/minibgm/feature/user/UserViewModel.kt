@@ -41,6 +41,7 @@ data class UserUiState(
     val aiConfig: AiConfig = AiConfig(),
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
+    val pipEnabled: Boolean = true,
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -154,6 +155,7 @@ class UserViewModel(
                 aiConfig = sync.settings.aiConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 amoledDarkMode = sync.settings.amoledDarkMode,
+                pipEnabled = sync.settings.pipEnabled,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -252,6 +254,13 @@ class UserViewModel(
     fun setAmoledDarkMode(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAmoledDarkMode(enabled)
+        }
+    }
+
+    /** 画中画（PiP）开关 */
+    fun setPipEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setPipEnabled(enabled)
         }
     }
 
