@@ -342,9 +342,8 @@ class ScheduleRepositoryImpl(
                     dataService.getRecentBangumiData(
                         year = currentYear,
                         month = currentMonth,
-                        // 13 个月回看：覆盖跨年两季档/长周更番（如 3 月开播的 Netflix 分段番），
-                        // 长青番（柯南类）靠官方日历覆盖，不在此窗口内
-                        lookbackMonths = 13,
+                        // 4 个月回看：覆盖本季与上一季跨季番，杜绝 15 个并发切片请求风暴
+                        lookbackMonths = 4,
                         aheadMonths = 1,
                         etag = currentEtag,
                     )

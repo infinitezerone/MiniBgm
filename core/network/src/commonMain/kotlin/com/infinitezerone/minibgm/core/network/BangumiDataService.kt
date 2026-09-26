@@ -25,21 +25,45 @@ sealed interface BangumiDataResult {
 interface BangumiDataService {
     suspend fun getBangumiData(etag: String? = null): BangumiDataResult
 
-    /** 获取近期在播季度的月份切片数据（默认覆盖过去 4 个月到未来 1 个月，仅 ~50KB） */
+    /** 获取近期在播季度的月份切片数据（覆盖过去 4 个月到未来 1 个月，仅 ~50KB） */
     suspend fun getRecentBangumiData(
         year: Int,
         month: Int,
-        // 13 个月回看，覆盖跨年两季档/长周更番（与 ScheduleRepository.ROSTER_LOOKBACK_DAYS 对齐）
-        lookbackMonths: Int = 13,
+        lookbackMonths: Int = 4,
         aheadMonths: Int = 1,
         etag: String? = null,
     ): BangumiDataResult = getBangumiData(etag)
+
+    companion object {
+        /** 兜底种子映射：针对 Netflix 独播或上游社区尚未及时合并切片的最新在播番剧 */
+        val HOT_AIRING_SEEDS =
+            listOf(
+                com.infinitezerone.minibgm.core.model.BangumiDataItem(
+                    title = "スティール・ボール・ラン ジョジョの奇妙な冒険 2nd & 3rd STAGE",
+                    titleTranslate = mapOf("zh-Hans" to listOf("飙马野郎 JOJO的奇妙冒险 第二&第三赛段")),
+                    type = "web",
+                    lang = "ja",
+                    officialSite = "https://jojo-portal-anime.com/sbr/",
+                    begin = "2026-09-25T16:00:00.000Z",
+                    sites =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .BangumiDataSite("bangumi", "639938"),
+                            com.infinitezerone.minibgm.core.model
+                                .BangumiDataSite("aniList", "210482"),
+                            com.infinitezerone.minibgm.core.model
+                                .BangumiDataSite("netflix", "82116553"),
+                        ),
+                ),
+            )
+    }
 }
 
 class BangumiDataServiceImpl(
     private val client: HttpClient,
     private val cdnUrls: List<String> = DEFAULT_CDN_URLS,
     private val cdnBases: List<String> = DEFAULT_CDN_BASES,
+    private val hotAiringSeeds: List<BangumiDataItem> = emptyList(),
 ) : BangumiDataService {
     constructor(client: HttpClient, cdnUrl: String) : this(client, listOf(cdnUrl), DEFAULT_CDN_BASES)
 
@@ -103,7 +127,7 @@ class BangumiDataServiceImpl(
                     }
                 }
 
-            val items = deferreds.awaitAll().flatten().distinctBy { it.bgmSubjectId ?: it.title }
+            val items = (deferreds.awaitAll().flatten() + hotAiringSeeds).distinctBy { it.bgmSubjectId ?: it.title }
             if (items.isEmpty() && !etag.isNullOrBlank()) {
                 BangumiDataResult.NotModified
             } else {
