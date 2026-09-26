@@ -3,13 +3,15 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
-import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
+import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
+import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
+import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
@@ -20,8 +22,9 @@ import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.core.network.AniListService
+import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BangumiApiService
-import com.infinitezerone.minibgm.core.network.BangumiDataResult
+import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BilibiliService
@@ -61,15 +64,8 @@ interface ScheduleRepository {
     ): List<UpcomingAiring>
 
     /**
-     * 前台极速刷新官方日历（50KB）：
-     * 100% 不碰 CDN，直接结合本地已有的播放源毫秒级入库，0 额外开销。
-     * 仅清理官方名单内的行，bgm-data 合并插入的网播番不受影响。
-     */
-    suspend fun refreshSchedules(): AppResult<Unit>
-
-    /**
      * 全量刷新管线（UX_REMEDIATION 诉求：所有数据源获取完再更新 UI 列表）：
-     * 依次拉齐官方日历（含逐话事件）与 bangumi-data 播放源/网播番/事件仲裁，
+     * 拉齐 AniList 周排期（名单发现 + 逐话真值）、bangumi-data 播放源与事件仲裁，
      * 期间对外流被闸门扣住，全部完成后才以最终状态对外发一次。
      * 各数据源失败不互相中断，错误信息聚合返回。
      *
@@ -80,9 +76,8 @@ interface ScheduleRepository {
 
     /**
      * 后台 / 手动同步：
-     * 1) CDN 播放源静态数据（ETag 304 探测）；
-     * 2) 新增合并官方日历遗漏的网播番（begin 在窗口内的 bgm-data 条目直接入库）；
-     * 3) 逐话播出事件同步（AniList 真值 + broadcast 规则推算）并仲裁回写。
+     * 1) 按条目 begin 月按需拉取 bangumi-data 月切片补全播放源/中文名；
+     * 2) AniList 周排期发现新番、补全逐话真值并仲裁回写。
      */
     suspend fun syncBangumiData(force: Boolean = false): AppResult<Unit>
 
@@ -108,6 +103,7 @@ class ScheduleRepositoryImpl(
     private val dataService: BangumiDataService,
     private val scheduleDao: AirScheduleDao,
     private val airEventDao: AirEventDao,
+    private val anilistMappingDao: AniListMappingDao,
     private val anilistService: AniListService,
     private val bilibiliService: BilibiliService,
     private val userPreferences: UserPreferencesDataSource,
@@ -252,41 +248,6 @@ class ScheduleRepositoryImpl(
             }.sortedBy { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: Long.MAX_VALUE }
     }
 
-    override suspend fun refreshSchedules(): AppResult<Unit> =
-        try {
-            // 1. 获取官方每日放送日历数据（包含高清海报图片、官方评分与排行、星期分类）
-            val calendarDays =
-                runCatching { apiService.getCalendar() }.getOrNull() ?: emptyList()
-
-            if (calendarDays.isEmpty()) {
-                return AppResult.Error(IllegalStateException("获取官方放送日历失败，请稍后重试"))
-            }
-
-            // 2. 读取本地已有的缓存实体，复用已同步好的播放源与时刻（0 次 CDN 请求）
-            val existingEntities = scheduleDao.getAllSchedulesList().associateBy { it.bgmId }
-            val entities =
-                calendarDays.flatMap { day ->
-                    val officialWeekday = day.weekday.id
-                    day.items.map { subject ->
-                        mapCalendarSubjectToEntity(subject, officialWeekday, existingEntities[subject.id])
-                    }
-                }
-
-            if (entities.isNotEmpty()) {
-                // 官方日历只是名单的一部分：只清理官方名单内的行，
-                // bgm-data 合并插入的网络独播番（不在官方日历中）必须保留
-                scheduleDao.deleteOfficialSchedulesNotIn(entities.map { it.bgmId })
-                scheduleDao.insertSchedules(entities)
-            }
-            // 逐话事件同步不在此处执行：refreshAllSchedules 会在 syncBangumiData 末尾统一跑一次，
-            // 避免全量管线路径上对 AniList 的重复查询；单独调用本方法的场景只刷新名单
-            AppResult.Success(Unit)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("同步官方放送日历"))
-        }
-
     override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
         if (!force) {
             val lastSync = userPreferences.userPreferences.firstOrNull()?.bangumiDataLastSyncTimestamp ?: 0L
@@ -296,16 +257,8 @@ class ScheduleRepositoryImpl(
         }
         scheduleHoldGate.value = true
         try {
-            val failures = mutableListOf<String>()
-            refreshSchedules().onError { _, message -> failures += message }
-            syncBangumiData().onError { _, message -> failures += message }
-            return if (failures.isEmpty()) {
-                // NotModified（数据未变）也算"同步过"，避免节流窗口永远无法生效
-                userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
-                AppResult.Success(Unit)
-            } else {
-                AppResult.Error(IllegalStateException(failures.joinToString("；")), failures.joinToString("；"))
-            }
+            // 唯一数据源：AniList 周排期（名单发现 + 逐话真值）+ 按需 bangumi-data 月切片
+            return syncBangumiData()
         } finally {
             scheduleHoldGate.value = false
         }
@@ -313,64 +266,17 @@ class ScheduleRepositoryImpl(
 
     override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> =
         try {
-            var existingEntities = scheduleDao.getAllSchedulesList()
-            if (existingEntities.isEmpty()) {
-                // 首次同步或本地时刻表为空时，先拉取官方日历构建基础实体，以确保 bgm-data 能够正确填充播放源与时刻
-                val refreshResult = refreshSchedules()
-                if (refreshResult is AppResult.Error) {
-                    return refreshResult
-                }
-                existingEntities = scheduleDao.getAllSchedulesList()
+            val existingEntities = scheduleDao.getAllSchedulesList()
+
+            // bangumi-data 不再作为名单来源（也不再有固定窗口）：名单由官方日历 + AniList 周排期负责，
+            // 这里只为缺播放源/中文名的条目，按其 begin 月按需补全（ETag 条件请求，未变即 0 字节）。
+            val enriched = enrichFromBangumiDataMonths(existingEntities)
+            if (enriched != existingEntities) {
+                scheduleDao.insertSchedules(enriched)
             }
+            userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
 
-            val now = TimeUtils.nowEpochMillis()
-            val (currentYear, currentMonth) = TimeUtils.currentCstYearMonth()
-            val shouldForce = force || existingEntities.all { it.sitesJson == "[]" || it.sitesJson.isBlank() }
-
-            val currentEtag =
-                if (shouldForce) {
-                    ""
-                } else {
-                    userPreferences.userPreferences
-                        .firstOrNull()
-                        ?.bangumiDataEtag
-                        .orEmpty()
-                }
-
-            val bangumiDataResult =
-                runCatching {
-                    dataService.getRecentBangumiData(
-                        year = currentYear,
-                        month = currentMonth,
-                        // 仅拉取当月单个切片（~15KB，带 ETag 304 缓存），跨季与未收录番剧由 AniList + 搜索自动自愈
-                        lookbackMonths = 0,
-                        aheadMonths = 0,
-                        etag = currentEtag,
-                    )
-                }.getOrElse { throwable ->
-                    return AppResult.Error(throwable, throwable.toUserFriendlyMessage("同步番组数据"))
-                }
-
-            if (bangumiDataResult is BangumiDataResult.Success) {
-                val itemsWithId = bangumiDataResult.items.filter { it.bgmSubjectId != null }
-                bangumiDataResult.etag?.takeIf { it.isNotBlank() }?.let {
-                    userPreferences.setBangumiDataEtag(it)
-                }
-                userPreferences.setBangumiDataLastSyncTimestamp(now)
-
-                val bgmMap = itemsWithId.associateBy { it.bgmSubjectId!! }
-
-                val enriched = enrichExistingEntities(existingEntities, bgmMap, now)
-                val existingIds = existingEntities.map { it.bgmId }.toSet()
-                val inserted = createNewEntitiesFromBangumiData(itemsWithId, existingIds, now)
-
-                val allSchedules = enriched + inserted
-                val finalized = enrichMissingMetadata(allSchedules)
-                scheduleDao.insertSchedules(finalized)
-            }
-
-            // ③ 逐话事件同步与仲裁（全量管线中唯一一次；refreshSchedules 不再自行同步）：
-            //    失败只降级为"预计"数据，不阻塞名单同步
+            // 逐话事件同步与仲裁（全量管线中唯一一次）：名单发现 + 排期回写 + 元数据回补都在这里收口
             runCatchingCancellable { syncAirEvents() }
 
             AppResult.Success(Unit)
@@ -400,69 +306,63 @@ class ScheduleRepositoryImpl(
         return index.search(query, limit)
     }
 
-    private fun enrichExistingEntities(
-        existingEntities: List<AirScheduleEntity>,
-        bgmMap: Map<Long, BangumiDataItem>,
-        now: Long,
-    ): List<AirScheduleEntity> =
-        existingEntities.map { entity ->
-            val dataItem = bgmMap[entity.bgmId] ?: return@map entity
-            val siteLinks = dataItem.sites.mapNotNull { s -> resolveSiteLink(s) }
-            val anilistId =
-                entity.anilistId
-                    ?: dataItem.sites
-                        .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                        ?.id
-                        ?.toLongOrNull()
-            entity.copy(
-                titleCn = entity.titleCn.ifBlank { dataItem.chineseTitle },
-                sitesJson = json.encodeToString(siteLinks),
-                anilistId = anilistId,
-            )
-        }
+    /**
+     * 为缺播放源的条目按其 `begin` 月（±1 月容忍 begin 的时区/跨月错位）按需拉取 bangumi-data 月切片，
+     * 补全 sites / 中文名 / anilistId。每月 ETag 持久化，未变时条件请求命中 304、零解析。
+     */
+    private suspend fun enrichFromBangumiDataMonths(entities: List<AirScheduleEntity>): List<AirScheduleEntity> {
+        val needs = entities.filter { it.sitesJson.isBlank() || it.sitesJson == "[]" }
+        if (needs.isEmpty()) return entities
 
-    private fun createNewEntitiesFromBangumiData(
-        itemsWithId: List<BangumiDataItem>,
-        existingIds: Set<Long>,
-        now: Long,
-    ): List<AirScheduleEntity> {
-        val windowStart = now - ROSTER_LOOKBACK_DAYS * DAY_MILLIS
-        val windowEnd = now + ROSTER_AHEAD_DAYS * DAY_MILLIS
-        val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(now)
-        return itemsWithId.mapNotNull { item ->
-            val bgmId = item.bgmSubjectId!!
-            if (existingIds.contains(bgmId)) return@mapNotNull null
-            val beginMillis = TimeUtils.epochMillisOfIso(item.begin) ?: return@mapNotNull null
-            if (beginMillis < windowStart || beginMillis > windowEnd) return@mapNotNull null
-            val endMillis = TimeUtils.epochMillisOfIso(item.end)
-            if (endMillis != null && endMillis < weekStartMillis) return@mapNotNull null
-            val normalizedBegin = TimeUtils.normalizeIsoUtc(item.begin)
-            val timeCst = TimeUtils.formatToCstTime(item.begin)
-            AirScheduleEntity(
-                bgmId = bgmId,
-                title = item.title,
-                titleCn = item.chineseTitle,
-                coverUrl = "",
-                ratingScore = 0.0,
-                airDate = item.begin.substringBefore("T"),
-                beginAtUtc = normalizedBegin.ifBlank { null },
-                sortMinutes = TimeUtils.parseTimeToMinutes(timeCst),
-                weekday = TimeUtils.cstWeekdayOfEpoch(beginMillis),
-                timeCst = timeCst,
-                timeJst = TimeUtils.formatToJstTime(item.begin),
-                sitesJson = json.encodeToString(item.sites.mapNotNull { s -> resolveSiteLink(s) }),
+        val nowMillis = TimeUtils.nowEpochMillis()
+        val months =
+            needs
+                .mapNotNull { monthKeyOfAirDate(it.airDate) }
+                .flatMap { key ->
+                    val year = key.substring(0, 4).toIntOrNull() ?: return@flatMap emptyList()
+                    val month = key.substring(5, 7).toIntOrNull() ?: return@flatMap emptyList()
+                    listOf(shiftMonth(year, month, -1), year to month, shiftMonth(year, month, 1))
+                }.distinct()
+
+        val itemsByBgmId = mutableMapOf<Long, BangumiDataItem>()
+        for ((year, month) in months) {
+            val key = monthKey(year, month)
+            val etag = runCatching { anilistMappingDao.getMonthEtag(key) }.getOrNull()?.etag
+            val result =
+                runCatchingCancellable { dataService.getMonthItems(year, month, etag) }.getOrNull()
+                    ?: continue
+            if (result is BangumiDataMonthResult.Success) {
+                result.etag?.takeIf { it.isNotBlank() }?.let {
+                    runCatching { anilistMappingDao.upsertMonthEtag(BangumiDataMonthEtagEntity(key, it, nowMillis)) }
+                }
+                result.items.forEach { item -> item.bgmSubjectId?.let { itemsByBgmId[it] = item } }
+            }
+        }
+        if (itemsByBgmId.isEmpty()) return entities
+
+        return entities.map { entity ->
+            val item = itemsByBgmId[entity.bgmId] ?: return@map entity
+            entity.copy(
+                titleCn = entity.titleCn.ifBlank { item.chineseTitle },
+                sitesJson = mergeSites(entity.sitesJson, json.encodeToString(item.sites.mapNotNull { resolveSiteLink(it) })),
                 anilistId =
-                    item.sites
-                        .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                        ?.id
-                        ?.toLongOrNull(),
-                broadcastRule = "",
-                source = AirScheduleEntity.SOURCE_BGM_DATA,
-                nextEpisode = 0,
-                nextEpisodeAtUtc = "",
-                nextEpisodeKind = "",
+                    entity.anilistId
+                        ?: item.sites
+                            .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
+                            ?.id
+                            ?.toLongOrNull(),
             )
         }
+    }
+
+    /** 从 `airDate`（`YYYY-MM-DD`）解析出 `YYYY-MM`；非法/缺失返回 null。 */
+    private fun monthKeyOfAirDate(airDate: String): String? {
+        val date = airDate.substringBefore("T")
+        if (date.length < 7) return null
+        val year = date.substring(0, 4).toIntOrNull() ?: return null
+        val month = date.substring(5, 7).toIntOrNull() ?: return null
+        if (year <= 0 || month !in 1..12) return null
+        return monthKey(year, month)
     }
 
     /**
@@ -537,7 +437,7 @@ class ScheduleRepositoryImpl(
         }
 
         val reconciled = reconcileScheduleEntities(activeEntities, allEvents, nowMillis)
-        scheduleDao.insertSchedules(reconciled)
+        scheduleDao.insertSchedules(enrichMissingMetadata(reconciled))
     }
 
     private suspend fun fetchAnilistAirEvents(
@@ -615,8 +515,12 @@ class ScheduleRepositoryImpl(
     }
 
     /**
-     * 利用 AniList 当周排期单次复合查询，发现全网在播但本地未收录（如网络独播番）或未关联 anilistId 的条目。
-     * 若未在本地匹配，调用 Bangumi 官方公开搜索接口按日文原名动态绑定 bgmId 并入库。
+     * 用 AniList 当周排期把全网在播条目补齐/绑定到本地时刻表。
+     *
+     * anilistId → bgmId 三级降级，命中即回写 [AniListBgmMappingEntity]：
+     * 1) 本地已有但尚未绑定 anilistId 的条目，按归一化标题精确匹配（不做包含匹配，避免跨季误配）；
+     * 2) 映射缓存；未命中则按条目 startDate（±1 月）按需拉取 bangumi-data 月切片，用 sites 桥解析；
+     * 3) 仍无结果时用 bgm.tv 官方搜索按日文原名兜底，且只在候选唯一时接受（绝不取首条）。
      */
     private suspend fun resolveWeeklyAiringSchedules(
         currentEntities: List<AirScheduleEntity>,
@@ -625,7 +529,7 @@ class ScheduleRepositoryImpl(
         val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
         val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
         val weeklyItems =
-            runCatching {
+            runCatchingCancellable {
                 anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
             }.getOrElse { emptyList() }
 
@@ -639,84 +543,68 @@ class ScheduleRepositoryImpl(
         val entitiesByBgmId = currentEntities.associateBy { it.bgmId }.toMutableMap()
         val newlyInserted = mutableListOf<AirScheduleEntity>()
         val newEvents = mutableListOf<AirEventEntity>()
+        val mappingsToPersist = mutableListOf<AniListBgmMappingEntity>()
+        val fetchedMonths = mutableSetOf<String>()
+        val mappingCache = loadMappingCache(weeklyItems.map { it.anilistId })
 
         for (item in weeklyItems) {
-            val existing = entitiesByAnilistId[item.anilistId]
-            if (existing != null) continue
+            if (entitiesByAnilistId[item.anilistId] != null) continue
 
-            // 1. 本地原名/译名精确或包含匹配
+            // 1) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
             val localMatch =
                 currentEntities.firstOrNull { entity ->
-                    item.titleNative.isNotBlank() && (
-                        entity.title.equals(item.titleNative, ignoreCase = true) ||
-                            entity.title.contains(item.titleNative) ||
-                            item.titleNative.contains(entity.title)
-                    )
+                    entity.anilistId == null && titlesRoughlyEqual(entity.title, item.titleNative)
                 }
             if (localMatch != null) {
                 val updated = localMatch.copy(anilistId = item.anilistId)
                 entitiesByBgmId[updated.bgmId] = updated
                 entitiesByAnilistId[item.anilistId] = updated
                 newlyInserted += updated
+                mappingsToPersist += updated.toAniListBgmMapping(item.anilistId, nowMillis)
+                newEvents += item.toAirEventEntity(updated.bgmId, nowMillis)
                 continue
             }
 
-            // 2. 本地未收录时：通过 Bangumi 官方搜索接口按日文原名自愈绑定
-            val searchTitle = item.titleNative.ifBlank { item.titleRomaji }
-            if (searchTitle.isBlank()) continue
-
-            val searchResult = runCatching { apiService.searchSubjects(searchTitle, type = 2) }.getOrNull()
-            val candidate =
-                searchResult?.list?.firstOrNull { subject ->
-                    val titleClean = searchTitle.replace(Regex("[・&\\-\\s]"), "")
-                    val nameClean = subject.name.replace(Regex("[・&\\-\\s]"), "")
-                    nameClean.contains(titleClean) || titleClean.contains(nameClean) ||
-                        (
-                            subject.date.isNotBlank() &&
-                                subject.date == TimeUtils.isoUtcFromEpochMillis(item.airAtEpochSeconds * 1000).substringBefore("T")
-                        )
-                } ?: searchResult?.list?.firstOrNull()
-
-            if (candidate != null && !entitiesByBgmId.containsKey(candidate.id)) {
-                val airMillis = item.airAtEpochSeconds * 1000
-                val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
-                val cstTime = TimeUtils.formatToCstTime(isoUtc)
-                val jstTime = TimeUtils.formatToJstTime(isoUtc)
-                val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
-                val newEntity =
-                    AirScheduleEntity(
-                        bgmId = candidate.id,
-                        title = candidate.name,
-                        titleCn = candidate.nameCn.ifBlank { candidate.name },
-                        coverUrl = candidate.images?.large ?: item.coverUrl.orEmpty(),
-                        ratingScore = candidate.rating?.score ?: 0.0,
-                        airDate = candidate.date.ifBlank { candidate.airDate },
-                        beginAtUtc = isoUtc,
-                        sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
-                        weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
-                        timeCst = cstTime,
-                        timeJst = jstTime,
-                        sitesJson = "[]",
+            // 2) 映射缓存 / bangumi-data 月切片
+            val mapping =
+                mappingCache[item.anilistId]
+                    ?: resolveMappingFromMonth(item, nowMillis, fetchedMonths, mappingCache)
+            if (mapping != null) {
+                mappingCache[item.anilistId] = mapping
+                mappingsToPersist += mapping
+                val existing = entitiesByBgmId[mapping.bgmId]
+                val entity =
+                    existing?.copy(
                         anilistId = item.anilistId,
-                        source = AirScheduleEntity.SOURCE_BGM_DATA,
-                        nextEpisode = item.episode,
-                        nextEpisodeAtUtc = isoUtc,
-                        nextEpisodeKind = kind,
-                    )
-                entitiesByBgmId[candidate.id] = newEntity
-                entitiesByAnilistId[item.anilistId] = newEntity
-                newlyInserted += newEntity
-                newEvents +=
-                    AirEventEntity(
-                        subjectId = candidate.id,
-                        episode = item.episode,
-                        airAtUtc = isoUtc,
-                        kind = kind,
-                        source = EVENT_SOURCE_ANILIST,
-                    )
+                        sitesJson = mergeSites(existing.sitesJson, mapping.sitesJson),
+                    ) ?: mapping.toAirScheduleEntity(item, nowMillis)
+                entitiesByBgmId[entity.bgmId] = entity
+                entitiesByAnilistId[item.anilistId] = entity
+                newlyInserted += entity
+                newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
+                continue
             }
+
+            // 3) bgm.tv 实时搜索兜底：唯一候选才接受
+            val subject = searchUniqueSubject(item) ?: continue
+            val searched = subject.toAniListBgmMapping(item.anilistId, nowMillis)
+            mappingCache[item.anilistId] = searched
+            mappingsToPersist += searched
+            val existing = entitiesByBgmId[searched.bgmId]
+            val entity =
+                existing?.copy(
+                    anilistId = item.anilistId,
+                    sitesJson = mergeSites(existing.sitesJson, searched.sitesJson),
+                ) ?: searched.toAirScheduleEntity(item, nowMillis)
+            entitiesByBgmId[entity.bgmId] = entity
+            entitiesByAnilistId[item.anilistId] = entity
+            newlyInserted += entity
+            newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
         }
 
+        if (mappingsToPersist.isNotEmpty()) {
+            runCatching { anilistMappingDao.upsertMappings(mappingsToPersist.distinctBy { it.anilistId }) }
+        }
         if (newlyInserted.isNotEmpty()) {
             scheduleDao.insertSchedules(newlyInserted)
         }
@@ -724,6 +612,210 @@ class ScheduleRepositoryImpl(
             airEventDao.insertAirEvents(newEvents)
         }
         return entitiesByBgmId.values.toList()
+    }
+
+    private suspend fun loadMappingCache(anilistIds: List<Long>): MutableMap<Long, AniListBgmMappingEntity> =
+        runCatching { anilistMappingDao.getMappingsByAniListIds(anilistIds.distinct()) }
+            .getOrElse { emptyList() }
+            .associateByTo(mutableMapOf<Long, AniListBgmMappingEntity>()) { it.anilistId }
+
+    /**
+     * 按条目 startDate（含前后各一个月，容忍 `begin` 的时区/跨月错位）按需拉取 bangumi-data 月切片，
+     * 用 `sites` 里的 anilist↔bangumi 桥解析映射。同月只拉一次，拉到的映射回填内存缓存供后续条目复用。
+     */
+    private suspend fun resolveMappingFromMonth(
+        item: AniListWeeklyScheduleItem,
+        nowMillis: Long,
+        fetchedMonths: MutableSet<String>,
+        mappingCache: MutableMap<Long, AniListBgmMappingEntity>,
+    ): AniListBgmMappingEntity? {
+        val year = item.startYear
+        val month = item.startMonth
+        if (year <= 0 || month !in 1..12) return null
+
+        for (offset in intArrayOf(-1, 0, 1)) {
+            val (targetYear, targetMonth) = shiftMonth(year, month, offset)
+            val key = monthKey(targetYear, targetMonth)
+            if (fetchedMonths.add(key)) {
+                val etag = runCatching { anilistMappingDao.getMonthEtag(key) }.getOrNull()?.etag
+                when (
+                    val result =
+                        runCatchingCancellable {
+                            dataService.getMonthItems(targetYear, targetMonth, etag)
+                        }.getOrNull()
+                ) {
+                    is BangumiDataMonthResult.Success -> {
+                        result.etag?.takeIf { it.isNotBlank() }?.let {
+                            runCatching { anilistMappingDao.upsertMonthEtag(BangumiDataMonthEtagEntity(key, it, nowMillis)) }
+                        }
+                        val mappings = result.items.mapNotNull { it.toAniListBgmMapping(key, nowMillis) }
+                        if (mappings.isNotEmpty()) {
+                            runCatching { anilistMappingDao.upsertMappings(mappings) }
+                            mappings.forEach { mappingCache[it.anilistId] = it }
+                        }
+                    }
+                    BangumiDataMonthResult.NotModified -> Unit
+                    BangumiDataMonthResult.NotFound, null -> Unit
+                }
+            }
+            mappingCache[item.anilistId]?.let { return it }
+        }
+        return null
+    }
+
+    /** bgm.tv 官方搜索兜底：返回空、或存在多个候选时一律不绑定，宁可缺失也不写错映射。 */
+    private suspend fun searchUniqueSubject(item: AniListWeeklyScheduleItem): Subject? {
+        val query = item.titleNative.ifBlank { item.titleRomaji }
+        if (query.isBlank()) return null
+        val list =
+            runCatchingCancellable { apiService.searchSubjects(query, type = 2) }
+                .getOrNull()
+                ?.list
+                .orEmpty()
+        if (list.isEmpty()) return null
+        if (list.size == 1) return list.first()
+        val normalized = normalizeTitle(query)
+        return list
+            .filter { normalizeTitle(it.name) == normalized || normalizeTitle(it.nameCn) == normalized }
+            .singleOrNull()
+    }
+
+    private fun shiftMonth(
+        year: Int,
+        month: Int,
+        offset: Int,
+    ): Pair<Int, Int> {
+        var y = year
+        var m = month + offset
+        while (m < 1) {
+            m += 12
+            y -= 1
+        }
+        while (m > 12) {
+            m -= 12
+            y += 1
+        }
+        return y to m
+    }
+
+    private fun monthKey(
+        year: Int,
+        month: Int,
+    ): String = "$year-${month.toString().padStart(2, '0')}"
+
+    private fun titlesRoughlyEqual(
+        a: String,
+        b: String,
+    ): Boolean {
+        if (a.isBlank() || b.isBlank()) return false
+        return normalizeTitle(a) == normalizeTitle(b)
+    }
+
+    /** 归一化片名：大小写 + 全/半角连接符、中点、空白一律抹平，仅用于"精确"比较 */
+    private fun normalizeTitle(value: String): String = value.lowercase().replace(TITLE_NOISE_REGEX, "")
+
+    private fun mergeSites(
+        existing: String,
+        incoming: String,
+    ): String = if (existing.isBlank() || existing == "[]") incoming else existing
+
+    private fun AniListWeeklyScheduleItem.toAirEventEntity(
+        subjectId: Long,
+        nowMillis: Long,
+    ): AirEventEntity {
+        val airMillis = airAtEpochSeconds * 1000
+        return AirEventEntity(
+            subjectId = subjectId,
+            episode = episode,
+            airAtUtc = TimeUtils.isoUtcFromEpochMillis(airMillis),
+            kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED,
+            source = EVENT_SOURCE_ANILIST,
+        )
+    }
+
+    private fun AniListBgmMappingEntity.toAirScheduleEntity(
+        item: AniListWeeklyScheduleItem,
+        nowMillis: Long,
+    ): AirScheduleEntity {
+        val airMillis = item.airAtEpochSeconds * 1000
+        val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
+        val cstTime = TimeUtils.formatToCstTime(isoUtc)
+        val jstTime = TimeUtils.formatToJstTime(isoUtc)
+        val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
+        return AirScheduleEntity(
+            bgmId = bgmId,
+            title = title,
+            titleCn = titleCn.ifBlank { title },
+            coverUrl = item.coverUrl.orEmpty(),
+            ratingScore = 0.0,
+            airDate = beginIso.substringBefore("T"),
+            beginAtUtc = beginIso.ifBlank { isoUtc },
+            sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
+            weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
+            timeCst = cstTime,
+            timeJst = jstTime,
+            sitesJson = sitesJson,
+            anilistId = anilistId,
+            source = AirScheduleEntity.SOURCE_BGM_DATA,
+            nextEpisode = item.episode,
+            nextEpisodeAtUtc = isoUtc,
+            nextEpisodeKind = kind,
+        )
+    }
+
+    private fun AirScheduleEntity.toAniListBgmMapping(
+        anilistId: Long,
+        nowMillis: Long,
+    ): AniListBgmMappingEntity =
+        AniListBgmMappingEntity(
+            anilistId = anilistId,
+            bgmId = bgmId,
+            sitesJson = sitesJson,
+            title = title,
+            titleCn = titleCn,
+            beginIso = beginUtc,
+            endIso = "",
+            monthKey = "",
+            updatedAt = nowMillis,
+        )
+
+    private fun Subject.toAniListBgmMapping(
+        anilistId: Long,
+        nowMillis: Long,
+    ): AniListBgmMappingEntity =
+        AniListBgmMappingEntity(
+            anilistId = anilistId,
+            bgmId = id,
+            sitesJson = "[]",
+            title = name,
+            titleCn = nameCn.ifBlank { name },
+            beginIso = date.ifBlank { airDate },
+            endIso = "",
+            monthKey = "",
+            updatedAt = nowMillis,
+        )
+
+    private fun BangumiDataItem.toAniListBgmMapping(
+        monthKey: String,
+        nowMillis: Long,
+    ): AniListBgmMappingEntity? {
+        val bgmId = bgmSubjectId ?: return null
+        val anilistId =
+            sites
+                .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
+                ?.id
+                ?.toLongOrNull() ?: return null
+        return AniListBgmMappingEntity(
+            anilistId = anilistId,
+            bgmId = bgmId,
+            sitesJson = json.encodeToString(sites.mapNotNull { resolveSiteLink(it) }),
+            title = title,
+            titleCn = chineseTitle,
+            beginIso = begin,
+            endIso = end,
+            monthKey = monthKey,
+            updatedAt = nowMillis,
+        )
     }
 
     private fun reconcileScheduleEntities(
@@ -787,71 +879,6 @@ class ScheduleRepositoryImpl(
                 )
             }
         }
-    }
-
-    private fun mapCalendarSubjectToEntity(
-        subject: Subject,
-        officialWeekday: Int,
-        existing: AirScheduleEntity?,
-    ): AirScheduleEntity =
-        if (existing == null) {
-            createInitialScheduleEntity(subject, officialWeekday)
-        } else {
-            mergeScheduleEntity(subject, officialWeekday, existing)
-        }
-
-    private fun createInitialScheduleEntity(
-        subject: Subject,
-        officialWeekday: Int,
-    ): AirScheduleEntity =
-        AirScheduleEntity(
-            bgmId = subject.id,
-            title = subject.name,
-            titleCn = subject.nameCn,
-            coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty()),
-            ratingScore = subject.rating?.score ?: 0.0,
-            airDate = subject.airDate,
-            beginAtUtc = null,
-            sortMinutes = AirScheduleEntity.UNKNOWN_SORT_MINUTES,
-            weekday = officialWeekday,
-            timeCst = "",
-            timeJst = "",
-            sitesJson = "[]",
-            anilistId = null,
-            broadcastRule = "",
-            totalEpisodes = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes.takeIf { it > 0 } ?: 0,
-            source = AirScheduleEntity.SOURCE_OFFICIAL,
-            nextEpisode = 0,
-            nextEpisodeAtUtc = "",
-            nextEpisodeKind = "",
-        )
-
-    private fun mergeScheduleEntity(
-        subject: Subject,
-        officialWeekday: Int,
-        existing: AirScheduleEntity,
-    ): AirScheduleEntity {
-        val coverUrl =
-            BgmImageUtils
-                .toSecureUrl(subject.images?.bestImage.orEmpty())
-                .ifBlank { existing.coverUrl }
-        val titleCn = subject.nameCn.ifBlank { existing.titleCn }
-        val airDate = existing.airDate.ifBlank { subject.airDate }
-        val totalEpisodes =
-            subject.eps.takeIf { it > 0 }
-                ?: subject.totalEpisodes.takeIf { it > 0 }
-                ?: existing.totalEpisodes
-
-        return existing.copy(
-            title = subject.name,
-            titleCn = titleCn,
-            coverUrl = coverUrl,
-            ratingScore = subject.rating?.score ?: 0.0,
-            airDate = airDate,
-            weekday = officialWeekday,
-            totalEpisodes = totalEpisodes,
-            source = AirScheduleEntity.SOURCE_OFFICIAL,
-        )
     }
 
     override suspend fun getScheduleDefaultOnlyWatching(): Boolean =
@@ -1072,7 +1099,9 @@ class ScheduleRepositoryImpl(
         const val EVENT_SOURCE_BILIBILI = "bilibili"
         const val EVENT_SOURCE_BGM_DATA = "bgm_data"
         const val ROSTER_LOOKBACK_DAYS = 370L
-        const val ROSTER_AHEAD_DAYS = 7L
+
+        /** 片名归一化时抹掉的连接符/中点/空白（含全角变体） */
+        private val TITLE_NOISE_REGEX = Regex("[・&＆\\-\\s　·]")
 
         /** 非强制刷新的节流阈值：冷启动/切 Tab 的页面重建不重跑全量管线 */
         const val REFRESH_THROTTLE_MILLIS = 30L * 60L * 1000L

@@ -140,54 +140,69 @@ class BangumiDataServiceTest {
         }
 
     @Test
-    fun getRecentBangumiData_fetchesMonthlySlicesAndCombines() =
+    fun getMonthItems_sendsIfNoneMatch_andReturnsNotModified_on304() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    assertEquals("\"month-etag\"", request.headers[HttpHeaders.IfNoneMatch])
+                    respond(content = "", status = HttpStatusCode.NotModified)
+                }
+
+            val client = HttpClient(engine) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+            val service = BangumiDataServiceImpl(client = client, cdnBases = listOf("https://test.cdn/"))
+
+            val result = service.getMonthItems(year = 2026, month = 9, etag = "\"month-etag\"")
+
+            assertIs<BangumiDataMonthResult.NotModified>(result)
+        }
+
+    @Test
+    fun getMonthItems_returnsNotFound_on404() =
+        runTest {
+            val engine = MockEngine { _ -> respond(content = "Not Found", status = HttpStatusCode.NotFound) }
+            val client = HttpClient(engine) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+            val service = BangumiDataServiceImpl(client = client, cdnBases = listOf("https://test.cdn/"))
+
+            val result = service.getMonthItems(year = 2099, month = 1)
+
+            assertIs<BangumiDataMonthResult.NotFound>(result)
+        }
+
+    @Test
+    fun getMonthItems_returnsSuccessWithEtag_on200() =
         runTest {
             val monthlyJson =
                 """
                 [
                     {
-                        "title": "一月新番",
-                        "begin": "2026-01-08T15:00:00.000Z",
-                        "broadcast": "R/2026-01-08T15:00:00.000Z/P7D",
-                        "sites": [{"site": "bangumi", "id": "3001"}]
+                        "title": "九月新番",
+                        "begin": "2026-09-25T16:00:00.000Z",
+                        "sites": [{"site": "bangumi", "id": "639938"}, {"site": "aniList", "id": "210482"}]
                     }
                 ]
                 """.trimIndent()
-
             val engine =
                 MockEngine { request ->
-                    if (request.url.encodedPath.contains("2026/01.json")) {
-                        respond(
-                            content = monthlyJson,
-                            status = HttpStatusCode.OK,
-                            headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
-                        )
-                    } else {
-                        respond(
-                            content = "Not Found",
-                            status = HttpStatusCode.NotFound,
-                        )
-                    }
+                    assertEquals("/data/items/2026/09.json", request.url.encodedPath)
+                    respond(
+                        content = monthlyJson,
+                        status = HttpStatusCode.OK,
+                        headers =
+                            headersOf(
+                                HttpHeaders.ContentType to listOf("application/json"),
+                                HttpHeaders.ETag to listOf("\"m9-etag\""),
+                            ),
+                    )
                 }
 
-            val client =
-                HttpClient(engine) {
-                    install(ContentNegotiation) {
-                        json(Json { ignoreUnknownKeys = true })
-                    }
-                }
+            val client = HttpClient(engine) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
+            val service = BangumiDataServiceImpl(client = client, cdnBases = listOf("https://test.cdn/"))
 
-            val service =
-                BangumiDataServiceImpl(
-                    client = client,
-                    cdnBases = listOf("https://test.cdn/"),
-                )
+            val result = service.getMonthItems(year = 2026, month = 9)
 
-            val result = service.getRecentBangumiData(year = 2026, month = 1, lookbackMonths = 1, aheadMonths = 0)
-
-            assertIs<BangumiDataResult.Success>(result)
+            assertIs<BangumiDataMonthResult.Success>(result)
             assertEquals(1, result.items.size)
-            assertEquals("一月新番", result.items.first().title)
-            assertEquals(3001L, result.items.first().bgmSubjectId)
+            assertEquals(639938L, result.items.first().bgmSubjectId)
+            assertEquals("\"m9-etag\"", result.etag)
         }
 }

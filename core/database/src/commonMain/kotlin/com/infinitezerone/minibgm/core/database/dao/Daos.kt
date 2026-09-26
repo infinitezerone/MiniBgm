@@ -7,8 +7,10 @@ import androidx.room3.Query
 import androidx.room3.Transaction
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
+import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantSessionEntity
+import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -28,10 +30,6 @@ interface AirScheduleDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSchedules(schedules: List<AirScheduleEntity>)
-
-    /** 清理官方日历中已消失的条目（只清理 official 来源，保护 bgm-data 合并插入的网播番） */
-    @Query("DELETE FROM air_schedules WHERE source = 'official' AND bgmId NOT IN (:keepIds)")
-    suspend fun deleteOfficialSchedulesNotIn(keepIds: List<Long>)
 
     /** 清理超出名单窗口的 bgm-data 合并行（防止过期网播番长期滞留） */
     @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND airDate < :date")
@@ -72,6 +70,25 @@ interface AirEventDao {
         fromIso: String,
         toIso: String,
     ): List<AirEventEntity>
+}
+
+/**
+ * AniList ↔ bangumi.tv 映射与 bangumi-data 月切片 ETag 的本地缓存。
+ * 时刻表解析 AniList 周排期时先查这里，命中则零网络开销。
+ */
+@Dao
+interface AniListMappingDao {
+    @Query("SELECT * FROM anilist_bgm_mapping WHERE anilistId IN (:anilistIds)")
+    suspend fun getMappingsByAniListIds(anilistIds: List<Long>): List<AniListBgmMappingEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMappings(mappings: List<AniListBgmMappingEntity>)
+
+    @Query("SELECT * FROM bangumi_data_month_etag WHERE monthKey = :monthKey")
+    suspend fun getMonthEtag(monthKey: String): BangumiDataMonthEtagEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertMonthEtag(etag: BangumiDataMonthEtagEntity)
 }
 
 @Dao

@@ -154,8 +154,6 @@ class CollectionRepositoryImplTest {
             return PageResponse(total = collectionsTotal, data = page)
         }
 
-        override suspend fun getCalendar() = error("Not needed")
-
         override suspend fun getSubject(id: Long) = error("Not needed")
 
         override suspend fun getSubjectCharacters(id: Long) = error("Not needed")

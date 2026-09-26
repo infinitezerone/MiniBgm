@@ -8,7 +8,6 @@ import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.network.BangumiApiService
-import com.infinitezerone.minibgm.core.network.model.CalendarDayResponse
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -28,8 +27,6 @@ class SubjectRepositoryImplTest {
         var subjectResponse: Subject? = null
         var shouldThrow: Boolean = false
         var cancellationToThrow: Boolean = false
-
-        override suspend fun getCalendar(): List<CalendarDayResponse> = error("Not needed")
 
         override suspend fun getSubject(id: Long): Subject =
             if (cancellationToThrow) {

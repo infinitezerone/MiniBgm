@@ -24,6 +24,7 @@ import com.infinitezerone.minibgm.core.data.repository.SubjectRepositoryImpl
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
+import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.network.AniListService
@@ -51,6 +52,7 @@ val dataModule =
                 dataService = get<BangumiDataService>(),
                 scheduleDao = get<AirScheduleDao>(),
                 airEventDao = get<AirEventDao>(),
+                anilistMappingDao = get<AniListMappingDao>(),
                 anilistService = get<AniListService>(),
                 bilibiliService = get<BilibiliService>(),
                 userPreferences = get<UserPreferencesDataSource>(),

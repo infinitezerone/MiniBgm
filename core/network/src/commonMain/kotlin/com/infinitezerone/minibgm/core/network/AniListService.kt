@@ -23,7 +23,7 @@ data class AniListMediaSchedule(
     val coverUrl: String? = null,
 )
 
-/** AniList 当周排期条目（含精准秒级时间、真实当前集数、标题、海报、独播类型） */
+/** AniList 当周排期条目（含精准秒级时间、真实当前集数、标题、海报、独播类型、开播年月） */
 data class AniListWeeklyScheduleItem(
     val anilistId: Long,
     val episode: Int,
@@ -33,6 +33,10 @@ data class AniListWeeklyScheduleItem(
     val titleRomaji: String = "",
     val coverUrl: String? = null,
     val format: String = "",
+    /** 条目开播年（0 = AniList 未提供）；用于按需定位 bangumi-data 的 begin 月切片 */
+    val startYear: Int = 0,
+    /** 条目开播月（0/13 = 未知） */
+    val startMonth: Int = 0,
 )
 
 /**
@@ -165,13 +169,13 @@ class AniListServiceImpl(
                   p1: Page(page: 1, perPage: 50) {
                     airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
                       episode airingAt
-                      media { id format title { native romaji } coverImage { large } }
+                      media { id format title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
                   p2: Page(page: 2, perPage: 50) {
                     airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
                       episode airingAt
-                      media { id format title { native romaji } coverImage { large } }
+                      media { id format title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
                 }
@@ -204,6 +208,8 @@ class AniListServiceImpl(
                         titleRomaji = media.title?.romaji.orEmpty(),
                         coverUrl = media.coverImage?.large,
                         format = media.format.orEmpty(),
+                        startYear = media.startDate?.year ?: 0,
+                        startMonth = media.startDate?.month ?: 0,
                     )
                 }.sortedBy { it.airAtEpochSeconds }
         }.getOrElse { emptyList() }
@@ -238,6 +244,13 @@ internal data class AniListWeeklyMediaInfo(
     val format: String? = null,
     val title: AniListWeeklyMediaTitle? = null,
     val coverImage: AniListCoverImage? = null,
+    val startDate: AniListWeeklyFuzzyDate? = null,
+)
+
+@Serializable
+internal data class AniListWeeklyFuzzyDate(
+    val year: Int? = null,
+    val month: Int? = null,
 )
 
 @Serializable

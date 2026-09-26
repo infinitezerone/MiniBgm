@@ -64,7 +64,7 @@ class FakeRepositoriesTest {
             assertEquals(1, result.size)
             assertEquals(1001L, result.first().bgmId)
 
-            val refreshResult = scheduleRepo.refreshSchedules()
+            val refreshResult = scheduleRepo.refreshAllSchedules()
             assertIs<AppResult.Success<Unit>>(refreshResult)
             assertEquals(1, scheduleRepo.refreshCallCount)
         }
