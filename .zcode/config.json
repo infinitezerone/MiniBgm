@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "node",
+              "args": ["${ZCODE_PROJECT_DIR}/tools/hooks/project-gate.mjs"],
+              "timeoutMs": 15000,
+              "statusMessage": "项目门禁校验…"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
