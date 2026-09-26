@@ -71,12 +71,7 @@ fun networkModule(
             )
         }
         single<BangumiApiService> { BangumiApiServiceImpl(client = get(), authConfig = get()) }
-        single<BangumiDataService> {
-            BangumiDataServiceImpl(
-                client = get(named("unauthenticated")),
-                hotAiringSeeds = BangumiDataService.HOT_AIRING_SEEDS,
-            )
-        }
+        single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }
         single<BilibiliService> { BilibiliServiceImpl(get(named("unauthenticated"))) }

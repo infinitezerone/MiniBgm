@@ -342,9 +342,9 @@ class ScheduleRepositoryImpl(
                     dataService.getRecentBangumiData(
                         year = currentYear,
                         month = currentMonth,
-                        // 4 个月回看：覆盖本季与上一季跨季番，杜绝 15 个并发切片请求风暴
-                        lookbackMonths = 4,
-                        aheadMonths = 1,
+                        // 仅拉取当月单个切片（~15KB，带 ETag 304 缓存），跨季与未收录番剧由 AniList + 搜索自动自愈
+                        lookbackMonths = 0,
+                        aheadMonths = 0,
                         etag = currentEtag,
                     )
                 }.getOrElse { throwable ->
@@ -472,9 +472,10 @@ class ScheduleRepositoryImpl(
      * 3) 仲裁回写条目的 next* 字段与 weekday，自动回补 AniList 高清封面，并剔除已完结僵尸条目。
      */
     private suspend fun syncAirEvents() {
-        val entities = scheduleDao.getAllSchedulesList()
-        if (entities.isEmpty()) return
+        val baseEntities = scheduleDao.getAllSchedulesList()
         val nowMillis = TimeUtils.nowEpochMillis()
+        val entities = resolveWeeklyAiringSchedules(baseEntities, nowMillis)
+        if (entities.isEmpty()) return
 
         // 事件与名单裁剪：清理已消失条目的事件与过期网播名单
         val keepIds = entities.map { it.bgmId }.toSet()
@@ -611,6 +612,118 @@ class ScheduleRepositoryImpl(
             coveredSubjects += entity.bgmId
         }
         return Triple(anilistEvents, coveredSubjects, coversBySubjectId)
+    }
+
+    /**
+     * 利用 AniList 当周排期单次复合查询，发现全网在播但本地未收录（如网络独播番）或未关联 anilistId 的条目。
+     * 若未在本地匹配，调用 Bangumi 官方公开搜索接口按日文原名动态绑定 bgmId 并入库。
+     */
+    private suspend fun resolveWeeklyAiringSchedules(
+        currentEntities: List<AirScheduleEntity>,
+        nowMillis: Long,
+    ): List<AirScheduleEntity> {
+        val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
+        val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
+        val weeklyItems =
+            runCatching {
+                anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
+            }.getOrElse { emptyList() }
+
+        if (weeklyItems.isEmpty()) return currentEntities
+
+        val entitiesByAnilistId =
+            currentEntities
+                .filter { it.anilistId != null }
+                .associateBy { it.anilistId!! }
+                .toMutableMap()
+        val entitiesByBgmId = currentEntities.associateBy { it.bgmId }.toMutableMap()
+        val newlyInserted = mutableListOf<AirScheduleEntity>()
+        val newEvents = mutableListOf<AirEventEntity>()
+
+        for (item in weeklyItems) {
+            val existing = entitiesByAnilistId[item.anilistId]
+            if (existing != null) continue
+
+            // 1. 本地原名/译名精确或包含匹配
+            val localMatch =
+                currentEntities.firstOrNull { entity ->
+                    item.titleNative.isNotBlank() && (
+                        entity.title.equals(item.titleNative, ignoreCase = true) ||
+                            entity.title.contains(item.titleNative) ||
+                            item.titleNative.contains(entity.title)
+                    )
+                }
+            if (localMatch != null) {
+                val updated = localMatch.copy(anilistId = item.anilistId)
+                entitiesByBgmId[updated.bgmId] = updated
+                entitiesByAnilistId[item.anilistId] = updated
+                newlyInserted += updated
+                continue
+            }
+
+            // 2. 本地未收录时：通过 Bangumi 官方搜索接口按日文原名自愈绑定
+            val searchTitle = item.titleNative.ifBlank { item.titleRomaji }
+            if (searchTitle.isBlank()) continue
+
+            val searchResult = runCatching { apiService.searchSubjects(searchTitle, type = 2) }.getOrNull()
+            val candidate =
+                searchResult?.list?.firstOrNull { subject ->
+                    val titleClean = searchTitle.replace(Regex("[・&\\-\\s]"), "")
+                    val nameClean = subject.name.replace(Regex("[・&\\-\\s]"), "")
+                    nameClean.contains(titleClean) || titleClean.contains(nameClean) ||
+                        (
+                            subject.date.isNotBlank() &&
+                                subject.date == TimeUtils.isoUtcFromEpochMillis(item.airAtEpochSeconds * 1000).substringBefore("T")
+                        )
+                } ?: searchResult?.list?.firstOrNull()
+
+            if (candidate != null && !entitiesByBgmId.containsKey(candidate.id)) {
+                val airMillis = item.airAtEpochSeconds * 1000
+                val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
+                val cstTime = TimeUtils.formatToCstTime(isoUtc)
+                val jstTime = TimeUtils.formatToJstTime(isoUtc)
+                val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
+                val newEntity =
+                    AirScheduleEntity(
+                        bgmId = candidate.id,
+                        title = candidate.name,
+                        titleCn = candidate.nameCn.ifBlank { candidate.name },
+                        coverUrl = candidate.images?.large ?: item.coverUrl.orEmpty(),
+                        ratingScore = candidate.rating?.score ?: 0.0,
+                        airDate = candidate.date.ifBlank { candidate.airDate },
+                        beginAtUtc = isoUtc,
+                        sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
+                        weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
+                        timeCst = cstTime,
+                        timeJst = jstTime,
+                        sitesJson = "[]",
+                        anilistId = item.anilistId,
+                        source = AirScheduleEntity.SOURCE_BGM_DATA,
+                        nextEpisode = item.episode,
+                        nextEpisodeAtUtc = isoUtc,
+                        nextEpisodeKind = kind,
+                    )
+                entitiesByBgmId[candidate.id] = newEntity
+                entitiesByAnilistId[item.anilistId] = newEntity
+                newlyInserted += newEntity
+                newEvents +=
+                    AirEventEntity(
+                        subjectId = candidate.id,
+                        episode = item.episode,
+                        airAtUtc = isoUtc,
+                        kind = kind,
+                        source = EVENT_SOURCE_ANILIST,
+                    )
+            }
+        }
+
+        if (newlyInserted.isNotEmpty()) {
+            scheduleDao.insertSchedules(newlyInserted)
+        }
+        if (newEvents.isNotEmpty()) {
+            airEventDao.insertAirEvents(newEvents)
+        }
+        return entitiesByBgmId.values.toList()
     }
 
     private fun reconcileScheduleEntities(

@@ -22,6 +22,7 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
 import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListService
+import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
@@ -46,6 +47,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ScheduleRepositoryImplTest {
@@ -137,7 +139,13 @@ class ScheduleRepositoryImplTest {
     private class FakeAniListService : AniListService {
         var schedules: Map<Long, List<AniListAiringEpisode>> = emptyMap()
         var mediaSchedules: Map<Long, AniListMediaSchedule> = emptyMap()
+        var weeklySchedules: List<AniListWeeklyScheduleItem> = emptyList()
         var requestedIds: List<Long> = emptyList()
+
+        override suspend fun getWeeklyAiringSchedule(
+            weekStartEpochSeconds: Long,
+            weekEndEpochSeconds: Long,
+        ): List<AniListWeeklyScheduleItem> = weeklySchedules
 
         override suspend fun getMediaSchedules(anilistIds: List<Long>): Map<Long, AniListMediaSchedule> {
             requestedIds = anilistIds
@@ -194,12 +202,14 @@ class ScheduleRepositoryImplTest {
             offset: Int,
         ): EpisodePageResponse = error("Not implemented")
 
+        var searchResults: List<Subject> = emptyList()
+
         override suspend fun searchSubjects(
             keyword: String,
             type: Int,
             limit: Int,
             offset: Int,
-        ): SearchSubjectResponse = error("Not implemented")
+        ): SearchSubjectResponse = SearchSubjectResponse(results = searchResults.size, list = searchResults)
 
         override suspend fun searchSubjectsAdvanced(
             request: SearchSubjectsRequest,
@@ -2203,5 +2213,64 @@ class ScheduleRepositoryImplTest {
             advanceUntilIdle()
             refreshJob.join()
             collector.cancel()
+        }
+
+    @Test
+    fun syncBangumiData_autoResolvesUnmappedWeeklyAnimeViaBangumiSearch() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val nowSeconds = nowMillis / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 210482L,
+                                episode = 2,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "ジョジョの奇妙な冒険 スティール・ボール・ラン 2nd・3rd STAGE",
+                                format = "ONA",
+                            ),
+                        )
+                }
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Fri", cn = "星期五", ja = "金", id = 5),
+                                items = emptyList(),
+                            ),
+                        )
+                    searchResults =
+                        listOf(
+                            Subject(
+                                id = 639938L,
+                                name = "スティール・ボール・ラン ジョジョの奇妙な冒険 2nd & 3rd STAGE",
+                                nameCn = "飙马野郎",
+                                date = TimeUtils.isoUtcFromEpochMillis(nowMillis).substringBefore("T"),
+                            ),
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData(force = true)
+            assertIs<AppResult.Success<Unit>>(result)
+
+            val schedules = dao.getAllSchedulesList()
+            val sbr = schedules.firstOrNull { it.bgmId == 639938L }
+            assertNotNull(sbr)
+            assertEquals("飙马野郎", sbr.titleCn)
+            assertEquals(210482L, sbr.anilistId)
+            assertEquals(2, sbr.nextEpisode)
         }
 }
