@@ -113,6 +113,37 @@ data class AssistantMessageEntity(
     val sessionId: String = "default",
 )
 
+/**
+ * AniList ↔ bangumi.tv 条目映射缓存。
+ *
+ * 映射来源只有两条：bangumi-data 月切片里的 `sites` 桥，或 bgm.tv 实时搜索。
+ * 一旦解析就持久化——既避免重复网络解析，也让映射在排期行被裁剪后依旧留存。
+ * 一个 bgmId 可对应多个 anilistId（拆季/多条目），故以 anilistId 为主键。
+ */
+@Entity(tableName = "anilist_bgm_mapping")
+data class AniListBgmMappingEntity(
+    @PrimaryKey val anilistId: Long,
+    val bgmId: Long,
+    /** 映射到的 bangumi-data sites（已解析成 SiteLink JSON），可直接作为排期的可播来源 */
+    val sitesJson: String,
+    val title: String,
+    val titleCn: String,
+    val beginIso: String,
+    val endIso: String,
+    /** 该映射来自哪个月切片（`YYYY-MM`）；来自实时搜索时为空串 */
+    val monthKey: String,
+    val updatedAt: Long,
+)
+
+/** bangumi-data 月份切片的 ETag 缓存：条件请求命中即 0 字节，未命中才重新解析。 */
+@Entity(tableName = "bangumi_data_month_etag")
+data class BangumiDataMonthEtagEntity(
+    /** `YYYY-MM` */
+    @PrimaryKey val monthKey: String,
+    val etag: String,
+    val updatedAt: Long,
+)
+
 /** 追番助手会话：多会话管理的元数据行；消息正文在 assistant_messages 表按 sessionId 归组 */
 @Entity(tableName = "assistant_sessions")
 data class AssistantSessionEntity(

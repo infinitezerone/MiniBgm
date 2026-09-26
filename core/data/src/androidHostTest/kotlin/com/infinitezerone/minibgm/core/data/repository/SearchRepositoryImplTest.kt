@@ -11,7 +11,6 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
-import com.infinitezerone.minibgm.core.network.model.CalendarDayResponse
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -54,8 +53,6 @@ class SearchRepositoryImplTest {
             if (shouldThrowLegacy) throw BgmNetworkException.ServerError(500, "Legacy Fail")
             return legacyResponse
         }
-
-        override suspend fun getCalendar(): List<CalendarDayResponse> = error("Not needed")
 
         override suspend fun getSubject(id: Long): Subject = error("Not needed")
 

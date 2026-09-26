@@ -20,6 +20,8 @@ import kotlin.test.fail
  * 8. 裸 IO 隔离：feature 源码严禁手写底层网络传输（HttpURLConnection / java.net.*）与私有磁盘 IO（cacheDir / filesDir / FileOutputStream）
  * 9. 路由 sealed 契约：NavKey 路由必须实现 BgmRoutes.kt 中的 sealed BgmRoute（让 BgmNavState 入栈语义 when 编译期穷尽，新增路由必须显式声明层级语义）
  * 10. AI 能力边界：只有 :feature:assistant 可依赖 :core:ai，其他页面须走 AssistantRoute 预填交接
+ * 11. 排期单一真源：名单与播出时间只能来自 AniList 周排期（bangumi-data 仅作按需映射/平台表），
+ *     不得回退到官方日历、bangumi-data 固定窗口或算术预测事件
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -420,6 +422,41 @@ class ArchitectureRulesTest {
                     "其他页面要触发 AI 检索必须跳转 AssistantRoute(prefillPrompt) 交接提问，" +
                     "不得在页内自建 agent 调用：\n" + violations.joinToString("\n"),
             )
+        }
+    }
+
+    /**
+     * 排期单一真源红线：时刻表仓库不得再依赖官方日历、bangumi-data 固定窗口或算术预测。
+     * 这三者正是历史上“漏番 / 假集数”的来源；AniList 周排期是名单与时间的唯一真源。
+     */
+    @Test
+    fun schedule_repository_uses_anilist_as_the_only_roster_source() {
+        val repoFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/ScheduleRepository.kt",
+            )
+        assertTrue(repoFile.isFile, "ScheduleRepository.kt 未找到: ${repoFile.absolutePath}")
+
+        val forbidden =
+            listOf(
+                "getCalendar(" to "官方日历已废弃：名单/排期真值只能来自 AniList 周排期",
+                "getRecentBangumiData(" to "bangumi-data 固定窗口已废弃：只能按 startDate/begin 月按需拉取单月切片",
+                "AirEventKind.PREDICTED" to "禁止生成算术预测事件（PREDICTED）",
+            )
+        val violations = mutableListOf<String>()
+        repoFile.readLines().forEachIndexed { index, line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
+            forbidden.forEach { (needle, reason) ->
+                if (trimmed.contains(needle)) {
+                    violations.add("${repoFile.name}:${index + 1} $reason -> $trimmed")
+                }
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail("违反排期单一真源红线（AniList 为名单+时间唯一真源）：\n" + violations.joinToString("\n"))
         }
     }
 }

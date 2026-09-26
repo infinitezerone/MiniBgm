@@ -6,20 +6,6 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class CalendarDayResponse(
-    val weekday: CalendarWeekday,
-    val items: List<Subject>,
-)
-
-@Serializable
-data class CalendarWeekday(
-    val en: String,
-    val cn: String,
-    val ja: String,
-    val id: Int,
-)
-
-@Serializable
 data class PageResponse<T>(
     val total: Int = 0,
     val limit: Int = 30,

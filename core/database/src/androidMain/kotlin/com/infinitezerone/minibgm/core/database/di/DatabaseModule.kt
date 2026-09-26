@@ -13,7 +13,7 @@ val databaseModule =
                     androidContext(),
                     BgmDatabase::class.java,
                     "minibgm.db",
-                ).addMigrations(MIGRATION_6_7)
+                ).addMigrations(MIGRATION_6_7, MIGRATION_8_9)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }
@@ -22,4 +22,5 @@ val databaseModule =
         single { get<BgmDatabase>().airEventDao() }
         single { get<BgmDatabase>().assistantMessageDao() }
         single { get<BgmDatabase>().assistantSessionDao() }
+        single { get<BgmDatabase>().anilistMappingDao() }
     }

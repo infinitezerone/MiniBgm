@@ -10,7 +10,6 @@ import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
-import com.infinitezerone.minibgm.core.network.model.CalendarDayResponse
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -51,8 +50,6 @@ data class UserCollectionStatusDetail(
 )
 
 interface BangumiApiService {
-    suspend fun getCalendar(): List<CalendarDayResponse>
-
     suspend fun getSubject(id: Long): Subject
 
     suspend fun getSubjectCharacters(id: Long): List<SubjectCharacter>
@@ -163,8 +160,6 @@ class BangumiApiServiceImpl(
     private val baseUrl: String = "https://api.bgm.tv",
     private val authConfig: BgmAuthConfig = BgmAuthConfig(),
 ) : BangumiApiService {
-    override suspend fun getCalendar(): List<CalendarDayResponse> = client.get("$baseUrl/calendar").body()
-
     override suspend fun getSubject(id: Long): Subject = client.get("$baseUrl/v0/subjects/$id").body()
 
     override suspend fun getSubjectCharacters(id: Long): List<SubjectCharacter> = client.get("$baseUrl/v0/subjects/$id/characters").body()

@@ -9,9 +9,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 
 sealed interface BangumiDataResult {
     data class Success(
@@ -22,17 +19,34 @@ sealed interface BangumiDataResult {
     data object NotModified : BangumiDataResult
 }
 
+/** 单个月份切片的拉取结果：区分"未变更"与"该月不存在"，调用方据此决定是否复用本地缓存。 */
+sealed interface BangumiDataMonthResult {
+    data class Success(
+        val items: List<BangumiDataItem>,
+        val etag: String?,
+    ) : BangumiDataMonthResult
+
+    /** 带 If-None-Match 命中 304：内容未变，应复用本地已缓存的映射行。 */
+    data object NotModified : BangumiDataMonthResult
+
+    /** 该月切片不存在（未来月份）或所有 CDN 均不可达。 */
+    data object NotFound : BangumiDataMonthResult
+}
+
 interface BangumiDataService {
     suspend fun getBangumiData(etag: String? = null): BangumiDataResult
 
-    /** 获取近期在播季度的月份切片数据（覆盖过去 4 个月到未来 1 个月，仅 ~50KB） */
-    suspend fun getRecentBangumiData(
+    /**
+     * 按需拉取单个月份切片（`data/items/YYYY/MM.json`，~几 KB 压缩），带 ETag 条件请求。
+     * 时刻表映射只用得到在播番所在的那几个月，不需要固定窗口或全量下载。
+     *
+     * @param etag 上次该月的 ETag；命中返回 [BangumiDataMonthResult.NotModified]（0 字节）
+     */
+    suspend fun getMonthItems(
         year: Int,
         month: Int,
-        lookbackMonths: Int = 4,
-        aheadMonths: Int = 1,
         etag: String? = null,
-    ): BangumiDataResult = getBangumiData(etag)
+    ): BangumiDataMonthResult = BangumiDataMonthResult.NotFound
 }
 
 class BangumiDataServiceImpl(
@@ -72,51 +86,11 @@ class BangumiDataServiceImpl(
         throw lastException ?: IllegalStateException("Failed to fetch bangumi-data from CDN endpoints")
     }
 
-    override suspend fun getRecentBangumiData(
+    override suspend fun getMonthItems(
         year: Int,
         month: Int,
-        lookbackMonths: Int,
-        aheadMonths: Int,
         etag: String?,
-    ): BangumiDataResult =
-        coroutineScope {
-            val targetMonths = mutableListOf<Pair<Int, Int>>()
-            for (offset in -lookbackMonths..aheadMonths) {
-                var targetYear = year
-                var targetMonth = month + offset
-                while (targetMonth < 1) {
-                    targetMonth += 12
-                    targetYear -= 1
-                }
-                while (targetMonth > 12) {
-                    targetMonth -= 12
-                    targetYear += 1
-                }
-                targetMonths.add(targetYear to targetMonth)
-            }
-
-            val deferreds =
-                targetMonths.map { (y, m) ->
-                    async {
-                        fetchMonthItems(y, m)
-                    }
-                }
-
-            val items = deferreds.awaitAll().flatten().distinctBy { it.bgmSubjectId ?: it.title }
-            if (items.isEmpty() && !etag.isNullOrBlank()) {
-                BangumiDataResult.NotModified
-            } else {
-                val first = targetMonths.first()
-                val last = targetMonths.last()
-                val compositeEtag = "W/\"items-${first.first}${first.second}-${last.first}${last.second}\""
-                BangumiDataResult.Success(items, compositeEtag)
-            }
-        }
-
-    private suspend fun fetchMonthItems(
-        year: Int,
-        month: Int,
-    ): List<BangumiDataItem> {
+    ): BangumiDataMonthResult {
         val monthStr = month.toString().padStart(2, '0')
         val path = "data/items/$year/$monthStr.json"
         for (base in cdnBases) {
@@ -129,18 +103,24 @@ class BangumiDataServiceImpl(
                             connectTimeoutMillis = 10_000
                             socketTimeoutMillis = 15_000
                         }
+                        if (!etag.isNullOrBlank()) {
+                            header(HttpHeaders.IfNoneMatch, etag)
+                        }
                     }
-                if (response.status == HttpStatusCode.OK) {
-                    return response.body<List<BangumiDataItem>>()
-                }
-                if (response.status == HttpStatusCode.NotFound) {
-                    return emptyList()
+                when (response.status) {
+                    HttpStatusCode.NotModified -> return BangumiDataMonthResult.NotModified
+                    HttpStatusCode.NotFound -> return BangumiDataMonthResult.NotFound
+                    HttpStatusCode.OK -> {
+                        val newEtag = response.headers[HttpHeaders.ETag]
+                        return BangumiDataMonthResult.Success(response.body(), newEtag)
+                    }
+                    else -> Unit
                 }
             } catch (_: Throwable) {
                 // 尝试下一个 CDN 节点
             }
         }
-        return emptyList()
+        return BangumiDataMonthResult.NotFound
     }
 
     companion object {

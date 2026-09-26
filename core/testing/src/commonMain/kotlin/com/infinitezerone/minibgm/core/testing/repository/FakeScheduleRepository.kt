@@ -39,11 +39,6 @@ class FakeScheduleRepository : ScheduleRepository {
         private set
     var syncBangumiDataResult: AppResult<Unit> = AppResult.Success(Unit)
 
-    override suspend fun refreshSchedules(): AppResult<Unit> {
-        refreshCallCount++
-        return refreshResult
-    }
-
     override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> {
         syncBangumiDataCallCount++
         return syncBangumiDataResult
@@ -74,7 +69,7 @@ class FakeScheduleRepository : ScheduleRepository {
     }
 
     override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
-        // 全量管线封装了 refreshSchedules + syncBangumiData：计数与错误注入沿用两者的既有语义
+        // 全量管线现在就是 syncBangumiData（AniList 周排期 + 按需月切片）
         refreshAllCalls += 1
         refreshCallCount++
         syncBangumiDataCallCount++

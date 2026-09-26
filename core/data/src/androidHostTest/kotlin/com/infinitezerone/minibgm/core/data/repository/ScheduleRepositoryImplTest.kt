@@ -4,8 +4,11 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
+import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
+import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
+import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
@@ -24,12 +27,11 @@ import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BangumiApiService
+import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BilibiliAiringEpisode
 import com.infinitezerone.minibgm.core.network.BilibiliService
-import com.infinitezerone.minibgm.core.network.model.CalendarDayResponse
-import com.infinitezerone.minibgm.core.network.model.CalendarWeekday
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -48,6 +50,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScheduleRepositoryImplTest {
@@ -71,11 +74,6 @@ class ScheduleRepositoryImplTest {
             val currentMap = schedulesFlow.value.associateBy { it.bgmId }.toMutableMap()
             schedules.forEach { currentMap[it.bgmId] = it }
             schedulesFlow.value = currentMap.values.toList()
-        }
-
-        override suspend fun deleteOfficialSchedulesNotIn(keepIds: List<Long>) {
-            schedulesFlow.value =
-                schedulesFlow.value.filter { it.bgmId in keepIds || it.source != "official" }
         }
 
         override suspend fun deleteStaleBgmDataSchedules(date: String) {
@@ -174,10 +172,7 @@ class ScheduleRepositoryImplTest {
     }
 
     private class FakeBangumiApiService : BangumiApiService {
-        var calendarDays: List<CalendarDayResponse> = emptyList()
         var subjects: Map<Long, Subject> = emptyMap()
-
-        override suspend fun getCalendar(): List<CalendarDayResponse> = calendarDays
 
         override suspend fun getSubject(id: Long): Subject = subjects[id] ?: error("Not implemented for id: $id")
 
@@ -253,10 +248,53 @@ class ScheduleRepositoryImplTest {
         var calledEtag: String? = null
         var callCount: Int = 0
 
+        /** `YYYY-MM` → 该月条目与 ETag */
+        var monthItems: Map<String, Pair<List<BangumiDataItem>, String?>> = emptyMap()
+        val requestedMonths: MutableList<String> = mutableListOf()
+
         override suspend fun getBangumiData(etag: String?): BangumiDataResult {
             callCount++
             calledEtag = etag
             return dataResult
+        }
+
+        override suspend fun getMonthItems(
+            year: Int,
+            month: Int,
+            etag: String?,
+        ): BangumiDataMonthResult {
+            val key = "$year-${month.toString().padStart(2, '0')}"
+            requestedMonths += key
+            monthItems[key]?.let { return BangumiDataMonthResult.Success(it.first, it.second) }
+            // 旧测试只设置 dataResult：把全量结果当作任意月切片返回，避免逐个改写旧用例
+            val legacy = dataResult as? BangumiDataResult.Success
+            if (legacy != null && legacy.items.isNotEmpty()) {
+                return BangumiDataMonthResult.Success(legacy.items, legacy.etag)
+            }
+            return BangumiDataMonthResult.NotFound
+        }
+    }
+
+    private class FakeAniListMappingDao : AniListMappingDao {
+        val mappings = MutableStateFlow<List<AniListBgmMappingEntity>>(emptyList())
+        val monthEtags = mutableMapOf<String, BangumiDataMonthEtagEntity>()
+
+        override suspend fun getMappingsByAniListIds(anilistIds: List<Long>): List<AniListBgmMappingEntity> =
+            mappings.value.filter { it.anilistId in anilistIds }
+
+        override suspend fun upsertMappings(mappings: List<AniListBgmMappingEntity>) {
+            val current =
+                this.mappings.value
+                    .associateBy { it.anilistId }
+                    .toMutableMap()
+            mappings.forEach { current[it.anilistId] = it }
+            this.mappings.value = current.values.toList()
+        }
+
+        override suspend fun getMonthEtag(monthKey: String): BangumiDataMonthEtagEntity? = monthEtags[monthKey]
+
+        override suspend fun upsertMonthEtag(etag: BangumiDataMonthEtagEntity) {
+            monthEtags[etag.monthKey] = etag
         }
     }
 
@@ -265,6 +303,7 @@ class ScheduleRepositoryImplTest {
         dataService: FakeBangumiDataService = FakeBangumiDataService(),
         scheduleDao: FakeAirScheduleDao = FakeAirScheduleDao(),
         airEventDao: FakeAirEventDao = FakeAirEventDao(),
+        anilistMappingDao: FakeAniListMappingDao = FakeAniListMappingDao(),
         anilistService: FakeAniListService = FakeAniListService(),
         bilibiliService: FakeBilibiliService = FakeBilibiliService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
@@ -274,127 +313,12 @@ class ScheduleRepositoryImplTest {
         dataService = dataService,
         scheduleDao = scheduleDao,
         airEventDao = airEventDao,
+        anilistMappingDao = anilistMappingDao,
         anilistService = anilistService,
         bilibiliService = bilibiliService,
         userPreferences = userPreferences,
         collectionRepository = collectionRepository,
     )
-
-    @Test
-    fun refreshSchedules_fetchesCalendarWithoutTouchingCDN() =
-        runTest {
-            val apiService =
-                FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items =
-                                    listOf(
-                                        Subject(
-                                            id = 1001L,
-                                            name = "无职转生",
-                                            nameCn = "无职转生 第三季",
-                                        ),
-                                    ),
-                            ),
-                        )
-                }
-            val dataService = FakeBangumiDataService()
-            val dao = FakeAirScheduleDao()
-            val userPrefs = createTestUserPreferencesDataSource()
-
-            val repo =
-                createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
-                    scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
-                    userPreferences = userPrefs,
-                )
-
-            val result = repo.refreshSchedules()
-
-            assertIs<AppResult.Success<Unit>>(result)
-            assertEquals(0, dataService.callCount) // 0 次 CDN 请求
-            val stored = dao.getAllSchedulesList()
-            assertEquals(1, stored.size)
-            assertEquals(1001L, stored[0].bgmId)
-            assertEquals(7, stored[0].weekday)
-            assertEquals("无职转生 第三季", stored[0].titleCn)
-        }
-
-    @Test
-    fun refreshSchedules_preservesWebOnlyRows_notInOfficialCalendar() =
-        runTest {
-            val apiService =
-                FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items =
-                                    listOf(
-                                        Subject(id = 1001L, name = "无职转生", nameCn = "无职转生 第三季"),
-                                    ),
-                            ),
-                        )
-                }
-            val dataService = FakeBangumiDataService()
-            val dao =
-                FakeAirScheduleDao().apply {
-                    insertSchedules(
-                        listOf(
-                            AirScheduleEntity(
-                                bgmId = 1001L,
-                                title = "无职转生",
-                                titleCn = "无职转生 第三季",
-                                coverUrl = "",
-                                ratingScore = 8.5,
-                                airDate = "",
-                                weekday = 7,
-                                timeCst = "",
-                                timeJst = "",
-                                sitesJson = "[]",
-                            ),
-                            // 官方日历不收录的网络独播番（bgm-data 合并插入的行）
-                            AirScheduleEntity(
-                                bgmId = 633836L,
-                                title = "Re:ゼロから始める異世界生活 4th season 奪還編",
-                                titleCn = "Re：从零开始的异世界生活 第四季 夺还篇",
-                                coverUrl = "",
-                                ratingScore = 0.0,
-                                airDate = TimeUtils.formatEpochSecondsToDate((TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS) / 1000),
-                                beginAtUtc = TimeUtils.isoUtcFromEpochMillis(TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS),
-                                weekday = 3,
-                                timeCst = "22:00",
-                                timeJst = "23:00",
-                                sitesJson = "[]",
-                                source = AirScheduleEntity.SOURCE_BGM_DATA,
-                            ),
-                        ),
-                    )
-                }
-            val userPrefs = createTestUserPreferencesDataSource()
-
-            val repo =
-                createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
-                    scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
-                    userPreferences = userPrefs,
-                )
-
-            val result = repo.refreshSchedules()
-
-            assertIs<AppResult.Success<Unit>>(result)
-            val stored = dao.getAllSchedulesList()
-            assertEquals(2, stored.size) // 网播番行必须保留
-            assertTrue(stored.any { it.bgmId == 633836L })
-        }
 
     @Test
     fun syncBangumiData_updatesRoomOnSuccess() =
@@ -430,7 +354,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "无职转生",
                                 coverUrl = "",
                                 ratingScore = 8.5,
-                                airDate = "",
+                                airDate = "2026-07-05",
                                 weekday = 7,
                                 timeCst = "",
                                 timeJst = "",
@@ -454,8 +378,7 @@ class ScheduleRepositoryImplTest {
             val result = repo.syncBangumiData(force = false)
 
             assertIs<AppResult.Success<Unit>>(result)
-            assertEquals(1, dataService.callCount)
-            assertEquals("W/\"etag-999\"", userPrefs.userPreferences.first().bangumiDataEtag)
+            assertTrue(dataService.requestedMonths.isNotEmpty())
             assertTrue(userPrefs.userPreferences.first().bangumiDataLastSyncTimestamp > 0L)
 
             val updated = dao.getAllSchedulesList().first { it.bgmId == 1001L }
@@ -465,153 +388,16 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
-    fun syncBangumiData_populatesCalendarFirst_whenDaoIsEmpty() =
+    fun syncBangumiData_mapsUnmappedWeeklyAnimeViaOnDemandMonthFile() =
         runTest {
-            val apiService =
-                FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items =
-                                    listOf(
-                                        Subject(
-                                            id = 1001L,
-                                            name = "无职转生",
-                                            nameCn = "无职转生",
-                                        ),
-                                    ),
-                            ),
-                        )
-                }
-            val dataService =
-                FakeBangumiDataService().apply {
-                    dataResult =
-                        BangumiDataResult.Success(
-                            items =
-                                listOf(
-                                    BangumiDataItem(
-                                        title = "无职转生",
-                                        titleTranslate = mapOf("zh-Hans" to listOf("无职转生 第三季")),
-                                        begin = "2026-07-05T15:00:00.000Z",
-                                        sites =
-                                            listOf(
-                                                BangumiDataSite(site = "bangumi", id = "1001"),
-                                                BangumiDataSite(site = "bilibili", id = "md12345"),
-                                            ),
-                                    ),
-                                ),
-                            etag = "W/\"etag-coldstart\"",
-                        )
-                }
-            val dao = FakeAirScheduleDao() // 完全为空
-            val userPrefs = createTestUserPreferencesDataSource()
-
-            val repo =
-                createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
-                    scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
-                    userPreferences = userPrefs,
-                )
-
-            val result = repo.syncBangumiData(force = false)
-
-            assertIs<AppResult.Success<Unit>>(result)
-            val stored = dao.getAllSchedulesList()
-            assertEquals(1, stored.size)
-            val item = stored.first()
-            assertEquals(1001L, item.bgmId)
-            assertTrue(item.sitesJson.contains("哔哩哔哩"))
-            assertEquals("", item.timeCst)
-            assertEquals("W/\"etag-coldstart\"", userPrefs.userPreferences.first().bangumiDataEtag)
-        }
-
-    @Test
-    fun syncBangumiData_forcesFetch_whenExistingEntitiesAllHaveEmptySites() =
-        runTest {
-            val apiService = FakeBangumiApiService()
-            val dataService =
-                FakeBangumiDataService().apply {
-                    dataResult =
-                        BangumiDataResult.Success(
-                            items =
-                                listOf(
-                                    BangumiDataItem(
-                                        title = "无职转生",
-                                        titleTranslate = mapOf("zh-Hans" to listOf("无职转生 第三季")),
-                                        begin = "2026-07-05T15:00:00.000Z",
-                                        sites =
-                                            listOf(
-                                                BangumiDataSite(site = "bangumi", id = "1001"),
-                                                BangumiDataSite(site = "bilibili", id = "md12345"),
-                                            ),
-                                    ),
-                                ),
-                            etag = "W/\"etag-forced\"",
-                        )
-                }
-            val dao =
-                FakeAirScheduleDao().apply {
-                    insertSchedules(
-                        listOf(
-                            AirScheduleEntity(
-                                bgmId = 1001L,
-                                title = "无职转生",
-                                titleCn = "无职转生",
-                                coverUrl = "",
-                                ratingScore = 8.5,
-                                airDate = "",
-                                weekday = 7,
-                                timeCst = "",
-                                timeJst = "",
-                                sitesJson = "[]", // 播放源全部为空
-                            ),
-                        ),
-                    )
-                }
-            val userPrefs = createTestUserPreferencesDataSource()
-            userPrefs.setBangumiDataEtag("W/\"old-stale-etag\"")
-
-            val repo =
-                createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
-                    scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
-                    userPreferences = userPrefs,
-                )
-
-            // force = false，但由于本地条目 sitesJson 均为空，应自动强制使用空 ETag 拉取避免 304 死锁
-            val result = repo.syncBangumiData(force = false)
-
-            assertIs<AppResult.Success<Unit>>(result)
-            assertEquals("", dataService.calledEtag) // 强制使用空 ETag
-            val updated = dao.getAllSchedulesList().first { it.bgmId == 1001L }
-            assertTrue(updated.sitesJson.contains("哔哩哔哩"))
-            assertEquals("W/\"etag-forced\"", userPrefs.userPreferences.first().bangumiDataEtag)
-        }
-
-    @Test
-    fun syncBangumiData_insertsWebOnlyShow_missingFromOfficialCalendar() =
-        runTest {
-            // Re:Zero 夺还篇场景：官方日历只收录 1001；
-            // bgm-data 里存在官方没有的网播番 633836（10 天前开播，带 anilist 映射与周播规则）
+            // 新模型：名单不再由 bgm-data 窗口补齐；网播番 633836 由 AniList 周排期发现，
+            // 再按条目 startDate 拉 bangumi-data 月切片（sites 桥）映射出 bgmId 并入库。
             val beginMillis = TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS
             val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
+            val (currentYear, currentMonth) = TimeUtils.currentCstYearMonth()
 
             val apiService =
                 FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items = listOf(Subject(id = 1001L, name = "无职转生", nameCn = "无职转生 第三季")),
-                            ),
-                        )
                 }
             val dataService =
                 FakeBangumiDataService().apply {
@@ -629,7 +415,6 @@ class ScheduleRepositoryImplTest {
                                         title = "Re:ゼロから始める異世界生活 4th season 奪還編",
                                         titleTranslate = mapOf("zh-Hans" to listOf("Re：从零开始的异世界生活 第四季 夺还篇")),
                                         begin = beginIso,
-                                        broadcast = "R/$beginIso/P7D",
                                         sites =
                                             listOf(
                                                 BangumiDataSite(site = "bangumi", id = "633836"),
@@ -641,6 +426,20 @@ class ScheduleRepositoryImplTest {
                             etag = "W/\"etag-webonly\"",
                         )
                 }
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 189046L,
+                                episode = 1,
+                                airAtEpochSeconds = beginMillis / 1000,
+                                titleNative = "Re:ゼロから始める異世界生活 4th season 奪還編",
+                                startYear = currentYear,
+                                startMonth = currentMonth,
+                            ),
+                        )
+                }
             val dao = FakeAirScheduleDao()
             val userPrefs = createTestUserPreferencesDataSource()
 
@@ -650,7 +449,7 @@ class ScheduleRepositoryImplTest {
                     dataService = dataService,
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
+                    anilistService = anilist,
                     userPreferences = userPrefs,
                 )
 
@@ -658,36 +457,44 @@ class ScheduleRepositoryImplTest {
 
             assertIs<AppResult.Success<Unit>>(result)
             val stored = dao.getAllSchedulesList()
-            assertEquals(2, stored.size)
+            assertEquals(1, stored.size)
             val webOnly = stored.first { it.bgmId == 633836L }
             assertEquals("Re：从零开始的异世界生活 第四季 夺还篇", webOnly.titleCn)
-            // 周几由 broadcast 规则起点（与应用时间表一致采用 CST 放送时区）推导
             assertEquals(TimeUtils.cstWeekdayOfEpoch(beginMillis), webOnly.weekday)
             assertEquals(189046L, webOnly.anilistId)
-            assertEquals("", webOnly.broadcastRule)
             assertEquals(AirScheduleEntity.SOURCE_BGM_DATA, webOnly.source)
             assertTrue(webOnly.sitesJson.contains("巴哈姆特"))
         }
 
     @Test
-    fun syncBangumiData_includesLongRunningOngoingAnimeBeyondOldNinetyDayWindow() =
+    fun syncBangumiData_mapsLongRunningAnimeBeyondMonthWindowViaStartDate() =
         runTest {
             val nowMillis = TimeUtils.nowEpochMillis()
-            val beginIso = TimeUtils.isoUtcFromEpochMillis(nowMillis - 192 * DAY_MILLIS)
+            // 开播 192 天（超出旧 90 天窗口）但仍周更：靠 AniList startDate 定位到老月切片
+            val beginMillis = nowMillis - 192 * DAY_MILLIS
+            val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
+            val beginDate = TimeUtils.formatEpochSecondsToDate(beginMillis / 1000)
+            val beginYear = beginDate.substring(0, 4).toInt()
+            val beginMonth = beginDate.substring(5, 7).toInt()
+
             val dataService =
                 FakeBangumiDataService().apply {
                     dataResult =
                         BangumiDataResult.Success(
                             items =
                                 listOf(
-                                    // Netflix 分段长档番：开播 192 天（超出旧 90 天窗口）但未完结，仍在周更
+                                    // 长档番：开播 192 天（超出旧窗口）但仍在周更
                                     BangumiDataItem(
                                         title = "スティール・ボール・ラン ジョジョの奇妙な冒険",
                                         titleTranslate = mapOf("zh-Hans" to listOf("飙马野郎 JOJO的奇妙冒险")),
                                         begin = beginIso,
-                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "551918")),
+                                        sites =
+                                            listOf(
+                                                BangumiDataSite(site = "bangumi", id = "551918"),
+                                                BangumiDataSite(site = "anilist", id = "210482"),
+                                            ),
                                     ),
-                                    // 同样超出旧窗口、但已完结的条目：不应收录
+                                    // 不在 AniList 周排期的已完结条目：不应被收录
                                     BangumiDataItem(
                                         title = "終わった番組",
                                         begin = beginIso,
@@ -698,14 +505,20 @@ class ScheduleRepositoryImplTest {
                             etag = "W/\"etag-longrunning\"",
                         )
                 }
-            // syncBangumiData 在本地为空时会先拉官方日历建基础实体，给一条避免前置报错
             val apiService =
                 FakeBangumiApiService().apply {
-                    calendarDays =
+                }
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
                         listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Fri", cn = "星期五", ja = "金", id = 5),
-                                items = listOf(Subject(id = 551918L, name = "スティール・ボール・ラン", nameCn = "飙马野郎")),
+                            AniListWeeklyScheduleItem(
+                                anilistId = 210482L,
+                                episode = 20,
+                                airAtEpochSeconds = nowMillis / 1000,
+                                titleNative = "スティール・ボール・ラン ジョジョの奇妙な冒険",
+                                startYear = beginYear,
+                                startMonth = beginMonth,
                             ),
                         )
                 }
@@ -717,19 +530,19 @@ class ScheduleRepositoryImplTest {
                     dataService = dataService,
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
+                    anilistService = anilist,
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
             assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
 
             val stored = dao.getAllSchedulesList()
-            assertTrue(stored.any { it.bgmId == 551918L }, "开播超 90 天但未完结的网播番应被收录")
-            assertTrue(stored.none { it.bgmId == 551919L }, "已完结条目不应被收录")
+            assertTrue(stored.any { it.bgmId == 551918L }, "开播超 90 天但仍在周更的番应被收录")
+            assertTrue(stored.none { it.bgmId == 551919L }, "不在周排期的已完结条目不应被收录")
 
-            // 时刻表流中也应可见（渲染侧 isActiveForSchedule 的窗口已与收录窗口对齐）
+            // 时刻表流中也应可见
             val visible = repo.getAllSchedulesStream().first()
-            assertTrue(visible.any { it.bgmId == 551918L }, "未完结长档番应出现在时刻表流中")
+            assertTrue(visible.any { it.bgmId == 551918L }, "长档番应出现在时刻表流中")
             assertTrue(visible.none { it.bgmId == 551919L })
         }
 
@@ -741,13 +554,6 @@ class ScheduleRepositoryImplTest {
 
             val apiService =
                 FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items = listOf(Subject(id = 1001L, name = "常规番", nameCn = "常规番")),
-                            ),
-                        )
                     subjects =
                         mapOf(
                             633836L to
@@ -785,6 +591,20 @@ class ScheduleRepositoryImplTest {
                             etag = "W/\"etag-enrich\"",
                         )
                 }
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 189046L,
+                                episode = 1,
+                                airAtEpochSeconds = beginMillis / 1000,
+                                titleNative = "Re:ゼロから始める異世界生活 4th season 奪還編",
+                                startYear = beginIso.substring(0, 4).toInt(),
+                                startMonth = beginIso.substring(5, 7).toInt(),
+                            ),
+                        )
+                }
             val dao = FakeAirScheduleDao()
             val userPrefs = createTestUserPreferencesDataSource()
 
@@ -794,7 +614,7 @@ class ScheduleRepositoryImplTest {
                     dataService = dataService,
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
+                    anilistService = anilist,
                     userPreferences = userPrefs,
                 )
 
@@ -1673,65 +1493,6 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
-    fun refreshSchedules_mergeScheduleEntity_preservesExistingCover_whenCalendarHasBlankCover() =
-        runTest {
-            val apiService =
-                FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items =
-                                    listOf(
-                                        Subject(
-                                            id = 7001L,
-                                            name = "官方番",
-                                            nameCn = "官方番",
-                                            images = null, // 官方刷新返回空图片
-                                        ),
-                                    ),
-                            ),
-                        )
-                }
-            val dao =
-                FakeAirScheduleDao().apply {
-                    insertSchedules(
-                        listOf(
-                            AirScheduleEntity(
-                                bgmId = 7001L,
-                                title = "官方番",
-                                titleCn = "官方番",
-                                coverUrl = "https://example.com/existing_cover.jpg",
-                                ratingScore = 8.0,
-                                airDate = "2026-07-01",
-                                weekday = 7,
-                                timeCst = "10:00",
-                                timeJst = "11:00",
-                                sitesJson = "[]",
-                                source = AirScheduleEntity.SOURCE_OFFICIAL,
-                            ),
-                        ),
-                    )
-                }
-
-            val repo =
-                createRepository(
-                    apiService = apiService,
-                    dataService = FakeBangumiDataService(),
-                    scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
-                    userPreferences = createTestUserPreferencesDataSource(),
-                )
-
-            val result = repo.refreshSchedules()
-
-            assertIs<AppResult.Success<Unit>>(result)
-            val stored = dao.getAllSchedulesList().single { it.bgmId == 7001L }
-            assertEquals("https://example.com/existing_cover.jpg", stored.coverUrl)
-        }
-
-    @Test
     fun syncBangumiData_enrichMissingMetadata_prioritizesBlankCoversAheadOfMissingEpisodes() =
         runTest {
             val nowMillis = TimeUtils.nowEpochMillis()
@@ -1739,13 +1500,6 @@ class ScheduleRepositoryImplTest {
 
             val apiService =
                 FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items = (1L..5L).map { id -> Subject(id = id, name = "官方番$id", nameCn = "官方番$id") },
-                            ),
-                        )
                     // API 只配置了缺失封面的第 6 个条目的元数据
                     subjects =
                         mapOf(
@@ -1770,7 +1524,11 @@ class ScheduleRepositoryImplTest {
                                         title = "无封面网播番",
                                         titleTranslate = mapOf("zh-Hans" to listOf("无封面网播番")),
                                         begin = beginIso,
-                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "6")),
+                                        sites =
+                                            listOf(
+                                                BangumiDataSite(site = "bangumi", id = "6"),
+                                                BangumiDataSite(site = "anilist", id = "600"),
+                                            ),
                                     ),
                                 ),
                             etag = "W/\"etag-test\"",
@@ -1800,13 +1558,27 @@ class ScheduleRepositoryImplTest {
                     )
                 }
 
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 600L,
+                                episode = 1,
+                                airAtEpochSeconds = nowMillis / 1000,
+                                titleNative = "无封面网播番",
+                                startYear = beginIso.substring(0, 4).toInt(),
+                                startMonth = beginIso.substring(5, 7).toInt(),
+                            ),
+                        )
+                }
             val repo =
                 createRepository(
                     apiService = apiService,
                     dataService = dataService,
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
-                    anilistService = FakeAniListService(),
+                    anilistService = anilist,
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
@@ -2068,25 +1840,8 @@ class ScheduleRepositoryImplTest {
     @Test
     fun refreshAllSchedules_holdsIntermediateEmissionsUntilAllSourcesFetched() =
         runTest {
-            // 数据源 1（官方日历）：网播番 B（id=2002）
-            val apiService =
-                FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Sun", cn = "星期日", ja = "日", id = 7),
-                                items =
-                                    listOf(
-                                        Subject(
-                                            id = 2002L,
-                                            name = "网播番B",
-                                            nameCn = "网播番B",
-                                        ),
-                                    ),
-                            ),
-                        )
-                }
-            // 数据源 2（bangumi-data）：为官方番 A（id=2001）补全播放源
+            val apiService = FakeBangumiApiService()
+            // bangumi-data 月切片：为番 A（id=2001）补全播放源
             val dataService =
                 FakeBangumiDataService().apply {
                     dataResult =
@@ -2117,7 +1872,7 @@ class ScheduleRepositoryImplTest {
                                 titleCn = "官方番A",
                                 coverUrl = "",
                                 ratingScore = 0.0,
-                                airDate = "",
+                                airDate = "2026-09-16",
                                 weekday = 7,
                                 timeCst = "",
                                 timeJst = "",
@@ -2152,12 +1907,10 @@ class ScheduleRepositoryImplTest {
 
             // 关键断言 1：管线期间中间态从未对外发流——闸门放开后只多发一次
             assertEquals(initialEmissions + 1, emissions.size)
-            // 关键断言 2（DAO 层）：两个数据源都已合并——官方行 2002 已插入，
-            // bangumi-data 已为 2001 补全 bilibili 播放源
+            // 关键断言 2（DAO 层）：bangumi-data 月切片已为 2001 补全 bilibili 播放源
             val stored = dao.getAllSchedulesList()
-            assertEquals(2, stored.size)
+            assertEquals(1, stored.size)
             assertTrue(stored.any { it.bgmId == 2001L && it.sitesJson.contains("bilibili") })
-            assertTrue(stored.any { it.bgmId == 2002L })
             // 关键断言 3：对外流与 DAO 最终态一致（不存在更晚的中间态外发）
             assertEquals(emissions.last(), repo.getAllSchedulesStream().first())
         }
@@ -2235,13 +1988,6 @@ class ScheduleRepositoryImplTest {
                 }
             val apiService =
                 FakeBangumiApiService().apply {
-                    calendarDays =
-                        listOf(
-                            CalendarDayResponse(
-                                weekday = CalendarWeekday(en = "Fri", cn = "星期五", ja = "金", id = 5),
-                                items = emptyList(),
-                            ),
-                        )
                     searchResults =
                         listOf(
                             Subject(
@@ -2272,5 +2018,206 @@ class ScheduleRepositoryImplTest {
             assertEquals("飙马野郎", sbr.titleCn)
             assertEquals(210482L, sbr.anilistId)
             assertEquals(2, sbr.nextEpisode)
+        }
+
+    @Test
+    fun syncBangumiData_mapsUnmappedWeeklyAnimeViaOnDemandMonthSlice() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 210482L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "スティール・ボール・ラン ジョジョの奇妙な冒険 2nd & 3rd STAGE",
+                                startYear = 2026,
+                                startMonth = 9,
+                            ),
+                        )
+                }
+            val dataService =
+                FakeBangumiDataService().apply {
+                    monthItems =
+                        mapOf(
+                            "2026-09" to
+                                (
+                                    listOf(
+                                        BangumiDataItem(
+                                            title = "スティール・ボール・ラン ジョジョの奇妙な冒険 2nd & 3rd STAGE",
+                                            titleTranslate =
+                                                mapOf(
+                                                    "zh-Hans" to
+                                                        listOf("飙马野郎 JOJO的奇妙冒险 第二&第三赛段"),
+                                                ),
+                                            begin = "2026-09-25T16:00:00.000Z",
+                                            sites =
+                                                listOf(
+                                                    BangumiDataSite(site = "bangumi", id = "639938"),
+                                                    BangumiDataSite(site = "aniList", id = "210482"),
+                                                    BangumiDataSite(site = "netflix", id = "82116553"),
+                                                ),
+                                        ),
+                                    ) to "W/\"month-etag\""
+                                ),
+                        )
+                }
+            val apiService =
+                FakeBangumiApiService().apply {
+                }
+            val dao = FakeAirScheduleDao()
+            val mappingDao = FakeAniListMappingDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistMappingDao = mappingDao,
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val sbr = dao.getAllSchedulesList().firstOrNull { it.bgmId == 639938L }
+            assertNotNull(sbr)
+            assertEquals(210482L, sbr.anilistId)
+            assertEquals("飙马野郎 JOJO的奇妙冒险 第二&第三赛段", sbr.titleCn)
+            assertTrue(sbr.sitesJson.contains("netflix"))
+            // 映射与月 ETag 均落库，供下次零解析复用
+            assertNotNull(mappingDao.mappings.value.firstOrNull { it.anilistId == 210482L })
+            assertNotNull(mappingDao.monthEtags["2026-09"])
+        }
+
+    @Test
+    fun syncBangumiData_doesNotBind_whenSearchHasNoUniqueCandidate() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 555L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "全く別のアニメ",
+                            ),
+                        )
+                }
+            val apiService =
+                FakeBangumiApiService().apply {
+                    searchResults =
+                        listOf(
+                            Subject(id = 1L, name = "無関係な作品 A"),
+                            Subject(id = 2L, name = "無関係な作品 B"),
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertTrue(dao.getAllSchedulesList().isEmpty(), "无唯一候选时不得绑定任何条目")
+        }
+
+    @Test
+    fun syncBangumiData_writesBackAniListIdToExistingLocalEntity() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 210482L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "AniList Only Title",
+                            ),
+                        )
+                }
+            val apiService =
+                FakeBangumiApiService().apply {
+                    searchResults = listOf(Subject(id = 639938L, name = "AniList Only Title"))
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val matched = dao.getAllSchedulesList().filter { it.bgmId == 639938L }
+            assertEquals(1, matched.size, "已存在的本地条目应回写 anilistId，而不是重复插入")
+            assertEquals(210482L, matched.first().anilistId)
+        }
+
+    @Test
+    fun syncBangumiData_rejectsCrossSeasonContainsMatch() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 210482L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "ジョジョの奇妙な冒険 スティール・ボール・ラン 2nd & 3rd STAGE",
+                            ),
+                        )
+                }
+            val apiService = FakeBangumiApiService().apply { searchResults = emptyList() }
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 551918L,
+                                title = "ジョジョの奇妙な冒険 スティール・ボール・ラン",
+                                titleCn = "飙马野郎 第一赛段",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = "2026-08-01",
+                                weekday = 5,
+                                timeCst = "",
+                                timeJst = "",
+                                sitesJson = "[]",
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val base = dao.getAllSchedulesList().first { it.bgmId == 551918L }
+            assertNull(base.anilistId, "基名不得被包含匹配到另一季的周排期条目上")
         }
 }
