@@ -572,6 +572,54 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun initialSource_prefersLastWorkingSourceId() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
+                    PlaybackSourceRule(id = "r2", name = "R2", urlTemplate = "https://b/?t={title}", isEnabled = true),
+                ),
+            )
+            settings.setLastPlaybackSourceId("r2")
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                )
+
+            advanceUntilIdle()
+
+            assertEquals("应优先选中上次成功起播的源（r2 在第 1 下标）", 1, vm.uiState.value.selectedSourceIndex)
+        }
+
+    @Test
+    fun onPlaybackReady_recordsLastWorkingSource() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
+                ),
+            )
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                )
+            advanceUntilIdle()
+
+            vm.onPlaybackReady()
+            advanceUntilIdle()
+
+            assertEquals("r1", settings.lastPlaybackSourceId.first())
+        }
+
+    @Test
     fun sourceRule_probesPlainTitlesBeforeEpisodeSuffixedKeywords() =
         runTest {
             // 取源接口形态：wd= 是标题模糊搜索，一次就返回整部片子（含全部分集），

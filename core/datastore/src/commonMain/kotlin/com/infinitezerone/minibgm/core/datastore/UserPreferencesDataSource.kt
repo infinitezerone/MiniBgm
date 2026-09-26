@@ -198,4 +198,11 @@ class UserPreferencesDataSource(
             current.copy(playbackPositionsJson = json)
         }
     }
+
+    /** 记录上次成功起播的播放源标识 */
+    suspend fun setLastPlaybackSourceId(id: String) {
+        dataStore.updateData { current ->
+            current.copy(lastPlaybackSourceId = id)
+        }
+    }
 }

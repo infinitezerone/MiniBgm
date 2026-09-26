@@ -192,6 +192,13 @@ class FakeSettingsRepository(
         playbackPositionsState.value = positions
     }
 
+    private val lastPlaybackSourceIdState = MutableStateFlow("")
+    override val lastPlaybackSourceId: Flow<String> = lastPlaybackSourceIdState
+
+    override suspend fun setLastPlaybackSourceId(id: String) {
+        lastPlaybackSourceIdState.value = id
+    }
+
     var validationReportResult:
         com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport> =
         com.infinitezerone.minibgm.core.common.AppResult.Success(
