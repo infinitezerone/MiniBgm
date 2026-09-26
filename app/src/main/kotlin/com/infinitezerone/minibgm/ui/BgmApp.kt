@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.ui
 
+import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
@@ -57,6 +59,8 @@ fun BgmApp(
     onUserNavigated: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val activity = context as? Activity
     val isAuthenticating by authRepository.isAuthenticating.collectAsStateWithLifecycle()
     val isOnline by networkMonitor.isOnline.collectAsStateWithLifecycle(initialValue = true)
     var wasOffline by remember { mutableStateOf(false) }
@@ -130,13 +134,15 @@ fun BgmApp(
 
         Scaffold(
             snackbarHost = {
-                SnackbarHost(
-                    hostState = snackbarHostState,
-                    modifier =
-                        Modifier
-                            .navigationBarsPadding()
-                            .padding(bottom = snackbarBottomPadding),
-                )
+                if (activity?.isInPictureInPictureMode != true) {
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier =
+                            Modifier
+                                .navigationBarsPadding()
+                                .padding(bottom = snackbarBottomPadding),
+                    )
+                }
             },
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             modifier = modifier.fillMaxSize(),
@@ -164,7 +170,7 @@ fun BgmApp(
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        if (isAuthenticating) {
+                        if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
                             OAuthProcessingDialog()
                         }
                     }
@@ -215,7 +221,7 @@ fun BgmApp(
                         )
                     }
 
-                    if (isAuthenticating) {
+                    if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
                         OAuthProcessingDialog()
                     }
                 }

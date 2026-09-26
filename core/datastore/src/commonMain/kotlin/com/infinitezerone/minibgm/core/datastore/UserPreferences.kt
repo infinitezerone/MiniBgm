@@ -17,6 +17,8 @@ data class UserPreferences(
     val isDarkMode: Boolean = false,
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
+    /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
+    val pipEnabled: Boolean = true,
     val notifyBeforeAirMinutes: Int = 15,
     /** 开播提醒总开关（每日追番更新汇总通知） */
     val airingReminderEnabled: Boolean = true,

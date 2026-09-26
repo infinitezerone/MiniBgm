@@ -30,7 +30,7 @@ echo "[jgate] 3/4 触及模块测试 + 装配门"
 modules=()
 while IFS= read -r line; do
   [ -n "$line" ] && modules+=("$line")
-done < <(jj diff --summary 2>/dev/null | awk '{print $NF}' | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u)
+done < <(jj diff --summary 2>/dev/null | tr '\\' '/' | awk '{print $NF}' | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u)
 
 test_tasks=()
 for m in "${modules[@]+"${modules[@]}"}"; do

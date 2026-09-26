@@ -350,4 +350,25 @@ class UserViewModelTest {
             assertEquals(customConfig, state.aiConfig)
             assertEquals(1, settingsRepo.setAiConfigCallCount)
         }
+
+    @Test
+    fun initialState_emitsDefaultPipEnabledTrue() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first()
+            assertTrue(state.pipEnabled)
+        }
+
+    @Test
+    fun setPipEnabled_updatesSettingsRepositoryAndState() =
+        runTest {
+            val (viewModel, _, settingsRepo) = createViewModel()
+
+            viewModel.setPipEnabled(false)
+
+            val state = viewModel.uiState.first { !it.pipEnabled }
+            assertFalse(state.pipEnabled)
+            assertEquals(1, settingsRepo.setPipEnabledCallCount)
+        }
 }

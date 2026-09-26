@@ -81,7 +81,23 @@ class PlayerViewModelTest {
         // 单集启动：空队列退化为长度 1 的队列，无连播
         assertEquals(1, state.queue.size)
         assertFalse(state.hasNext)
+        assertTrue(state.pipEnabled)
     }
+
+    @Test
+    fun pipEnabled_updatesWhenSettingsChange() =
+        runTest {
+            val settingsRepo = FakeSettingsRepository()
+            val viewModel = viewModel(settingsRepository = settingsRepo)
+            runCurrent()
+
+            assertTrue(viewModel.uiState.value.pipEnabled)
+
+            settingsRepo.setPipEnabled(false)
+            runCurrent()
+
+            assertFalse(viewModel.uiState.value.pipEnabled)
+        }
 
     @Test
     fun authenticated_markWatched_updatesStateAndEmitsEvent() =

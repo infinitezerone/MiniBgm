@@ -60,6 +60,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
+    suspend fun setPipEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(pipEnabled = enabled)
+        }
+    }
+
     suspend fun setNotifyBeforeAirMinutes(minutes: Int) {
         dataStore.updateData { current ->
             current.copy(notifyBeforeAirMinutes = minutes)
