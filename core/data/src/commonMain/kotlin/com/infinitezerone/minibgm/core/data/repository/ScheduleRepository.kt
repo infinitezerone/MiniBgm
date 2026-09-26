@@ -72,8 +72,11 @@ interface ScheduleRepository {
      * 依次拉齐官方日历（含逐话事件）与 bangumi-data 播放源/网播番/事件仲裁，
      * 期间对外流被闸门扣住，全部完成后才以最终状态对外发一次。
      * 各数据源失败不互相中断，错误信息聚合返回。
+     *
+     * [force] = false 时按 [REFRESH_THROTTLE_MILLIS] 节流：距上次成功同步不足阈值直接返回，
+     * 页面重建（冷启动/切 Tab）不应重复跑全量管线；下拉刷新等用户显式动作传 true。
      */
-    suspend fun refreshAllSchedules(): AppResult<Unit>
+    suspend fun refreshAllSchedules(force: Boolean = false): AppResult<Unit>
 
     /**
      * 后台 / 手动同步：
@@ -274,8 +277,9 @@ class ScheduleRepositoryImpl(
                 // bgm-data 合并插入的网络独播番（不在官方日历中）必须保留
                 scheduleDao.deleteOfficialSchedulesNotIn(entities.map { it.bgmId })
                 scheduleDao.insertSchedules(entities)
-                runCatchingCancellable { syncAirEvents() }
             }
+            // 逐话事件同步不在此处执行：refreshAllSchedules 会在 syncBangumiData 末尾统一跑一次，
+            // 避免全量管线路径上对 AniList 的重复查询；单独调用本方法的场景只刷新名单
             AppResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -283,13 +287,21 @@ class ScheduleRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("同步官方放送日历"))
         }
 
-    override suspend fun refreshAllSchedules(): AppResult<Unit> {
+    override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
+        if (!force) {
+            val lastSync = userPreferences.userPreferences.firstOrNull()?.bangumiDataLastSyncTimestamp ?: 0L
+            if (TimeUtils.nowEpochMillis() - lastSync < REFRESH_THROTTLE_MILLIS) {
+                return AppResult.Success(Unit)
+            }
+        }
         scheduleHoldGate.value = true
         try {
             val failures = mutableListOf<String>()
             refreshSchedules().onError { _, message -> failures += message }
             syncBangumiData().onError { _, message -> failures += message }
             return if (failures.isEmpty()) {
+                // NotModified（数据未变）也算"同步过"，避免节流窗口永远无法生效
+                userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
                 AppResult.Success(Unit)
             } else {
                 AppResult.Error(IllegalStateException(failures.joinToString("；")), failures.joinToString("；"))
@@ -330,7 +342,9 @@ class ScheduleRepositoryImpl(
                     dataService.getRecentBangumiData(
                         year = currentYear,
                         month = currentMonth,
-                        lookbackMonths = 4,
+                        // 13 个月回看：覆盖跨年两季档/长周更番（如 3 月开播的 Netflix 分段番），
+                        // 长青番（柯南类）靠官方日历覆盖，不在此窗口内
+                        lookbackMonths = 13,
                         aheadMonths = 1,
                         etag = currentEtag,
                     )
@@ -356,7 +370,8 @@ class ScheduleRepositoryImpl(
                 scheduleDao.insertSchedules(finalized)
             }
 
-            // ③ 逐话事件同步与仲裁：失败只降级为"预计"数据，不阻塞名单同步
+            // ③ 逐话事件同步与仲裁（全量管线中唯一一次；refreshSchedules 不再自行同步）：
+            //    失败只降级为"预计"数据，不阻塞名单同步
             runCatchingCancellable { syncAirEvents() }
 
             AppResult.Success(Unit)
@@ -889,7 +904,13 @@ class ScheduleRepositoryImpl(
             if (source == AirScheduleEntity.SOURCE_OFFICIAL) {
                 return true // 官方日历长篇连载（如柯南、海贼王）安全保留
             }
-            return beginMillis != null && beginMillis >= weekStartMillis - 14 * DAY_MILLIS
+            // bgm_data 无话数条目（跨季长档/网播分段番）：收录窗口（370 天）内默认显示，
+            // 否则这类番开播 14 天后就会从时刻表消失；但已知"下一话"时刻停在 14 天前
+            // 仍未前进（同步管线多轮未喂进新事件）时视为停更隐藏
+            if (beginMillis == null || beginMillis < nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) {
+                return false
+            }
+            return nextMillis == null || nextMillis >= nowMillis - 14 * DAY_MILLIS
         }
 
         // 6. 普通在播季度番，默认在总播映生命周期内保持活跃
@@ -938,8 +959,11 @@ class ScheduleRepositoryImpl(
         const val EVENT_SOURCE_ANILIST = "anilist"
         const val EVENT_SOURCE_BILIBILI = "bilibili"
         const val EVENT_SOURCE_BGM_DATA = "bgm_data"
-        const val ROSTER_LOOKBACK_DAYS = 90L
+        const val ROSTER_LOOKBACK_DAYS = 370L
         const val ROSTER_AHEAD_DAYS = 7L
+
+        /** 非强制刷新的节流阈值：冷启动/切 Tab 的页面重建不重跑全量管线 */
+        const val REFRESH_THROTTLE_MILLIS = 30L * 60L * 1000L
 
         private fun buildBilibiliUrl(id: String): String =
             when {

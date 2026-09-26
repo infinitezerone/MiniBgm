@@ -29,7 +29,8 @@ interface BangumiDataService {
     suspend fun getRecentBangumiData(
         year: Int,
         month: Int,
-        lookbackMonths: Int = 4,
+        // 13 个月回看，覆盖跨年两季档/长周更番（与 ScheduleRepository.ROSTER_LOOKBACK_DAYS 对齐）
+        lookbackMonths: Int = 13,
         aheadMonths: Int = 1,
         etag: String? = null,
     ): BangumiDataResult = getBangumiData(etag)

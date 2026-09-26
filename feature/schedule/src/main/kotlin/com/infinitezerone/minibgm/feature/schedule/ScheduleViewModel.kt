@@ -699,11 +699,12 @@ class ScheduleViewModel(
         showLoginPromptDialog.value = false
     }
 
-    fun refresh() {
+    /** [force] = 下拉刷新等用户显式动作；页面重建触发的静默刷新走仓库层 30 分钟节流 */
+    fun refresh(force: Boolean = false) {
         viewModelScope.launch {
             isRefreshing.value = true
             // 全量管线：官方日历 + bangumi-data + 逐话事件全部拉齐后，仓库层才对外发流（列表一次更新）
-            val schedulesResult = scheduleRepository.refreshAllSchedules()
+            val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
             collectionRepository.syncWatchingCollections()
             schedulesResult
                 .onSuccess { errorMessage.value = null }
