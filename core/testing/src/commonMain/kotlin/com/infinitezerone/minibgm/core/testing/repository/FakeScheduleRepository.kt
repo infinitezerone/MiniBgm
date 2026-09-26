@@ -73,7 +73,7 @@ class FakeScheduleRepository : ScheduleRepository {
         scheduleDefaultOnlyWatching = onlyWatching
     }
 
-    override suspend fun refreshAllSchedules(): AppResult<Unit> {
+    override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
         // 全量管线封装了 refreshSchedules + syncBangumiData：计数与错误注入沿用两者的既有语义
         refreshAllCalls += 1
         refreshCallCount++

@@ -660,6 +660,70 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
+    fun syncBangumiData_includesLongRunningOngoingAnimeBeyondOldNinetyDayWindow() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val beginIso = TimeUtils.isoUtcFromEpochMillis(nowMillis - 192 * DAY_MILLIS)
+            val dataService =
+                FakeBangumiDataService().apply {
+                    dataResult =
+                        BangumiDataResult.Success(
+                            items =
+                                listOf(
+                                    // Netflix 分段长档番：开播 192 天（超出旧 90 天窗口）但未完结，仍在周更
+                                    BangumiDataItem(
+                                        title = "スティール・ボール・ラン ジョジョの奇妙な冒険",
+                                        titleTranslate = mapOf("zh-Hans" to listOf("飙马野郎 JOJO的奇妙冒险")),
+                                        begin = beginIso,
+                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "551918")),
+                                    ),
+                                    // 同样超出旧窗口、但已完结的条目：不应收录
+                                    BangumiDataItem(
+                                        title = "終わった番組",
+                                        begin = beginIso,
+                                        end = TimeUtils.isoUtcFromEpochMillis(nowMillis - 150 * DAY_MILLIS),
+                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "551919")),
+                                    ),
+                                ),
+                            etag = "W/\"etag-longrunning\"",
+                        )
+                }
+            // syncBangumiData 在本地为空时会先拉官方日历建基础实体，给一条避免前置报错
+            val apiService =
+                FakeBangumiApiService().apply {
+                    calendarDays =
+                        listOf(
+                            CalendarDayResponse(
+                                weekday = CalendarWeekday(en = "Fri", cn = "星期五", ja = "金", id = 5),
+                                items = listOf(Subject(id = 551918L, name = "スティール・ボール・ラン", nameCn = "飙马野郎")),
+                            ),
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = FakeAniListService(),
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val stored = dao.getAllSchedulesList()
+            assertTrue(stored.any { it.bgmId == 551918L }, "开播超 90 天但未完结的网播番应被收录")
+            assertTrue(stored.none { it.bgmId == 551919L }, "已完结条目不应被收录")
+
+            // 时刻表流中也应可见（渲染侧 isActiveForSchedule 的窗口已与收录窗口对齐）
+            val visible = repo.getAllSchedulesStream().first()
+            assertTrue(visible.any { it.bgmId == 551918L }, "未完结长档番应出现在时刻表流中")
+            assertTrue(visible.none { it.bgmId == 551919L })
+        }
+
+    @Test
     fun syncBangumiData_enrichesMissingMetadata_forWebOnlyShow() =
         runTest {
             val beginMillis = TimeUtils.nowEpochMillis() - 5 * DAY_MILLIS

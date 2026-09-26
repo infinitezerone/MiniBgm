@@ -24,7 +24,7 @@ class RefreshScheduleWidgetCallback : ActionCallback {
         if (!refreshInProgress.compareAndSet(false, true)) return
         try {
             val koin = GlobalContext.getOrNull()
-            val result = koin?.getOrNull<ScheduleRepository>()?.refreshSchedules()
+            val result = koin?.getOrNull<ScheduleRepository>()?.refreshAllSchedules(force = true)
             if (result is AppResult.Error) {
                 // 桌面后台没有 UI 反馈通道，文本 Toast 是仅存的感知手段；
                 // 失败必须可见，避免小组件停留在旧数据上被误读为最新
