@@ -14,3 +14,9 @@ captures/
 keystore/
 keystore.properties
 .mimosa/
+
+# ZCode 会话数据不入库；仅钩子配置作为团队规约纳入版本控制
+# 先反排除目录本体（全局 ignore 的 .zcode/ 排除了目录，git 不会下钻），再收窄到只放行 config.json
+!.zcode/
+.zcode/*
+!.zcode/config.json

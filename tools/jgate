@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# jgate —— 提交前置验证门（AGENTS.md 唯一认可的提交前置步骤）
+# 流程：spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 测试结果真实性校验
+# "绿≠测过"由最后的 XML 校验机械保证：tests>0 且 failures==0 且 errors==0，否则退出非零。
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 1
+
+fail=0
+stamp=$(mktemp)
+touch "$stamp"
+
+run_gradle() {
+  echo "[jgate] gradle $*"
+  ./gradlew "$@" --console=plain || { echo "[jgate] ❌ gradle $* 失败"; fail=1; return 1; }
+}
+
+echo "[jgate] 1/4 spotlessApply"
+run_gradle spotlessApply -q
+
+echo "[jgate] 2/4 架构红线（:core:testing:testAndroid）"
+run_gradle :core:testing:testAndroid
+
+echo "[jgate] 3/4 触及模块测试 + 装配门"
+# 从 jj 工作副本差异提取触及的模块目录（app 单独一段）；按构建脚本是否用 minibgm.kmp.* 判定测试任务名
+modules=()
+while IFS= read -r line; do
+  [ -n "$line" ] && modules+=("$line")
+done < <(jj diff --summary 2>/dev/null | awk '{print $NF}' | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u)
+
+test_tasks=()
+for m in "${modules[@]+"${modules[@]}"}"; do
+  [ "$m" = "app" ] && continue # 装配门 :app:assembleDebug 已覆盖
+  [ -f "$m/build.gradle.kts" ] || continue
+  task_path=":${m//\//:}"
+  if grep -q "minibgm.kmp" "$m/build.gradle.kts"; then
+    test_tasks+=("${task_path}:testAndroid")
+  else
+    test_tasks+=("${task_path}:testDebugUnitTest")
+  fi
+done
+
+if [ "${#test_tasks[@]}" -gt 0 ]; then
+  run_gradle "${test_tasks[@]}" :app:assembleDebug
+else
+  run_gradle :app:assembleDebug
+fi
+
+echo "[jgate] 4/4 测试结果真实性校验"
+checked=0
+for m in "${modules[@]+"${modules[@]}"}"; do
+  [ -f "$m/build.gradle.kts" ] || continue
+  while IFS= read -r xml; do
+    checked=$((checked + 1))
+    counts=$(grep -o 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' "$xml" | head -1)
+    tests=$(echo "$counts" | sed -n 's/.*tests="\([0-9]*\)".*/\1/p')
+    failures=$(echo "$counts" | sed -n 's/.*failures="\([0-9]*\)".*/\1/p')
+    errors=$(echo "$counts" | sed -n 's/.*errors="\([0-9]*\)".*/\1/p')
+    if [ "${failures:-0}" != "0" ] || [ "${errors:-0}" != "0" ]; then
+      echo "[jgate] ❌ $xml：failures=$failures errors=$errors"
+      fail=1
+    elif [ "${tests:-0}" = "0" ]; then
+      echo "[jgate] ❌ $xml：tests=0（空跑/测试源集未收集）"
+      fail=1
+    fi
+  done < <(find "$m" -path "*/build/test-results/*" -name "TEST-*.xml" -newer "$stamp" 2>/dev/null)
+done
+
+if [ "$checked" = "0" ] && [ "${#test_tasks[@]}" -gt 0 ]; then
+  echo "[jgate] ⚠️ 测试任务无新增结果文件——若任务 UP-TO-DATE 属正常；若源集命名错误会静默空跑，请人工核对一次"
+fi
+
+rm -f "$stamp"
+if [ "$fail" != "0" ]; then
+  echo "[jgate] ❌ 验证门未通过，禁止提交"
+  exit 1
+fi
+echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
