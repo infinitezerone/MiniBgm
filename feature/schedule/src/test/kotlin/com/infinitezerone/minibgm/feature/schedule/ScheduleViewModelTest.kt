@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.collect
@@ -37,12 +38,14 @@ class ScheduleViewModelTest {
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
+        subjectRepository: FakeSubjectRepository = FakeSubjectRepository(),
     ): ScheduleViewModel =
         ScheduleViewModel(
             scheduleRepository = repository,
             collectionRepository = collectionRepository,
             settingsRepository = settingsRepository,
             authRepository = authRepository,
+            subjectRepository = subjectRepository,
         )
 
     @Test
