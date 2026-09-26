@@ -5,6 +5,11 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
+# 自愈：确保本 clone 的 git 钩子已接线（其他机器 clone 后无需人工记得跑 setup.sh）
+if [ "$(git config core.hooksPath || true)" != "tools/githooks" ]; then
+  git config core.hooksPath tools/githooks && echo "[jgate] 已自动接线 core.hooksPath → tools/githooks"
+fi
+
 fail=0
 stamp=$(mktemp)
 touch "$stamp"
