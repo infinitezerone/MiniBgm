@@ -52,3 +52,30 @@ jobs:
       # 否则 proguard 缺 keep 规则等问题只在打 tag 时第一次暴露（CI 上无 keystore，回退 debug 签名）
       - name: Spotless + Tests + CRAP Check + Assemble
         run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug assembleRelease --stacktrace
+
+  # Android Lint 增量门禁：存量问题封存在各模块 lint-baseline.xml，只拦新增（error 级失败）。
+  # 独立 job 并行于 Build & Test，避免拖长主链；Gradle 缓存吃掉重复成本。
+  lint:
+    name: Android Lint (增量)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Lint Debug (baseline ratchet)
+        run: ./gradlew lintDebug --stacktrace

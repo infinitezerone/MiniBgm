@@ -24,6 +24,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 (providers.gradleProperty("minibgm.versionCode").orNull)?.toInt() ?: 16
             defaultConfig.versionName =
                 providers.gradleProperty("minibgm.versionName").orNull ?: "0.2.8"
+            // lint 增量门禁：与 AndroidLibraryConventionPlugin 同策略
+            lint {
+                baseline = file("lint-baseline.xml")
+            }
         }
         configureCoreLibraryDesugaring()
         configureSpotless()
