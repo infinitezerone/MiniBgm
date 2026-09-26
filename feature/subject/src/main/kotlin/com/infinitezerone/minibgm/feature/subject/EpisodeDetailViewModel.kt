@@ -4,16 +4,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
+import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -42,12 +49,22 @@ data class EpisodeDetailUiState(
     val error: String? = null,
     /** 当前登录用户 id（null = 未登录），用于判定吐槽表态是否为己方 */
     val currentUserId: Long? = null,
+    val subject: Subject? = null,
+    val playbackRules: List<PlaybackSourceRule> = emptyList(),
+    val playlists: List<PlaybackPlaylist> = emptyList(),
+    /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
+    val failedSourceReasons: Map<String, String> = emptyMap(),
 )
 
 /** 单集详情页一次性单发事件 */
 sealed interface EpisodeDetailUiEvent {
     data class ShowSnackbar(
         val message: String,
+    ) : EpisodeDetailUiEvent
+
+    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问） */
+    data class OpenSourceSearch(
+        val prefillPrompt: String,
     ) : EpisodeDetailUiEvent
 }
 
@@ -59,6 +76,8 @@ class EpisodeDetailViewModel(
     private val collectionRepository: CollectionRepository,
     private val communityRepository: CommunityRepository,
     private val authRepository: AuthRepository,
+    private val settingsRepository: SettingsRepository? = null,
+    private val failureStore: PlaybackFailureStore? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(EpisodeDetailUiState())
     val uiState: StateFlow<EpisodeDetailUiState> = _uiState.asStateFlow()
@@ -77,6 +96,32 @@ class EpisodeDetailViewModel(
         viewModelScope.launch {
             authRepository.activeUserId.collect { userId ->
                 _uiState.update { it.copy(currentUserId = userId) }
+            }
+        }
+        // 订阅条目详情（播放源向导需要条目名；缓存未命中时由 refresh 兜底拉取）
+        viewModelScope.launch {
+            subjectRepository.getSubjectStream(subjectId).collect { subject ->
+                _uiState.update { it.copy(subject = subject ?: it.subject) }
+            }
+        }
+        // 订阅播放规则/片单与近期失败归因（播放与来源向导动线）
+        if (settingsRepository != null) {
+            viewModelScope.launch {
+                settingsRepository.playbackRules.collect { rules ->
+                    _uiState.update { it.copy(playbackRules = rules) }
+                }
+            }
+            viewModelScope.launch {
+                settingsRepository.playlists.collect { playlists ->
+                    _uiState.update { it.copy(playlists = playlists) }
+                }
+            }
+        }
+        if (failureStore != null) {
+            viewModelScope.launch {
+                failureStore.recentFailures.collect { failures ->
+                    _uiState.update { it.copy(failedSourceReasons = failures) }
+                }
             }
         }
         // 订阅本地分集流与收藏状态流
@@ -106,6 +151,38 @@ class EpisodeDetailViewModel(
         refresh(isUserPullToRefresh = false)
     }
 
+    /**
+     * 把找源请求交接给 AI 助手会话：本页面不做任何检索与抓取，只生成显式触发用的提问文案。
+     */
+    fun requestSourceSearch() {
+        val title =
+            _uiState.value.subject
+                ?.displayName
+                ?.ifBlank { "本条目" } ?: "本条目"
+        val episode = _uiState.value.episode
+        val target =
+            if (episode == null) {
+                "《$title》"
+            } else {
+                "《$title》 ${episodeGuideLabel(episode)}"
+            }
+        viewModelScope.launch {
+            _events.send(EpisodeDetailUiEvent.OpenSourceSearch("帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"))
+        }
+    }
+
+    /** 为当前分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */
+    fun buildPlayerRoute(episode: Episode): PlayerRoute =
+        buildEpisodePlayerRoute(
+            subjectId = subjectId,
+            subjectName =
+                _uiState.value.subject
+                    ?.displayName
+                    .orEmpty(),
+            episode = episode,
+            playlists = _uiState.value.playlists,
+        )
+
     /** 刷新单集吐槽短评与分集元数据 */
     fun refresh(isUserPullToRefresh: Boolean = false) {
         // 取消在途刷新：连续下拉时避免旧请求的短评响应后到覆盖新数据
@@ -129,6 +206,11 @@ class EpisodeDetailViewModel(
                             _uiState.update { it.copy(episode = ep, isLoading = false) }
                         }
                     }
+                }
+
+                // 条目详情未命中缓存时兜底拉取（来源向导需要条目名）
+                if (_uiState.value.subject == null) {
+                    subjectRepository.fetchSubjectDetail(subjectId)
                 }
 
                 // 拉取分集吐槽短评

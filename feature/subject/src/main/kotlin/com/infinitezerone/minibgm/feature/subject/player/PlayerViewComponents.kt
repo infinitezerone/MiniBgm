@@ -210,6 +210,7 @@ internal fun PlayerSourceSelector(
     onSelectSource: (Int) -> Unit,
     onRequestOpenSources: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onManageRules: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -225,9 +226,11 @@ internal fun PlayerSourceSelector(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(modifier = Modifier.weight(1f))
-            if (onRequestOpenSources != null) {
+            // 「播放源管理」优先跳转规则管理页；未接线时退回来源入口（如 AI 找源）
+            val manageRulesAction = onManageRules ?: onRequestOpenSources
+            if (manageRulesAction != null) {
                 TextButton(
-                    onClick = onRequestOpenSources,
+                    onClick = manageRulesAction,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
                     Icon(
@@ -490,7 +493,7 @@ internal fun PlayerEmptyView(
                     }
                 } else if (onRequestOpenSources != null) {
                     Button(onClick = onRequestOpenSources) {
-                        Text("管理播放源")
+                        Text("AI 找源")
                     }
                 }
             }

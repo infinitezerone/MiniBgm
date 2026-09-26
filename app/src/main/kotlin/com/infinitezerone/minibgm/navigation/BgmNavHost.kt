@@ -92,6 +92,7 @@ fun BgmNavHost(
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick = { navState.navigateTo(AssistantRoute()) },
                                 onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                onPlayClick = { route -> navState.navigateTo(route) },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
@@ -202,6 +203,9 @@ fun BgmNavHost(
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
+                                onPlayClick = { route -> navState.navigateTo(route) },
+                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
                                 metadata = bgmExtraPane(),
                             )
 
@@ -218,6 +222,17 @@ fun BgmNavHost(
 
                             playerEntry(
                                 onBackClick = { navState.goBack() },
+                                onRequestOpenSources = { route ->
+                                    val title = route.subjectName.ifBlank { "当前条目" }
+                                    navState.navigateTo(
+                                        AssistantRoute(
+                                            prefillPrompt =
+                                                "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${route.subjectId}）",
+                                        ),
+                                    )
+                                },
+                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
+                                metadata = bgmExtraPane(),
                             )
                         },
                     ),

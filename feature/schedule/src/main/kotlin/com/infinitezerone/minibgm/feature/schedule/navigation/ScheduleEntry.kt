@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.schedule.navigation
 
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.schedule.ScheduleScreen
@@ -13,6 +14,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
     onSearchClick: () -> Unit = {},
     onAssistantClick: () -> Unit = {},
     onSourceSearch: (String) -> Unit = {},
+    onPlayClick: (PlayerRoute) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -22,6 +24,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
             onSearchClick = onSearchClick,
             onAssistantClick = onAssistantClick,
             onSourceSearch = onSourceSearch,
+            onPlayClick = onPlayClick,
             scrollToTop = scrollToTop,
         )
     }

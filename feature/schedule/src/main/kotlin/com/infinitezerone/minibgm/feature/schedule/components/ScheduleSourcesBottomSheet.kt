@@ -54,6 +54,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +64,7 @@ fun ScheduleSourcesBottomSheet(
     onDismissRequest: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onAiSourceSearch: () -> Unit = {},
+    onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
@@ -97,6 +99,12 @@ fun ScheduleSourcesBottomSheet(
         }
 
     var isOtherExpanded by remember { mutableStateOf(false) }
+
+    // 一体化播放器路由：episodeId=0 时由播放器按规则源自主嗅探（与条目页「一体化播放器」同语义）
+    val internalPlayRoute =
+        remember(schedule.bgmId, displayName) {
+            PlayerRoute(subjectId = schedule.bgmId, episodeId = 0L, subjectName = displayName)
+        }
 
     BgmModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -177,6 +185,28 @@ fun ScheduleSourcesBottomSheet(
                         .padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (onInternalPlayClick != null) {
+                    Text(
+                        text = "应用内播放",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+
+                    ScheduleSourceCard(
+                        title = "用内置播放器播放",
+                        subtitle = "按播放规则自动嗅探可播地址并连播",
+                        iconVector = Icons.Filled.PlayCircleOutline,
+                        onClick = {
+                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                                onDismissRequest()
+                                onInternalPlayClick(internalPlayRoute)
+                            }
+                        },
+                    )
+                }
+
                 Text(
                     text = "AI 找源",
                     style = MaterialTheme.typography.labelMedium,
