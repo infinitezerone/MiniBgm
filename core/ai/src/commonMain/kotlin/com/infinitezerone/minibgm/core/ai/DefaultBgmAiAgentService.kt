@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.ai.wire.AiEndpointException
 import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
 import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
 import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
+import com.infinitezerone.minibgm.core.ai.wire.WireChoice
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -309,10 +310,7 @@ internal suspend fun runPiAgent(
             agentLogger.i {
                 "✅ Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策直接回复 (回答字数: ${content.length}, 思考字数: ${reasoning.length})"
             }
-            if (content.isBlank() && reasoning.isBlank() && choice.finishReason == "length") {
-                // 截断的空回复若照常返回，用户只会看到一条空气泡；显式失败并给出可行动提示
-                throw IllegalStateException("模型回复因长度上限被截断（finish_reason=length），请重试、精简提问，或在 AI 设置更换模型。")
-            }
+            throwIfTruncatedEmptyReply(choice, content, reasoning)
             return content.ifBlank { reasoning }
         }
 
@@ -388,6 +386,19 @@ internal suspend fun runPiAgent(
 
     agentLogger.w { "⚠️ Agent 轮次结束 (已执行 $turns 轮)，发起最终总结" }
     return summarizeFinalOutcome(config, wireClient, effectiveModel, messages)
+}
+
+/**
+ * finish_reason=length 且无任何可读内容：显式失败而非把空气泡交给会话。
+ * 独立成函数同时服务可读性与 CRAP 预算——runPiAgent 的复杂度已贴近门禁上限。
+ */
+internal fun throwIfTruncatedEmptyReply(
+    choice: WireChoice,
+    content: String,
+    reasoning: String,
+) {
+    if (content.isNotBlank() || reasoning.isNotBlank() || choice.finishReason != "length") return
+    throw IllegalStateException("模型回复因长度上限被截断（finish_reason=length），请重试、精简提问，或在 AI 设置更换模型。")
 }
 
 internal const val DEFAULT_SUMMARY_FALLBACK =
