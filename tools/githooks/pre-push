@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# 本仓库禁用 git push：推送统一走 jj git push（jj 不运行 git 钩子，此钩子只拦 git 直推）。
+echo "[githooks] git push 已禁用：推送用 jj git push --bookmark <名>。" >&2
+exit 1
