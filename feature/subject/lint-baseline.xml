@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.3.2" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.2)" variant="all" version="9.3.2">
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            private val base = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)"
+        errorLine2="                                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="30"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            override fun createDataSource(): HttpDataSource ="
+        errorLine2="                         ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="32"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                base.createDataSource().apply {"
+        errorLine2="                     ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="33"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    requestHeaders.get().forEach { (key, value) -> setRequestProperty(key, value) }"
+        errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="34"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            override fun setDefaultRequestProperties(defaultRequestProperties: Map&lt;String, String>): HttpDataSource.Factory = this"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="37"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
+            line="50"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
+            line="70"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
+            line="431"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
+            line="533"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="90"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerControlsOverlay.kt"
+            line="97"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
+            line="69"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
+            line="88"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
+            line="295"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
+            line="443"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt"
+            line="396"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCommunitySection.kt"
+            line="63"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCommunitySection.kt"
+            line="341"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt"
+            line="833"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/TopicDetailScreen.kt"
+            line="71"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="UnusedMaterial3ScaffoldPaddingParameter"
+        message="Content padding parameter _ is not used"
+        errorLine1="    ) { _ ->"
+        errorLine2="        ~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="375"
+            column="9"/>
+    </issue>
+
+</issues>

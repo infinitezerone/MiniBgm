@@ -15,6 +15,10 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
 
         extensions.configure<LibraryExtension> {
             configureKotlinAndroid(this)
+            // lint 增量门禁：存量问题封存于各模块 lint-baseline.xml，CI 只拦新增（error 级失败）
+            lint {
+                baseline = file("lint-baseline.xml")
+            }
         }
         configureCoreLibraryDesugaring()
         configureSpotless()

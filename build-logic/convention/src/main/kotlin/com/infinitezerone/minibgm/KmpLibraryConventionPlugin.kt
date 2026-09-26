@@ -22,6 +22,10 @@ class KmpLibraryConventionPlugin : Plugin<Project> {
                 androidLibrary.enableCoreLibraryDesugaring = true
                 // 新插件默认关闭 host 测试，显式开启以运行 commonTest / androidHostTest
                 androidLibrary.withHostTest { }
+                // lint 增量门禁：与 AndroidLibraryConventionPlugin 同策略（存量封存、只拦新增）
+                androidLibrary.lint {
+                    baseline = file("lint-baseline.xml")
+                }
             }
         }
 

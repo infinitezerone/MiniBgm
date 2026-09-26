@@ -22,6 +22,7 @@ bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试 → 
 - KMP 模块测试源集是 `androidHostTest` / `androidDeviceTest` 且 host 测试 opt-in；Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`）只有 `testDebugUnitTest`。命名错误的源集会静默空跑——jgate 的 XML 校验（`tests > 0 && failures == 0`）负责拦。
 - 全量 `allTests testDebugUnitTest` 仅用于跨切面改动（build-logic / 版本目录 / `:core:model` / `:core:common`）及 PR 前；Android-only 模块没有 allTests。
 - 模块依赖边变化后跑 `./gradlew graphUpdate` 重建各 README 依赖图。
+- Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 独立 job 只拦新增；修复代码后基线残留无害，勿手工编辑基线。
 
 ## 硬红线
 
