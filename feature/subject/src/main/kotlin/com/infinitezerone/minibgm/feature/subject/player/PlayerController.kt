@@ -37,7 +37,6 @@ data class PlaybackState(
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val isEnded: Boolean = false,
-    val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val error: String? = null,
 )
@@ -55,6 +54,13 @@ class PlayerController(
 ) {
     private val _state = MutableStateFlow(PlaybackState())
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
+
+    /**
+     * 播放位置单独成一个流：约 500ms 一跳，若混进 [PlaybackState] 会让整棵 UI 树每跳都重组。
+     * 只有真正展示进度的叶子（进度条/时间文本/手势层）才读它。
+     */
+    private val _positionMs = MutableStateFlow(0L)
+    val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
 
     private val _events = Channel<PlayerEngineEvent>(Channel.BUFFERED)
 
@@ -129,10 +135,12 @@ class PlayerController(
         if (url.isBlank()) {
             stopPositionPolling()
             engine.clear()
+            _positionMs.value = 0L
             _state.value = PlaybackState()
             return
         }
         if (url == _state.value.mediaUrl) return
+        _positionMs.value = 0L
         _state.value = PlaybackState(mediaUrl = url, isBuffering = true)
         engine.load(url, requestHeaders)
     }
@@ -166,7 +174,8 @@ class PlayerController(
     fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
         engine.seekTo(target)
-        _state.update { it.copy(positionMs = target, isEnded = false) }
+        _positionMs.value = target
+        _state.update { it.copy(isEnded = false) }
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -202,11 +211,9 @@ class PlayerController(
     private fun syncPositionOnce() {
         val position = engine.currentPositionMs
         val duration = engine.durationMs
+        _positionMs.value = position
         _state.update {
-            it.copy(
-                positionMs = position,
-                durationMs = if (duration > 0L) duration else it.durationMs,
-            )
+            it.copy(durationMs = if (duration > 0L) duration else it.durationMs)
         }
     }
 
