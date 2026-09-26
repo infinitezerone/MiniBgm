@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -202,6 +203,9 @@ class PlayerViewModel(
 
     private var resolveJob: Job? = null
 
+    /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore。 */
+    private var lastSavedSourceId: String = ""
+
     private fun initialEpisodes(): List<PlayerEpisodeItem> =
         if (route.queue.isNotEmpty()) {
             route.queue.map { entry ->
@@ -297,8 +301,10 @@ class PlayerViewModel(
             }
         }
 
-        // 2. 订阅播放规则并初始化可用源列表
+        // 2. 订阅播放规则并初始化可用源列表；首次进页优先选中上次成功起播的源
         viewModelScope.launch {
+            val preferredSourceId =
+                runCatching { settingsRepository.lastPlaybackSourceId.first() }.getOrDefault("")
             settingsRepository.playbackRules.collect { rules ->
                 val newSources = buildSources(rules)
                 val targetRuleIndex =
@@ -308,8 +314,19 @@ class PlayerViewModel(
                         null
                     }
                 _uiState.update { state ->
+                    // 仅在“首次构建源列表”时应用上次可用源，避免之后覆盖用户的手动选择
+                    val preferredIndex =
+                        if (route.initialRuleId.isBlank() &&
+                            preferredSourceId.isNotBlank() &&
+                            state.sources.isEmpty()
+                        ) {
+                            newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
+                        } else {
+                            null
+                        }
                     val newIndex =
                         targetRuleIndex
+                            ?: preferredIndex
                             ?: state.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
                     state.copy(
                         sources = newSources,
@@ -783,9 +800,13 @@ class PlayerViewModel(
         }
     }
 
-    /** 播放成功建立（STATE_READY）：清除该地址的失败标记，并把当前源的连续失败计数归零 */
+    /** 播放成功建立（STATE_READY）：清除该地址的失败标记，并把当前源记为“上次可用源” */
     fun onPlaybackReady() {
         failureStore?.markPlayable(_uiState.value.streamUrl, currentSourceId())
+        val id = currentSourceId() ?: return
+        if (id == lastSavedSourceId) return
+        lastSavedSourceId = id
+        viewModelScope.launch { settingsRepository.setLastPlaybackSourceId(id) }
     }
 
     fun onPlaybackError(message: String) {

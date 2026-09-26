@@ -116,6 +116,15 @@ interface SettingsRepository {
     suspend fun clearPlaybackPosition(url: String)
 
     /**
+     * 上次成功起播的播放源标识（`PlayerSourceTab.id`）。进播放页时优先选中它，
+     * 避免每次都从第一个源开始试错；空串表示尚无记录。
+     */
+    val lastPlaybackSourceId: Flow<String>
+
+    /** 记录上次成功起播的播放源标识 */
+    suspend fun setLastPlaybackSourceId(id: String)
+
+    /**
      * 对调用方给出的订阅地址 / 单站地址 / 规则 JSON 进行拉取、格式校验与端侧并发测速探活。
      *
      * 这里不代客户端检索社区：没有任何内置站点清单，也不接受「关键词搜索」这类入口，
@@ -403,6 +412,13 @@ class SettingsRepositoryImpl(
                 json.encodeToString<Map<String, Long>>(current - url),
             )
         }
+    }
+
+    override val lastPlaybackSourceId: Flow<String> =
+        userPreferences.userPreferences.map { it.lastPlaybackSourceId }
+
+    override suspend fun setLastPlaybackSourceId(id: String) {
+        userPreferences.setLastPlaybackSourceId(id)
     }
 
     override suspend fun validateAndTestSubscription(
