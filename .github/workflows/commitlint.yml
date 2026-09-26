@@ -1,0 +1,50 @@
+name: Commit Lint
+
+# 提交摘要格式门禁：Conventional Commits。独立于 ci.yml（那边 paths-ignore 会放行纯文档推送），
+# 且不依赖任何本地接线（git hooksPath / 工具钩子），对所有推送路径兜底。
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commitlint:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -e
+          if [ -n "$PR_BASE" ]; then
+            range="$PR_BASE..${{ github.sha }}"
+          elif [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            range="$AFTER"
+          else
+            range="$BEFORE..$AFTER"
+          fi
+          echo "校验范围: $range"
+          msgs=$(git log --format=%s "$range" 2>/dev/null || git log --format=%s -1)
+          echo "$msgs"
+          # 允许 Conventional Commits 各类型与 Merge 提交（若日后使用 GitHub 合并按钮）
+          bad=$(echo "$msgs" | grep -vcE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]*\))?!?: .+|^Merge ' || true)
+          if [ "$bad" != "0" ]; then
+            echo "❌ $bad 条提交摘要不符合 Conventional Commits（<类型>(<模块>): <摘要>）"
+            exit 1
+          fi
+          echo "✅ 全部符合"
