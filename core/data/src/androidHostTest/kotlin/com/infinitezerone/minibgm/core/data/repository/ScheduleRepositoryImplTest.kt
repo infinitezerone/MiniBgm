@@ -128,9 +128,15 @@ class ScheduleRepositoryImplTest {
             events.value = events.value.filter { it.subjectId in keepIds }
         }
 
-        override suspend fun deleteAnilistEventsForSubjects(subjectIds: List<Long>) {
-            val ids = subjectIds.toSet()
-            events.value = events.value.filterNot { it.source == "anilist" && it.subjectId in ids }
+        override suspend fun deleteAnilistEventsAt(
+            subjectId: Long,
+            airAts: List<String>,
+        ) {
+            val times = airAts.toSet()
+            events.value =
+                events.value.filterNot {
+                    it.source == "anilist" && it.subjectId == subjectId && it.airAtUtc in times
+                }
         }
 
         override suspend fun getUpcomingEvents(
@@ -384,7 +390,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = userPrefs,
                 )
 
-            val result = repo.syncBangumiData(force = false)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             assertTrue(dataService.requestedMonths.isNotEmpty())
@@ -462,7 +468,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = userPrefs,
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val stored = dao.getAllSchedulesList()
@@ -543,7 +549,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val stored = dao.getAllSchedulesList()
             assertTrue(stored.any { it.bgmId == 551918L }, "开播超 90 天但仍在周更的番应被收录")
@@ -627,7 +633,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = userPrefs,
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val stored = dao.getAllSchedulesList()
@@ -697,7 +703,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             assertEquals(listOf(189046L), anilist.requestedIds)
@@ -748,7 +754,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val storedEvents = airEventDao.getAllAirEvents()
@@ -794,7 +800,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             // Bilibili API is no longer invoked, preventing slow serial network loops
@@ -934,7 +940,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val updated = dao.getAllSchedulesList().single()
@@ -1007,7 +1013,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
@@ -1079,7 +1085,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
@@ -1130,7 +1136,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val updated = dao.getAllSchedulesList().single()
@@ -1182,7 +1188,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val updated = dao.getAllSchedulesList().single()
@@ -1415,7 +1421,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val updated = dao.getAllSchedulesList().first { it.bgmId == 5001L }
@@ -1492,7 +1498,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val schedules = dao.getAllSchedulesList()
@@ -1590,7 +1596,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val enriched = dao.getAllSchedulesList().first { it.bgmId == 6L }
@@ -1768,7 +1774,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             val schedules = dao.getAllSchedulesList()
@@ -1838,7 +1844,7 @@ class ScheduleRepositoryImplTest {
                     collectionRepository = collectionRepo,
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
 
             assertIs<AppResult.Success<Unit>>(result)
             // 验证未在追但属于 SOURCE_BGM_DATA 的条目依然包含在 targets 中请求 AniList，不会因已有封面且不在追而发生排期饿死与事件不同步
@@ -2017,7 +2023,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            val result = repo.syncBangumiData(force = true)
+            val result = repo.syncBangumiData()
             assertIs<AppResult.Success<Unit>>(result)
 
             val schedules = dao.getAllSchedulesList()
@@ -2088,7 +2094,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val sbr = dao.getAllSchedulesList().firstOrNull { it.bgmId == 639938L }
             assertNotNull(sbr)
@@ -2135,7 +2141,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
             val stored = dao.getAllSchedulesList()
             // 不得误绑任何候选，但要以占位条目（bgmId = -anilistId）显示在时刻表
             assertTrue(stored.none { it.bgmId == 1L || it.bgmId == 2L }, "无唯一候选时不得绑定任何条目")
@@ -2178,7 +2184,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val matched = dao.getAllSchedulesList().filter { it.bgmId == 639938L }
             assertEquals(1, matched.size, "已存在的本地条目应回写 anilistId，而不是重复插入")
@@ -2231,7 +2237,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val stored = dao.getAllSchedulesList()
             // 551918 已不在本周 AniList 名单会被裁剪清掉；无论如何都不得被误绑到 210482
@@ -2278,7 +2284,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
             assertTrue(dao.getAllSchedulesList().isEmpty(), "成人向条目不应进入时刻表")
         }
 
@@ -2318,7 +2324,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val stored = dao.getAllSchedulesList()
             assertEquals(1, stored.size)
@@ -2391,7 +2397,7 @@ class ScheduleRepositoryImplTest {
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
 
-            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData())
 
             val entity = dao.getAllSchedulesList().first { it.bgmId == 222L }
             assertEquals(1, entity.nextEpisode, "拆季偏移应把 AniList 第 13 话还原为 Bangumi 第 1 话")

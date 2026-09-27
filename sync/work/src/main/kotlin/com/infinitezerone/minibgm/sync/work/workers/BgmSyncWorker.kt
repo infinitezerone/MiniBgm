@@ -34,7 +34,7 @@ class BgmSyncWorker(
         withContext(dispatchers.io) {
             val startTime = TimeUtils.nowEpochMillis()
             log.d { "[SYNC_WORKER:START] attempt=$runAttemptCount" }
-            val scheduleResult = scheduleRepository.syncBangumiData(force = false)
+            val scheduleResult = scheduleRepository.syncBangumiData()
             // 追番收藏是用户核心数据，同步失败必须参与重试判定而非静默吞掉；
             // 重试成本低：时刻表侧有 ETag，304 不会重复拉全量
             val collectionError =

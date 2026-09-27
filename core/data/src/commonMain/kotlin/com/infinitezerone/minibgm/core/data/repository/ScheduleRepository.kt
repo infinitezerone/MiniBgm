@@ -82,7 +82,7 @@ interface ScheduleRepository {
      * 1) 按条目 begin 月按需拉取 bangumi-data 月切片补全播放源/中文名；
      * 2) AniList 周排期发现新番、补全逐话真值并仲裁回写。
      */
-    suspend fun syncBangumiData(force: Boolean = false): AppResult<Unit>
+    suspend fun syncBangumiData(): AppResult<Unit>
 
     /**
      * 本地别名词典容错搜索（UX_REMEDIATION 06-A）：
@@ -267,7 +267,7 @@ class ScheduleRepositoryImpl(
         }
     }
 
-    override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> =
+    override suspend fun syncBangumiData(): AppResult<Unit> =
         try {
             val existingEntities = scheduleDao.getAllSchedulesList()
 
@@ -424,13 +424,15 @@ class ScheduleRepositoryImpl(
             }
 
         // 1. AniList 逐话真值与高清封面同步（拆季偏移在此生效）
-        val (anilistEvents, coveredSubjects, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis)
-        // 用偏移后的逐话真值整体替换该批条目的 AniList 事件，避免与周排期写入的原始集数事件重复
-        if (coveredSubjects.isNotEmpty()) {
-            airEventDao.deleteAnilistEventsForSubjects(coveredSubjects.toList())
-        }
-        if (anilistEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(anilistEvents)
+        val (anilistEvents, _, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis)
+        // 用偏移后的逐话真值替换同 (subjectId, airAt) 的旧事件（含周排期写入的原始集数事件），
+        // 只替换 airAt 命中的那些以保留窗口外的事件，且整体原子执行
+        anilistEvents.groupBy { it.subjectId }.forEach { (subjectId, events) ->
+            airEventDao.replaceAnilistEventsAt(
+                subjectId = subjectId,
+                airAts = events.map { it.airAtUtc }.distinct(),
+                events = events,
+            )
         }
 
         // 3. 仲裁回写：next* 字段取未来最近一话（或刚播出的上一话），回补 AniList 高清封面，并剔除已完结僵尸条目
@@ -1077,7 +1079,7 @@ class ScheduleRepositoryImpl(
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
         val missing =
             schedules
-                .filter { it.coverUrl.isBlank() || it.totalEpisodes == 0 }
+                .filter { it.bgmId > 0 && (it.coverUrl.isBlank() || it.totalEpisodes == 0) }
                 .sortedWith(compareBy({ !it.coverUrl.isBlank() }, { it.totalEpisodes != 0 }))
                 .take(5)
         if (missing.isEmpty()) return schedules

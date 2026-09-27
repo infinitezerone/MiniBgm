@@ -39,7 +39,7 @@ class FakeScheduleRepository : ScheduleRepository {
         private set
     var syncBangumiDataResult: AppResult<Unit> = AppResult.Success(Unit)
 
-    override suspend fun syncBangumiData(force: Boolean): AppResult<Unit> {
+    override suspend fun syncBangumiData(): AppResult<Unit> {
         syncBangumiDataCallCount++
         return syncBangumiDataResult
     }

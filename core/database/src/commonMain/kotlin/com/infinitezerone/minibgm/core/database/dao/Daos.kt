@@ -60,8 +60,22 @@ interface AirEventDao {
     @Query("DELETE FROM air_events WHERE kind = 'predicted'")
     suspend fun deleteAllPredictedEvents()
 
-    @Query("DELETE FROM air_events WHERE source = 'anilist' AND subjectId IN (:subjectIds)")
-    suspend fun deleteAnilistEventsForSubjects(subjectIds: List<Long>)
+    @Query("DELETE FROM air_events WHERE source = 'anilist' AND subjectId = :subjectId AND airAtUtc IN (:airAts)")
+    suspend fun deleteAnilistEventsAt(
+        subjectId: Long,
+        airAts: List<String>,
+    )
+
+    /** 用逐话真值替换同 (subjectId, airAt) 的旧事件（含周排期写入的原始集数事件）；原子执行，避免删一半崩溃丢事件。 */
+    @Transaction
+    suspend fun replaceAnilistEventsAt(
+        subjectId: Long,
+        airAts: List<String>,
+        events: List<AirEventEntity>,
+    ) {
+        if (airAts.isNotEmpty()) deleteAnilistEventsAt(subjectId, airAts)
+        if (events.isNotEmpty()) insertAirEvents(events)
+    }
 
     @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
     suspend fun deleteEventsNotIn(keepIds: List<Long>)

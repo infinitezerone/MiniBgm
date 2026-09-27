@@ -278,7 +278,7 @@ class UserViewModel(
             isManualSyncing.value = true
             var success = false
             try {
-                val result = scheduleRepository.syncBangumiData(force = true)
+                val result = scheduleRepository.syncBangumiData()
                 success = result is AppResult.Success
             } finally {
                 isManualSyncing.value = false
