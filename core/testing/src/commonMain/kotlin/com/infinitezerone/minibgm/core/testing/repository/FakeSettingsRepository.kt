@@ -54,9 +54,31 @@ class FakeSettingsRepository(
         settingsState.value = settingsState.value.copy(airingReminderEnabled = enabled)
     }
 
+    override suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
+        settingsState.value = settingsState.value.copy(airingDailySummaryEnabled = enabled)
+    }
+
+    override suspend fun setAiringPreAirEnabled(enabled: Boolean) {
+        settingsState.value = settingsState.value.copy(airingPreAirEnabled = enabled)
+    }
+
     override suspend fun setAiringReminderHour(hour: Int) {
         setAiringReminderHourCallCount++
         settingsState.value = settingsState.value.copy(airingReminderHour = hour)
+    }
+
+    override suspend fun setNotifyBeforeAirMinutes(minutes: Int) {
+        settingsState.value = settingsState.value.copy(notifyBeforeAirMinutes = minutes)
+    }
+
+    override suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int) {
+        val clamped = offsetMinutes.coerceIn(-60, 120)
+        settingsState.value =
+            settingsState.value.copy(
+                airingNotificationOffsetMinutes = clamped,
+                notifyBeforeAirMinutes = if (clamped < 0) -clamped else 0,
+                airDelayOffsetMinutes = if (clamped > 0) clamped else 0,
+            )
     }
 
     override suspend fun setAmoledDarkMode(enabled: Boolean) {
@@ -109,11 +131,10 @@ class FakeSettingsRepository(
         aiProfilesState.value = profiles
     }
 
-    private val airDelayOffsetMinutesState = MutableStateFlow(0)
-    override val airDelayOffsetMinutes: Flow<Int> = airDelayOffsetMinutesState
+    override val airDelayOffsetMinutes: Flow<Int> = settingsState.map { it.airDelayOffsetMinutes }
 
     override suspend fun setAirDelayOffsetMinutes(minutes: Int) {
-        airDelayOffsetMinutesState.value = minutes
+        settingsState.value = settingsState.value.copy(airDelayOffsetMinutes = minutes)
     }
 
     private val playbackRulesState = MutableStateFlow<List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule>>(emptyList())

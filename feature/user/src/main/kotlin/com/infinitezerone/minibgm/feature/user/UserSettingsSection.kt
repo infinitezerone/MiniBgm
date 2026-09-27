@@ -81,13 +81,18 @@ internal fun SettingsSection(
     isSyncing: Boolean,
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
+    airingDailySummaryEnabled: Boolean = true,
+    onToggleAiringDailySummary: (Boolean) -> Unit = {},
+    airingPreAirEnabled: Boolean = true,
+    onToggleAiringPreAir: (Boolean) -> Unit = {},
     airingReminderHour: Int,
     hasNotificationPermission: Boolean = true,
     aiConfig: AiConfig = AiConfig(),
     onOpenAiSettingsDialog: () -> Unit = {},
     onOpenReminderHourDialog: () -> Unit,
-    airDelayOffsetMinutes: Int,
-    onOpenDelayOffsetDialog: () -> Unit,
+    airingNotificationOffsetMinutes: Int = -15,
+    onOpenTimingBottomSheet: () -> Unit = {},
+    onOpenSystemNotificationSettings: () -> Unit = {},
     onOpenSyncDialog: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
@@ -290,9 +295,9 @@ internal fun SettingsSection(
                 val isReminderActive = airingReminderEnabled && hasNotificationPermission
                 val reminderSubtitle =
                     if (!hasNotificationPermission) {
-                        "⚠️ 系统通知未开启，点击开启权限与每日推送"
+                        "系统通知未开启，点击开启权限与每日推送"
                     } else {
-                        "每日汇总「我追的」当日更新，开播前 15 分钟逐集提醒"
+                        "支持每日汇总清单与单集开播即时通知"
                     }
                 SettingsItemRow(
                     icon = Icons.Filled.NotificationsActive,
@@ -321,12 +326,19 @@ internal fun SettingsSection(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         )
 
+                        // 1. 每日追番更新汇总
                         SettingsItemRow(
                             icon = Icons.Filled.Schedule,
                             iconTint = MaterialTheme.colorScheme.secondary,
-                            title = "提醒时刻",
-                            subtitle = "每天 %02d:00 推送当日更新".format(airingReminderHour),
-                            onClick = onOpenReminderHourDialog,
+                            title = "每日更新汇总",
+                            subtitle = if (airingDailySummaryEnabled) "每天 %02d:00 推送今日更新".format(airingReminderHour) else "已关闭",
+                            onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
+                            trailing = {
+                                Switch(
+                                    checked = airingDailySummaryEnabled,
+                                    onCheckedChange = onToggleAiringDailySummary,
+                                )
+                            },
                         )
 
                         HorizontalDivider(
@@ -334,12 +346,51 @@ internal fun SettingsSection(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         )
 
+                        // 2. 新集开播提醒
+                        val timingSubtitle =
+                            when {
+                                airingNotificationOffsetMinutes < 0 -> "提前 ${-airingNotificationOffsetMinutes} 分钟"
+                                airingNotificationOffsetMinutes == 0 -> "准点开播"
+                                airingNotificationOffsetMinutes == 15 -> "延后 15 分钟（适配国内平台）"
+                                else -> "延后 $airingNotificationOffsetMinutes 分钟"
+                            }
+
                         SettingsItemRow(
-                            icon = Icons.Filled.Schedule,
+                            icon = Icons.Filled.PlayCircleOutline,
                             iconTint = MaterialTheme.colorScheme.tertiary,
-                            title = "开播提醒延迟偏移",
-                            subtitle = if (airDelayOffsetMinutes == 0) "无延迟" else "延迟 $airDelayOffsetMinutes 分钟",
-                            onClick = onOpenDelayOffsetDialog,
+                            title = "新集开播提醒",
+                            subtitle = if (airingPreAirEnabled) "每集播出时单独通知" else "已关闭",
+                            onClick = null,
+                            trailing = {
+                                Switch(
+                                    checked = airingPreAirEnabled,
+                                    onCheckedChange = onToggleAiringPreAir,
+                                )
+                            },
+                        )
+
+                        if (airingPreAirEnabled) {
+                            SettingsItemRow(
+                                icon = Icons.Filled.Schedule,
+                                iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                                title = "提醒时间",
+                                subtitle = timingSubtitle,
+                                onClick = onOpenTimingBottomSheet,
+                            )
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        )
+
+                        // 3. 系统通知渠道设置入口
+                        SettingsItemRow(
+                            icon = Icons.AutoMirrored.Filled.OpenInNew,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            title = "系统通知管理",
+                            subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
+                            onClick = onOpenSystemNotificationSettings,
                         )
                     }
                 }
@@ -606,52 +657,6 @@ internal fun ReminderHourDialog(
 }
 
 @Composable
-internal fun DelayOffsetDialog(
-    currentOffset: Int,
-    onSelectOffset: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("开播提醒延迟偏移") },
-        text = {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                listOf(0, 5, 10, 15, 30, 60).forEach { offset ->
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectOffset(offset)
-                                    onDismiss()
-                                }.padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.RadioButton(
-                            selected = (offset == currentOffset),
-                            onClick = {
-                                onSelectOffset(offset)
-                                onDismiss()
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (offset == 0) "无延迟" else "延迟 $offset 分钟",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
-            }
-        },
-    )
-}
-
-@Composable
 private fun SettingsItemRow(
     icon: ImageVector,
     iconTint: androidx.compose.ui.graphics.Color,
@@ -729,8 +734,8 @@ private fun SettingsSectionPreview() {
             onToggleAiringReminder = {},
             airingReminderHour = 8,
             onOpenReminderHourDialog = {},
-            airDelayOffsetMinutes = 15,
-            onOpenDelayOffsetDialog = {},
+            airingNotificationOffsetMinutes = -15,
+            onOpenTimingBottomSheet = {},
             onOpenSyncDialog = {},
             onSyncNow = {},
             onOpenWebUrl = {},

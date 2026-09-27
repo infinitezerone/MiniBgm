@@ -77,7 +77,7 @@ fun UserScreen(
                 coroutineScope.launch {
                     if (success) {
                         snackbarHostState.showSnackbar(
-                            if (uiState.isLoggedIn) "个人中心已刷新 ✨" else "已刷新（登录后可同步个人云端数据）",
+                            if (uiState.isLoggedIn) "个人中心已刷新" else "已刷新（登录后可同步个人云端数据）",
                         )
                     } else {
                         snackbarHostState.showSnackbar("刷新失败，请检查网络设置")
@@ -182,33 +182,98 @@ fun UserScreenContent(
             val adaptiveInfo = LocalWindowAdaptiveInfo.current
             val isWideScreen = adaptiveInfo.isWide
 
-            if (!uiState.isLoggedIn) {
-                // 未登录状态：全屏沉浸式登录引导区，干净聚焦无冗余
-                UnauthenticatedLandingView(
-                    onLogin = onLogin,
-                    isAuthenticating = uiState.isAuthenticating,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else if (isWideScreen) {
-                // 已登录宽屏双栏模式
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                ) {
-                    // 左栏：个人资料概览与多账号管理
-                    LazyColumn(
-                        state = listState,
+            when {
+                uiState.isLoading -> {
+                    // 首帧加载态：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
+                    UserScreenSkeleton(
+                        isWideScreen = isWideScreen,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                !uiState.isLoggedIn -> {
+                    // 未登录状态：全屏沉浸式登录引导区，干净聚焦无冗余
+                    UnauthenticatedLandingView(
+                        onLogin = onLogin,
+                        isAuthenticating = uiState.isAuthenticating,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                isWideScreen -> {
+                    // 已登录宽屏双栏模式
+                    Row(
                         modifier =
                             Modifier
-                                .weight(0.45f)
-                                .fillMaxHeight(),
-                        contentPadding = PaddingValues(bottom = 96.dp),
+                                .fillMaxSize()
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        // 左栏：个人资料概览与多账号管理
+                        LazyColumn(
+                            state = listState,
+                            modifier =
+                                Modifier
+                                    .weight(0.45f)
+                                    .fillMaxHeight(),
+                            contentPadding = PaddingValues(bottom = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            item(key = "wide_profile_header") {
+                                UserProfileHeaderCard(
+                                    profile = uiState.activeProfile,
+                                    savedAccountsCount = uiState.savedAccounts.size,
+                                    onManageAccountsClick = { showAccountSheet = true },
+                                )
+                            }
+
+                            if (uiState.savedAccounts.size > 1) {
+                                item(key = "wide_multi_account_card") {
+                                    MultiAccountQuickCard(
+                                        accounts = uiState.savedAccounts,
+                                        activeProfile = uiState.activeProfile,
+                                        onSwitchAccount = onSwitchAccount,
+                                        onManageAccountsClick = { showAccountSheet = true },
+                                        onAddAccountClick = {
+                                            showAccountSheet = false
+                                            onLogin()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        // 右栏：五维收藏分布全景看板
+                        LazyColumn(
+                            modifier =
+                                Modifier
+                                    .weight(0.55f)
+                                    .fillMaxHeight(),
+                            contentPadding = PaddingValues(bottom = 96.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            item(key = "wide_collections_overview") {
+                                CollectionOverviewCard(
+                                    isLoggedIn = true,
+                                    collectionCounts = uiState.collectionCounts,
+                                    isCountsLoading = uiState.isCountsLoading,
+                                    onCollectionClick = onCollectionClick,
+                                    onLogin = onLogin,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    // 已登录单栏竖屏模式
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        item(key = "wide_profile_header") {
+                        item(key = "profile_header") {
                             UserProfileHeaderCard(
                                 profile = uiState.activeProfile,
                                 savedAccountsCount = uiState.savedAccounts.size,
@@ -217,7 +282,7 @@ fun UserScreenContent(
                         }
 
                         if (uiState.savedAccounts.size > 1) {
-                            item(key = "wide_multi_account_card") {
+                            item(key = "multi_account_card") {
                                 MultiAccountQuickCard(
                                     accounts = uiState.savedAccounts,
                                     activeProfile = uiState.activeProfile,
@@ -230,18 +295,8 @@ fun UserScreenContent(
                                 )
                             }
                         }
-                    }
 
-                    // 右栏：五维收藏分布全景看板
-                    LazyColumn(
-                        modifier =
-                            Modifier
-                                .weight(0.55f)
-                                .fillMaxHeight(),
-                        contentPadding = PaddingValues(bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        item(key = "wide_collections_overview") {
+                        item(key = "collections_overview") {
                             CollectionOverviewCard(
                                 isLoggedIn = true,
                                 collectionCounts = uiState.collectionCounts,
@@ -250,47 +305,6 @@ fun UserScreenContent(
                                 onLogin = onLogin,
                             )
                         }
-                    }
-                }
-            } else {
-                // 已登录单栏竖屏模式
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    item(key = "profile_header") {
-                        UserProfileHeaderCard(
-                            profile = uiState.activeProfile,
-                            savedAccountsCount = uiState.savedAccounts.size,
-                            onManageAccountsClick = { showAccountSheet = true },
-                        )
-                    }
-
-                    if (uiState.savedAccounts.size > 1) {
-                        item(key = "multi_account_card") {
-                            MultiAccountQuickCard(
-                                accounts = uiState.savedAccounts,
-                                activeProfile = uiState.activeProfile,
-                                onSwitchAccount = onSwitchAccount,
-                                onManageAccountsClick = { showAccountSheet = true },
-                                onAddAccountClick = {
-                                    showAccountSheet = false
-                                    onLogin()
-                                },
-                            )
-                        }
-                    }
-
-                    item(key = "collections_overview") {
-                        CollectionOverviewCard(
-                            isLoggedIn = true,
-                            collectionCounts = uiState.collectionCounts,
-                            isCountsLoading = uiState.isCountsLoading,
-                            onCollectionClick = onCollectionClick,
-                            onLogin = onLogin,
-                        )
                     }
                 }
             }
@@ -408,7 +422,7 @@ private val previewProfile1 =
         nickname = "零一",
         userGroup = 1,
         avatar = UserAvatar(large = "", medium = "", small = ""),
-        sign = "探索二次元与科技的边界 ✨",
+        sign = "探索二次元与科技的边界",
     )
 
 private val previewProfile2 =
@@ -420,6 +434,24 @@ private val previewProfile2 =
         avatar = UserAvatar(large = "", medium = "", small = ""),
         sign = "补番进行中...",
     )
+
+@ThemePreviews
+@Composable
+private fun UserScreenLoadingPreview() {
+    MiniBgmTheme {
+        UserScreenContent(
+            uiState = UserUiState(isLoading = true),
+            onLogin = {},
+            onRefresh = {},
+            onSettingsClick = {},
+            onSwitchAccount = {},
+            onLogoutAccount = {},
+            onLogoutAll = {},
+            onCollectionClick = {},
+            snackbarHostState = remember { SnackbarHostState() },
+        )
+    }
+}
 
 @ThemePreviews
 @Composable

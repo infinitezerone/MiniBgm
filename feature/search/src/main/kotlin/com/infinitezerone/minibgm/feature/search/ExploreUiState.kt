@@ -49,15 +49,15 @@ enum class ExploreMood(
     val tags: List<String> = emptyList(),
     val sort: ExploreSort,
 ) {
-    MASTERPIECE("💎 封神必看", emptyList(), ExploreSort.RANK),
-    HOT("🔥 热门流行", emptyList(), ExploreSort.HEAT),
-    HEALING("🌿 深夜解压", listOf("治愈", "日常"), ExploreSort.RANK),
-    SHONEN("⚔️ 热血高燃", listOf("热血", "战斗"), ExploreSort.HEAT),
-    SUSPENSE("🧠 烧脑悬疑", listOf("悬疑", "推理"), ExploreSort.RANK),
-    TEARS("💧 催泪后劲", listOf("催泪", "感动"), ExploreSort.RANK),
-    ROMANCE("🌸 纯爱心动", listOf("恋爱", "纯爱"), ExploreSort.RANK),
-    FANTASY("🔮 异界奇幻", listOf("奇幻", "冒险"), ExploreSort.HEAT),
-    BLIND_BOX("🎲 随心盲盒", emptyList(), ExploreSort.RANK),
+    MASTERPIECE("封神必看", emptyList(), ExploreSort.RANK),
+    HOT("热门流行", emptyList(), ExploreSort.HEAT),
+    HEALING("深夜解压", listOf("治愈", "日常"), ExploreSort.RANK),
+    SHONEN("热血高燃", listOf("热血", "战斗"), ExploreSort.HEAT),
+    SUSPENSE("烧脑悬疑", listOf("悬疑", "推理"), ExploreSort.RANK),
+    TEARS("催泪后劲", listOf("催泪", "感动"), ExploreSort.RANK),
+    ROMANCE("纯爱心动", listOf("恋爱", "纯爱"), ExploreSort.RANK),
+    FANTASY("异界奇幻", listOf("奇幻", "冒险"), ExploreSort.HEAT),
+    BLIND_BOX("随心盲盒", emptyList(), ExploreSort.RANK),
 }
 
 /** 标签维度分组 */
@@ -70,7 +70,7 @@ data class TagGroup(
 val TAG_GROUPS =
     listOf(
         TagGroup(
-            name = "🌈 题材风格",
+            name = "题材风格",
             tags =
                 listOf(
                     "奇幻",
@@ -104,7 +104,7 @@ val TAG_GROUPS =
                 ),
         ),
         TagGroup(
-            name = "🎬 制作厂牌/监督",
+            name = "制作厂牌/监督",
             tags =
                 listOf(
                     "京阿尼",
@@ -131,7 +131,7 @@ val TAG_GROUPS =
                 ),
         ),
         TagGroup(
-            name = "📺 形式与受众",
+            name = "形式与受众",
             tags =
                 listOf(
                     "TV",

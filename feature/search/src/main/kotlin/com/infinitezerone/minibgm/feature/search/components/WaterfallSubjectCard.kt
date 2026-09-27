@@ -321,7 +321,7 @@ fun WaterfallSubjectCard(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 Text(
-                                    text = "💬 " + (hotComment.user?.displayName ?: "同好"),
+                                    text = hotComment.user?.displayName ?: "同好",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,

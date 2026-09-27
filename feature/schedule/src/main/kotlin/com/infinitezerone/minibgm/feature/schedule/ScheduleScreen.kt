@@ -128,39 +128,23 @@ fun ScheduleScreen(
         )
     }
 
-    // 7天平滑滑动的 Pager，初始定位到今天
-    val initialPage = (uiState.todayWeekday - 1).coerceIn(0, 6)
+    // 13天平滑滑动的 Pager，初始定位到今天（索引 6）
     val pagerState =
         rememberPagerState(
-            initialPage = initialPage,
-            pageCount = { 7 },
+            initialPage = ScheduleViewModel.TODAY_PAGE_INDEX,
+            pageCount = { ScheduleViewModel.TOTAL_SCHEDULE_DAYS },
         )
 
-    val stateMon = rememberLazyListState()
-    val stateTue = rememberLazyListState()
-    val stateWed = rememberLazyListState()
-    val stateThu = rememberLazyListState()
-    val stateFri = rememberLazyListState()
-    val stateSat = rememberLazyListState()
-    val stateSun = rememberLazyListState()
-    val weekdayListStates =
-        remember(stateMon, stateTue, stateWed, stateThu, stateFri, stateSat, stateSun) {
-            mapOf(
-                1 to stateMon,
-                2 to stateTue,
-                3 to stateWed,
-                4 to stateThu,
-                5 to stateFri,
-                6 to stateSat,
-                7 to stateSun,
-            )
-        }
+    val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
 
-    // 监听底栏「放送」Tab 再次点击回顶
+    // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     LaunchedEffect(scrollToTop) {
         scrollToTop?.collect {
-            val currentWeekday = pagerState.currentPage + 1
-            weekdayListStates[currentWeekday]?.animateScrollToItem(0)
+            if (pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX) {
+                pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
+            } else {
+                pageListStates.getOrNull(ScheduleViewModel.TODAY_PAGE_INDEX)?.animateScrollToItem(0)
+            }
         }
     }
 
@@ -171,11 +155,10 @@ fun ScheduleScreen(
         }
     }
 
-    // 滑动 Pager 时，双向同步选中的星期
+    // 滑动 Pager 时，双向同步选中的天索引
     LaunchedEffect(pagerState.currentPage) {
-        val targetWeekday = pagerState.currentPage + 1
-        if (uiState.selectedWeekday != targetWeekday) {
-            viewModel.selectWeekday(targetWeekday)
+        if (uiState.selectedPageIndex != pagerState.currentPage) {
+            viewModel.selectPage(pagerState.currentPage)
         }
     }
 
@@ -184,7 +167,7 @@ fun ScheduleScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = "📅 放送时刻表",
+                        text = "放送时刻表",
                     )
                 },
                 actions = {
@@ -222,8 +205,10 @@ fun ScheduleScreen(
                     .padding(innerPadding),
         ) {
             val watchingCountMap =
-                remember(uiState.weeklySchedules, uiState.watchingSubjectIds) {
-                    (1..7).associateWith { uiState.getWatchingCountForWeekday(it) }
+                remember(uiState.daySchedules, uiState.watchingSubjectIds) {
+                    (0 until ScheduleViewModel.TOTAL_SCHEDULE_DAYS).associateWith {
+                        uiState.getWatchingCountForPage(it)
+                    }
                 }
 
             // 顶部星期胶囊导航（指示器 + 快速点击锚点）
@@ -233,17 +218,17 @@ fun ScheduleScreen(
             ) {
                 ModernDateCapsuleStrip(
                     dateItems = uiState.dateItems,
-                    selectedWeekday = uiState.selectedWeekday,
+                    selectedPage = pagerState.currentPage,
                     pagerState = pagerState,
-                    onSelectWeekday = { weekday ->
-                        if (weekday == uiState.selectedWeekday) {
+                    onSelectPage = { page ->
+                        if (page == pagerState.currentPage) {
                             coroutineScope.launch {
-                                weekdayListStates[weekday]?.animateScrollToItem(0)
+                                pageListStates.getOrNull(page)?.animateScrollToItem(0)
                             }
                         } else {
-                            viewModel.selectWeekday(weekday)
+                            viewModel.selectPage(page)
                             coroutineScope.launch {
-                                pagerState.scrollToPage(weekday - 1)
+                                pagerState.scrollToPage(page)
                             }
                         }
                     },
@@ -252,16 +237,16 @@ fun ScheduleScreen(
                 )
             }
 
-            val currentWeekdayTotal = uiState.getTotalCountForWeekday(uiState.selectedWeekday)
-            val currentWeekdayWatching = uiState.getWatchingCountForWeekday(uiState.selectedWeekday)
+            val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
+            val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
 
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
                 FilterAndMetaBar(
-                    totalCount = currentWeekdayTotal,
-                    watchingCount = currentWeekdayWatching,
+                    totalCount = currentPageTotal,
+                    watchingCount = currentPageWatching,
                     onlyWatching = uiState.onlyWatching,
                     onToggleOnlyWatching = viewModel::toggleOnlyWatching,
                     isLoggedIn = uiState.isLoggedIn,
@@ -277,7 +262,7 @@ fun ScheduleScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 when {
-                    !uiState.hasSchedules && uiState.isLoading && uiState.weeklySchedules.isEmpty() -> {
+                    !uiState.hasSchedules && uiState.isLoading -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.TopCenter,
@@ -288,7 +273,7 @@ fun ScheduleScreen(
                         }
                     }
 
-                    !uiState.hasSchedules && uiState.error != null && uiState.weeklySchedules.isEmpty() -> {
+                    !uiState.hasSchedules && uiState.error != null -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center,
@@ -307,20 +292,19 @@ fun ScheduleScreen(
                             modifier = Modifier.fillMaxSize(),
                             key = { page -> page },
                         ) { page ->
-                            val weekday = page + 1
-                            val isTodayPage = weekday == uiState.todayWeekday
+                            val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
                             val timeGrouped =
-                                remember(uiState.weeklySchedules, weekday, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                    uiState.getTimeGroupedSchedulesForWeekday(weekday)
+                                remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                    uiState.getTimeGroupedSchedulesForPage(page)
                                 }
                             val allDaySchedules =
-                                remember(uiState.weeklySchedules, weekday, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                    uiState.getAllDaySchedulesForWeekday(weekday)
+                                remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                    uiState.getAllDaySchedulesForPage(page)
                                 }
-                            val listState = weekdayListStates[weekday] ?: rememberLazyListState()
+                            val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
 
                             DayScheduleList(
-                                weekday = weekday,
+                                pageIndex = page,
                                 isTodayPage = isTodayPage,
                                 timeGrouped = timeGrouped,
                                 allDaySchedules = allDaySchedules,
@@ -454,7 +438,7 @@ fun ScheduleScreen(
 
 @Composable
 private fun DayScheduleList(
-    weekday: Int,
+    pageIndex: Int,
     isTodayPage: Boolean,
     timeGrouped: Map<String, List<AirSchedule>>,
     allDaySchedules: List<AirSchedule>,
@@ -502,7 +486,7 @@ private fun DayScheduleList(
 
             // 如果当天完全没有排播
             if (timeGrouped.isEmpty() && allDaySchedules.isEmpty()) {
-                item(key = "empty_day_$weekday") {
+                item(key = "empty_day_$pageIndex") {
                     ScheduleDayEmptyNote(
                         onlyWatching = uiState.onlyWatching,
                         onSwitchToAll = onSwitchToAll,
@@ -511,7 +495,7 @@ private fun DayScheduleList(
             } else {
                 // ==================== 时间线排播节点（时间醒目 + 聚合防冗余） ====================
                 timeGrouped.forEach { (time, animeList) ->
-                    item(key = "timeslot_${weekday}_$time") {
+                    item(key = "timeslot_${pageIndex}_$time") {
                         TimelineSlotRow(
                             time = time,
                             schedules = animeList,
@@ -527,7 +511,7 @@ private fun DayScheduleList(
 
                 // ==================== 全天 / 网络独播待定番剧自然收容 ====================
                 if (allDaySchedules.isNotEmpty()) {
-                    item(key = "untimed_section_$weekday") {
+                    item(key = "untimed_section_$pageIndex") {
                         ScheduleUntimedSection(
                             schedules = allDaySchedules,
                             watchingSubjectIds = uiState.watchingSubjectIds,

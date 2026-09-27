@@ -54,6 +54,9 @@ interface AirEventDao {
     @Query("SELECT * FROM air_events")
     suspend fun getAllAirEvents(): List<AirEventEntity>
 
+    @Query("SELECT * FROM air_events")
+    fun getAllAirEventsStream(): Flow<List<AirEventEntity>>
+
     @Query("DELETE FROM air_events WHERE kind = 'predicted' AND airAtUtc < :isoUtc")
     suspend fun deleteStalePredictedEvents(isoUtc: String)
 

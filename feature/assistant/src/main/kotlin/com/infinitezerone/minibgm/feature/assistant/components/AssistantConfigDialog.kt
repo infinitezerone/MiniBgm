@@ -1180,7 +1180,7 @@ private fun ModelSelectorCard(
                 )
                 if (isModelKnownUnsupportedToolCall(currentModelDisplay)) {
                     Text(
-                        text = "⚠️ 官方暂不支持工具调用（无法查番或打卡）",
+                        text = "官方暂不支持工具调用（无法查番或打卡）",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 1,
@@ -1387,7 +1387,7 @@ private fun ModelPickerDialog(
                         if (!isSearching && selectedCapabilityFilter == null && remoteModels.isNotEmpty()) {
                             item {
                                 Text(
-                                    text = "🌐 远端已同步模型 (${remoteModels.size})",
+                                    text = "远端已同步模型 (${remoteModels.size})",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
@@ -1409,7 +1409,7 @@ private fun ModelPickerDialog(
                                 item {
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = "💡 推荐候选模型",
+                                        text = "推荐候选模型",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.Bold,
@@ -1490,7 +1490,7 @@ private fun ModelPickerItem(
                                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
                             ) {
                                 Text(
-                                    text = "⚠️ 官方暂无工具调用支持",
+                                    text = "官方暂无工具调用支持",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),

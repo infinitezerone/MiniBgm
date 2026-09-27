@@ -204,7 +204,7 @@ fun SearchResultCard(
                         color = typeTheme.containerColor,
                     ) {
                         Text(
-                            text = "${subjectType.iconEmoji} ${subjectType.label}",
+                            text = subjectType.label,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
                             fontWeight = FontWeight.Bold,
@@ -397,16 +397,17 @@ fun SearchResultGridCard(
                     }
                 }
 
-                // 右上角品类 Emoji
+                // 右上角品类徽章
                 Surface(
                     shape = RoundedCornerShape(bottomStart = 6.dp),
                     color = typeTheme.containerColor.copy(alpha = 0.9f),
                     modifier = Modifier.align(Alignment.TopEnd),
                 ) {
                     Text(
-                        text = subjectType.iconEmoji,
+                        text = subjectType.label,
                         fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
-                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
+                        color = typeTheme.contentColor,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
 

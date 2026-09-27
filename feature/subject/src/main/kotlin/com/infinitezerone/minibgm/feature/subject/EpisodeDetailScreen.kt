@@ -476,7 +476,7 @@ fun EpisodeDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
-                                    text = "💬 本集吐槽与讨论",
+                                    text = "本集吐槽与讨论",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                 )

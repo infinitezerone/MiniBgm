@@ -25,7 +25,7 @@ enum class SubjectType(
     BOOK(
         value = 1,
         label = "书籍",
-        iconEmoji = "📚",
+        iconEmoji = "",
         actionWish = "想读",
         actionDoing = "在读",
         actionCollect = "读过",
@@ -36,7 +36,7 @@ enum class SubjectType(
     ANIME(
         value = 2,
         label = "动画",
-        iconEmoji = "📺",
+        iconEmoji = "",
         actionWish = "想看",
         actionDoing = "在看",
         actionCollect = "看过",
@@ -47,7 +47,7 @@ enum class SubjectType(
     MUSIC(
         value = 3,
         label = "音乐",
-        iconEmoji = "🎵",
+        iconEmoji = "",
         actionWish = "想听",
         actionDoing = "在听",
         actionCollect = "听过",
@@ -58,7 +58,7 @@ enum class SubjectType(
     GAME(
         value = 4,
         label = "游戏",
-        iconEmoji = "🎮",
+        iconEmoji = "",
         actionWish = "想玩",
         actionDoing = "在玩",
         actionCollect = "玩过",
@@ -69,7 +69,7 @@ enum class SubjectType(
     REAL(
         value = 6,
         label = "三次元",
-        iconEmoji = "🎬",
+        iconEmoji = "",
         actionWish = "想看",
         actionDoing = "在看",
         actionCollect = "看过",

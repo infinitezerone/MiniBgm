@@ -123,7 +123,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 authRepository
                     .completeLogin(code, state)
-                    .onSuccess { snackbarHostState.showSnackbar("登录成功 🎉") }
+                    .onSuccess { snackbarHostState.showSnackbar("登录成功") }
                     .onError { _, message -> snackbarHostState.showSnackbar(message) }
             }
         }

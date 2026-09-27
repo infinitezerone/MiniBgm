@@ -37,7 +37,11 @@ data class UserUiState(
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
     val airingReminderEnabled: Boolean = true,
+    val airingDailySummaryEnabled: Boolean = true,
+    val airingPreAirEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
+    val notifyBeforeAirMinutes: Int = 15,
+    val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
@@ -144,6 +148,7 @@ class UserViewModel(
                 isLoggedIn = auth.isLoggedIn,
                 activeProfile = auth.activeProfile,
                 savedAccounts = auth.savedAccounts,
+                isLoading = false,
                 isAuthenticating = auth.isAuthenticating,
                 isRefreshing = local.isRefreshing,
                 syncInterval = sync.settings.syncInterval,
@@ -152,14 +157,18 @@ class UserViewModel(
                 collectionCounts = local.collectionCounts,
                 isCountsLoading = local.isCountsLoading,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
+                airingDailySummaryEnabled = sync.settings.airingDailySummaryEnabled,
+                airingPreAirEnabled = sync.settings.airingPreAirEnabled,
                 airingReminderHour = sync.settings.airingReminderHour,
+                notifyBeforeAirMinutes = sync.settings.notifyBeforeAirMinutes,
+                airingNotificationOffsetMinutes = sync.settings.airingNotificationOffsetMinutes,
                 aiConfig = sync.settings.aiConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 amoledDarkMode = sync.settings.amoledDarkMode,
                 pipEnabled = sync.settings.pipEnabled,
                 showRestrictedContent = sync.settings.showRestrictedContent,
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState(isLoading = true))
 
     /** 刷新个人中心：同步最新个人资料与全量收藏统计 */
     fun refresh(onComplete: ((Boolean) -> Unit)? = null) {
@@ -232,10 +241,38 @@ class UserViewModel(
         }
     }
 
+    /** 每日更新汇总子开关 */
+    fun setAiringDailySummaryEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAiringDailySummaryEnabled(enabled)
+        }
+    }
+
+    /** 单集开播即时提醒子开关 */
+    fun setAiringPreAirEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAiringPreAirEnabled(enabled)
+        }
+    }
+
     /** 每日提醒触发时刻（设备本地时间小时） */
     fun setAiringReminderHour(hour: Int) {
         viewModelScope.launch {
             settingsRepository.setAiringReminderHour(hour)
+        }
+    }
+
+    /** 单集临近提醒提前时间量（分钟） */
+    fun setNotifyBeforeAirMinutes(minutes: Int) {
+        viewModelScope.launch {
+            settingsRepository.setNotifyBeforeAirMinutes(minutes)
+        }
+    }
+
+    /** 单集提醒时机相对开播时刻的偏移量（分钟，负数提前，0准时，正数延后） */
+    fun setAiringNotificationOffsetMinutes(offsetMinutes: Int) {
+        viewModelScope.launch {
+            settingsRepository.setAiringNotificationOffsetMinutes(offsetMinutes)
         }
     }
 

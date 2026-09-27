@@ -198,7 +198,7 @@ internal fun CollectionOverviewCard(
             if (isLoggedIn) {
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    text = "💡 点击任意分类可直达条目列表、查看打卡进度并支持多维度筛选",
+                    text = "点击任意分类可直达条目列表、查看打卡进度并支持多维度筛选",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                 )

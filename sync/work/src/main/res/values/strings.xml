@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="airing_reminder_channel_name">追番更新提醒</string>
+    <string name="airing_channel_group_name">追番提醒</string>
+    <string name="airing_reminder_channel_name">追番每日汇总</string>
+    <string name="airing_reminder_channel_desc">每日在设定时刻汇总推送今天有更新的追番列表</string>
     <string name="airing_reminder_title">今天有 %1$d 部追番更新</string>
     <string name="airing_reminder_item">《%1$s》第 %2$d 话</string>
-    <string name="airing_pre_air_channel_name">开播前提醒</string>
+    <string name="airing_pre_air_channel_name">单集开播提醒</string>
+    <string name="airing_pre_air_channel_desc">在单集动画即将开播或刚开播时发出即时提醒通知</string>
     <string name="airing_pre_air_title">即将开播</string>
+    <string name="airing_pre_air_title_started">现已开播</string>
     <string name="airing_pre_air_item">《%1$s》第 %2$d 话马上开始</string>
+    <string name="airing_pre_air_item_started">《%1$s》第 %2$d 话现已开播</string>
 </resources>

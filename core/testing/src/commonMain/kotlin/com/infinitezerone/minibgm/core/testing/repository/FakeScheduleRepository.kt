@@ -31,9 +31,17 @@ class FakeScheduleRepository : ScheduleRepository {
         private set
     val searchLocalSubjectsCalls = mutableListOf<String>()
 
+    private val airEventsState = MutableStateFlow<List<com.infinitezerone.minibgm.core.model.AirScheduleEvent>>(emptyList())
+
+    fun sendAirEvents(events: List<com.infinitezerone.minibgm.core.model.AirScheduleEvent>) {
+        airEventsState.value = events
+    }
+
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> = schedulesState.map { it[weekday].orEmpty() }
 
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> = schedulesState.map { it.values.flatten() }
+
+    override fun getAllAirEventsStream(): Flow<List<com.infinitezerone.minibgm.core.model.AirScheduleEvent>> = airEventsState
 
     var syncBangumiDataCallCount: Int = 0
         private set

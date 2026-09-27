@@ -150,7 +150,7 @@ fun SubjectHeaderCard(
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
                         ) {
                             Text(
-                                text = "${subjectType.iconEmoji} ${subjectType.label}",
+                                text = subjectType.label,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,

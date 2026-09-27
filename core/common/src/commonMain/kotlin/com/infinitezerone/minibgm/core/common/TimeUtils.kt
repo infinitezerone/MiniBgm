@@ -35,6 +35,15 @@ object TimeUtils {
             ""
         }
 
+    /** ISO-8601 UTC 字符串 → 中国时区日期字符串 (yyyy-MM-dd) */
+    fun formatIsoToCstDate(isoUtcString: String): String =
+        try {
+            val instant = Instant.parse(isoUtcString)
+            instant.toLocalDateTime(timeZoneCst).date.toString()
+        } catch (_: Exception) {
+            isoUtcString.substringBefore("T").trim()
+        }
+
     /** epoch 毫秒 → 日本时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
     fun jstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneJst)
 

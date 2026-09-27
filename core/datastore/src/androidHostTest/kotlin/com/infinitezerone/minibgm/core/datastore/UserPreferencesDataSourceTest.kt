@@ -178,4 +178,48 @@ class UserPreferencesDataSourceTest {
             dataSource.setPipEnabled(true)
             assertTrue(dataStore.data.first().pipEnabled)
         }
+
+    @Test
+    fun `notification sub-switches toggle independently`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertTrue(dataStore.data.first().airingDailySummaryEnabled, "default daily summary should be true")
+            assertTrue(dataStore.data.first().airingPreAirEnabled, "default pre-air should be true")
+
+            dataSource.setAiringDailySummaryEnabled(false)
+            assertFalse(dataStore.data.first().airingDailySummaryEnabled)
+            assertTrue(dataStore.data.first().airingPreAirEnabled)
+
+            dataSource.setAiringPreAirEnabled(false)
+            assertFalse(dataStore.data.first().airingDailySummaryEnabled)
+            assertFalse(dataStore.data.first().airingPreAirEnabled)
+        }
+
+    @Test
+    fun `setAiringNotificationOffsetMinutes updates offset and syncs legacy fields`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertEquals(-15, dataStore.data.first().airingNotificationOffsetMinutes)
+
+            // 设为提前 20 分钟 (offset = -20)
+            dataSource.setAiringNotificationOffsetMinutes(-20)
+            val earlyState = dataStore.data.first()
+            assertEquals(-20, earlyState.airingNotificationOffsetMinutes)
+            assertEquals(20, earlyState.notifyBeforeAirMinutes)
+            assertEquals(0, earlyState.airDelayOffsetMinutes)
+
+            // 设为延后 45 分钟 (offset = 45)
+            dataSource.setAiringNotificationOffsetMinutes(45)
+            val lateState = dataStore.data.first()
+            assertEquals(45, lateState.airingNotificationOffsetMinutes)
+            assertEquals(0, lateState.notifyBeforeAirMinutes)
+            assertEquals(45, lateState.airDelayOffsetMinutes)
+
+            // 边界截断测试：超出 [-60, 120] 自动截断
+            dataSource.setAiringNotificationOffsetMinutes(-100)
+            assertEquals(-60, dataStore.data.first().airingNotificationOffsetMinutes)
+
+            dataSource.setAiringNotificationOffsetMinutes(200)
+            assertEquals(120, dataStore.data.first().airingNotificationOffsetMinutes)
+        }
 }

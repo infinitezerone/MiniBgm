@@ -1,10 +1,12 @@
 package com.infinitezerone.minibgm.sync.work.reminders
 
 import android.app.NotificationChannel
+import android.app.NotificationChannelGroup
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
@@ -12,29 +14,25 @@ import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.sync.work.R
 
 /**
- * 开播提醒通知的 Android 侧实现：频道管理、权限检查与汇总通知展示。
- * 逻辑判定在 [AiringReminderPlanner]，本类只负责"发"。
+ * 开播提醒通知的 Android 侧实现：频道管理、权限检查与通知展示。
+ * 逻辑判定在 [AiringReminderPlanner]，调度由 [AiringAlarmScheduler] 管理，本类负责构建与展示通知。
  */
 class AiringReminderNotifier(
     private val context: Context,
 ) {
     fun notificationsEnabled(): Boolean =
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-                android.content.pm.PackageManager.PERMISSION_GRANTED
+                PackageManager.PERMISSION_GRANTED
         } else {
             NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
 
+    /** 每日汇总通知（固定 ID，点击跳转时刻表） */
     fun notify(upcoming: List<UpcomingAiring>) {
+        if (upcoming.isEmpty()) return
+        createNotificationChannels(context)
         val manager = NotificationManagerCompat.from(context)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                context.getString(R.string.airing_reminder_channel_name),
-                NotificationManager.IMPORTANCE_DEFAULT,
-            ),
-        )
 
         val listText =
             upcoming.joinToString("\n") { item ->
@@ -43,10 +41,10 @@ class AiringReminderNotifier(
         val notification =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_menu_today)
+                .setSmallIcon(R.drawable.ic_notification_airing)
                 .setContentTitle(context.getString(R.string.airing_reminder_title, upcoming.size))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
-                .setContentIntent(launchAppIntent())
+                .setContentIntent(launchScheduleIntent())
                 .setAutoCancel(true)
                 .build()
 
@@ -54,34 +52,47 @@ class AiringReminderNotifier(
     }
 
     /**
-     * 开播前提醒：单集临近开播的实时通知。使用独立的高优先级频道，
-     * 用户可在系统设置中对"每日汇总"与"开播前提醒"分别静音。
+     * 单集临近/刚开播提醒。
+     * 为每部番剧分配独立 Notification ID，互不顶掉覆盖；
+     * 单集通知点击直达该番剧详情页面。
      */
-    fun notifyImminent(upcoming: List<UpcomingAiring>) {
+    fun notifyImminent(
+        upcoming: List<UpcomingAiring>,
+        isAlreadyStarted: Boolean = false,
+    ) {
+        if (upcoming.isEmpty()) return
+        createNotificationChannels(context)
         val manager = NotificationManagerCompat.from(context)
-        manager.createNotificationChannel(
-            NotificationChannel(
-                PRE_AIR_CHANNEL_ID,
-                context.getString(R.string.airing_pre_air_channel_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            ),
-        )
 
-        val listText =
-            upcoming.joinToString("\n") { item ->
-                context.getString(R.string.airing_pre_air_item, item.displayName, item.episode)
-            }
-        val notification =
-            NotificationCompat
-                .Builder(context, PRE_AIR_CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle(context.getString(R.string.airing_pre_air_title))
-                .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
-                .setContentIntent(launchAppIntent())
-                .setAutoCancel(true)
-                .build()
+        for (item in upcoming) {
+            val titleRes =
+                if (isAlreadyStarted) {
+                    R.string.airing_pre_air_title_started
+                } else {
+                    R.string.airing_pre_air_title
+                }
+            val itemText =
+                if (isAlreadyStarted) {
+                    context.getString(R.string.airing_pre_air_item_started, item.displayName, item.episode)
+                } else {
+                    context.getString(R.string.airing_pre_air_item, item.displayName, item.episode)
+                }
 
-        post(manager, PRE_AIR_NOTIFICATION_ID, notification)
+            val notification =
+                NotificationCompat
+                    .Builder(context, PRE_AIR_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification_airing)
+                    .setContentTitle(context.getString(titleRes))
+                    .setContentText(itemText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
+                    .setContentIntent(launchSubjectIntent(item.subjectId))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setAutoCancel(true)
+                    .build()
+
+            post(manager, notificationIdForSubject(item.subjectId), notification)
+        }
     }
 
     private fun post(
@@ -89,32 +100,84 @@ class AiringReminderNotifier(
         id: Int,
         notification: android.app.Notification,
     ) {
-        if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED ||
-            android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         ) {
             manager.notify(id, notification)
         }
     }
 
-    private fun launchAppIntent(): PendingIntent? {
-        val launch =
-            context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-                // 编译期契约：extra 键与 :app MainActivity 消费端共用 BgmNavIntents 常量
-                putExtra(BgmNavIntents.EXTRA_OPEN_SCHEDULE, true)
-            } ?: return null
+    private fun launchScheduleIntent(): PendingIntent? {
+        val launch = BgmNavIntents.createScheduleIntent(context)
+        if (launch.component == null && launch.action == null) return null
         return PendingIntent.getActivity(
             context,
-            0,
+            NOTIFICATION_ID,
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
-    private companion object {
+    private fun launchSubjectIntent(subjectId: Long): PendingIntent? {
+        val launch = BgmNavIntents.createSubjectIntent(context, subjectId)
+        if (launch.component == null && launch.action == null) return null
+        return PendingIntent.getActivity(
+            context,
+            notificationIdForSubject(subjectId),
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    companion object {
+        const val GROUP_ID = "group_airing"
         const val CHANNEL_ID = "airing_reminders"
         const val NOTIFICATION_ID = 4701
         const val PRE_AIR_CHANNEL_ID = "airing_pre_air"
-        const val PRE_AIR_NOTIFICATION_ID = 4702
+
+        fun notificationIdForSubject(subjectId: Long): Int = (47000 + (subjectId % 10000)).toInt()
+
+        /**
+         * 预注册所有通知渠道与分组（在 App 启动时调用，解决系统设置中看不到子渠道的懒加载问题）。
+         */
+        fun createNotificationChannels(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = NotificationManagerCompat.from(context)
+
+            // 1. 注册渠道组
+            manager.createNotificationChannelGroup(
+                NotificationChannelGroup(
+                    GROUP_ID,
+                    context.getString(R.string.airing_channel_group_name),
+                ),
+            )
+
+            // 2. 每日更新汇总渠道 (DEFAULT)
+            val dailyChannel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    context.getString(R.string.airing_reminder_channel_name),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    group = GROUP_ID
+                    description = context.getString(R.string.airing_reminder_channel_desc)
+                }
+            manager.createNotificationChannel(dailyChannel)
+
+            // 3. 单集即时开播提醒渠道 (HIGH, 带振动与锁屏公开)
+            val preAirChannel =
+                NotificationChannel(
+                    PRE_AIR_CHANNEL_ID,
+                    context.getString(R.string.airing_pre_air_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    group = GROUP_ID
+                    description = context.getString(R.string.airing_pre_air_channel_desc)
+                    enableVibration(true)
+                    setShowBadge(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
+            manager.createNotificationChannel(preAirChannel)
+        }
     }
 }

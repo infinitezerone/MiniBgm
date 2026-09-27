@@ -11,6 +11,8 @@ import androidx.work.WorkManager
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.sync.work.reminders.AiringAlarmScheduler
+import com.infinitezerone.minibgm.sync.work.reminders.AiringReminderNotifier
 import com.infinitezerone.minibgm.sync.work.workers.AiringReminderWorker
 import com.infinitezerone.minibgm.sync.work.workers.BgmSyncWorker
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +20,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.koin.core.context.GlobalContext
 import java.util.concurrent.TimeUnit
 
 val SyncConstraints =
@@ -27,24 +30,17 @@ val SyncConstraints =
         .setRequiresBatteryNotLow(true)
         .build()
 
-/** 开播提醒纯本地查询，不限网络；每小时探测一次窗口内的更新 */
-val ReminderConstraints =
-    Constraints
-        .Builder()
-        .setRequiresBatteryNotLow(true)
-        .build()
-
 /**
- * 统一调度启动器（对标 NiA Sync.initialize）：
- * 1. App 启动初始化时立即入队一次性后台同步任务（对标 NiA startUpSyncWork），
- *    确保新安装 / 无缓存 / 数据为空时立即发起首次静默同步。
- * 2. 根据用户偏好中的 [SyncInterval] 动态注册或注销系统后台周期任务。
+ * 统一后台调度启动器（对标 NiA Sync.initialize）：
+ * 1. 启动时入队一次性后台同步任务，并在网络就绪时执行首次静默同步；
+ * 2. 预注册通知渠道与分组（解决系统设置懒加载缺陷）；
+ * 3. 彻底注销旧版 WorkManager 15 分钟轮询，交由 [AiringAlarmScheduler] 定点精确调度；
+ * 4. 持续监听偏好变动动态调谐后台同步节拍与开播提醒闹钟。
  */
 object Sync {
     fun enqueueStartupSync(context: Context) {
         val workManager = WorkManager.getInstance(context)
 
-        // 启动时入队一次性静默同步（REPLACE 保证若有残留失败或旧任务时直接覆盖重新执行）
         val startupSyncWork =
             OneTimeWorkRequestBuilder<BgmSyncWorker>()
                 .setConstraints(SyncConstraints)
@@ -62,19 +58,51 @@ object Sync {
         context: Context,
         interval: SyncInterval = SyncInterval.WEEKLY,
     ) {
+        AiringReminderNotifier.createNotificationChannels(context)
+        // 彻底注销旧版 WorkManager 周期任务
+        WorkManager.getInstance(context).cancelUniqueWork(AiringReminderWorker.PERIODIC_WORK_NAME)
         enqueueStartupSync(context)
-        enqueueAiringReminders(context)
         reconfigure(context, interval)
     }
 
-    /** 结合用户偏好执行智能启动同步（节流与未同步检测），并持续监听偏好变动动态调谐后台节拍 */
+    /** 结合用户偏好执行智能启动同步（节流与未同步检测），预注册通知渠道并动态维护 AlarmManager 闹钟 */
     fun initialize(
         context: Context,
         userPreferences: UserPreferencesDataSource,
         scope: CoroutineScope,
     ) {
-        enqueueAiringReminders(context)
+        // 1. 预注册系统通知渠道与分组（开箱即见）
+        AiringReminderNotifier.createNotificationChannels(context)
 
+        // 2. 彻底注销旧版 WorkManager 周期任务（消除历史升级残留）
+        WorkManager.getInstance(context).cancelUniqueWork(AiringReminderWorker.PERIODIC_WORK_NAME)
+
+        // 3. 启动即刻核准一次开播提醒闹钟
+        val scheduler = runCatching { GlobalContext.get().get<AiringAlarmScheduler>() }.getOrNull()
+        scope.launch {
+            scheduler?.rescheduleAll()
+        }
+
+        // 4. 监听开播提醒偏好或同步时间戳变动，动态核准 Alarm
+        scope.launch {
+            userPreferences.userPreferences
+                .map {
+                    listOf(
+                        it.airingReminderEnabled,
+                        it.airingDailySummaryEnabled,
+                        it.airingPreAirEnabled,
+                        it.airingReminderHour,
+                        it.notifyBeforeAirMinutes,
+                        it.airDelayOffsetMinutes,
+                        it.bangumiDataLastSyncTimestamp,
+                    )
+                }.distinctUntilChanged()
+                .collect {
+                    scheduler?.rescheduleAll()
+                }
+        }
+
+        // 5. 数据同步检查与监听
         scope.launch {
             val initialPrefs = userPreferences.userPreferences.first()
             val isNeverSynced = initialPrefs.bangumiDataLastSyncTimestamp == 0L
@@ -89,29 +117,10 @@ object Sync {
             userPreferences.userPreferences
                 .map { it.syncInterval }
                 .distinctUntilChanged()
-                .collect { interval ->
-                    reconfigure(context, interval)
+                .collect { syncInterval ->
+                    reconfigure(context, syncInterval)
                 }
         }
-    }
-
-    /** 注册开播提醒周期任务（15 分钟本地探测：每日汇总去重 + 开播前 15 分钟逐集提醒窗口） */
-    fun enqueueAiringReminders(context: Context) {
-        val workManager = WorkManager.getInstance(context)
-        val periodicReminderWork =
-            PeriodicWorkRequestBuilder<AiringReminderWorker>(
-                repeatInterval = 15L,
-                repeatIntervalTimeUnit = TimeUnit.MINUTES,
-            ).setConstraints(ReminderConstraints)
-                .addTag(AiringReminderWorker.TAG)
-                .build()
-
-        workManager.enqueueUniquePeriodicWork(
-            AiringReminderWorker.PERIODIC_WORK_NAME,
-            // UPDATE 而非 KEEP：节拍从历史版本的 1 小时加密到 15 分钟后，升级用户需要同步新周期
-            ExistingPeriodicWorkPolicy.UPDATE,
-            periodicReminderWork,
-        )
     }
 
     fun reconfigure(
@@ -121,7 +130,6 @@ object Sync {
         val workManager = WorkManager.getInstance(context)
 
         if (interval == SyncInterval.MANUAL_ONLY) {
-            // 彻底注销系统后台周期任务
             workManager.cancelUniqueWork(BgmSyncWorker.PERIODIC_SYNC_WORK_NAME)
             return
         }
@@ -136,10 +144,6 @@ object Sync {
 
         workManager.enqueueUniquePeriodicWork(
             BgmSyncWorker.PERIODIC_SYNC_WORK_NAME,
-            // UPDATE 而非 CANCEL_AND_REENQUEUE：initialize 的偏好流 collect 首个值在每次
-            // app 启动都会触发 reconfigure，CANCEL_AND_REENQUEUE 会重置节拍（日常使用的
-            // 设备上周期同步几乎永远走不到触发点）并掐断正在运行的任务；UPDATE 保留原
-            // 节拍、仅按需更新约束，且不打断运行中的同步
             ExistingPeriodicWorkPolicy.UPDATE,
             periodicSyncWork,
         )

@@ -1,7 +1,5 @@
 package com.infinitezerone.minibgm.core.network.di
 
-import com.infinitezerone.minibgm.core.network.AniListService
-import com.infinitezerone.minibgm.core.network.AniListServiceImpl
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
@@ -14,6 +12,8 @@ import com.infinitezerone.minibgm.core.network.BgmTokenPair
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.PageFetchServiceImpl
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotServiceImpl
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
 import org.koin.core.module.Module
@@ -71,7 +71,7 @@ fun networkModule(
         single<BangumiApiService> { BangumiApiServiceImpl(client = get(), authConfig = get()) }
         single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
-        single<AniListService> { AniListServiceImpl(get(named("unauthenticated"))) }
+        single<ScheduleSnapshotService> { ScheduleSnapshotServiceImpl(get(named("unauthenticated"))) }
         single<PageFetchService> { PageFetchServiceImpl(get(named("unauthenticated"))) }
         single<com.infinitezerone.minibgm.core.network.CommunitySubscriptionService> {
             com.infinitezerone.minibgm.core.network

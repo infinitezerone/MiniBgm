@@ -188,7 +188,8 @@ class DefaultBgmAiAgentService(
                     content.contains("<toolcall>") ||
                     content.contains("<param_key>") ||
                     content.contains("<paramkey>") ||
-                    content.startsWith("❌ 执行出错")
+                    content.startsWith("❌ 执行出错") ||
+                    content.startsWith("执行出错")
             }
         if (cleanHistory.isEmpty()) {
             return prompt

@@ -12,24 +12,19 @@ import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
 import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
-import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
-import com.infinitezerone.minibgm.core.model.BangumiDataItem
-import com.infinitezerone.minibgm.core.model.BangumiDataSite
+import com.infinitezerone.minibgm.core.model.AirScheduleEvent
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.SearchFilter
-import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.SiteLink
-import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
-import com.infinitezerone.minibgm.core.network.AniListService
+import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
+import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
-import com.infinitezerone.minibgm.core.network.BangumiApiService
-import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
-import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotDto
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -53,6 +48,9 @@ interface ScheduleRepository {
      * 全量刷新管线进行期间扣住中间态，仅在管线完成后以最新完整数据对外发流。
      */
     fun getAllSchedulesStream(): Flow<List<AirSchedule>>
+
+    /** 全量逐话播出事件流（用于按真实自然日精准匹配单集与播出时刻） */
+    fun getAllAirEventsStream(): Flow<List<AirScheduleEvent>>
 
     /**
      * 查询指定条目（通常为"我追的"）在时间窗口内的播出事件，
@@ -101,12 +99,10 @@ interface ScheduleRepository {
 }
 
 class ScheduleRepositoryImpl(
-    private val apiService: BangumiApiService,
-    private val dataService: BangumiDataService,
     private val scheduleDao: AirScheduleDao,
     private val airEventDao: AirEventDao,
     private val anilistMappingDao: AniListMappingDao,
-    private val anilistService: AniListService,
+    private val snapshotService: ScheduleSnapshotService,
     private val userPreferences: UserPreferencesDataSource,
     private val collectionRepository: CollectionRepository? = null,
     private val json: Json = BgmHttpClient.jsonConfig,
@@ -117,6 +113,11 @@ class ScheduleRepositoryImpl(
             entities
                 .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
                 .map { it.toModel(json) }
+        }
+
+    override fun getAllAirEventsStream(): Flow<List<AirScheduleEvent>> =
+        airEventDao.getAllAirEventsStream().map { list ->
+            list.map { AirScheduleEvent(it.subjectId, it.episode, it.airAtUtc, it.kind) }
         }
 
     /**
@@ -272,19 +273,9 @@ class ScheduleRepositoryImpl(
 
     override suspend fun syncBangumiData(): AppResult<Unit> =
         try {
-            val existingEntities = scheduleDao.getAllSchedulesList()
-
-            // bangumi-data 不再作为名单来源（也不再有固定窗口）：名单由官方日历 + AniList 周排期负责，
-            // 这里只为缺播放源/中文名的条目，按其 begin 月按需补全（ETag 条件请求，未变即 0 字节）。
-            val enriched = enrichFromBangumiDataMonths(existingEntities)
-            if (enriched != existingEntities) {
-                scheduleDao.insertSchedules(enriched)
-            }
-            userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
-
-            // 逐话事件同步与仲裁（全量管线中唯一一次）：名单发现 + 排期回写 + 元数据回补都在这里收口
+            // 逐话事件同步与仲裁（全量管线中唯一一次）：快照直拉 + 名单发现 + 排期回写全部收口
             runCatchingCancellable { syncAirEvents() }
-
+            userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
             AppResult.Success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -315,73 +306,19 @@ class ScheduleRepositoryImpl(
     }
 
     /**
-     * 为缺播放源的条目按其 `begin` 月（±1 月容忍 begin 的时区/跨月错位）按需拉取 bangumi-data 月切片，
-     * 补全 sites / 中文名 / anilistId。每月 ETag 持久化，未变时条件请求命中 304、零解析。
-     */
-    private suspend fun enrichFromBangumiDataMonths(entities: List<AirScheduleEntity>): List<AirScheduleEntity> {
-        val needs = entities.filter { it.sitesJson.isBlank() || it.sitesJson == "[]" }
-        if (needs.isEmpty()) return entities
-
-        val nowMillis = TimeUtils.nowEpochMillis()
-        val months =
-            needs
-                .mapNotNull { monthKeyOfAirDate(it.airDate) }
-                .flatMap { key ->
-                    val year = key.substring(0, 4).toIntOrNull() ?: return@flatMap emptyList()
-                    val month = key.substring(5, 7).toIntOrNull() ?: return@flatMap emptyList()
-                    listOf(shiftMonth(year, month, -1), year to month, shiftMonth(year, month, 1))
-                }.distinct()
-
-        val itemsByBgmId = mutableMapOf<Long, BangumiDataItem>()
-        for ((year, month) in months) {
-            val key = monthKey(year, month)
-            val etag = runCatching { anilistMappingDao.getMonthEtag(key) }.getOrNull()?.etag
-            val result =
-                runCatchingCancellable { dataService.getMonthItems(year, month, etag) }.getOrNull()
-                    ?: continue
-            if (result is BangumiDataMonthResult.Success) {
-                result.etag?.takeIf { it.isNotBlank() }?.let {
-                    runCatching { anilistMappingDao.upsertMonthEtag(BangumiDataMonthEtagEntity(key, it, nowMillis)) }
-                }
-                result.items.forEach { item -> item.bgmSubjectId?.let { itemsByBgmId[it] = item } }
-            }
-        }
-        if (itemsByBgmId.isEmpty()) return entities
-
-        return entities.map { entity ->
-            val item = itemsByBgmId[entity.bgmId] ?: return@map entity
-            entity.copy(
-                titleCn = entity.titleCn.ifBlank { item.chineseTitle },
-                sitesJson = mergeSites(entity.sitesJson, json.encodeToString(item.sites.mapNotNull { resolveSiteLink(it) })),
-                anilistId =
-                    entity.anilistId
-                        ?: item.sites
-                            .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                            ?.id
-                            ?.toLongOrNull(),
-            )
-        }
-    }
-
-    /** 从 `airDate`（`YYYY-MM-DD`）解析出 `YYYY-MM`；非法/缺失返回 null。 */
-    private fun monthKeyOfAirDate(airDate: String): String? {
-        val date = airDate.substringBefore("T")
-        if (date.length < 7) return null
-        val year = date.substring(0, 4).toIntOrNull() ?: return null
-        val month = date.substring(5, 7).toIntOrNull() ?: return null
-        if (year <= 0 || month !in 1..12) return null
-        return monthKey(year, month)
-    }
-
-    /**
      * 同步全量条目的播出事件并仲裁时刻表：
-     * 1) 从 AniList 获取逐话真值与高清封面（日番主流，精确到秒级）；
-     * 2) 仲裁回写条目的 next* 字段与 weekday，自动回补 AniList 高清封面，并剔除已完结僵尸条目。
+     * 1) 下载放送时刻表快照（minibgm-schedule-data，CI 定时扫描 AniList 的产物）；
+     * 2) 快照投喂名单发现与本地/快照映射（映射不上直接丢弃，不生成占位条目）；
+     * 3) 仲裁回写条目的 next* 字段与 weekday，自动回补高清封面，并剔除已完结僵尸条目。
+     * 快照下载失败时保持本地现状（fail-open），等待下一班 CI / 刷新。
      */
     private suspend fun syncAirEvents() {
+        val snapshot =
+            runCatchingCancellable { snapshotService.getSnapshot() }.getOrNull()
+                ?: return
         val baseEntities = scheduleDao.getAllSchedulesList()
         val nowMillis = TimeUtils.nowEpochMillis()
-        val resolution = resolveWeeklyAiringSchedules(baseEntities, nowMillis)
+        val resolution = resolveWeeklyAiringSchedules(baseEntities, nowMillis, snapshot)
         if (resolution.entities.isEmpty()) return
 
         val trackingSubjectIds =
@@ -425,8 +362,8 @@ class ScheduleRepositoryImpl(
                 entities
             }
 
-        // 1. AniList 逐话真值与高清封面同步（拆季偏移在此生效）
-        val (anilistEvents, _, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis)
+        // 1. 快照自带逐话真值与高清封面（拆季偏移在此生效）
+        val (anilistEvents, _, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis, snapshot)
         // 用偏移后的逐话真值替换同 (subjectId, airAt) 的旧事件（含周排期写入的原始集数事件），
         // 只替换 airAt 命中的那些以保留窗口外的事件，且整体原子执行
         anilistEvents.groupBy { it.subjectId }.forEach { (subjectId, events) ->
@@ -463,20 +400,23 @@ class ScheduleRepositoryImpl(
         }
 
         val reconciled = reconcileScheduleEntities(activeEntities, allEvents, nowMillis)
-        scheduleDao.insertSchedules(enrichMissingMetadata(reconciled))
+        scheduleDao.insertSchedules(reconciled)
     }
 
     private suspend fun fetchAnilistAirEvents(
         entities: List<AirScheduleEntity>,
         nowMillis: Long,
+        snapshot: ScheduleSnapshotDto,
     ): Triple<List<AirEventEntity>, Set<Long>, Map<Long, String>> {
         val withAnilistId = entities.filter { it.anilistId != null }
         val schedulesByAnilistId =
-            runCatching {
-                anilistService.getMediaSchedules(
-                    anilistIds = withAnilistId.mapNotNull { it.anilistId },
-                )
-            }.getOrElse { emptyMap() }
+            snapshot.items.associate { item ->
+                item.anilistId to
+                    AniListMediaSchedule(
+                        episodes = item.episodes.map { AniListAiringEpisode(episode = it.n, airAtEpochSeconds = it.t) },
+                        coverUrl = item.coverUrl,
+                    )
+            }
         val anilistEvents = mutableListOf<AirEventEntity>()
         val coveredSubjects = mutableSetOf<Long>()
         val coversBySubjectId = mutableMapOf<Long, String>()
@@ -491,14 +431,15 @@ class ScheduleRepositoryImpl(
             val episodes = mediaSchedule.episodes
             if (episodes.isEmpty()) continue
 
-            // 拆季偏移推导：
+            // 拆季偏移推导（锚点只信真实 Bangumi 开播日期）：
             // 当季绝大多数条目在 AniList 为独立条目（从第 1 话开始），默认 offset = 0；
             // 若 AniList 话数从 >1 开始，且首个样本就在 Bangumi 开播日附近（±14天），
             // 则表明 AniList 顺延了上半季话数，其实际正对应本季第 1 话（如 AniList 13 话对齐 Bangumi 下半季第 1 话）。
-            // 绝不因首播日跨度大而把整部番剧跳过，播出时刻始终从真实单集时间戳直接解析。
-            val anchorMillis =
-                TimeUtils.epochMillisOfIso(entity.airDate)
-                    ?: TimeUtils.epochMillisOfIso(entity.beginUtc)
+            // airDate 未知（如快照 tier-0 新建实体）时强制 offset = 0 信任 AniList 编号，
+            // 绝不用条目自身的播出时间当锚（那会把"第 N 话"系统性错算成"第 1 话"），
+            // 也不因首播日跨度大而把整部番剧跳过，播出时刻始终从真实单集时间戳直接解析。
+            // airDate 由 enrichMissingMetadata 按 Bangumi 条目日期回填，下一轮刷新起生效。
+            val anchorMillis = TimeUtils.epochMillisOfIso(entity.airDate)
 
             val anchorEp =
                 if (anchorMillis != null) {
@@ -541,28 +482,44 @@ class ScheduleRepositoryImpl(
     }
 
     /**
-     * 用 AniList 当周排期把全网在播条目补齐/绑定到本地时刻表。
+     * 用快照数据把全网在播条目补齐/绑定到本地时刻表。
      *
-     * anilistId → bgmId 三级降级，命中即回写 [AniListBgmMappingEntity]：
-     * 1) 本地已有但尚未绑定 anilistId 的条目，按归一化标题精确匹配（不做包含匹配，避免跨季误配）；
-     * 2) 映射缓存；未命中则按条目 startDate（±1 月）按需拉取 bangumi-data 月切片，用 sites 桥解析；
-     * 3) 仍无结果时用 bgm.tv 官方搜索按日文原名兜底，且只在候选唯一时接受（绝不取首条）。
+     * anilistId → bgmId 映射（映射不上直接丢弃，不生成占位条目）：
+     * 0) 快照自带 bgmId（CI 侧已由 bangumi-data 桥接或搜索兜底完成解析）；
+     * 1) 本地已有但尚未绑定 anilistId 的条目，按归一化标题精确匹配；
+     * 2) 本地映射缓存（历史已保存的映射）；
+     * 全部落空即丢弃该条目（零网络额外开销，fail-open）。
      */
     private suspend fun resolveWeeklyAiringSchedules(
         currentEntities: List<AirScheduleEntity>,
         nowMillis: Long,
+        snapshot: ScheduleSnapshotDto,
     ): WeeklyResolution {
-        val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
-        val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
+        // 滚动 13 天时刻表（前 6 天 + 今天 + 后 6 天，留足前后 7 天窗口）：收录覆盖期内的全部在播条目
+        val windowStartSeconds = (nowMillis - 7 * DAY_MILLIS) / 1000
+        val windowEndSeconds = (nowMillis + 7 * DAY_MILLIS) / 1000
         val showRestricted =
             runCatching { userPreferences.userPreferences.firstOrNull()?.showRestrictedContent }
                 .getOrNull() ?: false
         val weeklyItems =
-            runCatchingCancellable {
-                // 边界用开区间 ±1 秒：把"周一 00:00:00 整"那一集纳入（否则它既不在本周也不在下周）
-                anilistService.getWeeklyAiringSchedule(weekStartSeconds - 1, weekEndSeconds + 1)
-            }.getOrElse { emptyList() }
-                .filter { showRestricted || !it.isAdult }
+            snapshot.items
+                .flatMap { item ->
+                    item.episodes
+                        .filter { it.t in windowStartSeconds..windowEndSeconds }
+                        .map { ep ->
+                            AniListWeeklyScheduleItem(
+                                anilistId = item.anilistId,
+                                episode = ep.n,
+                                airAtEpochSeconds = ep.t,
+                                titleNative = item.title,
+                                coverUrl = item.coverUrl,
+                                format = item.format,
+                                startYear = item.startYear,
+                                startMonth = item.startMonth,
+                                isAdult = item.isAdult,
+                            )
+                        }
+                }.filter { showRestricted || !it.isAdult }
 
         if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 
@@ -575,25 +532,120 @@ class ScheduleRepositoryImpl(
         val newlyInserted = mutableListOf<AirScheduleEntity>()
         val newEvents = mutableListOf<AirEventEntity>()
         val mappingsToPersist = mutableListOf<AniListBgmMappingEntity>()
-        val fetchedMonths = mutableSetOf<String>()
         val mappingCache = loadMappingCache(weeklyItems.map { it.anilistId })
+        val snapshotItemByAnilistId = snapshot.items.associateBy { it.anilistId }
 
         for (item in weeklyItems) {
+            val sItem = snapshotItemByAnilistId[item.anilistId]
+            val sSites = sItem?.sites?.mapNotNull { resolveSiteLink(it.site, it.id, it.url) }.orEmpty()
+            val sSitesJson = if (sSites.isNotEmpty()) json.encodeToString(sSites) else "[]"
+            val sCoverUrl = item.coverUrl.orEmpty()
+            val sTitleCn = sItem?.titleCn.orEmpty()
+            val sAirDate =
+                sItem?.airDate?.ifBlank { null }
+                    ?: if ((sItem?.startYear ?: 0) > 0 && (sItem?.startMonth ?: 0) in 1..12) {
+                        "${sItem!!.startYear}-${sItem!!.startMonth.toString().padStart(2, '0')}-01"
+                    } else {
+                        ""
+                    }
+
             val alreadyMapped = entitiesByAnilistId[item.anilistId]
-            if (alreadyMapped != null && alreadyMapped.bgmId > 0) continue
-            // 上一轮的占位条目：本次先移除，映射成功则升级为正式条目，否则重新生成占位
+            if (alreadyMapped != null && alreadyMapped.bgmId > 0) {
+                val mergedSites = mergeSites(alreadyMapped.sitesJson, sSitesJson)
+                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else alreadyMapped.titleCn
+                val targetCoverUrl = if (alreadyMapped.coverUrl.isBlank() && sCoverUrl.isNotBlank()) sCoverUrl else alreadyMapped.coverUrl
+                val targetAirDate =
+                    if (alreadyMapped.airDate.isBlank() &&
+                        sAirDate.isNotBlank()
+                    ) {
+                        sAirDate.substringBefore("T")
+                    } else {
+                        alreadyMapped.airDate
+                    }
+                val needsUpdate =
+                    targetCoverUrl != alreadyMapped.coverUrl ||
+                        targetTitleCn != alreadyMapped.titleCn ||
+                        targetAirDate != alreadyMapped.airDate ||
+                        mergedSites != alreadyMapped.sitesJson
+
+                if (needsUpdate) {
+                    val updated =
+                        alreadyMapped.copy(
+                            coverUrl = targetCoverUrl,
+                            titleCn = targetTitleCn,
+                            airDate = targetAirDate,
+                            sitesJson = mergedSites,
+                        )
+                    entitiesByAnilistId[item.anilistId] = updated
+                    entitiesByBgmId[updated.bgmId] = updated
+                    newlyInserted += updated
+                }
+                newEvents += item.toAirEventEntity(alreadyMapped.bgmId, nowMillis)
+                continue
+            }
+
+            // 上一轮的占位条目：本次先移除，映射成功则升级为正式条目，失败则随裁剪删除
             if (alreadyMapped != null) {
                 entitiesByAnilistId.remove(item.anilistId)
                 entitiesByBgmId.remove(alreadyMapped.bgmId)
             }
 
-            // 1) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
+            // 0) 快照自带 bgmId（CI 侧桥接/搜索已解析）：最优路径，零额外请求
+            val snapshotMapping =
+                sItem?.bgmId?.let { bgmId ->
+                    AniListBgmMappingEntity(
+                        anilistId = item.anilistId,
+                        bgmId = bgmId,
+                        sitesJson = sSitesJson,
+                        title = item.titleNative,
+                        titleCn = sTitleCn,
+                        beginIso = sAirDate,
+                        endIso = "",
+                        monthKey = "",
+                        updatedAt = nowMillis,
+                    )
+                }
+
+            // 1) 快照 bgmId 或本地历史映射缓存
+            val mapping = snapshotMapping ?: mappingCache[item.anilistId]
+            if (mapping != null) {
+                mappingCache[item.anilistId] = mapping
+                mappingsToPersist += mapping
+                val existing = entitiesByBgmId[mapping.bgmId]
+                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else existing?.titleCn?.ifBlank { mapping.titleCn }.orEmpty()
+                val targetSites = mergeSites(existing?.sitesJson.orEmpty(), sSitesJson.ifBlank { mapping.sitesJson })
+                val entity =
+                    existing?.copy(
+                        anilistId = item.anilistId,
+                        coverUrl = existing.coverUrl.ifBlank { item.coverUrl.orEmpty() },
+                        titleCn = targetTitleCn,
+                        airDate = existing.airDate.ifBlank { mapping.beginIso.substringBefore("T") },
+                        sitesJson = targetSites,
+                    ) ?: mapping.copy(titleCn = targetTitleCn, sitesJson = targetSites).toAirScheduleEntity(item, nowMillis)
+                entitiesByBgmId[entity.bgmId] = entity
+                entitiesByAnilistId[item.anilistId] = entity
+                newlyInserted += entity
+                newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
+                continue
+            }
+
+            // 2) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
             val localMatch =
                 currentEntities.firstOrNull { entity ->
-                    entity.bgmId > 0 && entity.anilistId == null && titlesRoughlyEqual(entity.title, item.titleNative)
+                    entity.bgmId > 0 &&
+                        entity.anilistId == null &&
+                        (titlesRoughlyEqual(entity.title, item.titleNative) || titlesRoughlyEqual(entity.titleCn, item.titleNative))
                 }
             if (localMatch != null) {
-                val updated = localMatch.copy(anilistId = item.anilistId)
+                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else localMatch.titleCn
+                val updated =
+                    localMatch.copy(
+                        anilistId = item.anilistId,
+                        coverUrl = localMatch.coverUrl.ifBlank { item.coverUrl.orEmpty() },
+                        titleCn = targetTitleCn,
+                        airDate = localMatch.airDate.ifBlank { sAirDate.substringBefore("T") },
+                        sitesJson = mergeSites(localMatch.sitesJson, sSitesJson),
+                    )
                 entitiesByBgmId[updated.bgmId] = updated
                 entitiesByAnilistId[item.anilistId] = updated
                 newlyInserted += updated
@@ -602,49 +654,7 @@ class ScheduleRepositoryImpl(
                 continue
             }
 
-            // 2) 映射缓存 / bangumi-data 月切片
-            val mapping =
-                mappingCache[item.anilistId]
-                    ?: resolveMappingFromMonth(item, nowMillis, fetchedMonths, mappingCache)
-            if (mapping != null) {
-                mappingCache[item.anilistId] = mapping
-                mappingsToPersist += mapping
-                val existing = entitiesByBgmId[mapping.bgmId]
-                val entity =
-                    existing?.copy(
-                        anilistId = item.anilistId,
-                        sitesJson = mergeSites(existing.sitesJson, mapping.sitesJson),
-                    ) ?: mapping.toAirScheduleEntity(item, nowMillis)
-                entitiesByBgmId[entity.bgmId] = entity
-                entitiesByAnilistId[item.anilistId] = entity
-                newlyInserted += entity
-                newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
-                continue
-            }
-
-            // 3) bgm.tv 实时搜索兜底：唯一候选才接受；仍无结果则以占位条目显示（不可进详情）
-            val subject = searchUniqueSubject(item, allowRestricted = showRestricted)
-            if (subject == null) {
-                val placeholder = item.toPlaceholderEntity(nowMillis)
-                entitiesByBgmId[placeholder.bgmId] = placeholder
-                entitiesByAnilistId[item.anilistId] = placeholder
-                newlyInserted += placeholder
-                newEvents += item.toAirEventEntity(placeholder.bgmId, nowMillis)
-                continue
-            }
-            val searched = subject.toAniListBgmMapping(item.anilistId, nowMillis)
-            mappingCache[item.anilistId] = searched
-            mappingsToPersist += searched
-            val existing = entitiesByBgmId[searched.bgmId]
-            val entity =
-                existing?.copy(
-                    anilistId = item.anilistId,
-                    sitesJson = mergeSites(existing.sitesJson, searched.sitesJson),
-                ) ?: searched.toAirScheduleEntity(item, nowMillis)
-            entitiesByBgmId[entity.bgmId] = entity
-            entitiesByAnilistId[item.anilistId] = entity
-            newlyInserted += entity
-            newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
+            // 3) 均未映射：直接跳过（CI 侧未收录条目，客户端不发起实时搜索/探测，不生成占位条目）
         }
 
         if (mappingsToPersist.isNotEmpty()) {
@@ -675,109 +685,6 @@ class ScheduleRepositoryImpl(
         runCatching { anilistMappingDao.getMappingsByAniListIds(anilistIds.distinct()) }
             .getOrElse { emptyList() }
             .associateByTo(mutableMapOf<Long, AniListBgmMappingEntity>()) { it.anilistId }
-
-    /**
-     * 按条目 startDate（含前后各一个月，容忍 `begin` 的时区/跨月错位）按需拉取 bangumi-data 月切片，
-     * 用 `sites` 里的 anilist↔bangumi 桥解析映射。同月只拉一次，拉到的映射回填内存缓存供后续条目复用。
-     */
-    private suspend fun resolveMappingFromMonth(
-        item: AniListWeeklyScheduleItem,
-        nowMillis: Long,
-        fetchedMonths: MutableSet<String>,
-        mappingCache: MutableMap<Long, AniListBgmMappingEntity>,
-    ): AniListBgmMappingEntity? {
-        val year = item.startYear
-        val month = item.startMonth
-        if (year <= 0 || month !in 1..12) return null
-
-        for (offset in intArrayOf(-1, 0, 1)) {
-            val (targetYear, targetMonth) = shiftMonth(year, month, offset)
-            val key = monthKey(targetYear, targetMonth)
-            if (fetchedMonths.add(key)) {
-                val etag = runCatching { anilistMappingDao.getMonthEtag(key) }.getOrNull()?.etag
-                when (
-                    val result =
-                        runCatchingCancellable {
-                            dataService.getMonthItems(targetYear, targetMonth, etag)
-                        }.getOrNull()
-                ) {
-                    is BangumiDataMonthResult.Success -> {
-                        result.etag?.takeIf { it.isNotBlank() }?.let {
-                            runCatching { anilistMappingDao.upsertMonthEtag(BangumiDataMonthEtagEntity(key, it, nowMillis)) }
-                        }
-                        val mappings = result.items.mapNotNull { it.toAniListBgmMapping(key, nowMillis) }
-                        if (mappings.isNotEmpty()) {
-                            runCatching { anilistMappingDao.upsertMappings(mappings) }
-                            mappings.forEach { mappingCache[it.anilistId] = it }
-                        }
-                    }
-                    BangumiDataMonthResult.NotModified -> Unit
-                    BangumiDataMonthResult.NotFound, null -> Unit
-                }
-            }
-            mappingCache[item.anilistId]?.let { return it }
-        }
-        return null
-    }
-
-    /** bgm.tv 搜索兜底：先 legacy，命中差/为空时退 v0 高级搜索；候选不唯一一律不绑定。 */
-    private suspend fun searchUniqueSubject(
-        item: AniListWeeklyScheduleItem,
-        allowRestricted: Boolean,
-    ): Subject? {
-        val query = item.titleNative.ifBlank { item.titleRomaji }
-        if (query.isBlank()) return null
-        val legacy =
-            runCatchingCancellable { apiService.searchSubjects(query, type = 2) }
-                .getOrNull()
-                ?.list
-                .orEmpty()
-        val candidates =
-            if (legacy.isNotEmpty()) {
-                legacy
-            } else {
-                runCatchingCancellable {
-                    apiService.searchSubjectsAdvanced(
-                        request =
-                            SearchSubjectsRequest(
-                                keyword = query,
-                                filter = SearchFilter(type = listOf(2), nsfw = if (allowRestricted) null else false),
-                            ),
-                    )
-                }.getOrNull()?.data.orEmpty()
-            }
-        if (candidates.isEmpty()) return null
-        if (candidates.size == 1) return candidates.first()
-        val key = canonicalTitleKey(query)
-        if (key.isBlank()) return null
-        return candidates
-            .filter { candidate ->
-                canonicalTitleKey(candidate.name).startsWith(key) || canonicalTitleKey(candidate.nameCn).startsWith(key)
-            }.singleOrNull()
-    }
-
-    private fun shiftMonth(
-        year: Int,
-        month: Int,
-        offset: Int,
-    ): Pair<Int, Int> {
-        var y = year
-        var m = month + offset
-        while (m < 1) {
-            m += 12
-            y -= 1
-        }
-        while (m > 12) {
-            m -= 12
-            y += 1
-        }
-        return y to m
-    }
-
-    private fun monthKey(
-        year: Int,
-        month: Int,
-    ): String = "$year-${month.toString().padStart(2, '0')}"
 
     private fun titlesRoughlyEqual(
         a: String,
@@ -832,7 +739,7 @@ class ScheduleRepositoryImpl(
     private fun mergeSites(
         existing: String,
         incoming: String,
-    ): String = if (existing.isBlank() || existing == "[]") incoming else existing
+    ): String = if (incoming.isNotBlank() && incoming != "[]") incoming else existing
 
     private fun AniListWeeklyScheduleItem.toAirEventEntity(
         subjectId: Long,
@@ -860,7 +767,7 @@ class ScheduleRepositoryImpl(
         return AirScheduleEntity(
             bgmId = bgmId,
             title = title,
-            titleCn = titleCn.ifBlank { title },
+            titleCn = titleCn,
             coverUrl = item.coverUrl.orEmpty(),
             ratingScore = 0.0,
             airDate = beginIso.substringBefore("T"),
@@ -879,33 +786,6 @@ class ScheduleRepositoryImpl(
     }
 
     /** 映射不到 bgmId 时的占位条目：只进时刻表展示，bgmId 用 `-anilistId` 作哨兵值。 */
-    private fun AniListWeeklyScheduleItem.toPlaceholderEntity(nowMillis: Long): AirScheduleEntity {
-        val airMillis = airAtEpochSeconds * 1000
-        val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
-        val cstTime = TimeUtils.formatToCstTime(isoUtc)
-        val jstTime = TimeUtils.formatToJstTime(isoUtc)
-        val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
-        val name = titleNative.ifBlank { titleRomaji }
-        return AirScheduleEntity(
-            bgmId = -anilistId,
-            title = name,
-            titleCn = name,
-            coverUrl = coverUrl.orEmpty(),
-            ratingScore = 0.0,
-            airDate = "",
-            beginAtUtc = isoUtc,
-            sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
-            weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
-            timeCst = cstTime,
-            timeJst = jstTime,
-            sitesJson = "[]",
-            anilistId = anilistId,
-            source = AirScheduleEntity.SOURCE_ANILIST_UNMAPPED,
-            nextEpisode = episode,
-            nextEpisodeAtUtc = isoUtc,
-            nextEpisodeKind = kind,
-        )
-    }
 
     private fun AirScheduleEntity.toAniListBgmMapping(
         anilistId: Long,
@@ -922,45 +802,6 @@ class ScheduleRepositoryImpl(
             monthKey = "",
             updatedAt = nowMillis,
         )
-
-    private fun Subject.toAniListBgmMapping(
-        anilistId: Long,
-        nowMillis: Long,
-    ): AniListBgmMappingEntity =
-        AniListBgmMappingEntity(
-            anilistId = anilistId,
-            bgmId = id,
-            sitesJson = "[]",
-            title = name,
-            titleCn = nameCn.ifBlank { name },
-            beginIso = date.ifBlank { airDate },
-            endIso = "",
-            monthKey = "",
-            updatedAt = nowMillis,
-        )
-
-    private fun BangumiDataItem.toAniListBgmMapping(
-        monthKey: String,
-        nowMillis: Long,
-    ): AniListBgmMappingEntity? {
-        val bgmId = bgmSubjectId ?: return null
-        val anilistId =
-            sites
-                .firstOrNull { it.site.equals(ANILIST_SITE, ignoreCase = true) }
-                ?.id
-                ?.toLongOrNull() ?: return null
-        return AniListBgmMappingEntity(
-            anilistId = anilistId,
-            bgmId = bgmId,
-            sitesJson = json.encodeToString(sites.mapNotNull { resolveSiteLink(it) }),
-            title = title,
-            titleCn = chineseTitle,
-            beginIso = begin,
-            endIso = end,
-            monthKey = monthKey,
-            updatedAt = nowMillis,
-        )
-    }
 
     private fun reconcileScheduleEntities(
         entities: List<AirScheduleEntity>,
@@ -1032,10 +873,14 @@ class ScheduleRepositoryImpl(
         userPreferences.setScheduleDefaultOnlyWatching(onlyWatching)
     }
 
-    private fun resolveSiteLink(site: BangumiDataSite): SiteLink? {
-        val siteKey = site.site.lowercase()
+    private fun resolveSiteLink(
+        site: String,
+        id: String,
+        customUrl: String = "",
+    ): SiteLink? {
+        val siteKey = site.lowercase()
         val resolver = SITE_RESOLVERS[siteKey] ?: return null
-        val url = site.url.ifBlank { resolver.second(site.id) }
+        val url = customUrl.ifBlank { resolver.second(id) }
         if (url.isBlank()) return null
         return SiteLink(
             siteName = siteKey,
@@ -1072,39 +917,6 @@ class ScheduleRepositoryImpl(
             nextEpisodeKind = nextEpisodeKind,
             isUnmapped = bgmId <= 0,
         )
-    }
-
-    /**
-     * 为合并入库或缺少元数据的条目回补官方高清封面与集数（时刻表不展示评分，故不再拉评分）。
-     * 优先对 coverUrl 为空及尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
-     */
-    private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
-        val missing =
-            schedules
-                .filter { it.bgmId > 0 && (it.coverUrl.isBlank() || it.totalEpisodes == 0) }
-                .sortedWith(compareBy({ !it.coverUrl.isBlank() }, { it.totalEpisodes != 0 }))
-                .take(5)
-        if (missing.isEmpty()) return schedules
-
-        val metadataByBgmId =
-            missing
-                .mapNotNull { entity ->
-                    runCatching { apiService.getSubject(entity.bgmId) }.getOrNull()
-                }.associateBy { it.id }
-
-        if (metadataByBgmId.isEmpty()) return schedules
-
-        return schedules.map { entity ->
-            val subject = metadataByBgmId[entity.bgmId] ?: return@map entity
-            val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
-            val eps = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes
-            val resolvedEpisodes = if (eps > 0) eps else -1
-            entity.copy(
-                coverUrl = coverUrl.ifBlank { entity.coverUrl },
-                totalEpisodes = if (entity.totalEpisodes == 0) resolvedEpisodes else entity.totalEpisodes,
-                titleCn = entity.titleCn.ifBlank { subject.nameCn },
-            )
-        }
     }
 
     private fun isZombieBgmDataSchedule(

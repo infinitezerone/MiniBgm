@@ -20,8 +20,14 @@ data class UserPreferences(
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
     val pipEnabled: Boolean = true,
     val notifyBeforeAirMinutes: Int = 15,
-    /** 开播提醒总开关（每日追番更新汇总通知） */
+    /** 开播提醒总开关 */
     val airingReminderEnabled: Boolean = true,
+    /** 每日追番更新汇总通知子开关 */
+    val airingDailySummaryEnabled: Boolean = true,
+    /** 单集开播即时通知子开关 */
+    val airingPreAirEnabled: Boolean = true,
+    /** 单集提醒时机相对开播时刻的偏移量（分钟，负数提前，0准时，正数延后，默认 -15 即提前 15 分钟） */
+    val airingNotificationOffsetMinutes: Int = -15,
     /** 上次发出更新提醒的日期（yyyy-MM-dd，用于每日去重） */
     val airingReminderLastNotifiedDate: String = "",
     /** 每日提醒的触发时刻（设备本地时间小时 0-23，默认早上 8 点） */

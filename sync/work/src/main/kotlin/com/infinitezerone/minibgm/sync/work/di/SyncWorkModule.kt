@@ -12,4 +12,13 @@ val syncWorkModule =
         workerOf(::BgmSyncWorker)
         workerOf(::AiringReminderWorker)
         single<SyncManager> { WorkManagerSyncManager(context = get()) }
+        single {
+            com.infinitezerone.minibgm.sync.work.reminders.AiringAlarmScheduler(
+                context = get(),
+                scheduleRepository = get(),
+                collectionRepository = get(),
+                userPreferences = get(),
+                tokenProvider = get(),
+            )
+        }
     }

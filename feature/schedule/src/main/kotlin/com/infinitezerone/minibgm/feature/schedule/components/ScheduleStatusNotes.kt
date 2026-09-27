@@ -86,7 +86,7 @@ fun OfflineCacheBanner(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "⚠️ 离线缓存数据 · 下拉或点击重试",
+                text = "离线缓存数据 · 下拉或点击重试",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )

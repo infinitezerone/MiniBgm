@@ -16,7 +16,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -237,17 +241,17 @@ internal fun UnauthenticatedLandingView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     LandingFeatureBadge(
-                        emoji = "📺",
+                        icon = Icons.Filled.Tv,
                         text = "追番打卡",
                         modifier = Modifier.weight(1f),
                     )
                     LandingFeatureBadge(
-                        emoji = "📦",
+                        icon = Icons.Filled.Bookmark,
                         text = "五维收藏",
                         modifier = Modifier.weight(1f),
                     )
                     LandingFeatureBadge(
-                        emoji = "🔔",
+                        icon = Icons.Filled.Notifications,
                         text = "更新提醒",
                         modifier = Modifier.weight(1f),
                     )
@@ -302,7 +306,7 @@ internal fun UnauthenticatedLandingView(
 
 @Composable
 private fun LandingFeatureBadge(
-    emoji: String,
+    icon: ImageVector,
     text: String,
     modifier: Modifier = Modifier,
 ) {
@@ -316,7 +320,12 @@ private fun LandingFeatureBadge(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
-            Text(text = emoji, style = MaterialTheme.typography.labelMedium)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = text,

@@ -707,7 +707,7 @@ class AssistantViewModelTest {
             val lastMsg =
                 viewModel.uiState.value.messages
                     .last()
-            assertEquals("⏹ 已停止生成。", lastMsg.content)
+            assertEquals("已停止生成。", lastMsg.content)
             assertEquals(MessageRole.ASSISTANT, lastMsg.role)
             assertFalse(lastMsg.isError)
         }
@@ -812,7 +812,7 @@ class AssistantViewModelTest {
             assertEquals(3, messages.size, "重试再失败：原错误保留 + 新错误追加")
             assertTrue(messages[1].isError)
             assertTrue(messages[2].isError)
-            assertEquals("❌ 执行出错：仍然失败", messages[2].content)
+            assertEquals("执行出错：仍然失败", messages[2].content)
         }
 
     @Test
@@ -1122,7 +1122,7 @@ class AssistantViewModelTest {
                 viewModel.uiState.value.messages
                     .last()
             assertTrue(lastMsg.isError)
-            assertEquals("❌ 执行出错：模型不可用（服务商提示 model route not found），请更换模型", lastMsg.content)
+            assertEquals("执行出错：模型不可用（服务商提示 model route not found），请更换模型", lastMsg.content)
         }
 
     @Test

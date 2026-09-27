@@ -108,19 +108,19 @@ private fun getTabLabel(
     when (tab) {
         SubjectDetailTab.EPISODES ->
             when (subjectType) {
-                SubjectType.BOOK -> "📚 卷册与章节"
-                SubjectType.MUSIC -> "🎵 曲目列表"
-                SubjectType.GAME -> "🎮 关卡与章节"
-                SubjectType.ANIME, SubjectType.REAL -> "📺 章节打卡"
+                SubjectType.BOOK -> "卷册与章节"
+                SubjectType.MUSIC -> "曲目列表"
+                SubjectType.GAME -> "关卡与章节"
+                SubjectType.ANIME, SubjectType.REAL -> "章节打卡"
             }
         SubjectDetailTab.DETAILS ->
             when (subjectType) {
-                SubjectType.BOOK -> "📖 原作与出版信息"
-                SubjectType.MUSIC -> "💿 专辑制作与人员"
-                SubjectType.GAME -> "🎮 游戏资料与主创"
-                SubjectType.ANIME, SubjectType.REAL -> "📖 资料与演职员"
+                SubjectType.BOOK -> "原作与出版信息"
+                SubjectType.MUSIC -> "专辑制作与人员"
+                SubjectType.GAME -> "游戏资料与主创"
+                SubjectType.ANIME, SubjectType.REAL -> "资料与演职员"
             }
-        SubjectDetailTab.COMMUNITY -> "💬 社区吐槽"
+        SubjectDetailTab.COMMUNITY -> "社区吐槽"
     }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -231,7 +231,7 @@ fun SubjectDetailScreen(
             if (granted) {
                 viewModel.enableAiringReminder()
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("已开启追番开播提醒 ✨")
+                    snackbarHostState.showSnackbar("已开启追番开播提醒")
                 }
             }
         }

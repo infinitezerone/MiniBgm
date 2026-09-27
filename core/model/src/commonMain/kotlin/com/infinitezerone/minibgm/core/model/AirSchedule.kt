@@ -26,6 +26,15 @@ data class AirSchedule(
     val isUnmapped: Boolean = false,
 )
 
+/** 单集播出事件领域模型（按自然日与时刻精准对应集数） */
+@Serializable
+data class AirScheduleEvent(
+    val subjectId: Long,
+    val episode: Int,
+    val airAtUtc: String,
+    val kind: String = "",
+)
+
 @Serializable
 data class SiteLink(
     val siteName: String,

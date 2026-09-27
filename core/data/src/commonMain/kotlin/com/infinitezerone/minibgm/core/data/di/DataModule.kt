@@ -28,13 +28,12 @@ import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
 import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
-import com.infinitezerone.minibgm.core.network.AniListService
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
-import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import org.koin.dsl.module
 
 val dataModule =
@@ -48,12 +47,10 @@ val dataModule =
         }
         single<ScheduleRepository> {
             ScheduleRepositoryImpl(
-                apiService = get<BangumiApiService>(),
-                dataService = get<BangumiDataService>(),
                 scheduleDao = get<AirScheduleDao>(),
                 airEventDao = get<AirEventDao>(),
                 anilistMappingDao = get<AniListMappingDao>(),
-                anilistService = get<AniListService>(),
+                snapshotService = get<ScheduleSnapshotService>(),
                 userPreferences = get<UserPreferencesDataSource>(),
                 collectionRepository = getOrNull<CollectionRepository>(),
             )

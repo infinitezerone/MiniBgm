@@ -79,9 +79,33 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 设置单集提醒时机偏移量（范围 [-60, +120] 分钟，自动联动 notifyBeforeAirMinutes 与 airDelayOffsetMinutes） */
+    suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int) {
+        val clamped = offsetMinutes.coerceIn(-60, 120)
+        dataStore.updateData { current ->
+            current.copy(
+                airingNotificationOffsetMinutes = clamped,
+                notifyBeforeAirMinutes = if (clamped < 0) -clamped else 0,
+                airDelayOffsetMinutes = if (clamped > 0) clamped else 0,
+            )
+        }
+    }
+
     suspend fun setAiringReminderEnabled(enabled: Boolean) {
         dataStore.updateData { current ->
             current.copy(airingReminderEnabled = enabled)
+        }
+    }
+
+    suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(airingDailySummaryEnabled = enabled)
+        }
+    }
+
+    suspend fun setAiringPreAirEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(airingPreAirEnabled = enabled)
         }
     }
 

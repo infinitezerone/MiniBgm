@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
@@ -47,6 +48,9 @@ data class WeekdayDateItem(
     val weekdayLabel: String, // "周一", "周二" ...
     val dateLabel: String, // "9/3"
     val isToday: Boolean,
+    val pageIndex: Int = 0,
+    val dateString: String = "",
+    val dayOffset: Int = 0,
 )
 
 /** 「放送」Tab 的单一不可变 UI 状态 */
@@ -55,9 +59,12 @@ data class ScheduleUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    val selectedWeekday: Int,
+    val selectedPageIndex: Int = ScheduleViewModel.TODAY_PAGE_INDEX,
+    val selectedWeekday: Int = ScheduleViewModel.currentLocalDate().dayOfWeek.value,
     val todayWeekday: Int = ScheduleViewModel.currentLocalDate().dayOfWeek.value,
+    val todayPageIndex: Int = ScheduleViewModel.TODAY_PAGE_INDEX,
     val dateItems: List<WeekdayDateItem> = emptyList(),
+    val daySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val weeklySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val watchingSubjectIds: Set<Long> = emptySet(),
     val onlyWatching: Boolean = false,
@@ -70,26 +77,30 @@ data class ScheduleUiState(
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
-        get() = weeklySchedules[selectedWeekday].orEmpty()
+        get() = daySchedules[selectedPageIndex] ?: weeklySchedules[selectedWeekday].orEmpty()
 
     /** 本地是否已有时刻表数据（用于本地优先策略，有数据时绝不展示全屏骨架图） */
     val hasSchedules: Boolean
-        get() = weeklySchedules.values.any { it.isNotEmpty() }
+        get() = daySchedules.values.any { it.isNotEmpty() } || weeklySchedules.values.any { it.isNotEmpty() }
 
     /** 是否处于离线缓存展示状态：有网络错误发生但本地有缓存数据 */
     val isOfflineCache: Boolean
         get() = error != null && hasSchedules
 
-    /** 当前选中星期经过筛选与时间线排序后的条目 */
+    /** 当前选中天经过筛选与时间线排序后的条目 */
     val currentDaySchedules: List<AirSchedule>
-        get() = getSortedSchedulesForWeekday(selectedWeekday, onlyWatching)
+        get() = getSortedSchedulesForPage(selectedPageIndex, onlyWatching)
 
-    /** 获取指定星期过滤并排序后的条目 */
-    fun getSortedSchedulesForWeekday(
-        weekday: Int,
+    /** 获取指定天（pageIndex）过滤并排序后的条目 */
+    fun getSortedSchedulesForPage(
+        pageIndex: Int,
         onlyWatchingFilter: Boolean = onlyWatching,
     ): List<AirSchedule> {
-        val raw = weeklySchedules[weekday].orEmpty()
+        val raw =
+            daySchedules[pageIndex] ?: run {
+                val weekday = dateItems.getOrNull(pageIndex)?.weekday ?: selectedWeekday
+                weeklySchedules[weekday].orEmpty()
+            }
         val list =
             if (onlyWatchingFilter) {
                 raw.filter { watchingSubjectIds.contains(it.bgmId) }
@@ -106,15 +117,13 @@ data class ScheduleUiState(
         )
     }
 
-    /** 获取指定星期有具体播放时间的条目（供连续时间轴使用） */
-    fun getTimedSchedulesForWeekday(weekday: Int): List<AirSchedule> =
-        getSortedSchedulesForWeekday(weekday).filter {
+    fun getTimedSchedulesForPage(pageIndex: Int): List<AirSchedule> =
+        getSortedSchedulesForPage(pageIndex).filter {
             (it.timeCst.ifBlank { it.timeJst }).isNotBlank()
         }
 
-    /** 按具体播出时间分组的排播条目，key 为时间字符串（如 "23:30"），保持时间先后顺序 */
-    fun getTimeGroupedSchedulesForWeekday(weekday: Int): Map<String, List<AirSchedule>> {
-        val timed = getTimedSchedulesForWeekday(weekday)
+    fun getTimeGroupedSchedulesForPage(pageIndex: Int): Map<String, List<AirSchedule>> {
+        val timed = getTimedSchedulesForPage(pageIndex)
         val linkedMap = linkedMapOf<String, MutableList<AirSchedule>>()
         for (item in timed) {
             val timeKey = item.timeCst.ifBlank { item.timeJst }
@@ -123,16 +132,64 @@ data class ScheduleUiState(
         return linkedMap
     }
 
-    /** 获取指定星期全天/时间未定的条目（供解耦全天专区使用） */
-    fun getAllDaySchedulesForWeekday(weekday: Int): List<AirSchedule> =
-        getSortedSchedulesForWeekday(weekday).filter {
+    fun getAllDaySchedulesForPage(pageIndex: Int): List<AirSchedule> =
+        getSortedSchedulesForPage(pageIndex).filter {
             (it.timeCst.ifBlank { it.timeJst }).isBlank()
         }
+
+    fun getWatchingCountForPage(pageIndex: Int): Int {
+        val list =
+            daySchedules[pageIndex] ?: run {
+                val weekday = dateItems.getOrNull(pageIndex)?.weekday ?: 1
+                weeklySchedules[weekday].orEmpty()
+            }
+        return list.count { watchingSubjectIds.contains(it.bgmId) }
+    }
+
+    fun getTotalCountForPage(pageIndex: Int): Int {
+        val list =
+            daySchedules[pageIndex] ?: run {
+                val weekday = dateItems.getOrNull(pageIndex)?.weekday ?: 1
+                weeklySchedules[weekday].orEmpty()
+            }
+        return list.size
+    }
+
+    /** 兼容旧接口：获取指定星期过滤并排序后的条目 */
+    fun getSortedSchedulesForWeekday(
+        weekday: Int,
+        onlyWatchingFilter: Boolean = onlyWatching,
+    ): List<AirSchedule> {
+        val pageIndex = findPageIndexForWeekday(weekday)
+        return getSortedSchedulesForPage(pageIndex, onlyWatchingFilter)
+    }
+
+    fun getTimedSchedulesForWeekday(weekday: Int): List<AirSchedule> = getTimedSchedulesForPage(findPageIndexForWeekday(weekday))
+
+    fun getTimeGroupedSchedulesForWeekday(weekday: Int): Map<String, List<AirSchedule>> =
+        getTimeGroupedSchedulesForPage(findPageIndexForWeekday(weekday))
+
+    fun getAllDaySchedulesForWeekday(weekday: Int): List<AirSchedule> = getAllDaySchedulesForPage(findPageIndexForWeekday(weekday))
+
+    fun getWatchingCountForWeekday(weekday: Int): Int = getWatchingCountForPage(findPageIndexForWeekday(weekday))
+
+    fun getTotalCountForWeekday(weekday: Int): Int = getTotalCountForPage(findPageIndexForWeekday(weekday))
+
+    private fun findPageIndexForWeekday(weekday: Int): Int {
+        val currentWeekRange = (-todayWeekday + 1)..(7 - todayWeekday)
+        return dateItems
+            .indexOfFirst { it.weekday == weekday && it.dayOffset in currentWeekRange }
+            .takeIf { it >= 0 }
+            ?: dateItems
+                .indexOfFirst { it.weekday == weekday }
+                .takeIf { it >= 0 }
+            ?: (weekday - 1).coerceIn(0, (dateItems.size - 1).coerceAtLeast(0))
+    }
 
     /** 今日正在追番的更新列表（在“今天”视图置顶呈现） */
     val todayWatchingSchedules: List<AirSchedule>
         get() {
-            val todayRaw = weeklySchedules[todayWeekday].orEmpty()
+            val todayRaw = daySchedules[todayPageIndex] ?: weeklySchedules[todayWeekday].orEmpty()
             return todayRaw
                 .filter { watchingSubjectIds.contains(it.bgmId) }
                 .sortedWith(
@@ -144,12 +201,6 @@ data class ScheduleUiState(
                     },
                 )
         }
-
-    /** 某一天的在追番剧数量 */
-    fun getWatchingCountForWeekday(weekday: Int): Int = weeklySchedules[weekday].orEmpty().count { watchingSubjectIds.contains(it.bgmId) }
-
-    /** 某一天的总番剧数量 */
-    fun getTotalCountForWeekday(weekday: Int): Int = weeklySchedules[weekday].orEmpty().size
 }
 
 /**
@@ -168,6 +219,7 @@ class ScheduleViewModel(
     private val authRepository: AuthRepository,
     private val subjectRepository: SubjectRepository,
 ) : ViewModel() {
+    private val selectedPageIndex = MutableStateFlow(TODAY_PAGE_INDEX)
     private val selectedWeekday = MutableStateFlow(currentLocalDate().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
@@ -181,14 +233,72 @@ class ScheduleViewModel(
     private val _userMessage = Channel<String>(Channel.BUFFERED)
     val userMessage: Flow<String> = _userMessage.receiveAsFlow()
 
-    // 监听全量放送流并按星期聚合（单流监听，避免按天并发 7 路订阅导致的重复 SQL 查询与高频重组）
-    private val weeklySchedulesFlow: Flow<Map<Int, List<AirSchedule>>> =
-        scheduleRepository.getAllSchedulesStream().map { all ->
-            val map = (1..7).associateWith { mutableListOf<AirSchedule>() }
-            all.forEach { schedule ->
-                map[schedule.weekday]?.add(schedule)
+    // 监听全量放送流与播出事件，聚合生成 13 天时刻表（以今天为中心锚点，前6天 + 今天 + 后6天）
+    private val scheduleDataFlow: Flow<Pair<Map<Int, List<AirSchedule>>, Map<Int, List<AirSchedule>>>> =
+        combine(
+            scheduleRepository.getAllSchedulesStream(),
+            scheduleRepository.getAllAirEventsStream(),
+        ) { allSchedules, allAirEvents ->
+            val currentToday = currentLocalDate()
+            val dateItems = calculateDateItems(currentToday)
+            val todayWeekday = currentToday.dayOfWeek.value
+            val currentWeekRange = (-todayWeekday + 1)..(7 - todayWeekday)
+
+            val schedulesByBgmId = allSchedules.associateBy { it.bgmId }
+            val eventsByDate = allAirEvents.groupBy { TimeUtils.formatIsoToCstDate(it.airAtUtc) }
+            val subjectIdsWithEvents = allAirEvents.map { it.subjectId }.toSet()
+
+            val dayMap = (0 until TOTAL_SCHEDULE_DAYS).associateWith { mutableListOf<AirSchedule>() }
+
+            dateItems.forEachIndexed { pageIndex, item ->
+                val dateStr = item.dateString
+                val weekday = item.weekday
+                val list = dayMap[pageIndex]!!
+
+                // 1. 命中当天具体 air_events 的条目
+                val eventsOnThisDay = eventsByDate[dateStr].orEmpty()
+                val seenSubjectIdsOnThisDay = mutableSetOf<Long>()
+
+                eventsOnThisDay.groupBy { it.subjectId }.forEach { (subId, events) ->
+                    val bestEvent = events.maxByOrNull { it.episode } ?: events.first()
+                    val schedule = schedulesByBgmId[subId]
+                    if (schedule != null) {
+                        seenSubjectIdsOnThisDay.add(subId)
+                        list.add(
+                            schedule.copy(
+                                weekday = weekday,
+                                nextEpisodeNumber = bestEvent.episode,
+                                nextEpisodeAtUtc = bestEvent.airAtUtc,
+                                timeCst = TimeUtils.formatToCstTime(bestEvent.airAtUtc).ifBlank { schedule.timeCst },
+                                timeJst = TimeUtils.formatToJstTime(bestEvent.airAtUtc).ifBlank { schedule.timeJst },
+                            ),
+                        )
+                    }
+                }
+
+                // 2. 没有在 air_events 出现过的番剧（如纯静态 bangumi-data 或单周兜底）
+                allSchedules.forEach { schedule ->
+                    if (schedule.bgmId in seenSubjectIdsOnThisDay) return@forEach
+                    if (schedule.bgmId in subjectIdsWithEvents) return@forEach
+
+                    if (schedule.nextEpisodeAtUtc.isNotBlank()) {
+                        val scheduleDate = TimeUtils.formatIsoToCstDate(schedule.nextEpisodeAtUtc)
+                        if (scheduleDate == dateStr) {
+                            list.add(schedule.copy(weekday = weekday))
+                        }
+                    } else if (schedule.weekday == weekday && item.dayOffset in currentWeekRange) {
+                        list.add(schedule)
+                    }
+                }
             }
-            map
+
+            // 保持对 1..7 周视图的向下兼容
+            val weeklyMap = (1..7).associateWith { mutableListOf<AirSchedule>() }
+            allSchedules.forEach { schedule ->
+                weeklyMap[schedule.weekday]?.add(schedule)
+            }
+
+            dayMap to weeklyMap
         }
 
     // 响应式观察用户正在追番与想看的条目集合及收藏详情（【我的追番】包含在看与想看）
@@ -240,8 +350,8 @@ class ScheduleViewModel(
     private val isActionDismissed = MutableStateFlow(false)
 
     private val filterFlow =
-        combine(selectedWeekday, onlyWatching) { weekday, onlyWatch ->
-            weekday to onlyWatch
+        combine(selectedPageIndex, onlyWatching) { pageIndex, onlyWatch ->
+            pageIndex to onlyWatch
         }
 
     private val statusFlow =
@@ -268,15 +378,15 @@ class ScheduleViewModel(
 
     private val baseUiState: StateFlow<ScheduleUiState> =
         combine(
-            weeklySchedulesFlow,
+            scheduleDataFlow,
             collectionsStateFlow,
             filterFlow,
             statusFlow,
             extraStateFlow,
         ) {
-            weeklySchedules,
+            (daySchedules, weeklySchedules),
             (watchingIds, collectionMap),
-            (weekday, onlyWatch),
+            (pageIndex, onlyWatch),
             (refreshing, error),
             extra,
             ->
@@ -284,10 +394,11 @@ class ScheduleViewModel(
             val currentToday = currentLocalDate()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
+            val selectedWeekday = currentDateItems.getOrNull(pageIndex)?.weekday ?: currentWeekday
 
             var computedNextUpAction: NextUpAction? = null
             if (!dismissed) {
-                val todayRaw = weeklySchedules[currentWeekday].orEmpty()
+                val todayRaw = daySchedules[TODAY_PAGE_INDEX] ?: weeklySchedules[currentWeekday].orEmpty()
                 val nowEpoch = System.currentTimeMillis()
 
                 var bestImminent: NextUpAction? = null
@@ -392,12 +503,15 @@ class ScheduleViewModel(
             }
 
             ScheduleUiState(
-                isLoading = refreshing && weeklySchedules.values.all { it.isEmpty() },
+                isLoading = refreshing && daySchedules.values.all { it.isEmpty() } && weeklySchedules.values.all { it.isEmpty() },
                 isRefreshing = refreshing,
                 error = error,
-                selectedWeekday = weekday,
+                selectedPageIndex = pageIndex,
+                selectedWeekday = selectedWeekday,
                 todayWeekday = currentWeekday,
+                todayPageIndex = TODAY_PAGE_INDEX,
                 dateItems = currentDateItems,
+                daySchedules = daySchedules,
                 weeklySchedules = weeklySchedules,
                 watchingSubjectIds = watchingIds,
                 onlyWatching = onlyWatch,
@@ -416,8 +530,10 @@ class ScheduleViewModel(
                     ScheduleUiState(
                         isLoading = false,
                         isRefreshing = false,
+                        selectedPageIndex = TODAY_PAGE_INDEX,
                         selectedWeekday = initialWeekday,
                         todayWeekday = initialWeekday,
+                        todayPageIndex = TODAY_PAGE_INDEX,
                         dateItems = calculateDateItems(initialToday),
                         isLoggedIn = false,
                     )
@@ -466,7 +582,28 @@ class ScheduleViewModel(
         refresh()
     }
 
+    fun selectPage(pageIndex: Int) {
+        selectedPageIndex.value = pageIndex.coerceIn(0, TOTAL_SCHEDULE_DAYS - 1)
+        val dateItem = calculateDateItems(currentLocalDate()).getOrNull(pageIndex)
+        if (dateItem != null) {
+            selectedWeekday.value = dateItem.weekday
+        }
+    }
+
     fun selectWeekday(weekday: Int) {
+        val currentToday = currentLocalDate()
+        val dateItems = calculateDateItems(currentToday)
+        val currentWeekday = currentToday.dayOfWeek.value
+        val currentWeekRange = (-currentWeekday + 1)..(7 - currentWeekday)
+        val targetIndex =
+            dateItems
+                .indexOfFirst { it.weekday == weekday && it.dayOffset in currentWeekRange }
+                .takeIf { it >= 0 }
+                ?: dateItems
+                    .indexOfFirst { it.weekday == weekday }
+                    .takeIf { it >= 0 }
+                ?: TODAY_PAGE_INDEX
+        selectedPageIndex.value = targetIndex
         selectedWeekday.value = weekday.coerceIn(1, 7)
     }
 
@@ -489,7 +626,7 @@ class ScheduleViewModel(
     fun enableAiringReminder() {
         viewModelScope.launch {
             settingsRepository.setAiringReminderEnabled(true)
-            _userMessage.send("已开启追番开播提醒 ✨")
+            _userMessage.send("已开启追番开播提醒")
         }
     }
 
@@ -522,9 +659,12 @@ class ScheduleViewModel(
     ): PlayerRoute? {
         val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0) ?: return null
         val schedule =
-            baseUiState.value.weeklySchedules.values
+            baseUiState.value.daySchedules.values
                 .flatten()
                 .firstOrNull { it.bgmId == subjectId }
+                ?: baseUiState.value.weeklySchedules.values
+                    .flatten()
+                    .firstOrNull { it.bgmId == subjectId }
         val subjectName = schedule?.let { it.titleCn.ifBlank { it.title } }.orEmpty()
         return buildEpisodeRoute(subjectId, subjectName, target, playlists)
     }
@@ -642,11 +782,13 @@ class ScheduleViewModel(
             if (force) {
                 isRefreshing.value = true
             }
-            // 全量管线：官方日历 + bangumi-data + 逐话事件全部拉齐后，仓库层才对外发流（列表一次更新）
-            val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
             if (isLoggedIn.value) {
-                collectionRepository.syncWatchingCollections()
+                launch {
+                    collectionRepository.syncWatchingCollections()
+                }
             }
+            // 全量快照管线：单次 CDN 快照直拉并直接入库
+            val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
             schedulesResult
                 .onSuccess { errorMessage.value = null }
                 .onError { _, message -> errorMessage.value = message }
@@ -657,6 +799,8 @@ class ScheduleViewModel(
     }
 
     companion object {
+        const val TODAY_PAGE_INDEX = 6
+        const val TOTAL_SCHEDULE_DAYS = 13
         val CST_ZONE_ID: ZoneId = ZoneId.of("Asia/Shanghai")
 
         fun currentLocalDate(): LocalDate = LocalDate.now()
@@ -664,11 +808,10 @@ class ScheduleViewModel(
         @Deprecated("Use currentLocalDate() instead", ReplaceWith("currentLocalDate()"))
         fun currentCstDate(): LocalDate = currentLocalDate()
 
-        fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> {
-            val todayWeekday = today.dayOfWeek.value
-            val monday = today.minusDays((todayWeekday - 1).toLong())
-            return (1..7).map { weekday ->
-                val date = monday.plusDays((weekday - 1).toLong())
+        fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> =
+            (-6..6).mapIndexed { index, offset ->
+                val date = today.plusDays(offset.toLong())
+                val weekday = date.dayOfWeek.value
                 val weekdayLabel =
                     when (weekday) {
                         1 -> "周一"
@@ -684,9 +827,11 @@ class ScheduleViewModel(
                     weekday = weekday,
                     weekdayLabel = weekdayLabel,
                     dateLabel = "${date.monthValue}/${date.dayOfMonth}",
-                    isToday = weekday == todayWeekday,
+                    isToday = offset == 0,
+                    pageIndex = index,
+                    dateString = date.toString(),
+                    dayOffset = offset,
                 )
             }
-        }
     }
 }

@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -124,17 +127,33 @@ fun TopicReplyCard(
                                     Modifier
                                 },
                         ) {
-                            Text(
-                                text = "❤️ ${reaction.count}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color =
-                                    if (mine) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Favorite,
+                                    contentDescription = null,
+                                    tint =
+                                        if (mine) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                        },
+                                    modifier = Modifier.size(11.dp),
+                                )
+                                Text(
+                                    text = reaction.count.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color =
+                                        if (mine) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
                         }
                     }
                 }

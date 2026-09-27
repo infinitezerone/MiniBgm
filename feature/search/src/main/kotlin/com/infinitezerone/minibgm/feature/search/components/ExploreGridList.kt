@@ -131,7 +131,7 @@ fun WaterfallGridList(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "✨ 已经到底啦，共发现 ${subjects.size} 部条目",
+                        text = "已经到底啦，共发现 ${subjects.size} 部条目",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )

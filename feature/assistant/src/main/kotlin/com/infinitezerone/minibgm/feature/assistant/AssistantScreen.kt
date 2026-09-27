@@ -112,10 +112,10 @@ import java.util.Locale
 
 private val PROMPT_SUGGESTIONS =
     listOf(
-        "📅 今天有哪些动画更新？",
-        "📺 查看我正在追看的番剧",
-        "🌟 推荐一部本季高分动画",
-        "✅ 把《葬送的芙莉莲》第12集标记为已看",
+        "今天有哪些动画更新？",
+        "查看我正在追看的番剧",
+        "推荐一部本季高分动画",
+        "把《葬送的芙莉莲》第12集标记为已看",
     )
 
 @Composable
@@ -862,7 +862,7 @@ private fun ChatMessageItem(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "🧠 思考过程",
+                            text = "思考过程",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

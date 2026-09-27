@@ -264,7 +264,7 @@ fun ExploreSpotlightCard(
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                             ) {
                                 Text(
-                                    text = "🔥 社区热评" + if (hotComment.rate > 0) " ★${hotComment.rate}" else "",
+                                    text = "社区热评" + if (hotComment.rate > 0) " ★${hotComment.rate}" else "",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,

@@ -275,7 +275,7 @@ class AssistantViewModel(
             AssistantMessage(
                 id = UUID.randomUUID().toString(),
                 role = MessageRole.ASSISTANT,
-                content = "⏹ 已停止生成。",
+                content = "已停止生成。",
             )
         _uiState.update { it.copy(messages = it.messages + stoppedMessage, isLoading = false) }
         saveToActiveSession(stoppedMessage)
@@ -393,7 +393,7 @@ class AssistantViewModel(
                             AssistantMessage(
                                 id = UUID.randomUUID().toString(),
                                 role = MessageRole.ASSISTANT,
-                                content = "❌ 执行出错：$errorMsg",
+                                content = "执行出错：$errorMsg",
                                 isError = true,
                             )
                         _uiState.update { state ->
@@ -663,7 +663,7 @@ class AssistantViewModel(
                         AssistantMessage(
                             id = UUID.randomUUID().toString(),
                             role = MessageRole.ASSISTANT,
-                            content = "❌ WebView 深度解析失败：${result.message}",
+                            content = "WebView 深度解析失败：${result.message}",
                             isError = true,
                         )
                     _uiState.update {

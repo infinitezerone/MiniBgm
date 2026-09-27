@@ -4,11 +4,10 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 版本控制
 
-仓库与 jj colocate：**历史操作只用 jj**；git 只读（log/diff/show/ls-remote/tag/clone）。git 写子命令与不规范的 jj commit 摘要会被仓库的命令门禁（`tools/hooks/project-gate.mjs`）直接拦截；git 层另有 pre-commit/pre-push 硬拒（新 clone 跑一次 `tools/githooks/setup.sh`，jgate 会自愈）——执法在 VCS/CI 层，工具钩子只是快速反馈。规则在门禁里，本文件不复述。
+仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要建议遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。
 
 - 一个提交一个目的；同一文件别混两个目的——事后 `jj split` 拆不出可编译的中间态。
 - 同一时刻只允许一条 Gradle 命令在跑（长构建后台 + 足够超时，避免 daemon 互踩）。
-- push 由人执行或逐次授权；push 侧有独立的安全扫描与 CI 重验，是最后的人工检查点。
 - OAuth 令牌交换/刷新代理在独立的私有 Cloudflare Workers 项目，本仓库搜不到；业务 API 直连 api.bgm.tv。
 
 ## 构建与验证

@@ -49,11 +49,20 @@ class UserViewModelTest {
     }
 
     @Test
-    fun initialState_notLoggedIn() =
+    fun initialState_isLoading() =
         runTest {
             val (viewModel, _) = createViewModel()
 
-            val state = viewModel.uiState.first()
+            assertTrue(viewModel.uiState.value.isLoading)
+        }
+
+    @Test
+    fun loadedState_notLoggedIn() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first { !it.isLoading }
+            assertFalse(state.isLoading)
             assertFalse(state.isLoggedIn)
             assertNull(state.activeProfile)
             assertTrue(state.savedAccounts.isEmpty())
@@ -72,6 +81,7 @@ class UserViewModelTest {
             val (viewModel, _) = createViewModel(authRepo = authRepo)
 
             val state = viewModel.uiState.first { it.isLoggedIn && it.activeProfile != null }
+            assertFalse(state.isLoading)
             assertTrue(state.isLoggedIn)
             assertNotNull(state.activeProfile)
             assertEquals("零一", state.activeProfile?.nickname)
@@ -130,7 +140,7 @@ class UserViewModelTest {
 
             viewModel.logout()
 
-            val state = viewModel.uiState.first { !it.isLoggedIn }
+            val state = viewModel.uiState.first { !it.isLoading && !it.isLoggedIn }
             assertEquals(1, authRepo.logoutCallCount)
             assertFalse(state.isLoggedIn)
             assertNull(state.activeProfile)
@@ -150,7 +160,7 @@ class UserViewModelTest {
 
             viewModel.logoutAll()
 
-            val state = viewModel.uiState.first { !it.isLoggedIn }
+            val state = viewModel.uiState.first { !it.isLoading && !it.isLoggedIn }
             assertEquals(1, authRepo.logoutAllCallCount)
             assertFalse(state.isLoggedIn)
             assertNull(state.activeProfile)
@@ -370,5 +380,20 @@ class UserViewModelTest {
             val state = viewModel.uiState.first { !it.pipEnabled }
             assertFalse(state.pipEnabled)
             assertEquals(1, settingsRepo.setPipEnabledCallCount)
+        }
+
+    @Test
+    fun setAiringNotificationOffsetMinutes_updatesSettingsRepositoryAndState() =
+        runTest {
+            val (viewModel, _, _) = createViewModel()
+
+            assertEquals(-15, viewModel.uiState.first().airingNotificationOffsetMinutes)
+
+            viewModel.setAiringNotificationOffsetMinutes(25)
+
+            val updatedState = viewModel.uiState.first { it.airingNotificationOffsetMinutes == 25 }
+            assertEquals(25, updatedState.airingNotificationOffsetMinutes)
+            assertEquals(0, updatedState.notifyBeforeAirMinutes)
+            assertEquals(25, updatedState.airDelayOffsetMinutes)
         }
 }

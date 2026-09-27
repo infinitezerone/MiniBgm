@@ -63,10 +63,9 @@ class ScheduleViewModelTest {
             assertEquals(today, state.selectedWeekday)
             assertEquals(today, state.todayWeekday)
             assertFalse(state.isOfflineCache)
-            assertEquals(7, state.dateItems.size)
-            assertTrue(state.dateItems.any { it.isToday && it.weekday == today })
-            assertEquals(1, state.dateItems.first().weekday)
-            assertEquals("周一", state.dateItems.first().weekdayLabel)
+            assertEquals(13, state.dateItems.size)
+            assertTrue(state.dateItems[ScheduleViewModel.TODAY_PAGE_INDEX].isToday)
+            assertEquals(today, state.dateItems[ScheduleViewModel.TODAY_PAGE_INDEX].weekday)
             assertEquals(
                 "葬送的芙莉莲",
                 state.schedules.first().titleCn,
@@ -554,5 +553,58 @@ class ScheduleViewModelTest {
 
             assertEquals(1, settingsRepository.setAiringReminderEnabledCallCount)
             assertTrue(settingsRepository.settings.first().airingReminderEnabled)
+        }
+
+    @Test
+    fun selectPage_switchesScheduleStreamAndUpdatesWeekday() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val viewModel = createViewModel(repository, collectionRepository)
+
+            viewModel.selectPage(0) // 6 days before today
+
+            val state = viewModel.uiState.first { it.selectedPageIndex == 0 }
+            assertEquals(0, state.selectedPageIndex)
+            val expectedWeekday = state.dateItems[0].weekday
+            assertEquals(expectedWeekday, state.selectedWeekday)
+        }
+
+    @Test
+    fun rolling13Days_mapsAirEventsToSpecificDaysAccurately() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+
+            val anime =
+                AirSchedule(
+                    bgmId = 555L,
+                    title = "咒术回战",
+                    titleCn = "咒术回战",
+                    weekday = today,
+                    timeCst = "23:00",
+                )
+            repository.sendSchedules(weekday = today, schedules = listOf(anime))
+
+            val currentToday = ScheduleViewModel.currentLocalDate()
+            val yesterdayDateStr = currentToday.minusDays(1).toString()
+            val yesterdayEvent =
+                com.infinitezerone.minibgm.core.model.AirScheduleEvent(
+                    subjectId = 555L,
+                    episode = 15,
+                    airAtUtc = "${yesterdayDateStr}T15:00:00Z", // 23:00 CST
+                )
+            repository.sendAirEvents(listOf(yesterdayEvent))
+
+            val viewModel = createViewModel(repository, collectionRepository)
+
+            val yesterdayPageIndex = ScheduleViewModel.TODAY_PAGE_INDEX - 1
+            viewModel.selectPage(yesterdayPageIndex)
+
+            val state = viewModel.uiState.first { it.selectedPageIndex == yesterdayPageIndex && it.schedules.isNotEmpty() }
+            val scheduleOnYesterday = state.schedules.first()
+            assertEquals(555L, scheduleOnYesterday.bgmId)
+            assertEquals(15, scheduleOnYesterday.nextEpisodeNumber)
+            assertEquals("23:00", scheduleOnYesterday.timeCst)
         }
 }

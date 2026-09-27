@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:rotation="-28">
+
+        <!-- 1. 胶囊 1 -->
+        <path
+            android:pathData="M36,38 A6,6 0 0 1 42,44 L42,64 A6,6 0 0 1 36,70 A6,6 0 0 1 30,64 L30,44 A6,6 0 0 1 36,38 Z"
+            android:fillColor="#FFFFFF" />
+
+        <!-- 2. 胶囊 2 -->
+        <path
+            android:pathData="M54,29 A6,6 0 0 1 60,35 L60,73 A6,6 0 0 1 54,79 A6,6 0 0 1 48,73 L48,35 A6,6 0 0 1 54,29 Z"
+            android:fillColor="#FFFFFF" />
+
+        <!-- 3. 胶囊 3 -->
+        <path
+            android:pathData="M72,38 A6,6 0 0 1 78,44 L78,64 A6,6 0 0 1 72,70 A6,6 0 0 1 66,64 L66,44 A6,6 0 0 1 72,38 Z"
+            android:fillColor="#FFFFFF" />
+
+    </group>
+
+    <!-- 右上角小星芒 -->
+    <path
+        android:pathData="M84,22 Q84,25 87,25 Q84,25 84,28 Q84,25 81,25 Q84,25 84,22 Z"
+        android:fillColor="#FFFFFF" />
+
+</vector>

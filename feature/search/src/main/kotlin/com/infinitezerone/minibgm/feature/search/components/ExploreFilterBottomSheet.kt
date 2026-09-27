@@ -97,7 +97,7 @@ fun ExploreFilterBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "🎯 多维深度筛选",
+                    text = "多维深度筛选",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -127,7 +127,7 @@ fun ExploreFilterBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 // Section A: 排序规则
-                FilterSection(title = "↕️ 排序规则") {
+                FilterSection(title = "排序规则") {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -159,7 +159,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section B: 媒介分类
-                FilterSection(title = "📁 媒介分类") {
+                FilterSection(title = "媒介分类") {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -183,7 +183,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section C: 播出时间与年代范围
-                FilterSection(title = "📅 播出时间与年代") {
+                FilterSection(title = "播出时间与年代") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // 时间分类切换药丸
                         Row(
@@ -243,7 +243,7 @@ fun ExploreFilterBottomSheet(
                 // Section D: 已生效标签总览与快捷清除
                 if (selectedTags.isNotEmpty()) {
                     FilterSection(
-                        title = "🏷️ 已选组合标签 (${selectedTags.size})",
+                        title = "已选组合标签 (${selectedTags.size})",
                         trailing = {
                             TextButton(onClick = onClearAllTags) {
                                 Text("清空标签", style = MaterialTheme.typography.labelSmall)
@@ -314,7 +314,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section F: 自定义标签精准输入
-                FilterSection(title = "➕ 自定义特色标签") {
+                FilterSection(title = "自定义特色标签") {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

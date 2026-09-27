@@ -32,7 +32,12 @@ data class UserSettings(
     val syncInterval: SyncInterval = SyncInterval.WEEKLY,
     val bangumiDataLastSyncTimestamp: Long = 0L,
     val airingReminderEnabled: Boolean = true,
+    val airingDailySummaryEnabled: Boolean = true,
+    val airingPreAirEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
+    val notifyBeforeAirMinutes: Int = 15,
+    val airDelayOffsetMinutes: Int = 0,
+    val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
@@ -52,8 +57,20 @@ interface SettingsRepository {
     /** 开播提醒总开关（通知权限的授予与否由 UI 层请求） */
     suspend fun setAiringReminderEnabled(enabled: Boolean)
 
+    /** 每日更新汇总子开关 */
+    suspend fun setAiringDailySummaryEnabled(enabled: Boolean)
+
+    /** 单集开播即时提醒子开关 */
+    suspend fun setAiringPreAirEnabled(enabled: Boolean)
+
     /** 每日提醒触发时刻（设备本地时间小时） */
     suspend fun setAiringReminderHour(hour: Int)
+
+    /** 单集临近提醒提前时间量（分钟） */
+    suspend fun setNotifyBeforeAirMinutes(minutes: Int)
+
+    /** 单集提醒时机相对开播时刻的偏移量（分钟，负数提前，0准时，正数延后） */
+    suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int)
 
     /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
     suspend fun setAmoledDarkMode(enabled: Boolean)
@@ -161,7 +178,12 @@ class SettingsRepositoryImpl(
                 syncInterval = prefs.syncInterval,
                 bangumiDataLastSyncTimestamp = prefs.bangumiDataLastSyncTimestamp,
                 airingReminderEnabled = prefs.airingReminderEnabled,
+                airingDailySummaryEnabled = prefs.airingDailySummaryEnabled,
+                airingPreAirEnabled = prefs.airingPreAirEnabled,
                 airingReminderHour = prefs.airingReminderHour,
+                notifyBeforeAirMinutes = prefs.notifyBeforeAirMinutes,
+                airDelayOffsetMinutes = prefs.airDelayOffsetMinutes,
+                airingNotificationOffsetMinutes = prefs.airingNotificationOffsetMinutes,
                 aiConfig =
                     AiConfig(
                         endpoint = prefs.aiEndpoint,
@@ -207,8 +229,24 @@ class SettingsRepositoryImpl(
         userPreferences.setAiringReminderEnabled(enabled)
     }
 
+    override suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
+        userPreferences.setAiringDailySummaryEnabled(enabled)
+    }
+
+    override suspend fun setAiringPreAirEnabled(enabled: Boolean) {
+        userPreferences.setAiringPreAirEnabled(enabled)
+    }
+
     override suspend fun setAiringReminderHour(hour: Int) {
         userPreferences.setAiringReminderHour(hour)
+    }
+
+    override suspend fun setNotifyBeforeAirMinutes(minutes: Int) {
+        userPreferences.setNotifyBeforeAirMinutes(minutes)
+    }
+
+    override suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int) {
+        userPreferences.setAiringNotificationOffsetMinutes(offsetMinutes)
     }
 
     override suspend fun setAmoledDarkMode(enabled: Boolean) {

@@ -92,7 +92,7 @@ fun SettingsScreen(
             if (granted) {
                 viewModel.setAiringReminderEnabled(true)
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("已开启追番开播提醒 ✨")
+                    snackbarHostState.showSnackbar("已开启追番开播提醒")
                 }
             } else {
                 viewModel.setAiringReminderEnabled(false)
@@ -127,7 +127,7 @@ fun SettingsScreen(
             viewModel.syncBangumiDataNow { success ->
                 coroutineScope.launch {
                     if (success) {
-                        snackbarHostState.showSnackbar("播放源已是最新状态 ✨")
+                        snackbarHostState.showSnackbar("播放源已是最新状态")
                     } else {
                         snackbarHostState.showSnackbar("同步失败，请检查网络设置")
                     }
@@ -135,11 +135,22 @@ fun SettingsScreen(
             }
         },
         onToggleAiringReminder = toggleAiringReminder,
+        airingDailySummaryEnabled = uiState.airingDailySummaryEnabled,
+        onToggleAiringDailySummary = viewModel::setAiringDailySummaryEnabled,
+        airingPreAirEnabled = uiState.airingPreAirEnabled,
+        onToggleAiringPreAir = viewModel::setAiringPreAirEnabled,
         hasNotificationPermission = hasNotificationPermission,
         airingReminderHour = uiState.airingReminderHour,
         onSelectReminderHour = viewModel::setAiringReminderHour,
-        airDelayOffsetMinutes = uiState.airDelayOffsetMinutes,
-        onSelectDelayOffsetMinutes = viewModel::setAirDelayOffsetMinutes,
+        airingNotificationOffsetMinutes = uiState.airingNotificationOffsetMinutes,
+        onSelectAiringNotificationOffsetMinutes = viewModel::setAiringNotificationOffsetMinutes,
+        onOpenSystemNotificationSettings = {
+            val intent =
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                }
+            context.startActivity(intent)
+        },
         amoledDarkMode = uiState.amoledDarkMode,
         onToggleAmoledDarkMode = viewModel::setAmoledDarkMode,
         pipEnabled = uiState.pipEnabled,
@@ -150,7 +161,7 @@ fun SettingsScreen(
         onOpenWebUrl = openWebUrl,
         onClearCache = {
             coroutineScope.launch {
-                snackbarHostState.showSnackbar("本地缓存与临时数据已清理 ✨")
+                snackbarHostState.showSnackbar("本地缓存与临时数据已清理")
             }
         },
         onLogoutCurrent = viewModel::logout,
@@ -208,11 +219,16 @@ fun SettingsScreenContent(
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onSyncNow: () -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit,
+    airingDailySummaryEnabled: Boolean = true,
+    onToggleAiringDailySummary: (Boolean) -> Unit = {},
+    airingPreAirEnabled: Boolean = true,
+    onToggleAiringPreAir: (Boolean) -> Unit = {},
     hasNotificationPermission: Boolean = true,
     airingReminderHour: Int,
     onSelectReminderHour: (Int) -> Unit,
-    airDelayOffsetMinutes: Int,
-    onSelectDelayOffsetMinutes: (Int) -> Unit,
+    airingNotificationOffsetMinutes: Int = -15,
+    onSelectAiringNotificationOffsetMinutes: (Int) -> Unit = {},
+    onOpenSystemNotificationSettings: () -> Unit = {},
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
@@ -232,7 +248,7 @@ fun SettingsScreenContent(
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }
-    var showDelayOffsetDialog by remember { mutableStateOf(false) }
+    var showTimingBottomSheet by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -271,13 +287,18 @@ fun SettingsScreenContent(
                     isSyncing = uiState.isSyncing,
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
+                    airingDailySummaryEnabled = airingDailySummaryEnabled,
+                    onToggleAiringDailySummary = onToggleAiringDailySummary,
+                    airingPreAirEnabled = airingPreAirEnabled,
+                    onToggleAiringPreAir = onToggleAiringPreAir,
                     hasNotificationPermission = hasNotificationPermission,
                     airingReminderHour = airingReminderHour,
                     aiConfig = uiState.aiConfig,
                     onOpenAiSettingsDialog = { showAiSettingsDialog = true },
                     onOpenReminderHourDialog = { showReminderHourDialog = true },
-                    airDelayOffsetMinutes = airDelayOffsetMinutes,
-                    onOpenDelayOffsetDialog = { showDelayOffsetDialog = true },
+                    airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
+                    onOpenTimingBottomSheet = { showTimingBottomSheet = true },
+                    onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
                     amoledDarkMode = amoledDarkMode,
                     onToggleAmoledDarkMode = onToggleAmoledDarkMode,
                     pipEnabled = pipEnabled,
@@ -320,11 +341,11 @@ fun SettingsScreenContent(
         )
     }
 
-    if (showDelayOffsetDialog) {
-        DelayOffsetDialog(
-            currentOffset = airDelayOffsetMinutes,
-            onSelectOffset = onSelectDelayOffsetMinutes,
-            onDismiss = { showDelayOffsetDialog = false },
+    if (showTimingBottomSheet) {
+        AiringTimingBottomSheet(
+            initialOffsetMinutes = airingNotificationOffsetMinutes,
+            onConfirmOffset = onSelectAiringNotificationOffsetMinutes,
+            onDismiss = { showTimingBottomSheet = false },
         )
     }
 
@@ -435,8 +456,8 @@ private fun SettingsScreenPreview() {
             onToggleAiringReminder = {},
             airingReminderHour = 8,
             onSelectReminderHour = {},
-            airDelayOffsetMinutes = 0,
-            onSelectDelayOffsetMinutes = {},
+            airingNotificationOffsetMinutes = -15,
+            onSelectAiringNotificationOffsetMinutes = {},
             amoledDarkMode = false,
             onToggleAmoledDarkMode = {},
             pipEnabled = true,

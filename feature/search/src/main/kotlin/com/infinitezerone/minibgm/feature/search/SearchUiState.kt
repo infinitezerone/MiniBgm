@@ -35,9 +35,9 @@ enum class SearchSort(
     val serverSort: String,
 ) {
     MATCH("综合匹配", "match"),
-    HEAT("热门收藏 🔥", "heat"),
-    SCORE("高分优先 ⭐", "score"),
-    RANK("排名靠前 🏆", "rank"),
+    HEAT("热门收藏", "heat"),
+    SCORE("高分优先", "score"),
+    RANK("排名靠前", "rank"),
 }
 
 /** 搜索视图模式 */

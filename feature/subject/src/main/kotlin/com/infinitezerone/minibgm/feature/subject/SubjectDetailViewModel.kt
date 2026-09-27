@@ -71,9 +71,9 @@ sealed interface SubjectDetailUiEvent {
 enum class SubjectDetailTab(
     val label: String,
 ) {
-    EPISODES("📺 章节打卡"),
-    DETAILS("📖 资料与演职员"),
-    COMMUNITY("💬 社区吐槽"),
+    EPISODES("章节打卡"),
+    DETAILS("资料与演职员"),
+    COMMUNITY("社区吐槽"),
 }
 
 /** 条目详情页 UI 状态 */

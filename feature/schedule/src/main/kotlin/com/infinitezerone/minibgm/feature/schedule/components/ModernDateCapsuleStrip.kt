@@ -44,9 +44,9 @@ import kotlin.math.roundToInt
 @Composable
 fun ModernDateCapsuleStrip(
     dateItems: List<WeekdayDateItem>,
-    selectedWeekday: Int,
+    selectedPage: Int,
     pagerState: PagerState,
-    onSelectWeekday: (Int) -> Unit,
+    onSelectPage: (Int) -> Unit,
     watchingCountMap: Map<Int, Int>,
     modifier: Modifier = Modifier,
 ) {
@@ -104,16 +104,16 @@ fun ModernDateCapsuleStrip(
                 .padding(horizontal = horizontalPaddingDp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(spacingDp),
     ) {
-        val activeWeekday = pagerState.currentPage + 1
-        dateItems.forEach { item ->
-            val isSelected = item.weekday == activeWeekday
-            val watchingCount = watchingCountMap[item.weekday] ?: 0
+        val activePage = pagerState.currentPage
+        dateItems.forEachIndexed { index, item ->
+            val isSelected = index == activePage
+            val watchingCount = watchingCountMap[index] ?: 0
 
             DateCapsule(
                 item = item,
                 isSelected = isSelected,
                 watchingCount = watchingCount,
-                onClick = { onSelectWeekday(item.weekday) },
+                onClick = { onSelectPage(index) },
             )
         }
     }
@@ -224,7 +224,7 @@ fun FilterAndMetaBar(
             },
             label = {
                 Text(
-                    text = if (!isLoggedIn) "⭐ 我的追番 (未登录)" else "⭐ 我的追番 ($watchingCount)",
+                    text = if (!isLoggedIn) "我的追番 (未登录)" else "我的追番 ($watchingCount)",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
                 )

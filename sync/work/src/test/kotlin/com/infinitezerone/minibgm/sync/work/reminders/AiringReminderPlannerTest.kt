@@ -214,10 +214,59 @@ class AiringReminderPlannerTest {
     }
 
     @Test
-    fun pickPreAir_skipsPastAirTime() {
+    fun pickPreAir_picksWithinGraceWindowWhenSlightlyLate() {
+        // 在 10 分钟容错窗口内（例如晚了 5 分钟），仍能捕获到通知（已开播状态）
         val planned = pickPreAir(airingAt(-5))
 
+        assertEquals(1, planned.size)
+        assertTrue(AiringReminderPlanner.isAlreadyStarted(airingAt(-5), nowEpochMillis))
+    }
+
+    @Test
+    fun pickPreAir_skipsBeyondGraceWindow() {
+        // 超过 10 分钟容错窗口（例如已过去 15 分钟），不再打扰用户
+        val planned = pickPreAir(airingAt(-15))
+
         assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun pickPreAir_respectsDelayOffset() {
+        // 播出时间虽然已过 5 分钟，但用户设置了源延迟 15 分钟，实际距离开播还有 10 分钟
+        val planned =
+            AiringReminderPlanner.pickPreAir(
+                enabled = true,
+                isLoggedIn = true,
+                notifiedKeys = emptyList(),
+                today = today,
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                airDelayOffsetMinutes = 15L,
+                upcoming = listOf(airingAt(-5)),
+            )
+
+        assertEquals(1, planned.size)
+        // 加上延迟后实际尚未播出
+        assertTrue(!AiringReminderPlanner.isAlreadyStarted(airingAt(-5), nowEpochMillis, airDelayOffsetMinutes = 15L))
+    }
+
+    @Test
+    fun nextAiringSchedule_picksNearestFutureEpisode() {
+        val ep1 = airingAt(30)
+        val ep2 = airingAt(10)
+        val ep3 = airingAt(-20) // 已过期
+
+        val next =
+            AiringReminderPlanner.nextAiringSchedule(
+                notifiedKeys = emptyList(),
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                upcoming = listOf(ep1, ep2, ep3),
+            )
+
+        // ep2 开播在 10 分钟后，提前 15 分钟应当立刻触发 (maxOf(now, targetTrigger) == now)
+        assertEquals(ep2.subjectId, next?.first?.subjectId)
+        assertEquals(nowEpochMillis, next?.second)
     }
 
     @Test
