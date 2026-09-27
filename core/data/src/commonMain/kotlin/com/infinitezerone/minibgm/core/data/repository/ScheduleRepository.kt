@@ -30,7 +30,6 @@ import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
-import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -108,7 +107,6 @@ class ScheduleRepositoryImpl(
     private val airEventDao: AirEventDao,
     private val anilistMappingDao: AniListMappingDao,
     private val anilistService: AniListService,
-    private val bilibiliService: BilibiliService,
     private val userPreferences: UserPreferencesDataSource,
     private val collectionRepository: CollectionRepository? = null,
     private val json: Json = BgmHttpClient.jsonConfig,
@@ -378,8 +376,7 @@ class ScheduleRepositoryImpl(
     /**
      * 同步全量条目的播出事件并仲裁时刻表：
      * 1) 从 AniList 获取逐话真值与高清封面（日番主流，精确到秒级）；
-     * 2) AniList 未覆盖但存在 B站源的条目由 BilibiliService 获取逐话真值（国创/B站独播）；
-     * 3) 仲裁回写条目的 next* 字段与 weekday，自动回补 AniList 高清封面，并剔除已完结僵尸条目。
+     * 2) 仲裁回写条目的 next* 字段与 weekday，自动回补 AniList 高清封面，并剔除已完结僵尸条目。
      */
     private suspend fun syncAirEvents() {
         val baseEntities = scheduleDao.getAllSchedulesList()
@@ -1242,7 +1239,6 @@ class ScheduleRepositoryImpl(
         const val ANILIST_SITE = "anilist"
         const val BILIBILI_SITE = "bilibili"
         const val EVENT_SOURCE_ANILIST = "anilist"
-        const val EVENT_SOURCE_BILIBILI = "bilibili"
         const val EVENT_SOURCE_BGM_DATA = "bgm_data"
         const val ROSTER_LOOKBACK_DAYS = 370L
 

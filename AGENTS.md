@@ -35,7 +35,7 @@ bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试 → 
 ## 领域规则
 
 - 装饰性功能 fail-open：光晕/动效/横幅等内部异常一律 `runCatching` 降级为"没有装饰"，绝不崩宿主页面；读硬件位图像素前先 `copy` 成软件位图。
-- 排期真值只来自 AniList/Bilibili 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 仅作元数据与平台映射，不得污染官方播出时间。
+- 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 仅作元数据与平台映射，不得污染官方播出时间。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（模块内白名单见 ArchitectureRulesTest）。
 - Ktor 401 自动刷新；刷新彻底失败自动登出——调用方永远不会看到 401。
 

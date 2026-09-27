@@ -83,6 +83,11 @@ data class SubjectDetailUiState(
     val isLoggedIn: Boolean = false,
     val selectedTab: SubjectDetailTab = SubjectDetailTab.EPISODES,
     val isEpisodeGridView: Boolean = true,
+    /** 分集排序方向：false = 最早在前，true = 最新在前 */
+    val episodeSortDescending: Boolean = false,
+    /** 是否还有未加载分集（滚动加载更多） */
+    val hasMoreEpisodes: Boolean = false,
+    val isLoadingMoreEpisodes: Boolean = false,
     val selectedEpisodeForDetail: Episode? = null,
     val activeCharacter: SubjectCharacter? = null,
     val activePerson: SubjectPerson? = null,
@@ -218,6 +223,11 @@ class SubjectDetailViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            subjectRepository.hasMoreEpisodesStream(subjectId).collect { more ->
+                _uiState.update { it.copy(hasMoreEpisodes = more) }
+            }
+        }
         if (settingsRepository != null) {
             viewModelScope.launch {
                 settingsRepository.playbackRules.collect { rules ->
@@ -264,7 +274,7 @@ class SubjectDetailViewModel(
 
                 // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
                 val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
-                val episodesResult = subjectRepository.fetchEpisodes(subjectId)
+                val episodesResult = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
                 val collectionResult = collectionRepository.fetchCollection(subjectId)
 
                 subjectResult.onError { _, message ->
@@ -312,6 +322,26 @@ class SubjectDetailViewModel(
     /** 切换分集列表的宫格视图/详细列表视图 */
     fun setEpisodeGridView(isGrid: Boolean) {
         _uiState.update { it.copy(isEpisodeGridView = isGrid) }
+    }
+
+    /** 分集排序方向：切换后按新方向重载首屏（降序从最新一话开始） */
+    fun setEpisodeSortDescending(descending: Boolean) {
+        if (_uiState.value.episodeSortDescending == descending) return
+        _uiState.update { it.copy(episodeSortDescending = descending) }
+        viewModelScope.launch {
+            subjectRepository.loadEpisodes(subjectId, descending)
+        }
+    }
+
+    /** 滚动到底部时续拉下一屏分集 */
+    fun loadMoreEpisodes() {
+        val state = _uiState.value
+        if (!state.hasMoreEpisodes || state.isLoadingMoreEpisodes) return
+        _uiState.update { it.copy(isLoadingMoreEpisodes = true) }
+        viewModelScope.launch {
+            subjectRepository.loadMoreEpisodes(subjectId, state.episodeSortDescending)
+            _uiState.update { it.copy(isLoadingMoreEpisodes = false) }
+        }
     }
 
     /** 打开分集详情底栏 */

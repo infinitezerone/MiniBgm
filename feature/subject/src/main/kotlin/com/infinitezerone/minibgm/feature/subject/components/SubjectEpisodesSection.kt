@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -77,6 +78,8 @@ fun EpisodesSectionHeader(
     modifier: Modifier = Modifier,
     onPlayNext: (() -> Unit)? = null,
     onOpenSources: (() -> Unit)? = null,
+    episodeSortDescending: Boolean = false,
+    onToggleSort: (() -> Unit)? = null,
 ) {
     val headerTitle =
         when (subjectType) {
@@ -174,6 +177,16 @@ fun EpisodesSectionHeader(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
+                }
+            }
+
+            if (onToggleSort != null) {
+                IconButton(onClick = onToggleSort) {
+                    Icon(
+                        imageVector = Icons.Filled.SwapVert,
+                        contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
+                        tint = if (episodeSortDescending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 

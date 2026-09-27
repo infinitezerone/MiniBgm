@@ -30,8 +30,6 @@ import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
 import com.infinitezerone.minibgm.core.network.BangumiDataResult
 import com.infinitezerone.minibgm.core.network.BangumiDataService
-import com.infinitezerone.minibgm.core.network.BilibiliAiringEpisode
-import com.infinitezerone.minibgm.core.network.BilibiliService
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -176,16 +174,6 @@ class ScheduleRepositoryImplTest {
         }
     }
 
-    private class FakeBilibiliService : BilibiliService {
-        var episodesBySiteId: Map<String, List<BilibiliAiringEpisode>> = emptyMap()
-        val requestedSiteIds: MutableList<String> = mutableListOf()
-
-        override suspend fun getAiringEpisodes(bilibiliSiteId: String): List<BilibiliAiringEpisode> {
-            requestedSiteIds += bilibiliSiteId
-            return episodesBySiteId[bilibiliSiteId].orEmpty()
-        }
-    }
-
     private class FakeBangumiApiService : BangumiApiService {
         var subjects: Map<Long, Subject> = emptyMap()
 
@@ -320,7 +308,6 @@ class ScheduleRepositoryImplTest {
         airEventDao: FakeAirEventDao = FakeAirEventDao(),
         anilistMappingDao: FakeAniListMappingDao = FakeAniListMappingDao(),
         anilistService: FakeAniListService = FakeAniListService(),
-        bilibiliService: FakeBilibiliService = FakeBilibiliService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
         collectionRepository: CollectionRepository? = null,
     ) = ScheduleRepositoryImpl(
@@ -330,7 +317,6 @@ class ScheduleRepositoryImplTest {
         airEventDao = airEventDao,
         anilistMappingDao = anilistMappingDao,
         anilistService = anilistService,
-        bilibiliService = bilibiliService,
         userPreferences = userPreferences,
         collectionRepository = collectionRepository,
     )
@@ -762,49 +748,6 @@ class ScheduleRepositoryImplTest {
             val updated = dao.getAllSchedulesList().single()
             assertEquals("", updated.nextEpisodeKind)
             assertEquals(0, updated.nextEpisode)
-        }
-
-    @Test
-    fun syncAirEvents_bypassesBilibiliAndReliesOnAniList() =
-        runTest {
-            val bilibiliService = FakeBilibiliService()
-            val dao =
-                FakeAirScheduleDao().apply {
-                    insertSchedules(
-                        listOf(
-                            AirScheduleEntity(
-                                bgmId = 456789L,
-                                title = "凡人修仙传",
-                                titleCn = "凡人修仙传",
-                                coverUrl = "",
-                                ratingScore = 8.0,
-                                airDate = "2020-07-25",
-                                beginAtUtc = "2020-07-25T03:00:00Z",
-                                weekday = 6,
-                                timeCst = "11:00",
-                                timeJst = "12:00",
-                                sitesJson = """[{"site":"bilibili","id":"4315482"}]""",
-                            ),
-                        ),
-                    )
-                }
-            val airEventDao = FakeAirEventDao()
-            val repo =
-                createRepository(
-                    apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
-                    scheduleDao = dao,
-                    airEventDao = airEventDao,
-                    bilibiliService = bilibiliService,
-                    anilistService = FakeAniListService(),
-                    userPreferences = createTestUserPreferencesDataSource(),
-                )
-
-            val result = repo.syncBangumiData()
-
-            assertIs<AppResult.Success<Unit>>(result)
-            // Bilibili API is no longer invoked, preventing slow serial network loops
-            assertTrue(bilibiliService.requestedSiteIds.isEmpty())
         }
 
     @Test

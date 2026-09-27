@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
 class SubjectRepositoryImplTest {
     private class FakeBangumiApiService : BangumiApiService {
         var episodesResponse: EpisodePageResponse = EpisodePageResponse(total = 0, data = emptyList())
+        var allEpisodes: List<Episode> = emptyList()
         var subjectResponse: Subject? = null
         var shouldThrow: Boolean = false
         var cancellationToThrow: Boolean = false
@@ -94,6 +95,13 @@ class SubjectRepositoryImplTest {
         ): EpisodePageResponse =
             if (shouldThrow) {
                 throw IllegalStateException("API error")
+            } else if (allEpisodes.isNotEmpty()) {
+                EpisodePageResponse(
+                    total = allEpisodes.size,
+                    limit = limit,
+                    offset = offset,
+                    data = allEpisodes.drop(offset).take(limit),
+                )
             } else {
                 episodesResponse
             }
@@ -329,5 +337,38 @@ class SubjectRepositoryImplTest {
             kotlin.test.assertFailsWith<kotlinx.coroutines.CancellationException> {
                 repo.fetchSubjectDetail(528828L)
             }
+        }
+
+    @Test
+    fun loadEpisodes_ascending_thenLoadMore_appendsUntilExhausted() =
+        runTest {
+            val api = FakeBangumiApiService().apply { allEpisodes = (1..150).map { Episode(id = it.toLong(), sort = it.toFloat()) } }
+            val repo = SubjectRepositoryImpl(api)
+
+            assertIs<AppResult.Success<List<Episode>>>(repo.loadEpisodes(1L, descending = false))
+            assertEquals(100, repo.getEpisodesStream(1L).first().size)
+            assertEquals(true, repo.hasMoreEpisodesStream(1L).first())
+
+            assertIs<AppResult.Success<Boolean>>(repo.loadMoreEpisodes(1L, descending = false))
+            assertEquals(150, repo.getEpisodesStream(1L).first().size)
+            assertEquals(false, repo.hasMoreEpisodesStream(1L).first())
+        }
+
+    @Test
+    fun loadEpisodes_descending_startsFromTail_andPagesDownward() =
+        runTest {
+            val api = FakeBangumiApiService().apply { allEpisodes = (1..150).map { Episode(id = it.toLong(), sort = it.toFloat()) } }
+            val repo = SubjectRepositoryImpl(api)
+
+            assertIs<AppResult.Success<List<Episode>>>(repo.loadEpisodes(1L, descending = true))
+            val loaded = repo.getEpisodesStream(1L).first()
+            assertEquals(100, loaded.size)
+            // 降序首屏取末页 [50,150)，最高话 id = 150
+            assertEquals(150L, loaded.last().id)
+            assertEquals(true, repo.hasMoreEpisodesStream(1L).first())
+
+            repo.loadMoreEpisodes(1L, descending = true)
+            assertEquals(150, repo.getEpisodesStream(1L).first().size)
+            assertEquals(false, repo.hasMoreEpisodesStream(1L).first())
         }
 }

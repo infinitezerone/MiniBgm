@@ -47,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -332,9 +333,17 @@ fun SubjectDetailScreen(
         }
     }
 
+    val orderedEpisodes =
+        remember(uiState.episodes, uiState.episodeSortDescending) {
+            if (uiState.episodeSortDescending) {
+                uiState.episodes.sortedByDescending { it.sort }
+            } else {
+                uiState.episodes.sortedBy { it.sort }
+            }
+        }
     val groupedEpisodes =
-        remember(uiState.episodes) {
-            uiState.episodes.groupBy { EpisodeGroup.fromType(it.type) }
+        remember(orderedEpisodes) {
+            orderedEpisodes.groupBy { EpisodeGroup.fromType(it.type) }
         }
     val availableGroups =
         remember(groupedEpisodes) {
@@ -481,6 +490,13 @@ fun SubjectDetailScreen(
                                 onSelectGroup = { selectedGroup = it },
                                 isGridView = uiState.isEpisodeGridView,
                                 onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
+                                episodeSortDescending = uiState.episodeSortDescending,
+                                hasMoreEpisodes = uiState.hasMoreEpisodes,
+                                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                                onToggleEpisodeSort = {
+                                    viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
+                                },
+                                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                                 onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
                                 onToggleWatching = {
                                     val wasWatching = uiState.collection?.type == CollectionType.DOING.value
@@ -752,6 +768,11 @@ private fun SubjectDetailContent(
     onSelectGroup: (EpisodeGroup) -> Unit,
     isGridView: Boolean,
     onToggleGridView: () -> Unit,
+    episodeSortDescending: Boolean,
+    hasMoreEpisodes: Boolean,
+    isLoadingMoreEpisodes: Boolean,
+    onToggleEpisodeSort: () -> Unit,
+    onLoadMoreEpisodes: () -> Unit,
     onOpenCollectionSheet: () -> Unit,
     onToggleWatching: () -> Unit,
     onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
@@ -772,6 +793,15 @@ private fun SubjectDetailContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+
+    // 滚动到“加载更多”脚标可见时自动续拉下一屏分集
+    LaunchedEffect(listState, hasMoreEpisodes) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo.any { it.key == "episodes_load_more" }
+        }.collect { visible ->
+            if (visible && hasMoreEpisodes) onLoadMoreEpisodes()
+        }
+    }
     val tabScrollPositions = remember { mutableMapOf<SubjectDetailTab, Pair<Int, Int>>() }
     var lastTab by remember { mutableStateOf(selectedTab) }
 
@@ -903,6 +933,8 @@ private fun SubjectDetailContent(
                             subjectType = subjectType,
                             isGridView = isGridView,
                             onToggleView = onToggleGridView,
+                            episodeSortDescending = episodeSortDescending,
+                            onToggleSort = onToggleEpisodeSort,
                             onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
                             onOpenSources = onOpenSources,
                         )
@@ -981,6 +1013,25 @@ private fun SubjectDetailContent(
                                     }
                                 },
                             )
+                        }
+                    }
+
+                    if (hasMoreEpisodes) {
+                        item(key = "episodes_load_more") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isLoadingMoreEpisodes) {
+                                    CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                                } else {
+                                    Text(
+                                        text = "上滑加载更多分集…",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -28,7 +28,28 @@ interface SubjectRepository {
 
     fun getEpisodesStream(subjectId: Long): Flow<List<Episode>>
 
+    /** 载入分集首屏（[descending] 决定从“最早”还是“最新”一端开始），重置该条目的累积缓存 */
+    suspend fun loadEpisodes(
+        subjectId: Long,
+        descending: Boolean = false,
+    ): AppResult<List<Episode>>
+
+    /** 按当前方向续拉下一屏，累积进缓存；返回是否拿到了新数据 */
+    suspend fun loadMoreEpisodes(
+        subjectId: Long,
+        descending: Boolean = false,
+    ): AppResult<Boolean>
+
+    /** 该条目是否还有未加载的分集（响应式） */
+    fun hasMoreEpisodesStream(subjectId: Long): Flow<Boolean>
+
+    /** 兼容旧调用：载入分集首屏（升序）并返回列表 */
     suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>>
+
+    /** 分集分页窗口大小 */
+    companion object {
+        const val EPISODE_PAGE_SIZE = 100
+    }
 
     suspend fun fetchCharacters(subjectId: Long): AppResult<List<SubjectCharacter>>
 
@@ -52,8 +73,19 @@ class SubjectRepositoryImpl(
     private val cacheMutex = Mutex()
     private val subjectsState = MutableStateFlow<Map<Long, Subject>>(emptyMap())
     private val episodesState = MutableStateFlow<Map<Long, List<Episode>>>(emptyMap())
+    private val episodesHasMoreState = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
+    private val episodeCursors = mutableMapOf<Long, EpisodeCursor>()
     private val subjectAccessOrder = mutableListOf<Long>()
     private val episodeAccessOrder = mutableListOf<Long>()
+
+    private data class EpisodeCursor(
+        val total: Int,
+        /** 升序：下一个待拉 offset；降序：本屏起始 offset */
+        val nextOffset: Int,
+        val descending: Boolean,
+    )
+
+    private fun hasMore(cursor: EpisodeCursor): Boolean = if (cursor.descending) cursor.nextOffset > 0 else cursor.nextOffset < cursor.total
 
     override fun getSubjectStream(id: Long): Flow<Subject?> =
         subjectsState
@@ -86,26 +118,95 @@ class SubjectRepositoryImpl(
             .map { it[subjectId].orEmpty() }
             .distinctUntilChanged()
 
-    override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> =
+    override fun hasMoreEpisodesStream(subjectId: Long): Flow<Boolean> =
+        episodesHasMoreState
+            .map { it[subjectId] ?: false }
+            .distinctUntilChanged()
+
+    override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> = loadEpisodes(subjectId, descending = false)
+
+    override suspend fun loadEpisodes(
+        subjectId: Long,
+        descending: Boolean,
+    ): AppResult<List<Episode>> =
         try {
-            val response = apiService.getEpisodes(subjectId, limit = 100)
-            cacheMutex.withLock {
-                episodeAccessOrder.remove(subjectId)
-                episodeAccessOrder.add(subjectId)
-                val newMap = episodesState.value.toMutableMap()
-                newMap[subjectId] = response.data
-                while (episodeAccessOrder.size > maxMemoryEntries) {
-                    val evictedId = episodeAccessOrder.removeAt(0)
-                    newMap.remove(evictedId)
+            val limit = SubjectRepository.EPISODE_PAGE_SIZE
+            // 降序需要先知道 total 才能从末页开始（只取 1 条探 total，不污染缓存）
+            val total =
+                if (descending) {
+                    apiService.getEpisodes(subjectId, limit = 1, offset = 0).total
+                } else {
+                    -1
                 }
-                episodesState.value = newMap
-            }
-            AppResult.Success(response.data)
+            val offset = if (descending) maxOf(0, total - limit) else 0
+            val page = apiService.getEpisodes(subjectId, limit = limit, offset = offset)
+            val resolvedTotal = if (descending) total else page.total
+            val cursor =
+                EpisodeCursor(
+                    total = resolvedTotal,
+                    nextOffset = if (descending) offset else page.data.size,
+                    descending = descending,
+                )
+            cacheEpisodePage(subjectId, page.data, cursor, reset = true)
+            AppResult.Success(page.data)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("获取剧集列表"))
         }
+
+    override suspend fun loadMoreEpisodes(
+        subjectId: Long,
+        descending: Boolean,
+    ): AppResult<Boolean> =
+        try {
+            val cursor = cacheMutex.withLock { episodeCursors[subjectId] }
+            if (cursor == null || !hasMore(cursor)) {
+                AppResult.Success(false)
+            } else {
+                val limit = SubjectRepository.EPISODE_PAGE_SIZE
+                val offset = if (descending) maxOf(0, cursor.nextOffset - limit) else cursor.nextOffset
+                val page = apiService.getEpisodes(subjectId, limit = limit, offset = offset)
+                val newCursor =
+                    EpisodeCursor(
+                        total = cursor.total,
+                        nextOffset = if (descending) offset else cursor.nextOffset + page.data.size,
+                        descending = descending,
+                    )
+                cacheEpisodePage(subjectId, page.data, newCursor, reset = false)
+                AppResult.Success(page.data.isNotEmpty())
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            AppResult.Error(e, e.toUserFriendlyMessage("获取剧集列表"))
+        }
+
+    private suspend fun cacheEpisodePage(
+        subjectId: Long,
+        page: List<Episode>,
+        cursor: EpisodeCursor,
+        reset: Boolean,
+    ) {
+        cacheMutex.withLock {
+            episodeAccessOrder.remove(subjectId)
+            episodeAccessOrder.add(subjectId)
+            val newMap = episodesState.value.toMutableMap()
+            val existing = if (reset) emptyList() else newMap[subjectId].orEmpty()
+            newMap[subjectId] = (existing + page).distinctBy { it.id }.sortedBy { it.sort }
+            val newHasMore = episodesHasMoreState.value.toMutableMap()
+            newHasMore[subjectId] = hasMore(cursor)
+            episodeCursors[subjectId] = cursor
+            while (episodeAccessOrder.size > maxMemoryEntries) {
+                val evictedId = episodeAccessOrder.removeAt(0)
+                newMap.remove(evictedId)
+                newHasMore.remove(evictedId)
+                episodeCursors.remove(evictedId)
+            }
+            episodesState.value = newMap
+            episodesHasMoreState.value = newHasMore
+        }
+    }
 
     override suspend fun fetchCharacters(subjectId: Long): AppResult<List<SubjectCharacter>> =
         asAppResult(errorMessage = { it.toUserFriendlyMessage("获取角色列表") }) {
