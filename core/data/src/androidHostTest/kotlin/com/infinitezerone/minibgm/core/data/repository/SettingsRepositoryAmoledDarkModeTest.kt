@@ -10,6 +10,7 @@ import androidx.datastore.core.WriteScope
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.testing.repository.FakeSecureSecretStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -91,7 +92,7 @@ class SettingsRepositoryAmoledDarkModeTest {
         val dataStore: DataStore<UserPreferences> =
             DataStoreFactory.create(storage = storage)
         val dataSource = UserPreferencesDataSource(dataStore)
-        val repository = SettingsRepositoryImpl(dataSource)
+        val repository = SettingsRepositoryImpl(dataSource, FakeSecureSecretStore())
     }
 
     @Test

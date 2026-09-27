@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.network.CommunitySubscriptionService
 import com.infinitezerone.minibgm.core.testing.datastore.createTestUserPreferencesDataSource
+import com.infinitezerone.minibgm.core.testing.repository.FakeSecureSecretStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -40,7 +41,7 @@ class SettingsRepositoryImplTest {
         runTest {
             val fakeService = FakeCommunitySubscriptionService()
             val fakeDataStore = createTestUserPreferencesDataSource()
-            val repo = SettingsRepositoryImpl(fakeDataStore, fakeService)
+            val repo = SettingsRepositoryImpl(fakeDataStore, FakeSecureSecretStore(), fakeService)
 
             val result = repo.validateAndTestSubscription("https://example.com/rules.json")
 
@@ -54,7 +55,7 @@ class SettingsRepositoryImplTest {
         runTest {
             val fakeService = FakeCommunitySubscriptionService()
             val fakeDataStore = createTestUserPreferencesDataSource()
-            val repo = SettingsRepositoryImpl(fakeDataStore, fakeService)
+            val repo = SettingsRepositoryImpl(fakeDataStore, FakeSecureSecretStore(), fakeService)
 
             val rule1 = PlaybackSourceRule(id = "1", name = "规则1", urlTemplate = "https://a.com/{title}")
             val rule2 = PlaybackSourceRule(id = "2", name = "规则2", urlTemplate = "https://b.com/{title}")
@@ -75,7 +76,7 @@ class SettingsRepositoryImplTest {
     fun aiConfigProfiles_roundTrip_saveActivateDelete() =
         runTest {
             val fakeService = FakeCommunitySubscriptionService()
-            val repo = SettingsRepositoryImpl(createTestUserPreferencesDataSource(), fakeService)
+            val repo = SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), fakeService)
 
             val configA =
                 com.infinitezerone.minibgm.core.model.AiConfig(

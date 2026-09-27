@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
@@ -12,11 +13,15 @@ import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
+
+/** 当前生效的 AI 密钥在加密库中的键；方案池密钥用 `ai.profile.<id>.apiKey` */
+private const val AI_ACTIVE_KEY = "ai.active.apiKey"
 
 /**
  * 面向 UI 的用户设置投影：仅包含展示与行为偏好，不含登录态与账号数据
@@ -145,12 +150,13 @@ interface SettingsRepository {
 
 class SettingsRepositoryImpl(
     private val userPreferences: UserPreferencesDataSource,
+    private val secureSecretStore: SecureSecretStore,
     private val communitySubscriptionService: com.infinitezerone.minibgm.core.network.CommunitySubscriptionService? = null,
 ) : SettingsRepository {
     private val json = BgmHttpClient.jsonConfig
 
     override val settings: Flow<UserSettings> =
-        userPreferences.userPreferences.map { prefs ->
+        combine(userPreferences.userPreferences, secureSecretStore.observeSecrets()) { prefs, secrets ->
             UserSettings(
                 syncInterval = prefs.syncInterval,
                 bangumiDataLastSyncTimestamp = prefs.bangumiDataLastSyncTimestamp,
@@ -159,7 +165,7 @@ class SettingsRepositoryImpl(
                 aiConfig =
                     AiConfig(
                         endpoint = prefs.aiEndpoint,
-                        apiKey = prefs.aiApiKey,
+                        apiKey = secrets[AI_ACTIVE_KEY].orEmpty(),
                         model = prefs.aiModel,
                         provider = prefs.aiProvider,
                     ),
@@ -170,10 +176,10 @@ class SettingsRepositoryImpl(
         }
 
     override val aiConfig: Flow<AiConfig> =
-        userPreferences.userPreferences.map { prefs ->
+        combine(userPreferences.userPreferences, secureSecretStore.observeSecrets()) { prefs, secrets ->
             AiConfig(
                 endpoint = prefs.aiEndpoint,
-                apiKey = prefs.aiApiKey,
+                apiKey = secrets[AI_ACTIVE_KEY].orEmpty(),
                 model = prefs.aiModel,
                 provider = prefs.aiProvider,
             )
@@ -220,10 +226,10 @@ class SettingsRepositoryImpl(
     override suspend fun setAiConfig(config: AiConfig) {
         userPreferences.setAiConfig(
             endpoint = config.endpoint,
-            apiKey = config.apiKey,
             model = config.model,
             provider = config.provider,
         )
+        secureSecretStore.setSecret(AI_ACTIVE_KEY, config.apiKey)
     }
 
     private val aiProfilesWriteMutex = Mutex()
@@ -238,8 +244,10 @@ class SettingsRepositoryImpl(
         }
 
     override val aiConfigProfiles: Flow<List<AiConfigProfile>> =
-        userPreferences.userPreferences.map { prefs ->
-            decodeAiProfiles(prefs.aiConfigProfilesJson)
+        combine(userPreferences.userPreferences, secureSecretStore.observeSecrets()) { prefs, secrets ->
+            decodeAiProfiles(prefs.aiConfigProfilesJson).map { profile ->
+                profile.copy(config = profile.config.copy(apiKey = secrets[aiProfileSecretKey(profile.id)].orEmpty()))
+            }
         }
 
     override val activeAiProfileId: Flow<String> =
@@ -250,8 +258,11 @@ class SettingsRepositoryImpl(
     override suspend fun saveAiConfigProfile(profile: AiConfigProfile) {
         aiProfilesWriteMutex.withLock {
             val current = decodeAiProfiles(userPreferences.userPreferences.first().aiConfigProfilesJson)
-            val updated = current.filterNot { it.id == profile.id } + profile
+            // 方案池 JSON 只存非密钥字段，密钥单独进加密库
+            val sanitized = profile.copy(config = profile.config.copy(apiKey = ""))
+            val updated = current.filterNot { it.id == profile.id }.map { it.copy(config = it.config.copy(apiKey = "")) } + sanitized
             userPreferences.setAiConfigProfilesJson(json.encodeToString(updated))
+            secureSecretStore.setSecret(aiProfileSecretKey(profile.id), profile.config.apiKey)
         }
     }
 
@@ -261,10 +272,10 @@ class SettingsRepositoryImpl(
                 .firstOrNull { it.id == profileId } ?: return
         userPreferences.setAiConfig(
             endpoint = profile.config.endpoint,
-            apiKey = profile.config.apiKey,
             model = profile.config.model,
             provider = profile.config.provider,
         )
+        secureSecretStore.setSecret(AI_ACTIVE_KEY, secureSecretStore.getSecret(aiProfileSecretKey(profileId)).orEmpty())
         userPreferences.setAiActiveProfileId(profileId)
     }
 
@@ -273,12 +284,19 @@ class SettingsRepositoryImpl(
             val prefs = userPreferences.userPreferences.first()
             val current = decodeAiProfiles(prefs.aiConfigProfilesJson)
             if (current.none { it.id == profileId }) return@withLock
-            userPreferences.setAiConfigProfilesJson(json.encodeToString(current.filterNot { it.id == profileId }))
+            userPreferences.setAiConfigProfilesJson(
+                json.encodeToString(
+                    current.filterNot { it.id == profileId }.map { it.copy(config = it.config.copy(apiKey = "")) },
+                ),
+            )
+            secureSecretStore.removeSecret(aiProfileSecretKey(profileId))
             if (prefs.aiActiveProfileId == profileId) {
                 userPreferences.setAiActiveProfileId("")
             }
         }
     }
+
+    private fun aiProfileSecretKey(profileId: String): String = "ai.profile.$profileId.apiKey"
 
     override suspend fun setAirDelayOffsetMinutes(minutes: Int) {
         userPreferences.setAirDelayOffsetMinutes(minutes)

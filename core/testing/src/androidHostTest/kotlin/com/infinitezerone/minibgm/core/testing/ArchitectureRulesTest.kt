@@ -173,7 +173,9 @@ class ArchitectureRulesTest {
     fun userPreferences_never_stores_sensitive_tokens() {
         // 反射校验 UserPreferences 所有属性名，杜绝凭据泄漏至未加密的 Preferences 中
         val fields = UserPreferences::class.java.declaredFields
-        val forbiddenKeywords = listOf("token", "accesstoken", "refreshtoken", "authsecret")
+        // 凭据形状的字段名一律不得出现在明文偏好里（OAuth token 走 TokenProvider，其他密钥走 SecureSecretStore）
+        val forbiddenKeywords =
+            listOf("token", "accesstoken", "refreshtoken", "apikey", "secret", "password", "passwd", "credential")
 
         val violatedFields =
             fields.filter { field ->

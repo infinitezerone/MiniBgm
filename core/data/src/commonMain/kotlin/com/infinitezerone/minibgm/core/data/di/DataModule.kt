@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.di
 
+import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.AuthRepositoryImpl
@@ -90,6 +91,7 @@ val dataModule =
         single<SettingsRepository> {
             SettingsRepositoryImpl(
                 userPreferences = get<UserPreferencesDataSource>(),
+                secureSecretStore = get<SecureSecretStore>(),
                 communitySubscriptionService = getOrNull(),
             )
         }

@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.datastore.di
 import androidx.datastore.core.DataStoreFactory
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStoreFile
+import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.datastore.AndroidCryptoManager
 import com.infinitezerone.minibgm.core.datastore.AuthBlobSerializer
@@ -39,6 +40,9 @@ val datastoreModule =
                 )
             AuthTokensDataSource(dataStore = authTokensDataStore, crypto = get())
         }
+
+        // 通用加密小秘密（如 AI 密钥）与 token 共用同一加密库
+        single<SecureSecretStore> { get<AuthTokensDataSource>() }
 
         single<TokenProvider> { KeystoreTokenProvider(get()) }
     }

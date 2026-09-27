@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.datastore
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
+import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -37,7 +38,30 @@ internal object AuthBlobSerializer : Serializer<String> {
 class AuthTokensDataSource(
     private val dataStore: DataStore<String>,
     private val crypto: CryptoManager,
-) {
+) : SecureSecretStore {
+    override fun observeSecrets(): Flow<Map<String, String>> = dataStore.data.map { blob -> decodeState(blob)?.secrets.orEmpty() }
+
+    override suspend fun getSecret(key: String): String? = currentState().secrets[key]
+
+    override suspend fun setSecret(
+        key: String,
+        value: String,
+    ) {
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: AuthTokensState()
+            val updatedSecrets = if (value.isBlank()) current.secrets - key else current.secrets + (key to value)
+            encodeState(current.copy(secrets = updatedSecrets))
+        }
+    }
+
+    override suspend fun removeSecret(key: String) {
+        dataStore.updateData { blob ->
+            val current = decodeState(blob) ?: return@updateData blob
+            if (key !in current.secrets) return@updateData blob
+            encodeState(current.copy(secrets = current.secrets - key))
+        }
+    }
+
     val tokens: Flow<Pair<String, String>?> =
         dataStore.data.map { blob ->
             val state = decodeState(blob) ?: return@map null
@@ -164,5 +188,7 @@ class AuthTokensDataSource(
         val accounts: Map<Long, AccountTokens> = emptyMap(),
         val accessToken: String = "",
         val refreshToken: String = "",
+        /** 非 OAuth 的加密小秘密（如 AI 服务密钥）；与 token 同库同加密 */
+        val secrets: Map<String, String> = emptyMap(),
     )
 }

@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaylistEntry
+import com.infinitezerone.minibgm.core.testing.repository.FakeSecureSecretStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -93,7 +94,7 @@ class SettingsRepositoryPlaybackTest {
         val dataStore: DataStore<UserPreferences> =
             DataStoreFactory.create(storage = storage)
         val dataSource = UserPreferencesDataSource(dataStore)
-        val repository = SettingsRepositoryImpl(dataSource)
+        val repository = SettingsRepositoryImpl(dataSource, FakeSecureSecretStore())
     }
 
     private fun entryJson(

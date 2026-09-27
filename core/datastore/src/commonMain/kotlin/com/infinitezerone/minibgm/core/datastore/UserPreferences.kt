@@ -43,8 +43,6 @@ data class UserPreferences(
     val airDelayOffsetMinutes: Int = 0,
     /** AI 服务配置：端点地址（如本地 Ollama http://10.0.2.2:11434/v1 或兼容 OpenAI 协议的云端端点） */
     val aiEndpoint: String = "",
-    /** AI 服务配置：访问密钥（遵循 AGENTS.md 凭据隔离，字段名禁止包含 token 关键字） */
-    val aiApiKey: String = "",
     /** AI 服务配置：模型名称（如 qwen2.5:7b, gpt-4o-mini） */
     val aiModel: String = "",
     /** AI 服务配置：服务商类型（如 ollama, openai） */

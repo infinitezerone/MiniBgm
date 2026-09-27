@@ -160,17 +160,15 @@ class UserPreferencesDataSource(
         }
     }
 
-    /** 更新 AI 服务配置 */
+    /** 更新 AI 服务配置（不含密钥；密钥走 SecureSecretStore 加密存储） */
     suspend fun setAiConfig(
         endpoint: String,
-        apiKey: String,
         model: String,
         provider: String,
     ) {
         dataStore.updateData { current ->
             current.copy(
                 aiEndpoint = endpoint,
-                aiApiKey = apiKey,
                 aiModel = model,
                 aiProvider = provider,
             )
