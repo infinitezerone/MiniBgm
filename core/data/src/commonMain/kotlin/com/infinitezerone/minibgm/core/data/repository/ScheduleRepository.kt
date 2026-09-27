@@ -19,6 +19,8 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.SearchFilter
+import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
@@ -604,7 +606,7 @@ class ScheduleRepositoryImpl(
             }
 
             // 3) bgm.tv 实时搜索兜底：唯一候选才接受
-            val subject = searchUniqueSubject(item) ?: continue
+            val subject = searchUniqueSubject(item, allowRestricted = showRestricted) ?: continue
             val searched = subject.toAniListBgmMapping(item.anilistId, nowMillis)
             mappingCache[item.anilistId] = searched
             mappingsToPersist += searched
@@ -693,21 +695,40 @@ class ScheduleRepositoryImpl(
         return null
     }
 
-    /** bgm.tv 官方搜索兜底：返回空、或存在多个候选时一律不绑定，宁可缺失也不写错映射。 */
-    private suspend fun searchUniqueSubject(item: AniListWeeklyScheduleItem): Subject? {
+    /** bgm.tv 搜索兜底：先 legacy，命中差/为空时退 v0 高级搜索；候选不唯一一律不绑定。 */
+    private suspend fun searchUniqueSubject(
+        item: AniListWeeklyScheduleItem,
+        allowRestricted: Boolean,
+    ): Subject? {
         val query = item.titleNative.ifBlank { item.titleRomaji }
         if (query.isBlank()) return null
-        val list =
+        val legacy =
             runCatchingCancellable { apiService.searchSubjects(query, type = 2) }
                 .getOrNull()
                 ?.list
                 .orEmpty()
-        if (list.isEmpty()) return null
-        if (list.size == 1) return list.first()
-        val normalized = normalizeTitle(query)
-        return list
-            .filter { normalizeTitle(it.name) == normalized || normalizeTitle(it.nameCn) == normalized }
-            .singleOrNull()
+        val candidates =
+            if (legacy.isNotEmpty()) {
+                legacy
+            } else {
+                runCatchingCancellable {
+                    apiService.searchSubjectsAdvanced(
+                        request =
+                            SearchSubjectsRequest(
+                                keyword = query,
+                                filter = SearchFilter(type = listOf(2), nsfw = if (allowRestricted) null else false),
+                            ),
+                    )
+                }.getOrNull()?.data.orEmpty()
+            }
+        if (candidates.isEmpty()) return null
+        if (candidates.size == 1) return candidates.first()
+        val key = canonicalTitleKey(query)
+        if (key.isBlank()) return null
+        return candidates
+            .filter { candidate ->
+                canonicalTitleKey(candidate.name).startsWith(key) || canonicalTitleKey(candidate.nameCn).startsWith(key)
+            }.singleOrNull()
     }
 
     private fun shiftMonth(
@@ -738,11 +759,50 @@ class ScheduleRepositoryImpl(
         b: String,
     ): Boolean {
         if (a.isBlank() || b.isBlank()) return false
-        return normalizeTitle(a) == normalizeTitle(b)
+        return canonicalTitleKey(a) == canonicalTitleKey(b)
     }
 
-    /** 归一化片名：大小写 + 全/半角连接符、中点、空白一律抹平，仅用于"精确"比较 */
-    private fun normalizeTitle(value: String): String = value.lowercase().replace(TITLE_NOISE_REGEX, "")
+    /**
+     * 片名归一化：全角数字/字母 → 半角、罗马数字 → 阿拉伯、季/期/部/クール/season 归一，
+     * 再抹平连接符/中点/空白；让「第2季 / 第二季 / 2nd Season / シーズン2」等同起来。
+     */
+    private fun canonicalTitleKey(raw: String): String {
+        if (raw.isBlank()) return ""
+        val s =
+            raw
+                .trim()
+                .lowercase()
+                .map { c ->
+                    val code = c.code
+                    if ((code in 0xFF10..0xFF19) || (code in 0xFF21..0xFF3A) || (code in 0xFF41..0xFF5A)) {
+                        (code - 0xFEE0).toChar()
+                    } else {
+                        c
+                    }
+                }.joinToString("")
+                .replace(ROMAN_NUMERAL_REGEX) { ROMAN_NUMERALS[it.value] ?: it.value }
+                .replace(Regex("第\\s*([一二三四五六七八九十]+)\\s*[季期部章]")) { "s" + chineseNumberToArabic(it.groupValues[1]) }
+                .replace(Regex("第\\s*(\\d+)\\s*[季期部章]"), "s$1")
+                .replace(Regex("(?:season|シーズン)\\s*(\\d+)"), "s$1")
+                .replace(Regex("(\\d+)\\s*(?:st|nd|rd|th)\\s+season"), "s$1")
+                .replace(Regex("(\\d+)\\s*クール"), "s$1")
+        return s.replace(TITLE_NOISE_REGEX, "")
+    }
+
+    private fun chineseNumberToArabic(cn: String): String {
+        val digits = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
+        return when {
+            cn == "十" -> "10"
+            cn.startsWith("十") -> (10 + (digits[cn.getOrNull(1)] ?: 0)).toString()
+            cn.contains("十") -> {
+                val parts = cn.split("十")
+                val tens = digits[parts[0].firstOrNull()] ?: 1
+                val ones = parts.getOrNull(1)?.firstOrNull()?.let { digits[it] } ?: 0
+                (tens * 10 + ones).toString()
+            }
+            else -> cn.mapNotNull { digits[it] }.joinToString("").ifBlank { cn }
+        }
+    }
 
     private fun mergeSites(
         existing: String,
@@ -1130,6 +1190,35 @@ class ScheduleRepositoryImpl(
 
         /** 片名归一化时抹掉的连接符/中点/空白（含全角变体） */
         private val TITLE_NOISE_REGEX = Regex("[・&＆\\-\\s　·]")
+
+        private val ROMAN_NUMERAL_REGEX = Regex("[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ]")
+        private val ROMAN_NUMERALS =
+            mapOf(
+                "Ⅰ" to "1",
+                "Ⅱ" to "2",
+                "Ⅲ" to "3",
+                "Ⅳ" to "4",
+                "Ⅴ" to "5",
+                "Ⅵ" to "6",
+                "Ⅶ" to "7",
+                "Ⅷ" to "8",
+                "Ⅸ" to "9",
+                "Ⅹ" to "10",
+                "Ⅺ" to "11",
+                "Ⅻ" to "12",
+                "ⅰ" to "1",
+                "ⅱ" to "2",
+                "ⅲ" to "3",
+                "ⅳ" to "4",
+                "ⅴ" to "5",
+                "ⅵ" to "6",
+                "ⅶ" to "7",
+                "ⅷ" to "8",
+                "ⅸ" to "9",
+                "ⅹ" to "10",
+                "ⅺ" to "11",
+                "ⅻ" to "12",
+            )
 
         /** 非强制刷新的节流阈值：冷启动/切 Tab 的页面重建不重跑全量管线 */
         const val REFRESH_THROTTLE_MILLIS = 30L * 60L * 1000L

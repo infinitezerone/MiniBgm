@@ -2261,4 +2261,47 @@ class ScheduleRepositoryImplTest {
             assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
             assertTrue(dao.getAllSchedulesList().isEmpty(), "成人向条目不应进入时刻表")
         }
+
+    @Test
+    fun syncBangumiData_mapsSeasonSuffixVariants_viaCanonicalTitleMatch() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 191832L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "时光代理人 第三季",
+                            ),
+                        )
+                }
+            // 候选 1 是第二季（不得误绑），候选 2 用罗马数字 + Part 后缀（应被归一化命中）
+            val apiService =
+                FakeBangumiApiService().apply {
+                    searchResults =
+                        listOf(
+                            Subject(id = 341311L, name = "时光代理人 第二季", nameCn = "时光代理人 第二季"),
+                            Subject(id = 555710L, name = "时光代理人Ⅲ Part One", nameCn = "时光代理人 第三季 Part 1"),
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val stored = dao.getAllSchedulesList()
+            assertEquals(1, stored.size)
+            assertEquals(555710L, stored.first().bgmId)
+        }
 }

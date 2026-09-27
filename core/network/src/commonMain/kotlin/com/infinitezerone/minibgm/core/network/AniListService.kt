@@ -190,6 +190,12 @@ class AniListServiceImpl(
                       media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
+                  p3: Page(page: 3, perPage: 50) {
+                    airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
+                      episode airingAt
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
+                    }
+                  }
                 }
                 """.trimIndent()
             val response =
@@ -206,6 +212,10 @@ class AniListServiceImpl(
                         .orEmpty() +
                         response.data
                             ?.p2
+                            ?.airingSchedules
+                            .orEmpty() +
+                        response.data
+                            ?.p3
                             ?.airingSchedules
                             .orEmpty()
                 )
@@ -237,6 +247,7 @@ internal data class AniListWeeklyGraphQLResponse(
 internal data class AniListWeeklyData(
     val p1: AniListPageAiring? = null,
     val p2: AniListPageAiring? = null,
+    val p3: AniListPageAiring? = null,
 )
 
 @Serializable
