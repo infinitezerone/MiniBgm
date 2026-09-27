@@ -36,6 +36,8 @@ data class UserPreferences(
     val bangumiDataLastSyncTimestamp: Long = 0L,
     /** 放送时刻表默认筛选：false 为全部，true 为仅展示我追的番 */
     val scheduleDefaultOnlyWatching: Boolean = false,
+    /** 放送时刻表是否展示 AniList 成人向（里番/R18）条目；默认关，仅作用于时刻表 */
+    val scheduleShowAdult: Boolean = false,
     /** 本地最近搜索历史词条列表（按最近使用降序，最多 20 条） */
     val searchHistory: List<String> = emptyList(),
     /** 开播提醒延迟偏移 (分钟) */

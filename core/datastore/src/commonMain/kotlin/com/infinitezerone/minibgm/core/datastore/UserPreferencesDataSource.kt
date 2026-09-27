@@ -129,6 +129,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 时刻表是否展示 AniList 成人向条目（默认关） */
+    suspend fun setScheduleShowAdult(showAdult: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(scheduleShowAdult = showAdult)
+        }
+    }
+
     /** 添加或更新搜索历史（去重置顶，最多保留 20 条） */
     suspend fun addSearchHistory(query: String) {
         val trimmed = query.trim()

@@ -42,6 +42,8 @@ data class UserUiState(
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
     val pipEnabled: Boolean = true,
+    /** 放送时刻表是否展示 AniList 成人向（里番/R18）条目 */
+    val scheduleShowAdult: Boolean = false,
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -156,6 +158,7 @@ class UserViewModel(
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 amoledDarkMode = sync.settings.amoledDarkMode,
                 pipEnabled = sync.settings.pipEnabled,
+                scheduleShowAdult = sync.settings.scheduleShowAdult,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState())
 
@@ -261,6 +264,14 @@ class UserViewModel(
     fun setPipEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setPipEnabled(enabled)
+        }
+    }
+
+    /** 时刻表 R18 显示开关：写入偏好后立即强制同步一次，让名单即时增/删成人条目 */
+    fun setScheduleShowAdult(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setScheduleShowAdult(enabled)
+            scheduleRepository.refreshAllSchedules(force = true)
         }
     }
 

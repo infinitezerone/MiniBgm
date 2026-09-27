@@ -33,6 +33,8 @@ class FakeSettingsRepository(
         private set
     var setPipEnabledCallCount: Int = 0
         private set
+    var setScheduleShowAdultCallCount: Int = 0
+        private set
 
     fun setSettings(settings: UserSettings) {
         settingsState.value = settings
@@ -65,6 +67,11 @@ class FakeSettingsRepository(
     override suspend fun setPipEnabled(enabled: Boolean) {
         setPipEnabledCallCount++
         settingsState.value = settingsState.value.copy(pipEnabled = enabled)
+    }
+
+    override suspend fun setScheduleShowAdult(enabled: Boolean) {
+        setScheduleShowAdultCallCount++
+        settingsState.value = settingsState.value.copy(scheduleShowAdult = enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {

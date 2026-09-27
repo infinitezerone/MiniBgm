@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -98,6 +99,8 @@ internal fun SettingsSection(
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
     onTogglePipEnabled: (Boolean) -> Unit = {},
+    scheduleShowAdult: Boolean = false,
+    onToggleScheduleShowAdult: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -182,6 +185,20 @@ internal fun SettingsSection(
                         Switch(
                             checked = pipEnabled,
                             onCheckedChange = onTogglePipEnabled,
+                        )
+                    },
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.VisibilityOff,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "时刻表显示 R18",
+                    subtitle = "在放送时刻表展示 AniList 成人向（里番）条目，仅影响时刻表",
+                    onClick = { onToggleScheduleShowAdult(!scheduleShowAdult) },
+                    trailing = {
+                        Switch(
+                            checked = scheduleShowAdult,
+                            onCheckedChange = onToggleScheduleShowAdult,
                         )
                     },
                 )
