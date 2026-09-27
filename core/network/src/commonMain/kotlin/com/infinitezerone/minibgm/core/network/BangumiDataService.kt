@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.common.unescapeHtmlEntities
 import com.infinitezerone.minibgm.core.model.BangumiDataItem
 import com.infinitezerone.minibgm.core.model.BangumiDataRoot
 import io.ktor.client.HttpClient
@@ -78,7 +79,7 @@ class BangumiDataServiceImpl(
 
                 val newEtag = response.headers[HttpHeaders.ETag]
                 val root: BangumiDataRoot = response.body()
-                return BangumiDataResult.Success(root.items, newEtag)
+                return BangumiDataResult.Success(root.items.map { it.decodedHtml() }, newEtag)
             } catch (e: Throwable) {
                 lastException = e
             }
@@ -112,7 +113,7 @@ class BangumiDataServiceImpl(
                     HttpStatusCode.NotFound -> return BangumiDataMonthResult.NotFound
                     HttpStatusCode.OK -> {
                         val newEtag = response.headers[HttpHeaders.ETag]
-                        return BangumiDataMonthResult.Success(response.body(), newEtag)
+                        return BangumiDataMonthResult.Success(response.body<List<BangumiDataItem>>().map { it.decodedHtml() }, newEtag)
                     }
                     else -> Unit
                 }
@@ -122,6 +123,13 @@ class BangumiDataServiceImpl(
         }
         return BangumiDataMonthResult.NotFound
     }
+
+    /** bangumi-data 部分条目的 title 含 `&amp;` 等 HTML 实体，入口统一还原。 */
+    private fun BangumiDataItem.decodedHtml(): BangumiDataItem =
+        copy(
+            title = title.unescapeHtmlEntities(),
+            titleTranslate = titleTranslate.mapValues { (_, values) -> values.map { it.unescapeHtmlEntities() } },
+        )
 
     companion object {
         val DEFAULT_CDN_URLS =

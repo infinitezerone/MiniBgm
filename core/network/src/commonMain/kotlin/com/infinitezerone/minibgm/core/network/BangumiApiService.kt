@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.common.unescapeHtmlEntities
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
@@ -160,7 +161,15 @@ class BangumiApiServiceImpl(
     private val baseUrl: String = "https://api.bgm.tv",
     private val authConfig: BgmAuthConfig = BgmAuthConfig(),
 ) : BangumiApiService {
-    override suspend fun getSubject(id: Long): Subject = client.get("$baseUrl/v0/subjects/$id").body()
+    override suspend fun getSubject(id: Long): Subject = client.get("$baseUrl/v0/subjects/$id").body<Subject>().decodedHtml()
+
+    /** bgm.tv 部分接口（尤其 legacy 搜索/日历）会把标题里的 & 与 ' 转义成 HTML 实体，统一在入口还原。 */
+    private fun Subject.decodedHtml(): Subject =
+        copy(
+            name = name.unescapeHtmlEntities(),
+            nameCn = nameCn.unescapeHtmlEntities(),
+            summary = summary.unescapeHtmlEntities(),
+        )
 
     override suspend fun getSubjectCharacters(id: Long): List<SubjectCharacter> = client.get("$baseUrl/v0/subjects/$id/characters").body()
 
@@ -206,7 +215,8 @@ class BangumiApiServiceImpl(
                 parameter("responseGroup", "medium")
                 parameter("max_results", limit)
                 parameter("start", offset)
-            }.body()
+            }.body<SearchSubjectResponse>()
+            .let { response -> response.copy(list = response.list.map { it.decodedHtml() }) }
     }
 
     override suspend fun searchSubjectsAdvanced(
@@ -220,7 +230,8 @@ class BangumiApiServiceImpl(
                 parameter("offset", offset)
                 contentType(ContentType.Application.Json)
                 setBody(request)
-            }.body()
+            }.body<PageResponse<Subject>>()
+            .let { page -> page.copy(data = page.data.map { it.decodedHtml() }) }
 
     override suspend fun getUserCollections(
         username: String,

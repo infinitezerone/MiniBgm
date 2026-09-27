@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
+import com.infinitezerone.minibgm.core.common.unescapeHtmlEntities
 import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
@@ -937,8 +938,8 @@ class ScheduleRepositoryImpl(
 
         return AirSchedule(
             bgmId = bgmId,
-            title = title,
-            titleCn = titleCn,
+            title = title.unescapeHtmlEntities(),
+            titleCn = titleCn.unescapeHtmlEntities(),
             coverUrl = BgmImageUtils.optimizeBgmImageUrl(coverUrl),
             ratingScore = ratingScore,
             airDate = airDate,
