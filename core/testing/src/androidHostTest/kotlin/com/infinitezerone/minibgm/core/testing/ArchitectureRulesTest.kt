@@ -415,8 +415,7 @@ class ArchitectureRulesTest {
                         .relativeTo(projectRoot)
                         .path
                         .replace(File.separatorChar, '/')
-                        .let { !it.contains("/build/") } &&
-                    file.parentFile?.name != "assistant"
+                        .let { !it.contains("/build/") && !it.startsWith("feature/assistant/") }
             }.forEach { file ->
                 val relPath = file.relativeTo(projectRoot).path
                 file.readLines().forEachIndexed { index, line ->
