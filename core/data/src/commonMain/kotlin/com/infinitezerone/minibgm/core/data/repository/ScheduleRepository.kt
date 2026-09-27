@@ -555,7 +555,8 @@ class ScheduleRepositoryImpl(
                 .getOrNull() ?: false
         val weeklyItems =
             runCatchingCancellable {
-                anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
+                // 边界用开区间 ±1 秒：把"周一 00:00:00 整"那一集纳入（否则它既不在本周也不在下周）
+                anilistService.getWeeklyAiringSchedule(weekStartSeconds - 1, weekEndSeconds + 1)
             }.getOrElse { emptyList() }
                 .filter { showRestricted || !it.isAdult }
 

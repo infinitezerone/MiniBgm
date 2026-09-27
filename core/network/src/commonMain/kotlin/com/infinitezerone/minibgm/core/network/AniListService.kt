@@ -47,7 +47,7 @@ data class AniListWeeklyScheduleItem(
  */
 interface AniListService {
     /**
-     * 单次复合 GraphQL 请求拉取当周（weekStart 到 weekEnd）全网在播排期（上限 100 部，含 TV 与网络独播）。
+     * 单次复合 GraphQL 请求拉取当周（weekStart 到 weekEnd）全网在播排期（上限 300 条，含 TV 与网络独播）。
      * 是时刻表当周排期的唯一排期真源，杜绝算术预测与漏番。
      */
     suspend fun getWeeklyAiringSchedule(
@@ -196,6 +196,24 @@ class AniListServiceImpl(
                       media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
+                  p4: Page(page: 4, perPage: 50) {
+                    airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
+                      episode airingAt
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
+                    }
+                  }
+                  p5: Page(page: 5, perPage: 50) {
+                    airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
+                      episode airingAt
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
+                    }
+                  }
+                  p6: Page(page: 6, perPage: 50) {
+                    airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
+                      episode airingAt
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
+                    }
+                  }
                 }
                 """.trimIndent()
             val response =
@@ -216,6 +234,18 @@ class AniListServiceImpl(
                             .orEmpty() +
                         response.data
                             ?.p3
+                            ?.airingSchedules
+                            .orEmpty() +
+                        response.data
+                            ?.p4
+                            ?.airingSchedules
+                            .orEmpty() +
+                        response.data
+                            ?.p5
+                            ?.airingSchedules
+                            .orEmpty() +
+                        response.data
+                            ?.p6
                             ?.airingSchedules
                             .orEmpty()
                 )
@@ -248,6 +278,9 @@ internal data class AniListWeeklyData(
     val p1: AniListPageAiring? = null,
     val p2: AniListPageAiring? = null,
     val p3: AniListPageAiring? = null,
+    val p4: AniListPageAiring? = null,
+    val p5: AniListPageAiring? = null,
+    val p6: AniListPageAiring? = null,
 )
 
 @Serializable
