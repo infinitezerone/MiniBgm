@@ -37,6 +37,8 @@ data class AniListWeeklyScheduleItem(
     val startYear: Int = 0,
     /** 条目开播月（0/13 = 未知） */
     val startMonth: Int = 0,
+    /** AniList 成人向标记（里番/R18）；默认不过滤，由上层按 App 的 NSFW 策略剔除 */
+    val isAdult: Boolean = false,
 )
 
 /**
@@ -180,13 +182,13 @@ class AniListServiceImpl(
                   p1: Page(page: 1, perPage: 50) {
                     airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
                       episode airingAt
-                      media { id format title { native romaji } coverImage { large } startDate { year month } }
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
                   p2: Page(page: 2, perPage: 50) {
                     airingSchedules(airingAt_greater: $weekStartEpochSeconds, airingAt_lesser: $weekEndEpochSeconds) {
                       episode airingAt
-                      media { id format title { native romaji } coverImage { large } startDate { year month } }
+                      media { id format isAdult title { native romaji } coverImage { large } startDate { year month } }
                     }
                   }
                 }
@@ -221,6 +223,7 @@ class AniListServiceImpl(
                         format = media.format.orEmpty(),
                         startYear = media.startDate?.year ?: 0,
                         startMonth = media.startDate?.month ?: 0,
+                        isAdult = media.isAdult,
                     )
                 }.sortedBy { it.airAtEpochSeconds }
         }.getOrElse { emptyList() }
@@ -253,6 +256,7 @@ internal data class AniListWeeklyScheduleEntry(
 internal data class AniListWeeklyMediaInfo(
     val id: Long,
     val format: String? = null,
+    val isAdult: Boolean = false,
     val title: AniListWeeklyMediaTitle? = null,
     val coverImage: AniListCoverImage? = null,
     val startDate: AniListWeeklyFuzzyDate? = null,

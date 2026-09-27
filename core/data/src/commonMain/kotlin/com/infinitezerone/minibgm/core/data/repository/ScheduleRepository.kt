@@ -546,6 +546,8 @@ class ScheduleRepositoryImpl(
             runCatchingCancellable {
                 anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
             }.getOrElse { emptyList() }
+                // 与搜索/探索保持一致：App 不展示里番/成人条目（bgm.tv 侧统一 nsfw=false）
+                .filterNot { it.isAdult }
 
         if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 

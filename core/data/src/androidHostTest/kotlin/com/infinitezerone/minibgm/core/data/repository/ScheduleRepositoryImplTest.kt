@@ -2224,4 +2224,41 @@ class ScheduleRepositoryImplTest {
             val base = dao.getAllSchedulesList().first { it.bgmId == 551918L }
             assertNull(base.anilistId, "基名不得被包含匹配到另一季的周排期条目上")
         }
+
+    @Test
+    fun syncBangumiData_excludesAdultWeeklyEntries() =
+        runTest {
+            val nowSeconds = TimeUtils.nowEpochMillis() / 1000
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 999L,
+                                episode = 1,
+                                airAtEpochSeconds = nowSeconds + 3600,
+                                titleNative = "成人向作品",
+                                isAdult = true,
+                            ),
+                        )
+                }
+            // 即便搜索能命中候选，也不应入库
+            val apiService =
+                FakeBangumiApiService().apply {
+                    searchResults = listOf(Subject(id = 123L, name = "成人向作品", nameCn = "成人向作品"))
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = apiService,
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+            assertTrue(dao.getAllSchedulesList().isEmpty(), "成人向条目不应进入时刻表")
+        }
 }
