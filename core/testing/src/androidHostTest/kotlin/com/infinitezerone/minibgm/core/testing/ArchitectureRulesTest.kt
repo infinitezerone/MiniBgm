@@ -50,6 +50,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -79,6 +80,7 @@ class ArchitectureRulesTest {
         // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -114,6 +116,7 @@ class ArchitectureRulesTest {
         modelDir
             .resolve("src")
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -142,6 +145,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.name.endsWith("ViewModel.kt") }
             .forEach { vmFile ->
                 val relPath = vmFile.relativeTo(projectRoot).path
@@ -201,6 +205,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -230,6 +235,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -267,6 +273,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -311,6 +318,7 @@ class ArchitectureRulesTest {
             if (!dir.isDirectory) return@forEach
             dir
                 .walkTopDown()
+                .onEnter { it.name != "build" }
                 .filter {
                     it.isFile &&
                         it.extension == "kt" &&
@@ -364,6 +372,7 @@ class ArchitectureRulesTest {
             if (!dir.isDirectory) return@forEach
             dir
                 .walkTopDown()
+                .onEnter { it.name != "build" }
                 .filter {
                     it.isFile &&
                         it.extension == "kt" &&
@@ -398,6 +407,7 @@ class ArchitectureRulesTest {
         // 此处只保留源码 import 扫描作为纵深防御
         featureDir
             .walkTopDown()
+            .onEnter { it.name != "build" }
             .filter { file ->
                 file.isFile &&
                     file.extension == "kt" &&
