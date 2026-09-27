@@ -91,6 +91,11 @@ class ScheduleRepositoryImplTest {
                 }
         }
 
+        override suspend fun deleteSchedulesNotIn(keepIds: List<Long>) {
+            val keep = keepIds.toSet()
+            schedulesFlow.value = schedulesFlow.value.filter { it.bgmId in keep }
+        }
+
         override suspend fun clearSchedules() {
             schedulesFlow.value = emptyList()
         }

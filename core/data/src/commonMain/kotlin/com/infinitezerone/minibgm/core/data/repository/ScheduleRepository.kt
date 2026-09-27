@@ -374,25 +374,38 @@ class ScheduleRepositoryImpl(
     private suspend fun syncAirEvents() {
         val baseEntities = scheduleDao.getAllSchedulesList()
         val nowMillis = TimeUtils.nowEpochMillis()
-        val entities = resolveWeeklyAiringSchedules(baseEntities, nowMillis)
-        if (entities.isEmpty()) return
+        val resolution = resolveWeeklyAiringSchedules(baseEntities, nowMillis)
+        if (resolution.entities.isEmpty()) return
 
-        // 事件与名单裁剪：清理已消失条目的事件与过期网播名单
-        val keepIds = entities.map { it.bgmId }.toSet()
-        airEventDao.deleteEventsNotIn(keepIds.toList())
-        // 清除所有历史遗留预测事件（彻底废弃 PREDICTED 假数据）
-        airEventDao.deleteAllPredictedEvents()
-
-        val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
-        scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
-
-        // 用户在看收藏过滤：有在看数据时仅对在看条目与缺少封面的条目发起精准排期校验
         val trackingSubjectIds =
             collectionRepository
                 ?.getCollectionsByTypeStream(CollectionType.DOING)
                 ?.firstOrNull()
                 ?.map { it.subjectId }
                 ?.toSet()
+
+        // 名单裁剪：只有"本周 AniList 在播"或"用户在追"的条目留在时刻表。
+        // 删日历后不再有官方名单，靠这一步把遗留 official 行、往季已完结番剔除；
+        // 周排期拉取失败（roster 为空）时不裁剪，避免网络抖动清空时刻表。
+        val tracked = trackingSubjectIds.orEmpty()
+        val entities =
+            if (resolution.rosterAnilistIds.isNotEmpty()) {
+                resolution.entities.filter { entity ->
+                    (entity.anilistId?.let { it in resolution.rosterAnilistIds } == true) || entity.bgmId in tracked
+                }
+            } else {
+                resolution.entities
+            }
+        if (entities.isEmpty()) return
+
+        val keepIds = entities.map { it.bgmId }.toSet()
+        airEventDao.deleteEventsNotIn(keepIds.toList())
+        // 清除所有历史遗留预测事件（彻底废弃 PREDICTED 假数据）
+        airEventDao.deleteAllPredictedEvents()
+        scheduleDao.deleteSchedulesNotIn(keepIds.toList())
+
+        val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
+        scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
 
         val targets =
             if (!trackingSubjectIds.isNullOrEmpty()) {
@@ -525,7 +538,7 @@ class ScheduleRepositoryImpl(
     private suspend fun resolveWeeklyAiringSchedules(
         currentEntities: List<AirScheduleEntity>,
         nowMillis: Long,
-    ): List<AirScheduleEntity> {
+    ): WeeklyResolution {
         val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
         val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
         val weeklyItems =
@@ -533,7 +546,7 @@ class ScheduleRepositoryImpl(
                 anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
             }.getOrElse { emptyList() }
 
-        if (weeklyItems.isEmpty()) return currentEntities
+        if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 
         val entitiesByAnilistId =
             currentEntities
@@ -611,8 +624,20 @@ class ScheduleRepositoryImpl(
         if (newEvents.isNotEmpty()) {
             airEventDao.insertAirEvents(newEvents)
         }
-        return entitiesByBgmId.values.toList()
+        return WeeklyResolution(
+            entities = entitiesByBgmId.values.toList(),
+            rosterAnilistIds = weeklyItems.map { it.anilistId }.toSet(),
+        )
     }
+
+    /**
+     * [resolveWeeklyAiringSchedules] 的结果：本时刻表的最新条目，以及本周 AniList 名单里的 anilistId。
+     * 后者用于把本地表裁剪成"真正在播"的集合（删日历后不再有官方名单）。
+     */
+    private data class WeeklyResolution(
+        val entities: List<AirScheduleEntity>,
+        val rosterAnilistIds: Set<Long>,
+    )
 
     private suspend fun loadMappingCache(anilistIds: List<Long>): MutableMap<Long, AniListBgmMappingEntity> =
         runCatching { anilistMappingDao.getMappingsByAniListIds(anilistIds.distinct()) }

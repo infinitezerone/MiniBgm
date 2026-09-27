@@ -39,6 +39,9 @@ interface AirScheduleDao {
     @Query("DELETE FROM air_schedules WHERE source = 'bgm_data' AND bgmId IN (:ids)")
     suspend fun deleteBgmDataSchedulesByIds(ids: List<Long>)
 
+    @Query("DELETE FROM air_schedules WHERE bgmId NOT IN (:keepIds)")
+    suspend fun deleteSchedulesNotIn(keepIds: List<Long>)
+
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
 }
