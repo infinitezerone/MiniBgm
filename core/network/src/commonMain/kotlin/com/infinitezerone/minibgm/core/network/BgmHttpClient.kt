@@ -50,6 +50,11 @@ object BgmHttpClient {
         enableLogging: Boolean = false,
         loggerTag: String = "Bgm/Network",
     ) {
+        // ContentNegotiation 必须装在基础配置上：unauth client（AniList / bangumi-data / bilibili
+        // / 社区订阅）也走它，否则 setBody(obj) 与 response.body<T>() 都会因找不到转换器而失败。
+        install(ContentNegotiation) {
+            json(jsonConfig)
+        }
         install(ContentEncoding) {
             gzip()
             deflate()
@@ -128,9 +133,6 @@ object BgmHttpClient {
         engine: HttpClientEngine? = null,
     ): HttpClient {
         fun HttpClientConfig<*>.bgmConfiguration() {
-            install(ContentNegotiation) {
-                json(jsonConfig)
-            }
             install(HttpCache)
             applyBaseNetworkConfig(enableLogging = enableLogging, loggerTag = "Bgm/Network")
             install(HttpTimeout) {

@@ -100,6 +100,17 @@ internal data class AniListAiringNode(
 )
 
 /**
+ * AniList GraphQL 请求体。
+ *
+ * 必须用 @Serializable 类型：用 `setBody(mapOf("query" to ...))` 时 Ktor 的 ContentNegotiation
+ * 不会接管裸 Map，发送阶段会把它当 OutgoingContent 强转并抛 ClassCastException，请求静默全挂。
+ */
+@Serializable
+internal data class AniListQueryRequest(
+    val query: String,
+)
+
+/**
  * 通过别名批量化查询（单次请求最多 [chunkSize] 个条目），
  * 未收录/查询失败的条目静默跳过，不影响同批其它条目。
  */
@@ -125,7 +136,7 @@ class AniListServiceImpl(
                                 client
                                     .post("https://graphql.anilist.co") {
                                         contentType(ContentType.Application.Json)
-                                        setBody(mapOf("query" to "query { ${aliases.joinToString(" ")} }"))
+                                        setBody(AniListQueryRequest("query { ${aliases.joinToString(" ")} }"))
                                     }.body<AniListGraphQLResponse>()
                             chunk.forEachIndexed { index, id ->
                                 val media = response.data?.get("s$index")
@@ -184,7 +195,7 @@ class AniListServiceImpl(
                 client
                     .post("https://graphql.anilist.co") {
                         contentType(ContentType.Application.Json)
-                        setBody(mapOf("query" to query))
+                        setBody(AniListQueryRequest(query))
                     }.body<AniListWeeklyGraphQLResponse>()
             val allEntries =
                 (
