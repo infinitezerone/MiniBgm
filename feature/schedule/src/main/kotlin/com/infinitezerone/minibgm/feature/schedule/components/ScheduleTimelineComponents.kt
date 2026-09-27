@@ -7,31 +7,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,8 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
-import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
-import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
@@ -62,7 +52,6 @@ import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
-import com.infinitezerone.minibgm.feature.schedule.CatchupScheduleItem
 
 enum class AirStatus {
     NORMAL,
@@ -530,167 +519,6 @@ fun SiteLinksRow(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(horizontal = 2.5.dp, vertical = 0.5.dp),
                     )
-                }
-            }
-        }
-    }
-}
-
-/** 待补更新聚合卡片（昨日·前天已播但用户未打卡的番） */
-@Composable
-fun ScheduleCatchupSection(
-    catchupItems: List<CatchupScheduleItem>,
-    onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onMarkEpisodeWatched: (Long, Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            ),
-        shape = RoundedCornerShape(14.dp),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ElectricBolt,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        text = "待补更新 (近期在追)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                ) {
-                    Text(
-                        text = "${catchupItems.size} 部未看",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                    )
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                catchupItems.forEach { item ->
-                    val displayName = item.schedule.titleCn.ifBlank { item.schedule.title }
-                    Surface(
-                        onClick = {
-                            onSubjectClick(
-                                SubjectDetailRoute(
-                                    subjectId = item.schedule.bgmId,
-                                    initialName = displayName,
-                                    initialCoverUrl = item.schedule.coverUrl,
-                                    source = "catchup",
-                                ),
-                            )
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier.width(44.dp).aspectRatio(0.7f),
-                            ) {
-                                CoverImage(
-                                    url = item.schedule.coverUrl,
-                                    contentDescription = displayName,
-                                    cornerRadius = 6.dp,
-                                    aspectRatio = 0.7f,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .bgmSharedElement(
-                                                key = BgmSharedElementKeys.subjectCover(item.schedule.bgmId, "catchup"),
-                                                clipInOverlayDuringTransition = RoundedCornerShape(6.dp),
-                                            ),
-                                )
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(bottomEnd = 4.dp),
-                                    modifier = Modifier.align(Alignment.TopStart),
-                                ) {
-                                    Text(
-                                        text = item.dayLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
-                                    )
-                                }
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "已更新至第 ${item.targetEp} 话 · 当前打卡第 ${item.epStatus} 话",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-
-                            // 打卡弹性动效：只在点击瞬间缩放，纯绘制层，不影响布局与无障碍
-                            val markWatchedBounce = rememberBounceOnClick()
-                            Button(
-                                onClick = {
-                                    markWatchedBounce.bounce()
-                                    onMarkEpisodeWatched(item.schedule.bgmId, item.targetEp)
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                colors =
-                                    ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    ),
-                                modifier = Modifier.height(30.dp).bounceOnClick(markWatchedBounce),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "标为看过",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }

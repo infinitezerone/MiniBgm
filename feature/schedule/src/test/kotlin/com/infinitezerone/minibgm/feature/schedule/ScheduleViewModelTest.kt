@@ -362,45 +362,6 @@ class ScheduleViewModelTest {
         }
 
     @Test
-    fun catchupItems_aggregatesUnwatchedAiredEpisodesFromYesterday() =
-        runTest {
-            val repository = FakeScheduleRepository()
-            val collectionRepository = FakeCollectionRepository()
-
-            val yesterday = if (today == 1) 7 else today - 1
-            val yesterdayAnime =
-                AirSchedule(
-                    bgmId = 888L,
-                    title = "Dandadan",
-                    titleCn = "胆大党",
-                    weekday = yesterday,
-                    timeCst = "00:30",
-                    nextEpisodeNumber = 9,
-                )
-            repository.sendSchedules(weekday = yesterday, schedules = listOf(yesterdayAnime))
-
-            // 用户正在追 888L，且只打卡到了第 8 话 (落后 1 话)
-            collectionRepository.sendCollection(
-                UserCollection(
-                    subjectId = 888L,
-                    type = CollectionType.DOING.value,
-                    epStatus = 8,
-                ),
-            )
-
-            val viewModel = createViewModel(repository, collectionRepository)
-
-            val state = viewModel.uiState.first { it.catchupItems.isNotEmpty() }
-            assertEquals(1, state.catchupItems.size)
-            val catchup = state.catchupItems.first()
-            assertEquals(888L, catchup.schedule.bgmId)
-            assertEquals("昨天", catchup.dayLabel)
-            assertEquals(8, catchup.epStatus)
-            assertEquals(9, catchup.targetEp)
-            assertEquals(1, state.yesterdaySchedules.size)
-        }
-
-    @Test
     fun markEpisodeWatched_invokesRepositoryAndSendsFeedback() =
         runTest {
             val repository = FakeScheduleRepository()

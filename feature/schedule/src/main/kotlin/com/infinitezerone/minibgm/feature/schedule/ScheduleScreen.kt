@@ -61,7 +61,6 @@ import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
 import com.infinitezerone.minibgm.feature.schedule.components.NextUpActionCard
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
-import com.infinitezerone.minibgm.feature.schedule.components.ScheduleCatchupSection
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
@@ -497,17 +496,6 @@ private fun DayScheduleList(
                         onMarkWatched = onMarkEpisodeWatched,
                         onDismiss = onDismissNextUpAction,
                         onClick = { onSubjectClick(SubjectDetailRoute(uiState.nextUpAction.subjectId)) },
-                    )
-                }
-            }
-
-            // ==================== 今日视图专属首屏：待补更新 ====================
-            if (isTodayPage && !uiState.onlyWatching && uiState.catchupItems.isNotEmpty()) {
-                item(key = "today_catchup_feed") {
-                    ScheduleCatchupSection(
-                        catchupItems = uiState.catchupItems,
-                        onSubjectClick = onSubjectClick,
-                        onMarkEpisodeWatched = onMarkEpisodeWatched,
                     )
                 }
             }

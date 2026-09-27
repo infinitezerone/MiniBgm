@@ -40,15 +40,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** 待补番剧条目（包含所属日期与已看/在播进度） */
-@Immutable
-data class CatchupScheduleItem(
-    val schedule: AirSchedule,
-    val dayLabel: String, // "昨天" 或 "前天"
-    val epStatus: Int, // 用户已打卡集数
-    val targetEp: Int, // 官方当前播出集数
-)
-
 /** 星期与真实日期模型 */
 @Immutable
 data class WeekdayDateItem(
@@ -70,8 +61,6 @@ data class ScheduleUiState(
     val weeklySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val watchingSubjectIds: Set<Long> = emptySet(),
     val onlyWatching: Boolean = false,
-    val catchupItems: List<CatchupScheduleItem> = emptyList(),
-    val yesterdaySchedules: List<AirSchedule> = emptyList(),
     val nextUpAction: NextUpAction? = null,
     /** 续看卡的应用内直达路由：按追番进度定位下一待看集（null = 数据未就绪，卡片退回外部跳转） */
     val nextUpPlayRoute: PlayerRoute? = null,
@@ -296,53 +285,6 @@ class ScheduleViewModel(
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
 
-            val yesterdayWeekday = if (currentWeekday == 1) 7 else currentWeekday - 1
-            val dayBeforeWeekday = if (yesterdayWeekday == 1) 7 else yesterdayWeekday - 1
-
-            // 提取待补更新：昨日、前天已播出的在追番，且进度落后
-            val catchupList = mutableListOf<CatchupScheduleItem>()
-            val yesterdayRaw = weeklySchedules[yesterdayWeekday].orEmpty()
-            for (item in yesterdayRaw) {
-                val col = collectionMap[item.bgmId]
-                if (col != null) {
-                    val targetEp = item.nextEpisodeNumber
-                    if (targetEp > 0 && col.epStatus < targetEp) {
-                        catchupList.add(
-                            CatchupScheduleItem(
-                                schedule = item,
-                                dayLabel = "昨天",
-                                epStatus = col.epStatus,
-                                targetEp = targetEp,
-                            ),
-                        )
-                    }
-                }
-            }
-
-            val dayBeforeRaw = weeklySchedules[dayBeforeWeekday].orEmpty()
-            for (item in dayBeforeRaw) {
-                val col = collectionMap[item.bgmId]
-                if (col != null) {
-                    val targetEp = item.nextEpisodeNumber
-                    if (targetEp > 0 && col.epStatus < targetEp) {
-                        catchupList.add(
-                            CatchupScheduleItem(
-                                schedule = item,
-                                dayLabel = "前天",
-                                epStatus = col.epStatus,
-                                targetEp = targetEp,
-                            ),
-                        )
-                    }
-                }
-            }
-
-            // 昨日全部播映新番（按播出时间排列，供未登录/快捷浏览速览）
-            val yesterdayList =
-                yesterdayRaw.sortedWith(
-                    compareBy<AirSchedule> { it.timeCst.ifBlank { it.timeJst } },
-                )
-
             var computedNextUpAction: NextUpAction? = null
             if (!dismissed) {
                 val todayRaw = weeklySchedules[currentWeekday].orEmpty()
@@ -459,8 +401,6 @@ class ScheduleViewModel(
                 weeklySchedules = weeklySchedules,
                 watchingSubjectIds = watchingIds,
                 onlyWatching = onlyWatch,
-                catchupItems = catchupList,
-                yesterdaySchedules = yesterdayList,
                 nextUpAction = computedNextUpAction,
                 isActionDismissed = dismissed,
                 showLoginPromptDialog = showLogin,
