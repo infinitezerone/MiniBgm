@@ -34,7 +34,9 @@ class BgmSyncWorker(
         withContext(dispatchers.io) {
             val startTime = TimeUtils.nowEpochMillis()
             log.d { "[SYNC_WORKER:START] attempt=$runAttemptCount" }
-            val scheduleResult = scheduleRepository.syncBangumiData()
+            // 后台周期同步走全量管线：force=true 故意绕过 30 分钟节流（后台本就该全量跑），
+            // 并且与 UI 刷新共用闸门/管线锁，避免并发时闸门提前放开
+            val scheduleResult = scheduleRepository.refreshAllSchedules(force = true)
             // 追番收藏是用户核心数据，同步失败必须参与重试判定而非静默吞掉；
             // 重试成本低：时刻表侧有 ETag，304 不会重复拉全量
             val collectionError =

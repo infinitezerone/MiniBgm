@@ -128,6 +128,9 @@ class ScheduleRepositoryImpl(
      */
     private val scheduleHoldGate = MutableStateFlow(false)
 
+    /** 管线锁：UI 刷新与后台 worker 并发时后者排队，避免闸门被先完成的一方提前放开。 */
+    private val refreshPipelineMutex = Mutex()
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> =
         channelFlow {
@@ -258,12 +261,14 @@ class ScheduleRepositoryImpl(
                 return AppResult.Success(Unit)
             }
         }
-        scheduleHoldGate.value = true
-        try {
-            // 唯一数据源：AniList 周排期（名单发现 + 逐话真值）+ 按需 bangumi-data 月切片
-            return syncBangumiData()
-        } finally {
-            scheduleHoldGate.value = false
+        // 管线锁包住“置闸门 → 跑管线 → 放闸门”整段：并发调用只会串行跑，不会提前放开
+        return refreshPipelineMutex.withLock {
+            scheduleHoldGate.value = true
+            try {
+                syncBangumiData()
+            } finally {
+                scheduleHoldGate.value = false
+            }
         }
     }
 
