@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayCircleOutline
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.bounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
-import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
@@ -317,7 +315,6 @@ fun ScheduleTimelineSingleCard(
                     subjectId = schedule.bgmId,
                     initialName = displayName,
                     initialCoverUrl = schedule.coverUrl,
-                    initialScore = schedule.ratingScore,
                     source = "schedule",
                 ),
             )
@@ -404,26 +401,6 @@ fun ScheduleTimelineSingleCard(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                )
-                            }
-                        }
-
-                        if (schedule.ratingScore > 0.0) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = null,
-                                    tint = RatingGold,
-                                    modifier = Modifier.size(11.dp),
-                                )
-                                Text(
-                                    text = schedule.ratingScore.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = RatingGold,
                                 )
                             }
                         }
@@ -623,7 +600,6 @@ fun ScheduleCatchupSection(
                                     subjectId = item.schedule.bgmId,
                                     initialName = displayName,
                                     initialCoverUrl = item.schedule.coverUrl,
-                                    initialScore = item.schedule.ratingScore,
                                     source = "catchup",
                                 ),
                             )

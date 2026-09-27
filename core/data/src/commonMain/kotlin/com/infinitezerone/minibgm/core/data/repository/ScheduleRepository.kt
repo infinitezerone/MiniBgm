@@ -955,8 +955,8 @@ class ScheduleRepositoryImpl(
     }
 
     /**
-     * 为合并入库或缺少元数据的条目（如 bgm-data 网播番）回补官方高清封面、真实评分与集数。
-     * 优先对 coverUrl 为空（避免被缺集数的官方条目饿死）及尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
+     * 为合并入库或缺少元数据的条目回补官方高清封面与集数（时刻表不展示评分，故不再拉评分）。
+     * 优先对 coverUrl 为空及尚未补齐集数的条目平滑顺序调用官方接口（单批上限 5 条，避免突发流量触发限流）；获取后落库持久化，后续刷新直接复用。
      */
     private suspend fun enrichMissingMetadata(schedules: List<AirScheduleEntity>): List<AirScheduleEntity> {
         val missing =
@@ -977,12 +977,10 @@ class ScheduleRepositoryImpl(
         return schedules.map { entity ->
             val subject = metadataByBgmId[entity.bgmId] ?: return@map entity
             val coverUrl = BgmImageUtils.toSecureUrl(subject.images?.bestImage.orEmpty())
-            val rating = subject.rating?.score ?: 0.0
             val eps = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes
             val resolvedEpisodes = if (eps > 0) eps else -1
             entity.copy(
                 coverUrl = coverUrl.ifBlank { entity.coverUrl },
-                ratingScore = if (entity.ratingScore == 0.0) rating else entity.ratingScore,
                 totalEpisodes = if (entity.totalEpisodes == 0) resolvedEpisodes else entity.totalEpisodes,
                 titleCn = entity.titleCn.ifBlank { subject.nameCn },
             )

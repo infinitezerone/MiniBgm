@@ -629,7 +629,6 @@ class ScheduleRepositoryImplTest {
             val stored = dao.getAllSchedulesList()
             val webOnly = stored.first { it.bgmId == 633836L }
             assertEquals("https://lain.bgm.tv/r/400/pic/cover/l/sample_rezero.jpg", webOnly.coverUrl)
-            assertEquals(8.6, webOnly.ratingScore)
             assertEquals(16, webOnly.totalEpisodes)
             assertEquals("Re：从零开始的异世界生活 第四季 夺还篇", webOnly.titleCn)
         }

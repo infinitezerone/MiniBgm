@@ -113,8 +113,6 @@ data class ScheduleUiState(
                 if (time.isNotBlank()) 0 else 1
             }.thenBy {
                 it.timeCst.ifBlank { it.timeJst }
-            }.thenByDescending {
-                it.ratingScore
             },
         )
     }
@@ -339,11 +337,10 @@ class ScheduleViewModel(
                 }
             }
 
-            // 昨日全部播映新番（按评分与时间排列，供未登录/快捷浏览速览）
+            // 昨日全部播映新番（按播出时间排列，供未登录/快捷浏览速览）
             val yesterdayList =
                 yesterdayRaw.sortedWith(
-                    compareByDescending<AirSchedule> { it.ratingScore }
-                        .thenBy { it.timeCst.ifBlank { it.timeJst } },
+                    compareBy<AirSchedule> { it.timeCst.ifBlank { it.timeJst } },
                 )
 
             var computedNextUpAction: NextUpAction? = null
