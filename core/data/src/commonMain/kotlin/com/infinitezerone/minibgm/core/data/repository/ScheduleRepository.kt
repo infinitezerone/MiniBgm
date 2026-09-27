@@ -417,15 +417,18 @@ class ScheduleRepositoryImpl(
                 entities.filter {
                     it.bgmId in trackingSubjectIds ||
                         it.source == AirScheduleEntity.SOURCE_BGM_DATA ||
-                        it.source == AirScheduleEntity.SOURCE_ANILIST_UNMAPPED ||
                         it.coverUrl.isBlank()
                 }
             } else {
                 entities
             }
 
-        // 1. AniList 逐话真值与高清封面同步
+        // 1. AniList 逐话真值与高清封面同步（拆季偏移在此生效）
         val (anilistEvents, coveredSubjects, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis)
+        // 用偏移后的逐话真值整体替换该批条目的 AniList 事件，避免与周排期写入的原始集数事件重复
+        if (coveredSubjects.isNotEmpty()) {
+            airEventDao.deleteAnilistEventsForSubjects(coveredSubjects.toList())
+        }
         if (anilistEvents.isNotEmpty()) {
             airEventDao.insertAirEvents(anilistEvents)
         }

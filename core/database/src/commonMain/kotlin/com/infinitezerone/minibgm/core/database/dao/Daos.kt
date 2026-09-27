@@ -60,6 +60,9 @@ interface AirEventDao {
     @Query("DELETE FROM air_events WHERE kind = 'predicted'")
     suspend fun deleteAllPredictedEvents()
 
+    @Query("DELETE FROM air_events WHERE source = 'anilist' AND subjectId IN (:subjectIds)")
+    suspend fun deleteAnilistEventsForSubjects(subjectIds: List<Long>)
+
     @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
     suspend fun deleteEventsNotIn(keepIds: List<Long>)
 

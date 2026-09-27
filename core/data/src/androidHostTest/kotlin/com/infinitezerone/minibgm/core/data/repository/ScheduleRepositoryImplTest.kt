@@ -128,6 +128,11 @@ class ScheduleRepositoryImplTest {
             events.value = events.value.filter { it.subjectId in keepIds }
         }
 
+        override suspend fun deleteAnilistEventsForSubjects(subjectIds: List<Long>) {
+            val ids = subjectIds.toSet()
+            events.value = events.value.filterNot { it.source == "anilist" && it.subjectId in ids }
+        }
+
         override suspend fun getUpcomingEvents(
             subjectIds: List<Long>,
             fromIso: String,
@@ -2318,5 +2323,77 @@ class ScheduleRepositoryImplTest {
             val stored = dao.getAllSchedulesList()
             assertEquals(1, stored.size)
             assertEquals(555710L, stored.first().bgmId)
+        }
+
+    @Test
+    fun syncBangumiData_appliesSplitCourOffset_replacingRawWeeklyEpisode() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val beginMillis = nowMillis - 2 * DAY_MILLIS
+            val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
+            val (currentYear, currentMonth) = TimeUtils.currentCstYearMonth()
+            val anilist =
+                FakeAniListService().apply {
+                    weeklySchedules =
+                        listOf(
+                            AniListWeeklyScheduleItem(
+                                anilistId = 111L,
+                                episode = 13,
+                                airAtEpochSeconds = beginMillis / 1000,
+                                titleNative = "分割クール作品",
+                                startYear = currentYear,
+                                startMonth = currentMonth,
+                            ),
+                        )
+                    // AniList 整季连续编号：第 13 话 = Bangumi 第二季第 1 话
+                    mediaSchedules =
+                        mapOf(
+                            111L to
+                                AniListMediaSchedule(
+                                    episodes =
+                                        (1..13).map { ep ->
+                                            AniListAiringEpisode(
+                                                episode = ep,
+                                                airAtEpochSeconds = (beginMillis - (13 - ep) * 7 * DAY_MILLIS) / 1000,
+                                            )
+                                        },
+                                ),
+                        )
+                }
+            val dataService =
+                FakeBangumiDataService().apply {
+                    monthItems =
+                        mapOf(
+                            "$currentYear-${currentMonth.toString().padStart(2, '0')}" to
+                                (
+                                    listOf(
+                                        BangumiDataItem(
+                                            title = "分割クール作品",
+                                            begin = beginIso,
+                                            sites =
+                                                listOf(
+                                                    BangumiDataSite(site = "bangumi", id = "222"),
+                                                    BangumiDataSite(site = "anilist", id = "111"),
+                                                ),
+                                        ),
+                                    ) to "W/\"x\""
+                                ),
+                        )
+                }
+            val dao = FakeAirScheduleDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = dataService,
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    anilistService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
+
+            val entity = dao.getAllSchedulesList().first { it.bgmId == 222L }
+            assertEquals(1, entity.nextEpisode, "拆季偏移应把 AniList 第 13 话还原为 Bangumi 第 1 话")
         }
 }
