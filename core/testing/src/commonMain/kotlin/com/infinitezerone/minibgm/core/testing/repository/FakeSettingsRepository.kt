@@ -33,7 +33,7 @@ class FakeSettingsRepository(
         private set
     var setPipEnabledCallCount: Int = 0
         private set
-    var setScheduleShowAdultCallCount: Int = 0
+    var setShowRestrictedContentCallCount: Int = 0
         private set
 
     fun setSettings(settings: UserSettings) {
@@ -69,9 +69,9 @@ class FakeSettingsRepository(
         settingsState.value = settingsState.value.copy(pipEnabled = enabled)
     }
 
-    override suspend fun setScheduleShowAdult(enabled: Boolean) {
-        setScheduleShowAdultCallCount++
-        settingsState.value = settingsState.value.copy(scheduleShowAdult = enabled)
+    override suspend fun setShowRestrictedContent(enabled: Boolean) {
+        setShowRestrictedContentCallCount++
+        settingsState.value = settingsState.value.copy(showRestrictedContent = enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {

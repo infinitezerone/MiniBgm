@@ -129,10 +129,10 @@ class UserPreferencesDataSource(
         }
     }
 
-    /** 时刻表是否展示 AniList 成人向条目（默认关） */
-    suspend fun setScheduleShowAdult(showAdult: Boolean) {
+    /** 是否显示受限内容（里番/R18），默认关 */
+    suspend fun setShowRestrictedContent(showRestricted: Boolean) {
         dataStore.updateData { current ->
-            current.copy(scheduleShowAdult = showAdult)
+            current.copy(showRestrictedContent = showRestricted)
         }
     }
 

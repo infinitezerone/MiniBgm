@@ -252,7 +252,6 @@ class TagSubjectsViewModel(
                 SearchFilter(
                     tag = listOf(state.tag),
                     type = typeList,
-                    nsfw = false,
                 ),
         )
     }

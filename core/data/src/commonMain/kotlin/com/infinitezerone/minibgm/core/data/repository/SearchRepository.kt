@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -84,7 +85,7 @@ class SearchRepositoryImpl(
                         SearchSubjectsRequest(
                             keyword = query,
                             sort = sort?.ifBlank { null },
-                            filter = if (type > 0) SearchFilter(type = listOf(type)) else null,
+                            filter = (if (type > 0) SearchFilter(type = listOf(type)) else SearchFilter()).copy(nsfw = resolveNsfwFilter()),
                         ),
                     limit = limit,
                     offset = offset,
@@ -121,7 +122,7 @@ class SearchRepositoryImpl(
         try {
             val response =
                 apiService.searchSubjectsAdvanced(
-                    request = request,
+                    request = withNsfwPolicy(request),
                     limit = limit,
                     offset = offset,
                 )
@@ -131,4 +132,16 @@ class SearchRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("高级搜索"))
         }
+
+    /**
+     * 受限内容统一策略（bgm.tv v0 高级搜索的 `nsfw` 语义）：
+     * 缺省/`null` = **返回包含 R18 的全部**；`false` = 只要非 R18；`true` = 只要 R18。
+     * 所以关闭「显示受限条目内容」时必须显式传 `false`，否则有权限的用户会搜到里番。
+     * 无 bgm.tv 权限的账号由服务端忽略该字段，永远拿不到 R18。
+     */
+    private suspend fun resolveNsfwFilter(): Boolean? =
+        if (userPreferences.userPreferences.firstOrNull()?.showRestrictedContent == true) null else false
+
+    private suspend fun withNsfwPolicy(request: SearchSubjectsRequest): SearchSubjectsRequest =
+        request.copy(filter = (request.filter ?: SearchFilter()).copy(nsfw = resolveNsfwFilter()))
 }

@@ -257,7 +257,6 @@ class ExploreViewModel(
                 tag = state.selectedTags.toList().ifEmpty { null },
                 airDate = state.selectedSeason.airDateFilter,
                 rank = rankFilter,
-                nsfw = false,
             )
         return SearchSubjectsRequest(
             sort = state.selectedSort.sortKey,

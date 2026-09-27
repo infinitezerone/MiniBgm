@@ -33,8 +33,8 @@ data class UserSettings(
     val amoledDarkMode: Boolean = false,
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
-    /** 放送时刻表是否展示 AniList 成人向（里番/R18）条目；仅作用于时刻表 */
-    val scheduleShowAdult: Boolean = false,
+    /** 是否显示受限内容（里番/R18）：搜索与时刻表统一策略 */
+    val showRestrictedContent: Boolean = false,
 )
 
 interface SettingsRepository {
@@ -57,8 +57,8 @@ interface SettingsRepository {
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
 
-    /** 放送时刻表是否展示 AniList 成人向条目（仅作用于时刻表，默认关） */
-    suspend fun setScheduleShowAdult(enabled: Boolean)
+    /** 是否显示受限内容（里番/R18）：搜索、时刻表等全站统一策略，默认关 */
+    suspend fun setShowRestrictedContent(enabled: Boolean)
 
     /** 更新 AI 服务配置 */
     suspend fun setAiConfig(config: AiConfig)
@@ -167,7 +167,7 @@ class SettingsRepositoryImpl(
                     ),
                 amoledDarkMode = prefs.amoledDarkMode,
                 pipEnabled = prefs.pipEnabled,
-                scheduleShowAdult = prefs.scheduleShowAdult,
+                showRestrictedContent = prefs.showRestrictedContent,
             )
         }
 
@@ -215,8 +215,8 @@ class SettingsRepositoryImpl(
         userPreferences.setPipEnabled(enabled)
     }
 
-    override suspend fun setScheduleShowAdult(enabled: Boolean) {
-        userPreferences.setScheduleShowAdult(enabled)
+    override suspend fun setShowRestrictedContent(enabled: Boolean) {
+        userPreferences.setShowRestrictedContent(enabled)
     }
 
     override suspend fun setAiConfig(config: AiConfig) {

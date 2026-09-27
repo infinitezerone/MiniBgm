@@ -99,8 +99,8 @@ internal fun SettingsSection(
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
     onTogglePipEnabled: (Boolean) -> Unit = {},
-    scheduleShowAdult: Boolean = false,
-    onToggleScheduleShowAdult: (Boolean) -> Unit = {},
+    showRestrictedContent: Boolean = false,
+    onToggleShowRestrictedContent: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -188,17 +188,37 @@ internal fun SettingsSection(
                         )
                     },
                 )
+            }
+        }
+
+        // 受限内容
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+        ) {
+            Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                Text(
+                    text = "受限内容",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
 
                 SettingsItemRow(
                     icon = Icons.Filled.VisibilityOff,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "时刻表显示 R18",
-                    subtitle = "在放送时刻表展示 AniList 成人向（里番）条目，仅影响时刻表",
-                    onClick = { onToggleScheduleShowAdult(!scheduleShowAdult) },
+                    title = "显示受限条目内容",
+                    subtitle = "显示里番等 R18 条目（搜索与放送时刻表）；搜索仍受 Bangumi 账号权限限制",
+                    onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
                     trailing = {
                         Switch(
-                            checked = scheduleShowAdult,
-                            onCheckedChange = onToggleScheduleShowAdult,
+                            checked = showRestrictedContent,
+                            onCheckedChange = onToggleShowRestrictedContent,
                         )
                     },
                 )

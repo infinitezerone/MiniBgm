@@ -542,15 +542,15 @@ class ScheduleRepositoryImpl(
     ): WeeklyResolution {
         val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
         val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
-        // 默认与搜索/探索一致地排除里番/成人条目；用户在设置里显式开启"时刻表显示 R18"后放行
-        val showAdult =
-            runCatching { userPreferences.userPreferences.firstOrNull()?.scheduleShowAdult }
+        // 受限内容统一策略：设置里开启「显示受限条目内容」后才放行 AniList 成人向条目
+        val showRestricted =
+            runCatching { userPreferences.userPreferences.firstOrNull()?.showRestrictedContent }
                 .getOrNull() ?: false
         val weeklyItems =
             runCatchingCancellable {
                 anilistService.getWeeklyAiringSchedule(weekStartSeconds, weekEndSeconds)
             }.getOrElse { emptyList() }
-                .filter { showAdult || !it.isAdult }
+                .filter { showRestricted || !it.isAdult }
 
         if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 
