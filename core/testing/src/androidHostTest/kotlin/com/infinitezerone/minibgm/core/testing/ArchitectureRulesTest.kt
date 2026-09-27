@@ -50,7 +50,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -80,7 +80,7 @@ class ArchitectureRulesTest {
         // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -116,7 +116,7 @@ class ArchitectureRulesTest {
         modelDir
             .resolve("src")
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -145,7 +145,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.name.endsWith("ViewModel.kt") }
             .forEach { vmFile ->
                 val relPath = vmFile.relativeTo(projectRoot).path
@@ -207,7 +207,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -237,7 +237,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -275,7 +275,7 @@ class ArchitectureRulesTest {
 
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path
@@ -320,7 +320,7 @@ class ArchitectureRulesTest {
             if (!dir.isDirectory) return@forEach
             dir
                 .walkTopDown()
-                .onEnter { it.name != "build" }
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
                 .filter {
                     it.isFile &&
                         it.extension == "kt" &&
@@ -374,7 +374,7 @@ class ArchitectureRulesTest {
             if (!dir.isDirectory) return@forEach
             dir
                 .walkTopDown()
-                .onEnter { it.name != "build" }
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
                 .filter {
                     it.isFile &&
                         it.extension == "kt" &&
@@ -409,7 +409,7 @@ class ArchitectureRulesTest {
         // 此处只保留源码 import 扫描作为纵深防御
         featureDir
             .walkTopDown()
-            .onEnter { it.name != "build" }
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { file ->
                 file.isFile &&
                     file.extension == "kt" &&
@@ -469,5 +469,11 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail("违反排期单一真源红线（AniList 为名单+时间唯一真源）：\n" + violations.joinToString("\n"))
         }
+    }
+
+    private companion object {
+        /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
+        val NON_SOURCE_DIR_NAMES =
+            setOf("build", "test", "androidTest", "androidHostTest", "androidDeviceTest", "commonTest")
     }
 }
