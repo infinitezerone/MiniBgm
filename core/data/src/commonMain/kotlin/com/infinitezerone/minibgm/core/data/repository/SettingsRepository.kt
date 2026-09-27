@@ -33,7 +33,6 @@ data class UserSettings(
     val amoledDarkMode: Boolean = false,
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
-    /** 是否显示受限内容（里番/R18）：搜索与时刻表统一策略 */
     val showRestrictedContent: Boolean = false,
 )
 
@@ -57,7 +56,6 @@ interface SettingsRepository {
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
 
-    /** 是否显示受限内容（里番/R18）：搜索、时刻表等全站统一策略，默认关 */
     suspend fun setShowRestrictedContent(enabled: Boolean)
 
     /** 更新 AI 服务配置 */

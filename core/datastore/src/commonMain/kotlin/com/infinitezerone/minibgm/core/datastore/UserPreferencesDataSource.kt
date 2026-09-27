@@ -129,7 +129,6 @@ class UserPreferencesDataSource(
         }
     }
 
-    /** 是否显示受限内容（里番/R18），默认关 */
     suspend fun setShowRestrictedContent(showRestricted: Boolean) {
         dataStore.updateData { current ->
             current.copy(showRestrictedContent = showRestricted)

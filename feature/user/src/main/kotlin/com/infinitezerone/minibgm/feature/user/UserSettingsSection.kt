@@ -191,7 +191,6 @@ internal fun SettingsSection(
             }
         }
 
-        // 受限内容
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,
@@ -213,7 +212,7 @@ internal fun SettingsSection(
                     icon = Icons.Filled.VisibilityOff,
                     iconTint = MaterialTheme.colorScheme.primary,
                     title = "显示受限条目内容",
-                    subtitle = "显示里番等 R18 条目（搜索与放送时刻表）；搜索仍受 Bangumi 账号权限限制",
+                    subtitle = "",
                     onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
                     trailing = {
                         Switch(

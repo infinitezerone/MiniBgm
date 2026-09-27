@@ -42,7 +42,6 @@ data class UserUiState(
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
     val pipEnabled: Boolean = true,
-    /** 是否显示受限内容（里番/R18）：搜索与时刻表统一策略 */
     val showRestrictedContent: Boolean = false,
 )
 
@@ -267,7 +266,6 @@ class UserViewModel(
         }
     }
 
-    /** 显示受限内容开关：写入偏好后立即强制同步时刻表，让名单即时增/删成人条目 */
     fun setShowRestrictedContent(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setShowRestrictedContent(enabled)

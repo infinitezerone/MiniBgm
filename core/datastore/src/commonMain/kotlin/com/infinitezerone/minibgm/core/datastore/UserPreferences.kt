@@ -36,7 +36,6 @@ data class UserPreferences(
     val bangumiDataLastSyncTimestamp: Long = 0L,
     /** 放送时刻表默认筛选：false 为全部，true 为仅展示我追的番 */
     val scheduleDefaultOnlyWatching: Boolean = false,
-    /** 是否显示受限内容（里番/R18）：搜索、时刻表等全站统一策略，默认关 */
     val showRestrictedContent: Boolean = false,
     /** 本地最近搜索历史词条列表（按最近使用降序，最多 20 条） */
     val searchHistory: List<String> = emptyList(),

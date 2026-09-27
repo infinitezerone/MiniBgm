@@ -542,7 +542,6 @@ class ScheduleRepositoryImpl(
     ): WeeklyResolution {
         val weekStartSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000
         val weekEndSeconds = TimeUtils.cstWeekEndEpochMillis(nowMillis) / 1000
-        // 受限内容统一策略：设置里开启「显示受限条目内容」后才放行 AniList 成人向条目
         val showRestricted =
             runCatching { userPreferences.userPreferences.firstOrNull()?.showRestrictedContent }
                 .getOrNull() ?: false

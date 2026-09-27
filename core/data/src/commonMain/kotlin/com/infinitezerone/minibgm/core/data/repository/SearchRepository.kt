@@ -133,12 +133,6 @@ class SearchRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("高级搜索"))
         }
 
-    /**
-     * 受限内容统一策略（bgm.tv v0 高级搜索的 `nsfw` 语义）：
-     * 缺省/`null` = **返回包含 R18 的全部**；`false` = 只要非 R18；`true` = 只要 R18。
-     * 所以关闭「显示受限条目内容」时必须显式传 `false`，否则有权限的用户会搜到里番。
-     * 无 bgm.tv 权限的账号由服务端忽略该字段，永远拿不到 R18。
-     */
     private suspend fun resolveNsfwFilter(): Boolean? =
         if (userPreferences.userPreferences.firstOrNull()?.showRestrictedContent == true) null else false
 
