@@ -22,6 +22,8 @@ data class AirSchedule(
     /** 时刻可信度：AirEventKind.ACTUAL / SCHEDULED / PREDICTED；空串表示未知 */
     val nextEpisodeKind: String = "",
     val isAiring: Boolean = true,
+    /** 未映射到 bgmId 的占位条目（仅时刻表展示，不可进详情/追番/播放） */
+    val isUnmapped: Boolean = false,
 )
 
 @Serializable

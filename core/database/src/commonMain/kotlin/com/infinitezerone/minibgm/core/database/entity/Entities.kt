@@ -45,6 +45,9 @@ data class AirScheduleEntity(
     companion object {
         const val SOURCE_OFFICIAL = "official"
         const val SOURCE_BGM_DATA = "bgm_data"
+
+        /** AniList 已发现但未能映射到 bgmId 的占位条目（仅时刻表展示） */
+        const val SOURCE_ANILIST_UNMAPPED = "anilist_unmapped"
         const val UNKNOWN_SORT_MINUTES = 9999
     }
 }

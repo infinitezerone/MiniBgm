@@ -299,14 +299,16 @@ fun ScheduleTimelineSingleCard(
 
     Card(
         onClick = {
-            onSubjectClick(
-                SubjectDetailRoute(
-                    subjectId = schedule.bgmId,
-                    initialName = displayName,
-                    initialCoverUrl = schedule.coverUrl,
-                    source = "schedule",
-                ),
-            )
+            if (!schedule.isUnmapped) {
+                onSubjectClick(
+                    SubjectDetailRoute(
+                        subjectId = schedule.bgmId,
+                        initialName = displayName,
+                        initialCoverUrl = schedule.coverUrl,
+                        source = "schedule",
+                    ),
+                )
+            }
         },
         shape = RoundedCornerShape(14.dp),
         colors =
@@ -402,22 +404,30 @@ fun ScheduleTimelineSingleCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    SiteLinksRow(
-                        links = schedule.siteLinks,
-                        onOpenUrl = { url ->
-                            if (onOpenUrl != null) {
-                                onOpenUrl(url)
-                            } else {
-                                context.launchStreamingUrl(url)
-                            }
-                        },
-                        onShowMoreSources = { onShowSources(schedule) },
-                    )
+                    if (schedule.isUnmapped) {
+                        Text(
+                            text = "AniList 在播 · Bangumi 暂未收录",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
+                    } else {
+                        SiteLinksRow(
+                            links = schedule.siteLinks,
+                            onOpenUrl = { url ->
+                                if (onOpenUrl != null) {
+                                    onOpenUrl(url)
+                                } else {
+                                    context.launchStreamingUrl(url)
+                                }
+                            },
+                            onShowMoreSources = { onShowSources(schedule) },
+                        )
 
-                    BookmarkChip(
-                        isWatching = isWatching,
-                        onToggle = { onToggleWatching(schedule.bgmId) },
-                    )
+                        BookmarkChip(
+                            isWatching = isWatching,
+                            onToggle = { onToggleWatching(schedule.bgmId) },
+                        )
+                    }
                 }
             }
         }

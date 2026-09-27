@@ -50,7 +50,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScheduleRepositoryImplTest {
@@ -2132,7 +2131,15 @@ class ScheduleRepositoryImplTest {
                 )
 
             assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
-            assertTrue(dao.getAllSchedulesList().isEmpty(), "无唯一候选时不得绑定任何条目")
+            val stored = dao.getAllSchedulesList()
+            // 不得误绑任何候选，但要以占位条目（bgmId = -anilistId）显示在时刻表
+            assertTrue(stored.none { it.bgmId == 1L || it.bgmId == 2L }, "无唯一候选时不得绑定任何条目")
+            assertTrue(
+                stored.any { it.bgmId == -555L && it.source == AirScheduleEntity.SOURCE_ANILIST_UNMAPPED },
+                "映射不到时仍应入库为占位条目",
+            )
+            val visible = repo.getAllSchedulesStream().first()
+            assertTrue(visible.any { it.isUnmapped && it.bgmId == -555L }, "占位条目应出现在时刻表流且标记为未映射")
         }
 
     @Test
@@ -2221,8 +2228,16 @@ class ScheduleRepositoryImplTest {
 
             assertIs<AppResult.Success<Unit>>(repo.syncBangumiData(force = true))
 
-            val base = dao.getAllSchedulesList().first { it.bgmId == 551918L }
-            assertNull(base.anilistId, "基名不得被包含匹配到另一季的周排期条目上")
+            val stored = dao.getAllSchedulesList()
+            // 551918 已不在本周 AniList 名单会被裁剪清掉；无论如何都不得被误绑到 210482
+            assertTrue(
+                stored.none { it.bgmId == 551918L && it.anilistId != null },
+                "基名不得被包含匹配到另一季的周排期条目上",
+            )
+            assertTrue(
+                stored.any { it.bgmId == -210482L && it.anilistId == 210482L },
+                "映射不到应入库为占位条目",
+            )
         }
 
     @Test

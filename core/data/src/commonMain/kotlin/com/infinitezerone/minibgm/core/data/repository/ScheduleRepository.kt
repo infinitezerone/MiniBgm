@@ -117,7 +117,7 @@ class ScheduleRepositoryImpl(
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
             val nowMillis = TimeUtils.nowEpochMillis()
             entities
-                .filter { it.isActiveForSchedule(nowMillis) }
+                .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
                 .map { it.toModel(json) }
         }
 
@@ -298,13 +298,15 @@ class ScheduleRepositoryImpl(
         val index =
             SearchAliasIndex(
                 entries =
-                    entities.map { entity ->
-                        SearchAliasIndex.Entry(
-                            subjectId = entity.bgmId,
-                            title = entity.title,
-                            titleCn = entity.titleCn,
-                        )
-                    },
+                    entities
+                        .filter { it.bgmId > 0 }
+                        .map { entity ->
+                            SearchAliasIndex.Entry(
+                                subjectId = entity.bgmId,
+                                title = entity.title,
+                                titleCn = entity.titleCn,
+                            )
+                        },
             )
         return index.search(query, limit)
     }
@@ -415,6 +417,7 @@ class ScheduleRepositoryImpl(
                 entities.filter {
                     it.bgmId in trackingSubjectIds ||
                         it.source == AirScheduleEntity.SOURCE_BGM_DATA ||
+                        it.source == AirScheduleEntity.SOURCE_ANILIST_UNMAPPED ||
                         it.coverUrl.isBlank()
                 }
             } else {
@@ -568,12 +571,18 @@ class ScheduleRepositoryImpl(
         val mappingCache = loadMappingCache(weeklyItems.map { it.anilistId })
 
         for (item in weeklyItems) {
-            if (entitiesByAnilistId[item.anilistId] != null) continue
+            val alreadyMapped = entitiesByAnilistId[item.anilistId]
+            if (alreadyMapped != null && alreadyMapped.bgmId > 0) continue
+            // 上一轮的占位条目：本次先移除，映射成功则升级为正式条目，否则重新生成占位
+            if (alreadyMapped != null) {
+                entitiesByAnilistId.remove(item.anilistId)
+                entitiesByBgmId.remove(alreadyMapped.bgmId)
+            }
 
             // 1) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
             val localMatch =
                 currentEntities.firstOrNull { entity ->
-                    entity.anilistId == null && titlesRoughlyEqual(entity.title, item.titleNative)
+                    entity.bgmId > 0 && entity.anilistId == null && titlesRoughlyEqual(entity.title, item.titleNative)
                 }
             if (localMatch != null) {
                 val updated = localMatch.copy(anilistId = item.anilistId)
@@ -605,8 +614,16 @@ class ScheduleRepositoryImpl(
                 continue
             }
 
-            // 3) bgm.tv 实时搜索兜底：唯一候选才接受
-            val subject = searchUniqueSubject(item, allowRestricted = showRestricted) ?: continue
+            // 3) bgm.tv 实时搜索兜底：唯一候选才接受；仍无结果则以占位条目显示（不可进详情）
+            val subject = searchUniqueSubject(item, allowRestricted = showRestricted)
+            if (subject == null) {
+                val placeholder = item.toPlaceholderEntity(nowMillis)
+                entitiesByBgmId[placeholder.bgmId] = placeholder
+                entitiesByAnilistId[item.anilistId] = placeholder
+                newlyInserted += placeholder
+                newEvents += item.toAirEventEntity(placeholder.bgmId, nowMillis)
+                continue
+            }
             val searched = subject.toAniListBgmMapping(item.anilistId, nowMillis)
             mappingCache[item.anilistId] = searched
             mappingsToPersist += searched
@@ -853,6 +870,35 @@ class ScheduleRepositoryImpl(
         )
     }
 
+    /** 映射不到 bgmId 时的占位条目：只进时刻表展示，bgmId 用 `-anilistId` 作哨兵值。 */
+    private fun AniListWeeklyScheduleItem.toPlaceholderEntity(nowMillis: Long): AirScheduleEntity {
+        val airMillis = airAtEpochSeconds * 1000
+        val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
+        val cstTime = TimeUtils.formatToCstTime(isoUtc)
+        val jstTime = TimeUtils.formatToJstTime(isoUtc)
+        val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
+        val name = titleNative.ifBlank { titleRomaji }
+        return AirScheduleEntity(
+            bgmId = -anilistId,
+            title = name,
+            titleCn = name,
+            coverUrl = coverUrl.orEmpty(),
+            ratingScore = 0.0,
+            airDate = "",
+            beginAtUtc = isoUtc,
+            sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
+            weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
+            timeCst = cstTime,
+            timeJst = jstTime,
+            sitesJson = "[]",
+            anilistId = anilistId,
+            source = AirScheduleEntity.SOURCE_ANILIST_UNMAPPED,
+            nextEpisode = episode,
+            nextEpisodeAtUtc = isoUtc,
+            nextEpisodeKind = kind,
+        )
+    }
+
     private fun AirScheduleEntity.toAniListBgmMapping(
         anilistId: Long,
         nowMillis: Long,
@@ -1016,6 +1062,7 @@ class ScheduleRepositoryImpl(
             nextEpisodeNumber = calculatedEp,
             nextEpisodeAtUtc = nextEpisodeAtUtc,
             nextEpisodeKind = nextEpisodeKind,
+            isUnmapped = bgmId <= 0,
         )
     }
 
