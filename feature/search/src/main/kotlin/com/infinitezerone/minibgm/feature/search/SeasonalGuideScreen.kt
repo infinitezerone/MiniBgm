@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.search
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -80,6 +82,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+
+/**
+ * 可见条目少于这个数就认为列表填不满一屏——此时滚不动，触底加载无从触发，需要主动补取。
+ * 取两屏左右的量，既避免用户看到"总共就这几条"的错觉，也不至于每次都把整季拉完。
+ */
+private const val MIN_VISIBLE_ITEMS = 12
 
 /**
  * 季度新番导视大盘界面（独立二级页容器）
@@ -172,8 +180,14 @@ fun SeasonalGuideContent(
     }
 
     // 触底无限加载监控：列表与网格的滚动状态互相独立，必须订阅当前形态对应的那一个，
-    // 否则切到列表后会继续读网格的布局信息（网格不再滚动，永远触不了底）
-    LaunchedEffect(uiState.viewMode, uiState.hasMore, uiState.isLoadingMore) {
+    // 否则切到列表后会继续读网格的布局信息（网格不再滚动，永远触不了底）。
+    //
+    // 这里刻意用 viewMode 作为唯一 key、并在 collect 内**实时**读 uiState：
+    // LaunchedEffect 的闭包只在 key 变化时更新，若把 isLoading 也当成闭包变量用，
+    // 首屏结束（isLoading true→false）时 key 没变、闭包不更新，判断会永远停在"正在加载"，
+    // 于是翻页再也触发不了——表现就是列表停在第一批条目上不动。
+    // 另外这个条件在"可见条目不足一屏"时恒为真，正好也兜住了客户端过滤把结果筛得只剩几条的情况。
+    LaunchedEffect(uiState.viewMode) {
         snapshotFlow {
             val (totalItems, lastVisible) =
                 when (uiState.viewMode) {
@@ -189,9 +203,25 @@ fun SeasonalGuideContent(
                 }
             totalItems > 0 && lastVisible >= totalItems - 6
         }.collect { shouldLoadMore ->
-            if (shouldLoadMore && uiState.hasMore && !uiState.isLoadingMore && !uiState.isLoading) {
+            val state = viewModel.uiState.value
+            if (shouldLoadMore && state.hasMore && !state.isLoadingMore && !state.isLoading) {
                 viewModel.loadMore()
             }
+        }
+    }
+
+    // 兜底：上面的触底检测靠 snapshotFlow 驱动，而 snapshotFlow 会去重——重新求值结果仍为 true 时
+    // 不会再发射，所以"已经到底但内容不足一屏"这种情况只会触发一次。
+    // 产地「欧美」、形式「全部」/「短片 / MV」这三档是客户端过滤，可能把整页整页地筛掉、只剩几条，
+    // 而内容不足一屏就滚不动，触底也就无从触发。这里在可见条目填不满两屏时主动继续取，直到填满或取尽。
+    LaunchedEffect(uiState.viewMode, uiState.filteredSubjects.size, uiState.hasMore, uiState.isLoading) {
+        val state = viewModel.uiState.value
+        if (state.hasMore &&
+            !state.isLoading &&
+            !state.isLoadingMore &&
+            state.filteredSubjects.size < MIN_VISIBLE_ITEMS
+        ) {
+            viewModel.loadMore()
         }
     }
 
@@ -202,100 +232,101 @@ fun SeasonalGuideContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 单行紧凑复合过滤栏：左侧年份季度选择胶囊 + 右侧播出形式滚动过滤
-                Row(
+                // 过滤栏分三层：档期与视图切换一行，产地（一级）一行，放送形式（二级）一行。
+                // 分行是为了让从属关系看得见——先按产地粗筛，再在产地内按形式细筛。
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    // 1. 复合档期选择胶囊 [ 2026 · 4月春 ▾ ]
-                    Surface(
-                        onClick = { showSeasonPicker = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.height(36.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 1. 复合档期选择胶囊 [ 2026 · 4月春 ▾ ]
+                        Surface(
+                            onClick = { showSeasonPicker = true },
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.height(36.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CalendarMonth,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = "${uiState.selectedYear} · ${uiState.selectedQuarter.displayLabel}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = "选择档期",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        // 2. 视图形态切换（紧凑列表 ↔ 海报网格），与搜索结果页的操作条同形态
+                        IconButton(
+                            onClick = viewModel::toggleViewMode,
+                            modifier = Modifier.size(36.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.CalendarMonth,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                imageVector =
+                                    if (uiState.viewMode == SeasonalViewMode.LIST) {
+                                        Icons.Filled.GridView
+                                    } else {
+                                        Icons.AutoMirrored.Filled.ViewList
+                                    },
+                                contentDescription =
+                                    if (uiState.viewMode == SeasonalViewMode.LIST) {
+                                        "切换为海报网格"
+                                    } else {
+                                        "切换为紧凑列表"
+                                    },
                                 tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = "${uiState.selectedYear} · ${uiState.selectedQuarter.displayLabel}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = "选择档期",
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(19.dp),
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // 2. 播出形式分类横向滚动流 (全部 / TV动画 / 网络独播 / 剧场版/OVA)
-                    LazyRow(
+                    // 3. 一级筛选：产地。条件下推服务端，切换需重新取数，否则总数会是"已加载的那几十条"里的子集
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.weight(1f),
                     ) {
-                        items(SeasonCategoryFilter.entries) { category ->
-                            FilterChip(
-                                selected = uiState.selectedCategory == category,
-                                onClick = { viewModel.selectCategory(category) },
-                                label = {
-                                    Text(
-                                        text = category.label,
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                },
-                                modifier = Modifier.height(36.dp),
-                                border = null,
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    ),
+                        SeasonOriginFilter.entries.forEach { origin ->
+                            SeasonalGuideFilterChip(
+                                label = origin.label,
+                                selected = uiState.selectedOrigin == origin,
+                                onClick = { viewModel.selectOrigin(origin) },
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    // 3. 视图形态切换（紧凑列表 ↔ 海报网格），与搜索结果页的操作条同形态
-                    IconButton(
-                        onClick = viewModel::toggleViewMode,
-                        modifier = Modifier.size(36.dp),
+                    // 4. 二级筛选：放送形式（在当前产地内细分）
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(
-                            imageVector =
-                                if (uiState.viewMode == SeasonalViewMode.LIST) {
-                                    Icons.Filled.GridView
-                                } else {
-                                    Icons.AutoMirrored.Filled.ViewList
-                                },
-                            contentDescription =
-                                if (uiState.viewMode == SeasonalViewMode.LIST) {
-                                    "切换为海报网格"
-                                } else {
-                                    "切换为紧凑列表"
-                                },
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(19.dp),
-                        )
+                        SeasonFormFilter.entries.forEach { form ->
+                            SeasonalGuideFilterChip(
+                                label = form.label,
+                                selected = uiState.selectedForm == form,
+                                onClick = { viewModel.selectForm(form) },
+                            )
+                        }
                     }
                 }
 
@@ -304,7 +335,7 @@ fun SeasonalGuideContent(
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
-                // 4. 内容主体状态机
+                // 5. 内容主体状态机
                 when {
                     // 首次加载全屏骨架屏（跟随当前形态，避免在列表视图下先闪一屏网格）
                     uiState.isLoading && uiState.subjects.isEmpty() -> {
@@ -943,4 +974,37 @@ private fun SeasonQuarterCard(
             )
         }
     }
+}
+
+/**
+ * 导视筛选 chip。
+ *
+ * 产地与形式两行共用同一形态——两行只有取值域不同，样式分叉会让人误以为层级也不同。
+ */
+@Composable
+private fun SeasonalGuideFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        },
+        modifier = modifier.height(34.dp),
+        border = null,
+        colors =
+            FilterChipDefaults.filterChipColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
+    )
 }

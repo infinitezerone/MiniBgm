@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -75,7 +76,8 @@ class SeasonalGuideViewModelTest {
             val state = viewModel.uiState.value
             assertEquals(2026, state.selectedYear)
             assertEquals(SeasonQuarter.WINTER, state.selectedQuarter)
-            assertEquals(SeasonCategoryFilter.ALL, state.selectedCategory)
+            assertEquals(SeasonOriginFilter.ALL, state.selectedOrigin)
+            assertEquals(SeasonFormFilter.ALL, state.selectedForm)
             assertFalse(state.isLoading)
             assertFalse(state.isRefreshing)
             assertNull(state.error)
@@ -173,32 +175,209 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun selectCategory_filtersSubjectsLocallyWithoutAdditionalNetworkCall() =
+    fun selectOrigin_pushesMetaTagToServerAndRefetchesFromStart() =
         runTest {
-            val tvAnime = sampleSubject.copy(id = 1L, name = "TV Anime", tags = listOf(Tag("TV", 10)))
-            val webAnime = sampleSubject.copy(id = 2L, name = "Web Anime", tags = listOf(Tag("WEB", 10)))
-            val movieAnime = sampleSubject.copy(id = 3L, name = "Movie Anime", tags = listOf(Tag("剧场版", 10)))
-
             val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(tvAnime, webAnime, movieAnime))
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
             assertEquals(1, searchRepository.advancedSearchCallCount)
-            assertEquals(3, viewModel.uiState.value.filteredSubjects.size)
+            assertNull(searchRepository.lastAdvancedRequest?.filter?.metaTags)
 
-            viewModel.selectCategory(SeasonCategoryFilter.TV)
-            assertEquals(1, searchRepository.advancedSearchCallCount) // No network re-query
-            assertEquals(listOf(tvAnime), viewModel.uiState.value.filteredSubjects)
+            viewModel.selectOrigin(SeasonOriginFilter.CHINA)
+            advanceUntilIdle()
 
-            viewModel.selectCategory(SeasonCategoryFilter.WEB)
-            assertEquals(listOf(webAnime), viewModel.uiState.value.filteredSubjects)
+            // 产地必须下推服务端并重新取数：只筛"已加载的那几十条"会显示成假的小数字
+            // （当季国产实际 53 部，而首屏只有 20 条）
+            assertEquals(SeasonOriginFilter.CHINA, viewModel.uiState.value.selectedOrigin)
+            assertEquals(2, searchRepository.advancedSearchCallCount)
+            assertEquals(listOf("中国"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+            assertEquals(0, searchRepository.lastAdvancedOffset)
+        }
 
-            viewModel.selectCategory(SeasonCategoryFilter.MOVIE_OVA)
-            assertEquals(listOf(movieAnime), viewModel.uiState.value.filteredSubjects)
+    @Test
+    fun selectForm_combinesWithOriginAsServerSideAnd() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
 
-            viewModel.selectCategory(SeasonCategoryFilter.ALL)
-            assertEquals(3, viewModel.uiState.value.filteredSubjects.size)
+            viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
+            advanceUntilIdle()
+            viewModel.selectForm(SeasonFormFilter.TV)
+            advanceUntilIdle()
+
+            // 服务端多值 meta_tags 是 AND 语义，恰好就是"当季日本 TV 动画"这层意思
+            assertEquals(listOf("日本", "TV"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+        }
+
+    @Test
+    fun selectWesternOrigin_leavesFilteringToClientBecauseServerTagIsNotAggregate() =
+        runTest {
+            // 服务端 meta_tags 是精确单标签匹配：「欧美」只覆盖 7 条，而只标具体国家的有 13 条，
+            // 用任一单标签下推都会漏掉一半以上，所以这一档不下推、由客户端按集合筛
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult =
+                AppResult.Success(
+                    listOf(
+                        sampleSubject.copy(id = 1L, metaTags = listOf("TV", "日本")),
+                        sampleSubject.copy(id = 2L, metaTags = listOf("漫画改", "美国", "WEB")),
+                        sampleSubject.copy(id = 3L, metaTags = listOf("奇幻", "欧美", "WEB")),
+                    ),
+                )
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            viewModel.selectOrigin(SeasonOriginFilter.WESTERN)
+            advanceUntilIdle()
+
+            assertNull(searchRepository.lastAdvancedRequest?.filter?.metaTags)
+
+            assertEquals(
+                listOf(2L, 3L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun defaultFormFilter_foldsShortFormClipsOutOfTheList() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult =
+                AppResult.Success(
+                    listOf(
+                        sampleSubject.copy(id = 1L, platform = "TV", metaTags = listOf("TV", "日本")),
+                        sampleSubject.copy(id = 2L, platform = "其他", metaTags = listOf("MV", "日本")),
+                        sampleSubject.copy(id = 3L, platform = "WEB", metaTags = listOf("短片", "中国")),
+                    ),
+                )
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            // 「全部」形式档折叠片段型：MV / 短片不该混进新番列表
+            assertEquals(
+                listOf(1L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun shortFormFilter_keepsFetchingPagesUntilSomethingIsVisible() =
+        runTest {
+            // 热度排序下片段型普遍靠后：前两页整页都是正片，第 3 页才出现 1 条 MV。
+            // 若不在过滤后继续往后取，用户会停在"列表空白、又因为没有内容而无法滚动"的死角上。
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchPages =
+                mapOf(
+                    0 to List(20) { sampleSubject.copy(id = it.toLong() + 1, platform = "TV") },
+                    20 to List(20) { sampleSubject.copy(id = it.toLong() + 101, platform = "TV") },
+                    40 to listOf(sampleSubject.copy(id = 999L, platform = "其他", metaTags = listOf("MV"))),
+                )
+            searchRepository.advancedSearchTotal = 41
+
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            viewModel.selectForm(SeasonFormFilter.SHORT)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(999L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+            // 首屏 1 次 + 「短片 / MV」档下连续取了 3 页（片段型在第 3 页才出现）
+            assertEquals(4, searchRepository.advancedSearchCallCount)
+            // 三页原始条目都留在 state 里：过滤不参与游标推进，所以滚到底仍是完整结果
+            assertEquals(41, viewModel.uiState.value.subjects.size)
+        }
+
+    @Test
+    fun loadMore_keepsFetchingWhileWholePagesAreFilteredOut() =
+        runTest {
+            // 翻页的续取判据必须是"可见条目确实变多了"，而不是"列表非空"——翻页时列表本来就非空，
+            // 用后者只会取一页就收工；碰上整页都是正片（热度排序下片段型普遍靠后）时，
+            // 可见内容与滚动范围都不变，触底加载会永久卡死：滑到底不动、既不转圈也不加载。
+            //
+            // 每页都是满的 20 条：翻页游标按 offset + 实际条数前进，页宽不满时下一页的 offset 会跟着缩小。
+            val searchRepository = FakeSearchRepository()
+            val mv = { id: Long -> sampleSubject.copy(id = id, platform = "其他", metaTags = listOf("MV")) }
+            val tv = { from: Long -> List(20) { sampleSubject.copy(id = from + it, platform = "TV") } }
+            searchRepository.advancedSearchPages =
+                mapOf(
+                    0 to (listOf(mv(1L)) + tv(100L).dropLast(1)),
+                    20 to tv(200L),
+                    40 to tv(300L),
+                    60 to (tv(400L).dropLast(1) + mv(999L)),
+                )
+            searchRepository.advancedSearchTotal = 100
+
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            viewModel.selectForm(SeasonFormFilter.SHORT)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(1L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+            val callsBeforeLoadMore = searchRepository.advancedSearchCallCount
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            // offset 20 / 40 两页整页被滤掉，必须一路取到 60 页才出现第 2 条 MV
+            assertEquals(
+                listOf(1L, 999L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+            assertEquals(callsBeforeLoadMore + 3, searchRepository.advancedSearchCallCount)
+            assertFalse(viewModel.uiState.value.isLoadingMore)
+        }
+
+    @Test
+    fun loadMore_cancelledByFilterSwitch_clearsFlagSoNextPageStillLoads() =
+        runTest {
+            // 切产地/形式会 cancel 正在飞的翻页任务。若 isLoadingMore 只在正常返回路径复位，
+            // 它会永久停在 true，loadMore 的 guard 从此恒真——表现是切完筛选后再也翻不了页。
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchPages =
+                mapOf(
+                    0 to List(20) { sampleSubject.copy(id = it.toLong() + 1) },
+                    20 to List(20) { sampleSubject.copy(id = it.toLong() + 21) },
+                )
+            searchRepository.advancedSearchTotal = 100
+
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+
+            val gate = CompletableDeferred<Unit>()
+            searchRepository.advancedSearchGate = gate
+            viewModel.loadMore()
+            assertTrue(viewModel.uiState.value.isLoadingMore)
+
+            // 请求还在飞的时候切产地：翻页任务被取消，旧条件的结果不能混进按新条件重建的列表
+            viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
+            gate.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isLoadingMore)
+            assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+
+            // 关键：标志复位了，翻页才进得去。若卡在 true，这次调用会被 guard 直接挡回
+            searchRepository.advancedSearchGate = null
+            val callsBeforeLoadMore = searchRepository.advancedSearchCallCount
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(callsBeforeLoadMore + 1, searchRepository.advancedSearchCallCount)
+            assertEquals(40, viewModel.uiState.value.subjects.size)
         }
 
     @Test
@@ -554,23 +733,40 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun matchesCategory_handlesEdgeCasesCorrectly() {
-        val taglessSubject = Subject(id = 1, name = "Original Title", tags = emptyList())
-        assertTrue(matchesCategory(taglessSubject, SeasonCategoryFilter.TV))
-        assertFalse(matchesCategory(taglessSubject, SeasonCategoryFilter.WEB))
-        assertFalse(matchesCategory(taglessSubject, SeasonCategoryFilter.MOVIE_OVA))
+    fun matchesOrigin_readsOfficialMetaTagsIncludingCountryOnlyWesternEntries() {
+        val japanese = Subject(id = 1, name = "x", metaTags = listOf("TV", "日本"))
+        val chinese = Subject(id = 2, name = "x", metaTags = listOf("WEB", "中国"))
+        // 真实数据里大量欧美条目只标了具体国家、没有「欧美」聚合标签（如 X战警97 只标「美国」）
+        val americanOnly = Subject(id = 3, name = "x", metaTags = listOf("TV", "美国"))
+        val unknown = Subject(id = 4, name = "x", tags = listOf(Tag("动画", 10)))
 
-        val webTagSubject = Subject(id = 2, name = "Web Series", tags = listOf(Tag("网络动画", 10)))
-        assertTrue(matchesCategory(webTagSubject, SeasonCategoryFilter.WEB))
-        assertFalse(matchesCategory(webTagSubject, SeasonCategoryFilter.TV))
+        assertTrue(matchesOrigin(japanese, SeasonOriginFilter.JAPAN))
+        assertFalse(matchesOrigin(japanese, SeasonOriginFilter.CHINA))
+        assertTrue(matchesOrigin(chinese, SeasonOriginFilter.CHINA))
+        assertTrue(matchesOrigin(americanOnly, SeasonOriginFilter.WESTERN))
+        assertFalse(matchesOrigin(unknown, SeasonOriginFilter.WESTERN))
+        assertTrue(matchesOrigin(unknown, SeasonOriginFilter.ALL))
+    }
 
-        val wordBoundarySubject = Subject(id = 3, name = "Spider Webster", tags = emptyList())
-        assertTrue(matchesCategory(wordBoundarySubject, SeasonCategoryFilter.TV))
-        assertFalse(matchesCategory(wordBoundarySubject, SeasonCategoryFilter.WEB))
+    @Test
+    fun matchesForm_foldsShortFormAndReadsPlatformField() {
+        val tv = Subject(id = 1, name = "x", platform = "TV", metaTags = listOf("TV"))
+        val web = Subject(id = 2, name = "x", platform = "WEB", metaTags = listOf("WEB"))
+        val movie = Subject(id = 3, name = "x", platform = "剧场版", metaTags = listOf("剧场版"))
+        val mv = Subject(id = 4, name = "x", platform = "其他", metaTags = listOf("MV"))
+        // platform 标成 WEB，但带「短片」标签——片段判据不能只看 platform
+        val shortViaTag = Subject(id = 5, name = "x", platform = "WEB", metaTags = listOf("短片"))
 
-        val movieSubject = Subject(id = 4, name = "Movie Title", nameCn = "剧场版 某作品", tags = emptyList())
-        assertTrue(matchesCategory(movieSubject, SeasonCategoryFilter.MOVIE_OVA))
-        assertFalse(matchesCategory(movieSubject, SeasonCategoryFilter.TV))
+        assertTrue(matchesForm(tv, SeasonFormFilter.TV))
+        assertTrue(matchesForm(web, SeasonFormFilter.WEB))
+        assertTrue(matchesForm(movie, SeasonFormFilter.MOVIE))
+        assertTrue(matchesForm(mv, SeasonFormFilter.SHORT))
+        assertTrue(matchesForm(shortViaTag, SeasonFormFilter.SHORT))
+
+        // 「全部」折叠片段型：默认列表里不该混进 MV / 短片
+        assertTrue(matchesForm(tv, SeasonFormFilter.ALL))
+        assertFalse(matchesForm(mv, SeasonFormFilter.ALL))
+        assertFalse(matchesForm(shortViaTag, SeasonFormFilter.ALL))
     }
 
     @Test

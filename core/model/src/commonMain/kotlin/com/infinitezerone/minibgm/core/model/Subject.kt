@@ -24,6 +24,17 @@ data class Subject(
     val rating: Rating? = null,
     val collection: CollectionCount? = null,
     val tags: List<Tag> = emptyList(),
+    /**
+     * Bangumi 官方元标签：除题材外还携带**产地**（日本 / 中国 / 美国 / 欧美 …）与
+     * **放送形式**（TV / WEB / 剧场版 / OVA / MV / PV / CM / 短片）。
+     *
+     * 此前这个字段在反序列化时被丢弃，导视只能拿用户标签（[tags]）加标题关键词去猜
+     * 放送形式——`tags` 是 UGC 标签、噪声大，而这里才是站方维护的取值域。
+     * 高级搜索的 `filter.meta_tags` 用的也是它，两端口径一致。
+     */
+    @SerialName("meta_tags") val metaTags: List<String> = emptyList(),
+    /** 放送平台（TV / WEB / OVA / 剧场版 / 其他）；比从 [metaTags] 里找形式标签更可靠 */
+    val platform: String = "",
     val infobox: List<Infobox> = emptyList(),
 ) {
     val displayName: String
@@ -59,7 +70,22 @@ data class Subject(
                 ?.firstOrNull { it.isNotBlank() }
                 ?.trim()
                 .orEmpty()
+
+    /**
+     * 是否为片段型条目（MV / PV / CM / 短片等），而非有完整叙事、按集放送的正片。
+     *
+     * 一季的搜索结果里混着几十条音乐影像与宣传短片，会把真正的新番冲散，因此导视默认折叠它们。
+     * 判据是 `platform == 其他` 或带片段类元标签——两种形态在真实响应里都出现过。
+     */
+    val isShortForm: Boolean
+        get() = platform == PLATFORM_OTHER || metaTags.any { it in SHORT_FORM_META_TAGS }
 }
+
+/** `platform` 取「其他」的条目基本都是不占档期的片段映像 */
+private const val PLATFORM_OTHER = "其他"
+
+/** 片段类元标签：这些不是一集一集放送的正片 */
+private val SHORT_FORM_META_TAGS = setOf("MV", "PV", "CM", "短片", "短片集")
 
 /** 与片名相关的 infobox 条目；`日文名` 常与 [Subject.name] 重复，去重时会被合并 */
 private val ALIAS_INFOBOX_KEYS = setOf("中文名", "别名", "第二中文名", "英文名", "罗马字", "日文名")

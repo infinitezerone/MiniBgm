@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.SearchResult
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +35,18 @@ class FakeSearchRepository : SearchRepository {
      * 需要模拟"还有下一页"时显式设一个更大的值。
      */
     var advancedSearchTotal: Int = -1
+
+    /**
+     * 按 `offset` 指定每一页的内容；未命中的 offset 回落到 [advancedSearchResult]。
+     * 用于验证"客户端过滤把整页滤空后要继续往后取"这类跨页行为。
+     */
+    var advancedSearchPages: Map<Int, List<Subject>> = emptyMap()
+
+    /**
+     * 非空时每次高级搜索都先挂起等它完成，用于制造"请求还在飞"的中间态
+     * （验证切筛选取消翻页任务后状态标志是否被正确复位）。注意它会被取消传播打断。
+     */
+    var advancedSearchGate: CompletableDeferred<Unit>? = null
 
     private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
     var addHistoryCallCount: Int = 0
@@ -87,14 +100,17 @@ class FakeSearchRepository : SearchRepository {
         lastAdvancedRequest = request
         lastAdvancedOffset = offset
         lastAdvancedLimit = limit
+        advancedSearchGate?.await()
         return when (val result = advancedSearchResult) {
-            is AppResult.Success ->
+            is AppResult.Success -> {
+                val page = advancedSearchPages[offset] ?: result.data
                 AppResult.Success(
                     SearchResult(
-                        total = if (advancedSearchTotal >= 0) advancedSearchTotal else result.data.size,
-                        list = result.data,
+                        total = if (advancedSearchTotal >= 0) advancedSearchTotal else page.size,
+                        list = page,
                     ),
                 )
+            }
             is AppResult.Error -> result
             is AppResult.Loading -> result
         }

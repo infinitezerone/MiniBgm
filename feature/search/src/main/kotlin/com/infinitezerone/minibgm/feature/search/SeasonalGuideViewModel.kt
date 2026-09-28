@@ -150,9 +150,24 @@ class SeasonalGuideViewModel(
         loadSeasonalAnime()
     }
 
-    fun selectCategory(category: SeasonCategoryFilter) {
-        if (_uiState.value.selectedCategory == category) return
-        _uiState.update { it.copy(selectedCategory = category) }
+    /**
+     * 切换产地筛选。
+     *
+     * 必须重新取数：条件下推服务端后 `total` 会变，若沿用已加载的数据做客户端过滤，
+     * 会显示成"选国产只有 2 部"——因为当前只加载了 20 条。连载中分组不依赖搜索接口，
+     * 不重取，其可见性由派生属性按新条件自动收敛。
+     */
+    fun selectOrigin(origin: SeasonOriginFilter) {
+        if (_uiState.value.selectedOrigin == origin) return
+        _uiState.update { it.copy(selectedOrigin = origin) }
+        loadSeasonalAnime(reloadOngoing = false)
+    }
+
+    /** 切换放送形式筛选；理由同 [selectOrigin]，同样需要重新取数 */
+    fun selectForm(form: SeasonFormFilter) {
+        if (_uiState.value.selectedForm == form) return
+        _uiState.update { it.copy(selectedForm = form) }
+        loadSeasonalAnime(reloadOngoing = false)
     }
 
     /** 切换海报网格／紧凑列表；纯展示偏好，不重新取数（翻页游标对两种形态是同一份数据） */
@@ -242,44 +257,90 @@ class SeasonalGuideViewModel(
 
     fun loadMore() {
         val currentState = _uiState.value
+        // 这道 guard 是并发控制的唯一入口：isLoadingMore 由下面置位、由任务收尾复位，
+        // 同一时刻只可能有一个翻页任务在跑，所以这里既不必要也不该再 cancel 上一个任务——
+        // 自取消会把刚置上的标志连同收尾逻辑一起丢掉（见 try/finally 处的说明）。
         if (currentState.isLoading || currentState.isLoadingMore || currentState.isRefreshing || !currentState.hasMore) {
             return
         }
 
-        loadMoreJob?.cancel()
-        // 翻页 offset 用独立的服务端游标而非 subjects.size：去重会丢弃重复条目，两者一旦错位就会跳过数据
-        val offset = currentState.pageOffset
-        val request = buildSearchRequest(currentState)
-
         loadMoreJob =
             viewModelScope.launch {
                 _uiState.update { it.copy(isLoadingMore = true) }
-                when (val result = searchRepository.searchSubjectsAdvanced(request = request, limit = PAGE_SIZE, offset = offset)) {
-                    is AppResult.Success -> {
-                        val newSubjects = result.data.list
-                        _uiState.update {
-                            val existingIds = it.subjects.map { s -> s.id }.toSet()
-                            val uniqueNew = newSubjects.filter { s -> s.id !in existingIds }
-                            val loadedCount = offset + newSubjects.size
-                            it.copy(
-                                isLoadingMore = false,
-                                subjects = it.subjects + uniqueNew,
-                                pageOffset = loadedCount,
-                                hasMore = loadedCount < result.data.total,
-                            )
-                        }
+                // 必须在 finally 里复位：切产地/形式会 cancel 本任务，若只在正常路径复位，
+                // isLoadingMore 会永久停在 true，上面的 guard 从此恒真——表现是切完筛选后再也翻不了页。
+                val error =
+                    try {
+                        fetchPages(startOffset = _uiState.value.pageOffset)
+                    } finally {
+                        _uiState.update { it.copy(isLoadingMore = false) }
                     }
-                    is AppResult.Error -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoadingMore = false,
-                                userMessage = "加载更多失败：${result.message}",
-                            )
-                        }
-                    }
-                    is AppResult.Loading -> Unit
+                _uiState.update {
+                    it.copy(userMessage = error?.takeIf { msg -> msg.isNotBlank() }?.let { msg -> "加载更多失败：$msg" })
                 }
             }
+    }
+
+    /**
+     * 从 [startOffset] 起取页并写入状态，返回错误消息（成功为 null）。
+     *
+     * 会**连续取页直到本次调用确实多出可见条目**，原因是客户端还压着三层服务端表达不了的过滤：
+     * 产地「欧美」（服务端 meta_tags 精确匹配，"欧美 / 美国 / 英国…"之间的"或"表达不了）、
+     * 形式「全部」要折叠片段型、「短片 / MV」要只留片段型（都没有排除语法，多值又是 AND）。
+     * 这些过滤会整页整页地把条目滤掉——列表一旦为空就没有可滚动内容，触底加载永远不会触发，
+     * 用户会停在一片空白上。所以这里主动往后取。
+     *
+     * 判据是"可见条目数比调用前多"，不是"列表非空"：翻页时列表本来就是非空的，用后者只会取一页就收工；
+     * 若这一页整页被滤掉，可见内容与滚动范围都没变，触底加载会卡死在这里（滑到底不动、既不转圈也不加载）。
+     *
+     * [startOffset] 为 0 时首屏整批替换，否则按已加载 ID 去重后追加。
+     * 翻页游标始终按服务端返回的原始条数前进，过滤不参与——所以一路取到底得到的过滤结果是完整的。
+     */
+    private suspend fun fetchPages(startOffset: Int): String? {
+        var offset = startOffset
+        var isFirstIteration = true
+        val visibleBefore = if (startOffset == 0) 0 else _uiState.value.filteredSubjects.size
+        while (true) {
+            val replaceFirstPage = isFirstIteration && startOffset == 0
+            isFirstIteration = false
+
+            val result =
+                searchRepository.searchSubjectsAdvanced(
+                    request = buildSearchRequest(_uiState.value),
+                    limit = PAGE_SIZE,
+                    offset = offset,
+                )
+
+            when (result) {
+                is AppResult.Success -> {
+                    val page = result.data.list
+                    val loadedCount = offset + page.size
+                    _uiState.update { current ->
+                        val merged =
+                            if (replaceFirstPage) {
+                                page
+                            } else {
+                                val existingIds = current.subjects.map { s -> s.id }.toSet()
+                                current.subjects + page.filter { s -> s.id !in existingIds }
+                            }
+                        current.copy(
+                            subjects = merged,
+                            pageOffset = loadedCount,
+                            hasMore = loadedCount < result.data.total,
+                            error = null,
+                        )
+                    }
+                    offset = loadedCount
+
+                    val updated = _uiState.value
+                    // 取空、已取尽 → 收工；本次调用已经多出可见条目 → 也收工
+                    if (page.isEmpty() || !updated.hasMore) return null
+                    if (updated.filteredSubjects.size > visibleBefore) return null
+                }
+                is AppResult.Error -> return result.message
+                is AppResult.Loading -> return null
+            }
+        }
     }
 
     fun clearUserMessage() {
@@ -297,30 +358,48 @@ class SeasonalGuideViewModel(
 
     private fun buildSearchRequest(state: SeasonalGuideUiState): SearchSubjectsRequest {
         val (startDay, endDay) = state.selectedQuarter.getAirDateRange(state.selectedYear)
+        // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + TV」＝当季日本 TV 动画）。
+        // 产地「欧美」与形式「全部」/「短片 / MV」的 metaTag 为 null——服务端 meta_tags 是多值 AND、
+        // 且没有排除语法，"或"（欧美 vs 只标具体国家）与"以上皆非"（片段型）都表达不了，
+        // 这三档改由客户端兜，见 SeasonalGuideUiState.filteredSubjects。
+        val metaTags = listOfNotNull(state.selectedOrigin.metaTag, state.selectedForm.metaTag)
         return SearchSubjectsRequest(
             sort = "heat",
             filter =
                 SearchFilter(
                     type = listOf(2),
                     airDate = listOf(">=$startDay", "<=$endDay"),
+                    metaTags = metaTags.ifEmpty { null },
                 ),
         )
     }
 
-    private fun loadSeasonalAnime(isRefresh: Boolean = false) {
+    private fun loadSeasonalAnime(
+        isRefresh: Boolean = false,
+        reloadOngoing: Boolean = true,
+    ) {
         fetchJob?.cancel()
-        loadMoreJob?.cancel()
+        // 交接正在飞的翻页任务：它由 [loadMore] 启动，携带的是**旧筛选条件**的响应。
+        // 协程被 cancel 后在下一次挂起点抛出之前，仍可能执行到状态写入，所以新一轮取数必须先等它彻底结束
+        // （见 fetchJob 里的 join），否则旧条件的结果会混进按新条件重建的列表里。
+        val staleLoadMore = loadMoreJob
+        loadMoreJob = null
+        staleLoadMore?.cancel()
         ongoingJob?.cancel()
         val currentState = _uiState.value
-        val request = buildSearchRequest(currentState)
         val selectedYear = currentState.selectedYear
         val selectedQuarter = currentState.selectedQuarter
 
-        // 换季/刷新时先清空连载中分组，避免上一季的条目串到本季
-        _uiState.update { it.copy(ongoingSubjects = emptyList(), isLoadingOngoing = false) }
+        // 换季/刷新时先清空连载中分组，避免上一季的条目串到本季；
+        // 仅切换产地/形式时不重取它——连载中分组不走搜索接口，其可见性由派生属性自动收敛
+        if (reloadOngoing) {
+            _uiState.update { it.copy(ongoingSubjects = emptyList(), isLoadingOngoing = false) }
+        }
 
         fetchJob =
             viewModelScope.launch {
+                // 先置加载态再 join：join 是挂起点，若排在后面，这段窗口里 isLoading 还是旧值，
+                // 触底兜底可能挤进来发起一次携带陈旧游标的翻页
                 _uiState.update {
                     if (isRefresh) {
                         it.copy(isRefreshing = true, error = null)
@@ -329,31 +408,19 @@ class SeasonalGuideViewModel(
                     }
                 }
 
-                when (val result = searchRepository.searchSubjectsAdvanced(request = request, limit = PAGE_SIZE, offset = 0)) {
-                    is AppResult.Success -> {
-                        val firstPage = result.data.list
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                isRefreshing = false,
-                                subjects = firstPage,
-                                pageOffset = firstPage.size,
-                                hasMore = firstPage.size < result.data.total,
-                                error = null,
-                            )
-                        }
-                        loadOngoingSubjects(selectedYear, selectedQuarter)
-                    }
-                    is AppResult.Error -> {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                isRefreshing = false,
-                                error = result.message.ifBlank { "获取新番导视失败" },
-                            )
-                        }
-                    }
-                    is AppResult.Loading -> Unit
+                staleLoadMore?.join()
+
+                val error = fetchPages(startOffset = 0)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        error = error?.ifBlank { "获取新番导视失败" },
+                    )
+                }
+
+                if (error == null && reloadOngoing) {
+                    loadOngoingSubjects(selectedYear, selectedQuarter)
                 }
             }
     }

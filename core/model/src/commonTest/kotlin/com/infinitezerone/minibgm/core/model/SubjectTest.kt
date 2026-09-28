@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.model
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SubjectTest {
@@ -90,5 +91,37 @@ class SubjectTest {
         assertEquals("AT-X", listed.broadcastStation)
         assertEquals("", missing.broadcastStation)
         assertEquals("", blank.broadcastStation)
+    }
+
+    @Test
+    fun `metaTags 与 platform 从响应里解析出来`() {
+        // 这两个字段此前在反序列化时被静默丢弃，导视只能拿用户标签（tags）加标题关键词去猜放送形式
+        val subject =
+            json.decodeFromString<Subject>(
+                """
+                {"id":501963,"name":"無職転生Ⅲ","platform":"TV",
+                 "meta_tags":["后宫","TV","日本","奇幻","冒险","小说改"]}
+                """.trimIndent(),
+            )
+
+        assertEquals(listOf("后宫", "TV", "日本", "奇幻", "冒险", "小说改"), subject.metaTags)
+        assertEquals("TV", subject.platform)
+        assertFalse(subject.isShortForm)
+    }
+
+    @Test
+    fun `isShortForm 同时识别 platform 其他与片段类元标签`() {
+        // 两种形态在真实响应里都出现过：MV 条目的 platform 普遍是「其他」，
+        // 但也有 platform 标成 WEB 却带「短片」标签的
+        val viaPlatform = json.decodeFromString<Subject>("""{"id":1,"name":"x","platform":"其他","meta_tags":["MV"]}""")
+        val viaTag = json.decodeFromString<Subject>("""{"id":2,"name":"x","platform":"WEB","meta_tags":["短片"]}""")
+        val regular = json.decodeFromString<Subject>("""{"id":3,"name":"x","platform":"WEB","meta_tags":["WEB","日本"]}""")
+        val bare = json.decodeFromString<Subject>("""{"id":4,"name":"x"}""")
+
+        assertTrue(viaPlatform.isShortForm)
+        assertTrue(viaTag.isShortForm)
+        // 两个字段都缺失的条目（如「乐高航海王」）是真番，不能因为没标签就当成片段
+        assertFalse(regular.isShortForm)
+        assertFalse(bare.isShortForm)
     }
 }

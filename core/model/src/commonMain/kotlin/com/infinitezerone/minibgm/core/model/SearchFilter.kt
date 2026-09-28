@@ -24,4 +24,12 @@ data class SearchFilter(
     val rating: List<String>? = null,
     val rank: List<String>? = null,
     val nsfw: Boolean? = null,
+    /**
+     * 官方元标签过滤，多值为 **AND** 语义。
+     *
+     * 产地（日本 / 中国 / 欧美）与放送形式（TV / WEB / 剧场版）都在这个取值域里，
+     * 导视页的两级筛选因此可以整体下推服务端——只有服务端过滤过，总数与分页才是准的。
+     * 注意它没有排除语法，「剧场版或 OVA」这类"或"关系表达不了。
+     */
+    @SerialName("meta_tags") val metaTags: List<String>? = null,
 )
