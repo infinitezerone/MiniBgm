@@ -5,10 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
-import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
-import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.SyncManager
@@ -16,7 +14,6 @@ import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,12 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -47,7 +38,6 @@ data class UserUiState(
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
     val trackingFootprint: TrackingFootprint? = null,
-    val subjectActivity: SubjectActivityState = SubjectActivityState(),
     val airingReminderEnabled: Boolean = true,
     val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
@@ -85,13 +75,10 @@ private data class LocalSlice(
     val trackingFootprint: TrackingFootprint?,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class UserViewModel(
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
-    private val communityRepository: CommunityRepository,
-    private val subjectRepository: SubjectRepository,
     private val settingsRepository: SettingsRepository,
     private val syncManager: SyncManager,
 ) : ViewModel() {
@@ -144,86 +131,6 @@ class UserViewModel(
             SyncSlice(settings, workSyncing, delayMinutes)
         }
 
-    /** 在追动态参与方上限：取最近在追的前 N 部拉取最新讨论，控制网络扇出 */
-    private companion object {
-        const val ACTIVITY_SUBJECT_LIMIT = 3
-        const val ACTIVITY_TOPIC_LIMIT = 1
-    }
-
-    /**
-     * 在追动态流：在追（DOING）收藏变化（按条目集合去重）后，
-     * 对前 N 部各取最新一条讨论。讨论拉取失败静默降级为缺失该条（fail-open），
-     * 全部失败即为空列表、卡片由 UI 隐藏。仅在 UI 订阅期间活跃（WhileSubscribed）。
-     *
-     * 番名一次性由本地排期表批量补齐（0 请求）：时刻表的名单裁剪会保留用户所有在追条目，
-     * 故无需逐部回源详情接口——单次渲染的网络扇出因此固定为 N 次讨论请求。
-     */
-    private val subjectActivityFlow: Flow<SubjectActivityState> =
-        collectionRepository
-            .getCollectionsByTypeStream(CollectionType.DOING)
-            .map { collections -> collections.take(ACTIVITY_SUBJECT_LIMIT).map { it.subjectId } }
-            .distinctUntilChanged()
-            .flatMapLatest { subjectIds ->
-                if (subjectIds.isEmpty()) {
-                    flowOf(SubjectActivityState())
-                } else {
-                    val localTitles = scheduleRepository.getLocalSubjectTitles(subjectIds)
-                    combine(
-                        subjectIds.map { subjectId ->
-                            observeSubjectLatestTopic(subjectId, localTitles[subjectId].orEmpty())
-                        },
-                    ) { items ->
-                        SubjectActivityState(
-                            items =
-                                items
-                                    .filterNotNull()
-                                    .sortedByDescending(SubjectActivityItem::updatedAtMs),
-                        )
-                    }.onStart { emit(SubjectActivityState(isLoading = true)) }
-                }
-            }
-
-    /**
-     * 单部在追番剧的最新讨论。
-     *
-     * 番名优先取本地排期表；本地未命中时退回条目内存缓存（同会话内看过该条目详情即有值）；
-     * 两者都缺失则跳过该条，不为此再补一次详情请求——宁可少一条，也不把页面变成请求放大器。
-     */
-    private fun observeSubjectLatestTopic(
-        subjectId: Long,
-        localName: String,
-    ): Flow<SubjectActivityItem?> =
-        flow {
-            val topicsResult = communityRepository.getSubjectTopics(subjectId, limit = ACTIVITY_TOPIC_LIMIT)
-            val topic = (topicsResult as? AppResult.Success)?.data?.firstOrNull()
-            if (topic == null) {
-                emit(null)
-            } else {
-                val subjectName =
-                    localName.ifBlank {
-                        subjectRepository
-                            .getSubjectStream(subjectId)
-                            .firstOrNull()
-                            ?.let { it.nameCn.ifBlank { it.name } }
-                            .orEmpty()
-                    }
-                if (subjectName.isBlank()) {
-                    emit(null)
-                } else {
-                    emit(
-                        SubjectActivityItem(
-                            subjectId = subjectId,
-                            subjectName = subjectName,
-                            topicId = topic.id,
-                            topicTitle = topic.title,
-                            replyCount = topic.replyCount,
-                            updatedAtMs = maxOf(topic.updatedAt, topic.createdAt),
-                        ),
-                    )
-                }
-            }
-        }
-
     private val localSlice: Flow<LocalSlice> =
         combine(
             isManualSyncing,
@@ -240,8 +147,7 @@ class UserViewModel(
             authSlice,
             syncSlice,
             localSlice,
-            subjectActivityFlow,
-        ) { auth, sync, local, subjectActivity ->
+        ) { auth, sync, local ->
             UserUiState(
                 isLoggedIn = auth.isLoggedIn,
                 activeProfile = auth.activeProfile,
@@ -255,7 +161,6 @@ class UserViewModel(
                 collectionCounts = local.collectionCounts,
                 isCountsLoading = local.isCountsLoading,
                 trackingFootprint = local.trackingFootprint,
-                subjectActivity = subjectActivity,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
                 airingDailySummaryEnabled = sync.settings.airingDailySummaryEnabled,
                 airingPreAirEnabled = sync.settings.airingPreAirEnabled,

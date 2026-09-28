@@ -3,18 +3,14 @@ package com.infinitezerone.minibgm.feature.user
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
-import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfileAlt
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,8 +36,6 @@ class UserViewModelTest {
         authRepo: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = false),
         scheduleRepo: FakeScheduleRepository = FakeScheduleRepository(),
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
-        communityRepo: FakeCommunityRepository = FakeCommunityRepository(),
-        subjectRepo: FakeSubjectRepository = FakeSubjectRepository(),
         settingsRepo: FakeSettingsRepository = FakeSettingsRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
     ): Triple<UserViewModel, FakeScheduleRepository, FakeSettingsRepository> {
@@ -50,8 +44,6 @@ class UserViewModelTest {
                 authRepository = authRepo,
                 scheduleRepository = scheduleRepo,
                 collectionRepository = collectionRepo,
-                communityRepository = communityRepo,
-                subjectRepository = subjectRepo,
                 settingsRepository = settingsRepo,
                 syncManager = syncManager,
             )
@@ -266,128 +258,6 @@ class UserViewModelTest {
             assertEquals(8, state.trackingFootprint?.watchingCount)
             assertEquals(96, state.trackingFootprint?.episodesWatched)
             assertEquals(3, state.trackingFootprint?.monthActiveCount)
-        }
-
-    @Test
-    fun loggedInState_withoutDoingCollections_emitsStableEmptySubjectActivity() =
-        runTest {
-            val authRepo =
-                FakeAuthRepository(
-                    initialLoggedIn = true,
-                    initialProfile = sampleUserProfile,
-                )
-            val collectionRepo = FakeCollectionRepository()
-            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
-
-            val state = viewModel.uiState.first { !it.isLoading }
-            assertTrue(state.subjectActivity.items.isEmpty())
-            // 无在追收藏时动态卡保持稳定空态（非加载中），UI 层据此隐藏卡片
-            assertFalse(state.subjectActivity.isLoading)
-        }
-
-    @Test
-    fun loggedOutState_subjectActivityStaysEmpty() =
-        runTest {
-            val (viewModel, _) = createViewModel()
-
-            val state = viewModel.uiState.first { !it.isLoading }
-            assertTrue(state.subjectActivity.items.isEmpty())
-            assertFalse(state.subjectActivity.isLoading)
-        }
-
-    @Test
-    fun subjectActivity_resolvesNamesFromLocalScheduleWithoutDetailRequests() =
-        runTest {
-            // 回归：番名曾逐部经 fetchSubjectDetail 联网补全，把一次渲染放大成 2N 次请求；
-            // 时刻表名单裁剪已保留在追条目，本地批量取名即可（0 请求）
-            val authRepo =
-                FakeAuthRepository(
-                    initialLoggedIn = true,
-                    initialProfile = sampleUserProfile,
-                )
-            val collectionRepo = FakeCollectionRepository()
-            collectionRepo.sendCollection(
-                sampleUserCollection.copy(subjectId = 1001L, type = CollectionType.DOING.value),
-            )
-            val communityRepo = FakeCommunityRepository()
-            communityRepo.getSubjectTopicsResult =
-                AppResult.Success(
-                    listOf(
-                        SubjectTopic(
-                            id = 7L,
-                            title = "第 12 话观感",
-                            replyCount = 3,
-                            createdAt = 100L,
-                            updatedAt = 200L,
-                        ),
-                    ),
-                )
-            val scheduleRepo = FakeScheduleRepository()
-            scheduleRepo.localSubjectTitles = mapOf(1001L to "本地番名")
-            val subjectRepo = FakeSubjectRepository()
-            val (viewModel, _) =
-                createViewModel(
-                    authRepo = authRepo,
-                    scheduleRepo = scheduleRepo,
-                    collectionRepo = collectionRepo,
-                    communityRepo = communityRepo,
-                    subjectRepo = subjectRepo,
-                )
-
-            val state = viewModel.uiState.first { it.subjectActivity.items.isNotEmpty() }
-
-            assertEquals(
-                "本地番名",
-                state.subjectActivity.items
-                    .first()
-                    .subjectName,
-            )
-            assertEquals(
-                "第 12 话观感",
-                state.subjectActivity.items
-                    .first()
-                    .topicTitle,
-            )
-            // 关键约束：页面只发讨论请求，不叠加逐部详情请求
-            assertEquals(0, subjectRepo.fetchSubjectDetailCallCount)
-            assertEquals(1, scheduleRepo.getLocalSubjectTitlesCallCount)
-            assertEquals(1, communityRepo.getSubjectTopicsCallCount)
-        }
-
-    @Test
-    fun subjectActivity_skipsItemWhenNameMissingLocally() =
-        runTest {
-            // 本地排期表与条目内存缓存都取不到番名时跳过该条，而不是补发一次详情请求
-            val authRepo =
-                FakeAuthRepository(
-                    initialLoggedIn = true,
-                    initialProfile = sampleUserProfile,
-                )
-            val collectionRepo = FakeCollectionRepository()
-            collectionRepo.sendCollection(
-                sampleUserCollection.copy(subjectId = 1001L, type = CollectionType.DOING.value),
-            )
-            val communityRepo = FakeCommunityRepository()
-            communityRepo.getSubjectTopicsResult =
-                AppResult.Success(listOf(SubjectTopic(id = 7L, title = "第 12 话观感", replyCount = 3)))
-            val scheduleRepo = FakeScheduleRepository()
-            val subjectRepo = FakeSubjectRepository()
-            val (viewModel, _) =
-                createViewModel(
-                    authRepo = authRepo,
-                    scheduleRepo = scheduleRepo,
-                    collectionRepo = collectionRepo,
-                    communityRepo = communityRepo,
-                    subjectRepo = subjectRepo,
-                )
-
-            val state =
-                viewModel.uiState.first {
-                    !it.subjectActivity.isLoading && communityRepo.getSubjectTopicsCallCount > 0
-                }
-
-            assertTrue(state.subjectActivity.items.isEmpty())
-            assertEquals(0, subjectRepo.fetchSubjectDetailCallCount)
         }
 
     @Test

@@ -91,15 +91,6 @@ interface ScheduleRepository {
         limit: Int = 8,
     ): List<com.infinitezerone.minibgm.core.model.LocalSubjectMatch>
 
-    /**
-     * 批量取本地排期表里的番名（0 请求）：`bgmId -> 中文名/原名`。
-     *
-     * 时刻表的名单裁剪会保留用户所有在追条目，因此在追番剧的名字可直接由本地补齐，
-     * 无需逐部回源详情接口——避免把一次页面渲染变成 N 次网络扇出。
-     * 未收录的 id 不出现在结果中，由调用方降级。
-     */
-    suspend fun getLocalSubjectTitles(ids: List<Long>): Map<Long, String>
-
     /** 放送时刻表默认筛选：false 为全部，true 为仅展示我追的番 */
     suspend fun getScheduleDefaultOnlyWatching(): Boolean
 
@@ -291,13 +282,6 @@ class ScheduleRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("同步番组数据"))
         }
-
-    override suspend fun getLocalSubjectTitles(ids: List<Long>): Map<Long, String> {
-        if (ids.isEmpty()) return emptyMap()
-        return scheduleDao
-            .getSchedulesByIds(ids)
-            .associate { it.bgmId to it.titleCn.ifBlank { it.title } }
-    }
 
     override suspend fun searchLocalSubjects(
         query: String,
