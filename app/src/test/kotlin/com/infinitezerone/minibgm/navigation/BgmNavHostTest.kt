@@ -12,7 +12,6 @@ import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
-import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -31,7 +30,6 @@ class BgmNavHostTest {
     fun isTopLevelRoute_returnsFalse_forSecondaryAndDetailRoutes() {
         assertFalse(isTopLevelRoute(SubjectDetailRoute(1001L)))
         assertFalse(isTopLevelRoute(SearchRoute("test")))
-        assertFalse(isTopLevelRoute(UserCollectionsRoute(3)))
         assertFalse(isTopLevelRoute(AssistantRoute()))
         assertFalse(isTopLevelRoute(SeasonalGuideRoute()))
         assertFalse(isTopLevelRoute(LinkedSubjectRoute(1002L)))

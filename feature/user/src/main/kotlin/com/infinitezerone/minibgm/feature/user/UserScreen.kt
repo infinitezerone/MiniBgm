@@ -1,12 +1,12 @@
 package com.infinitezerone.minibgm.feature.user
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -41,32 +42,46 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserAvatar
+import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
+/**
+ * 个人页四层结构（对齐主流社区 App 个人页与仓库内 `SubjectDetailScreen` 的既有范式）：
+ * 身份头部 → 通栏数字带 → 吸顶分区 Tab → 当前分区内容流。
+ */
 @Composable
 fun UserScreen(
-    onCollectionClick: (CollectionType) -> Unit = {},
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
+    collectionsViewModel: UserCollectionsViewModel = koinViewModel(),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val collectionsState by collectionsViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
+    // 分区默认落在「在看」，进页面即可见内容，无需用户先手动切一次 Tab
+    LaunchedEffect(collectionsViewModel) {
+        collectionsViewModel.setInitialType(CollectionType.DOING)
+    }
+
     UserScreenContent(
         uiState = uiState,
+        collectionsState = collectionsState,
         onLogin = {
             coroutineScope.launch {
                 val authorizeUrl = viewModel.beginLogin()
@@ -74,6 +89,8 @@ fun UserScreen(
             }
         },
         onRefresh = {
+            // 下拉刷新同时覆盖两个数据块：个人资料/收藏计数（头部与 Tab 计数）与当前分区的收藏列表
+            collectionsViewModel.refresh()
             viewModel.refresh { success ->
                 coroutineScope.launch {
                     if (success) {
@@ -90,24 +107,33 @@ fun UserScreen(
         onSwitchAccount = viewModel::switchAccount,
         onLogoutAccount = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
-        onCollectionClick = onCollectionClick,
+        onSelectCollectionType = collectionsViewModel::selectType,
+        onSelectSubjectFilter = collectionsViewModel::selectSubjectFilter,
+        onLoadMore = collectionsViewModel::loadMore,
+        onIncrementProgress = collectionsViewModel::incrementEpisodeProgress,
+        onSubjectClick = onSubjectClick,
         scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun UserScreenContent(
     uiState: UserUiState,
+    collectionsState: UserCollectionsUiState,
     onLogin: () -> Unit,
     onRefresh: () -> Unit,
     onSettingsClick: () -> Unit,
     onSwitchAccount: (Long) -> Unit,
     onLogoutAccount: (Long) -> Unit,
     onLogoutAll: () -> Unit,
-    onCollectionClick: (CollectionType) -> Unit,
+    onSelectCollectionType: (CollectionType) -> Unit,
+    onSelectSubjectFilter: (CollectionSubjectFilter) -> Unit,
+    onLoadMore: (CollectionType) -> Unit,
+    onIncrementProgress: (UserCollection) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
     scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -117,10 +143,32 @@ fun UserScreenContent(
     var showLogoutAllDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(scrollToTop) {
         scrollToTop?.collect {
             listState.animateScrollToItem(0)
+        }
+    }
+
+    // 数字带位于头部之下、吸顶 Tab 之上，据此推出 Tab 在列表中的下标（供点击数字带跳转用）
+    val statsVisible = uiState.trackingFootprint != null
+    val tabsIndex = if (statsVisible) 2 else 1
+
+    // 触底加载：滑动到列表末尾（倒数第 3 项以内）且有更多数据时自动增量加载
+    val activeType = collectionsState.selectedType
+    val activeHasMore = collectionsState.hasMoreByType[activeType] ?: false
+    LaunchedEffect(listState, activeType, activeHasMore, collectionsState.loadingMoreTypes) {
+        if (!activeHasMore) return@LaunchedEffect
+        snapshotFlow {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            layoutInfo.totalItemsCount > 0 && lastVisibleIndex >= layoutInfo.totalItemsCount - 3
+        }.distinctUntilChanged().collect { shouldLoadMore ->
+            val loadingMore = collectionsState.loadingMoreTypes.contains(collectionsState.selectedType)
+            if (shouldLoadMore && !loadingMore) {
+                onLoadMore(collectionsState.selectedType)
+            }
         }
     }
 
@@ -173,21 +221,17 @@ fun UserScreenContent(
         modifier = modifier,
     ) { innerPadding ->
         PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
+            isRefreshing = uiState.isRefreshing || collectionsState.isRefreshing,
             onRefresh = onRefresh,
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            val adaptiveInfo = LocalWindowAdaptiveInfo.current
-            val isWideScreen = adaptiveInfo.isWide
-
             when {
                 uiState.isLoading -> {
                     // 首帧加载态：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
                     UserScreenSkeleton(
-                        isWideScreen = isWideScreen,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -201,115 +245,53 @@ fun UserScreenContent(
                     )
                 }
 
-                isWideScreen -> {
-                    // 已登录宽屏双栏模式
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 24.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    ) {
-                        // 左栏：个人资料概览与多账号管理
-                        LazyColumn(
-                            state = listState,
-                            modifier =
-                                Modifier
-                                    .weight(0.45f)
-                                    .fillMaxHeight(),
-                            contentPadding = PaddingValues(bottom = 96.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            item(key = "wide_profile_header") {
-                                UserProfileHeaderCard(
-                                    profile = uiState.activeProfile,
-                                    savedAccountsCount = uiState.savedAccounts.size,
-                                    trackingFootprint = uiState.trackingFootprint,
-                                    onManageAccountsClick = { showAccountSheet = true },
-                                    onFootprintClick = { onCollectionClick(CollectionType.DOING) },
-                                )
-                            }
-
-                            if (uiState.savedAccounts.size > 1) {
-                                item(key = "wide_multi_account_card") {
-                                    MultiAccountQuickCard(
-                                        accounts = uiState.savedAccounts,
-                                        activeProfile = uiState.activeProfile,
-                                        onSwitchAccount = onSwitchAccount,
-                                        onManageAccountsClick = { showAccountSheet = true },
-                                        onAddAccountClick = {
-                                            showAccountSheet = false
-                                            onLogin()
-                                        },
-                                    )
-                                }
-                            }
-                        }
-
-                        // 右栏：五维收藏分布全景看板
-                        LazyColumn(
-                            modifier =
-                                Modifier
-                                    .weight(0.55f)
-                                    .fillMaxHeight(),
-                            contentPadding = PaddingValues(bottom = 96.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            item(key = "wide_collections_overview") {
-                                CollectionOverviewCard(
-                                    isLoggedIn = true,
-                                    collectionCounts = uiState.collectionCounts,
-                                    isCountsLoading = uiState.isCountsLoading,
-                                    onCollectionClick = onCollectionClick,
-                                    onLogin = onLogin,
-                                )
-                            }
-                        }
-                    }
-                }
-
                 else -> {
-                    // 已登录单栏竖屏模式
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(bottom = 96.dp),
                     ) {
-                        item(key = "profile_header") {
-                            UserProfileHeaderCard(
+                        item(key = "profile_hero") {
+                            UserProfileHero(
                                 profile = uiState.activeProfile,
                                 savedAccountsCount = uiState.savedAccounts.size,
-                                trackingFootprint = uiState.trackingFootprint,
                                 onManageAccountsClick = { showAccountSheet = true },
-                                onFootprintClick = { onCollectionClick(CollectionType.DOING) },
                             )
                         }
 
-                        if (uiState.savedAccounts.size > 1) {
-                            item(key = "multi_account_card") {
-                                MultiAccountQuickCard(
-                                    accounts = uiState.savedAccounts,
-                                    activeProfile = uiState.activeProfile,
-                                    onSwitchAccount = onSwitchAccount,
-                                    onManageAccountsClick = { showAccountSheet = true },
-                                    onAddAccountClick = {
-                                        showAccountSheet = false
-                                        onLogin()
+                        uiState.trackingFootprint?.let { footprint ->
+                            item(key = "tracking_stats") {
+                                TrackingStatsRow(
+                                    footprint = footprint,
+                                    onClick = {
+                                        coroutineScope.launch { listState.animateScrollToItem(tabsIndex) }
                                     },
                                 )
                             }
                         }
 
-                        item(key = "collections_overview") {
-                            CollectionOverviewCard(
-                                isLoggedIn = true,
-                                collectionCounts = uiState.collectionCounts,
-                                isCountsLoading = uiState.isCountsLoading,
-                                onCollectionClick = onCollectionClick,
-                                onLogin = onLogin,
+                        stickyHeader(key = "collection_tabs") {
+                            CollectionTypeTabs(
+                                selectedType = collectionsState.selectedType,
+                                counts = uiState.collectionCounts,
+                                onSelectType = onSelectCollectionType,
                             )
                         }
+
+                        item(key = "subject_filter") {
+                            SubjectFilterRow(
+                                selectedFilter = collectionsState.selectedSubjectFilter,
+                                onSelectFilter = onSelectSubjectFilter,
+                            )
+                        }
+
+                        collectionSection(
+                            state = collectionsState,
+                            onSubjectClick = onSubjectClick,
+                            onIncrementProgress = onIncrementProgress,
+                            onRefresh = onRefresh,
+                            onLoadMore = onLoadMore,
+                        )
                     }
                 }
             }
@@ -418,6 +400,80 @@ fun UserScreenContent(
     }
 }
 
+/**
+ * 第四层：当前分区的收藏内容流。
+ *
+ * 数据由 [UserCollectionsViewModel] 按分区懒加载（进入分区才发 1 次请求），
+ * 因此这里只负责把已加载状态映射成列表项，不做任何请求编排。
+ */
+private fun LazyListScope.collectionSection(
+    state: UserCollectionsUiState,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
+    onIncrementProgress: (UserCollection) -> Unit,
+    onRefresh: () -> Unit,
+    onLoadMore: (CollectionType) -> Unit,
+) {
+    val type = state.selectedType
+    val collections = state.collectionsByType[type].orEmpty()
+    val isLoaded = state.collectionsByType.containsKey(type)
+    val isLoading = state.loadingTypes.contains(type) || (state.isLoading && !isLoaded)
+    val errorMessage = state.errorByType[type] ?: state.error
+    val isLoadingMore = state.loadingMoreTypes.contains(type)
+    val hasMore = state.hasMoreByType[type] ?: false
+
+    when {
+        isLoading && !isLoaded -> {
+            item(key = "collection_loading") {
+                CollectionLoadingView(modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+
+        errorMessage != null && collections.isEmpty() -> {
+            item(key = "collection_error") {
+                ErrorCollectionsView(
+                    errorMessage = errorMessage,
+                    onRetry = onRefresh,
+                )
+            }
+        }
+
+        isLoaded && collections.isEmpty() -> {
+            item(key = "collection_empty") {
+                EmptyCollectionsView(onRefresh = onRefresh)
+            }
+        }
+
+        else -> {
+            items(
+                items = collections,
+                key = { "collection_${it.subjectId}" },
+            ) { item ->
+                UserCollectionCard(
+                    collection = item,
+                    isUpdating = state.updatingSubjectIds.contains(item.subjectId),
+                    onSubjectClick = onSubjectClick,
+                    onIncrementProgress = { onIncrementProgress(item) },
+                    modifier =
+                        Modifier.padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 6.dp,
+                            bottom = 6.dp,
+                        ),
+                )
+            }
+
+            item(key = "collection_footer") {
+                CollectionListFooter(
+                    isLoadingMore = isLoadingMore,
+                    hasMore = hasMore,
+                    loadedCount = collections.size,
+                )
+            }
+        }
+    }
+}
+
 // ---------------- Previews ----------------
 
 private val previewProfile1 =
@@ -430,14 +486,60 @@ private val previewProfile1 =
         sign = "探索二次元与科技的边界",
     )
 
-private val previewProfile2 =
-    UserProfile(
-        id = 654321L,
-        username = "anime_lover",
-        nickname = "马甲二号",
-        userGroup = 1,
-        avatar = UserAvatar(large = "", medium = "", small = ""),
-        sign = "补番进行中...",
+private val previewCollections =
+    listOf(
+        UserCollection(
+            userId = 123456L,
+            subjectId = 1001L,
+            subjectType = 2,
+            rate = 8,
+            type = CollectionType.DOING.value,
+            comment = "分镜稳，节奏舒服。",
+            epStatus = 7,
+            volStatus = 0,
+            updatedAt = "2026-09-26T14:30:00Z",
+        ),
+        UserCollection(
+            userId = 123456L,
+            subjectId = 1002L,
+            subjectType = 2,
+            rate = 0,
+            type = CollectionType.DOING.value,
+            comment = "",
+            epStatus = 3,
+            volStatus = 0,
+            updatedAt = "2026-09-25T10:00:00Z",
+        ),
+    )
+
+private fun previewCollectionsState() =
+    UserCollectionsUiState(
+        isLoggedIn = true,
+        activeProfile = previewProfile1,
+        selectedType = CollectionType.DOING,
+        collectionsByType = mapOf(CollectionType.DOING to previewCollections),
+    )
+
+private fun previewUserState() =
+    UserUiState(
+        isLoggedIn = true,
+        activeProfile = previewProfile1,
+        savedAccounts = listOf(previewProfile1),
+        collectionCounts =
+            mapOf(
+                CollectionType.DOING to 8,
+                CollectionType.WISH to 24,
+                CollectionType.COLLECT to 142,
+                CollectionType.ON_HOLD to 3,
+                CollectionType.DROPPED to 1,
+            ),
+        trackingFootprint =
+            TrackingFootprint(
+                watchingCount = 8,
+                episodesWatched = 96,
+                monthActiveCount = 3,
+                lastActiveAtIso = "2026-09-26T14:30:00Z",
+            ),
     )
 
 @ThemePreviews
@@ -446,13 +548,18 @@ private fun UserScreenLoadingPreview() {
     MiniBgmTheme {
         UserScreenContent(
             uiState = UserUiState(isLoading = true),
+            collectionsState = UserCollectionsUiState(),
             onLogin = {},
             onRefresh = {},
             onSettingsClick = {},
             onSwitchAccount = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onCollectionClick = {},
+            onSelectCollectionType = {},
+            onSelectSubjectFilter = {},
+            onLoadMore = {},
+            onIncrementProgress = {},
+            onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }
@@ -464,13 +571,18 @@ private fun UserScreenUnauthenticatedPreview() {
     MiniBgmTheme {
         UserScreenContent(
             uiState = UserUiState(isLoggedIn = false),
+            collectionsState = UserCollectionsUiState(),
             onLogin = {},
             onRefresh = {},
             onSettingsClick = {},
             onSwitchAccount = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onCollectionClick = {},
+            onSelectCollectionType = {},
+            onSelectSubjectFilter = {},
+            onLoadMore = {},
+            onIncrementProgress = {},
+            onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }
@@ -478,73 +590,22 @@ private fun UserScreenUnauthenticatedPreview() {
 
 @ThemePreviews
 @Composable
-private fun UserScreenSingleAccountPreview() {
+private fun UserScreenLoggedInPreview() {
     MiniBgmTheme {
         UserScreenContent(
-            uiState =
-                UserUiState(
-                    isLoggedIn = true,
-                    activeProfile = previewProfile1,
-                    savedAccounts = listOf(previewProfile1),
-                    collectionCounts =
-                        mapOf(
-                            CollectionType.DOING to 8,
-                            CollectionType.WISH to 24,
-                            CollectionType.COLLECT to 142,
-                            CollectionType.ON_HOLD to 3,
-                            CollectionType.DROPPED to 1,
-                        ),
-                    trackingFootprint =
-                        TrackingFootprint(
-                            watchingCount = 8,
-                            episodesWatched = 96,
-                            monthActiveCount = 3,
-                            lastActiveAtIso = "2026-09-26T14:30:00Z",
-                        ),
-                ),
+            uiState = previewUserState(),
+            collectionsState = previewCollectionsState(),
             onLogin = {},
             onRefresh = {},
             onSettingsClick = {},
             onSwitchAccount = {},
             onLogoutAccount = {},
             onLogoutAll = {},
-            onCollectionClick = {},
-            snackbarHostState = remember { SnackbarHostState() },
-        )
-    }
-}
-
-@ThemePreviews
-@Composable
-private fun UserScreenMultiAccountPreview() {
-    MiniBgmTheme {
-        UserScreenContent(
-            uiState =
-                UserUiState(
-                    isLoggedIn = true,
-                    activeProfile = previewProfile1,
-                    savedAccounts = listOf(previewProfile1, previewProfile2),
-                    collectionCounts =
-                        mapOf(
-                            CollectionType.DOING to 8,
-                            CollectionType.WISH to 24,
-                            CollectionType.COLLECT to 142,
-                        ),
-                    trackingFootprint =
-                        TrackingFootprint(
-                            watchingCount = 8,
-                            episodesWatched = 96,
-                            monthActiveCount = 3,
-                            lastActiveAtIso = "2026-09-26T14:30:00Z",
-                        ),
-                ),
-            onLogin = {},
-            onRefresh = {},
-            onSettingsClick = {},
-            onSwitchAccount = {},
-            onLogoutAccount = {},
-            onLogoutAll = {},
-            onCollectionClick = {},
+            onSelectCollectionType = {},
+            onSelectSubjectFilter = {},
+            onLoadMore = {},
+            onIncrementProgress = {},
+            onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
     }

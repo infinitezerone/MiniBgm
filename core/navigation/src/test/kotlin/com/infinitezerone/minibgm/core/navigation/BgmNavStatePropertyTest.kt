@@ -24,7 +24,7 @@ private fun <T> List<T>.cyclic(index: Int): T = get(((index % size) + size) % si
  * 2. 顶层历史首元素恒为 [ScheduleRoute]（exit through home）；
  * 3. 子栈中 [SubjectDetailRoute] 至多一个（连续点选条目是 replace 不是 push）；
  * 4. 任意时刻入栈 [SubjectDetailRoute] 后，子栈恰为 `[Tab根, 条目详情]`（返回一次必回到列表）；
- * 5. 入栈 [SearchRoute]/[UserCollectionsRoute] 后，子栈恰为 `[Tab根, 二级页]`（清理残留详情层级）；
+ * 5. 入栈 [SearchRoute] 后，子栈恰为 `[Tab根, 二级页]`（清理残留详情层级）；
  * 6. 从任意状态连续 [BgmNavState.goBack] 有界可达起始 Tab 根，且此后再退即抛出（应用出口唯一）。
  */
 class BgmNavStatePropertyTest {
@@ -78,15 +78,6 @@ class BgmNavStatePropertyTest {
     ) : Action {
         override fun applyTo(state: BgmNavState): Boolean {
             state.navigateTo(SearchRoute(initialQuery = RANDOM_QUERIES.cyclic(index)))
-            return true
-        }
-    }
-
-    private data class PushCollections(
-        val seed: Long,
-    ) : Action {
-        override fun applyTo(state: BgmNavState): Boolean {
-            state.navigateTo(UserCollectionsRoute(initialType = (seed % 3).toInt() + 1))
             return true
         }
     }
@@ -158,19 +149,18 @@ class BgmNavStatePropertyTest {
 
     private fun randomActions(rng: Random): List<Action> =
         List(rng.nextInt(10, 40)) {
-            when (rng.nextInt(13)) {
+            when (rng.nextInt(12)) {
                 0 -> PushDetail(rng.nextLong())
                 1 -> PushLinked(rng.nextLong())
                 2 -> PushEpisode(rng.nextLong())
                 3 -> PushTag(rng.nextInt())
                 4 -> PushSearch(rng.nextInt())
-                5 -> PushCollections(rng.nextLong())
-                6 -> PushAssistant
-                7 -> PushSeasonalGuide(rng.nextInt(2020, 2030), rng.nextInt(1, 13))
-                8 -> PushTopic(rng.nextLong())
-                9 -> PushPlayer(rng.nextLong())
-                10 -> PushPlaybackRules
-                11 -> SwitchTab(rng.nextInt())
+                5 -> PushAssistant
+                6 -> PushSeasonalGuide(rng.nextInt(2020, 2030), rng.nextInt(1, 13))
+                7 -> PushTopic(rng.nextLong())
+                8 -> PushPlayer(rng.nextLong())
+                9 -> PushPlaybackRules
+                10 -> SwitchTab(rng.nextInt())
                 else -> GoBack
             }
         }
@@ -201,7 +191,7 @@ class BgmNavStatePropertyTest {
             state.currentTopLevelKey,
             stack.first(),
         )
-        // 3. 子栈中 SubjectDetailRoute 至多一个；同类二级页（搜索/收藏）也至多一个
+        // 3. 子栈中 SubjectDetailRoute 至多一个；同类二级页（搜索）也至多一个
         val detailCount = stack.count { it is SubjectDetailRoute }
         assertTrue(
             "$context: 子栈中 SubjectDetailRoute 出现 $detailCount 次（>1 意味着条目详情被 push 而非 replace）：$stack",
@@ -211,11 +201,6 @@ class BgmNavStatePropertyTest {
         assertTrue(
             "$context: 子栈中 SearchRoute 出现 $searchCount 次（同类二级页应替换而非堆叠）：$stack",
             searchCount <= 1,
-        )
-        val collectionsCount = stack.count { it is UserCollectionsRoute }
-        assertTrue(
-            "$context: 子栈中 UserCollectionsRoute 出现 $collectionsCount 次（同类二级页应替换而非堆叠）：$stack",
-            collectionsCount <= 1,
         )
         val assistantCount = stack.count { it is AssistantRoute }
         assertTrue(
@@ -277,7 +262,7 @@ class BgmNavStatePropertyTest {
     fun randomSequences_backReturnsToListAfterDetailSelection() {
         // 分栏模式核心契约：在"Tab 根 ↔ 详情钻取链"路径上（不含搜索等二级页），
         // 点选条目详情后子栈恰为 [Tab根, 详情]，返回一次必回到 Tab 根而非倒退到上一个条目。
-        // 注：搜索/收藏页上点详情的合法路径为 [根, 二级页, 详情]，返回回到二级页，另行覆盖。
+        // 注：搜索页上点详情的合法路径为 [根, 二级页, 详情]，返回回到二级页，另行覆盖。
         val seeds = listOf(1L, 7L, 42L, 2026L, 0x5EEDL)
         for (seed in seeds) {
             val rng = Random(seed)
@@ -326,7 +311,7 @@ class BgmNavStatePropertyTest {
                 )[rng.nextInt(5)].applyTo(state)
             }
             // 声明的契约：进入二级列表页清理全部详情层级残留，二级页之下只保留 Tab 根；
-            // 二级页之间可以共存（如 [根, Search, Collections]），但详情链不得残留在其上方
+            // 二级页之间可以共存（如 [根, Search, Assistant]），但详情链不得残留在其上方
             state.navigateTo(SearchRoute())
             assertTrue(
                 "seed=$seed: 进入搜索后详情层级应被清理，实际 ${state.currentSubStack.toList()}",
@@ -334,15 +319,6 @@ class BgmNavStatePropertyTest {
             )
             assertTrue(
                 "seed=$seed: 进入搜索后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
-                state.currentSubStack.first() == state.currentTopLevelKey,
-            )
-            state.navigateTo(UserCollectionsRoute())
-            assertTrue(
-                "seed=$seed: 进入收藏列表后详情层级应被清理，实际 ${state.currentSubStack.toList()}",
-                state.currentSubStack.none { it is SubjectDetailRoute },
-            )
-            assertTrue(
-                "seed=$seed: 进入收藏列表后子栈应以 Tab 根开始，实际 ${state.currentSubStack.toList()}",
                 state.currentSubStack.first() == state.currentTopLevelKey,
             )
             state.navigateTo(AssistantRoute(prefillPrompt = "帮我找《测试番剧》第 3 话的在线观看页面"))
@@ -368,7 +344,7 @@ class BgmNavStatePropertyTest {
 
     @Test
     fun randomSequences_detailOverSecondLevel_backReturnsToSecondLevel() {
-        // 搜索/收藏页点选条目是合法的 [根, 二级页, 详情] 路径：返回一次回到二级页（结果列表），
+        // 搜索页点选条目是合法的 [根, 二级页, 详情] 路径：返回一次回到二级页（结果列表），
         // 再次点选新详情时替换旧详情而非堆叠
         val seeds = listOf(1L, 7L, 42L, 2026L, 0x5EEDL)
         for (seed in seeds) {

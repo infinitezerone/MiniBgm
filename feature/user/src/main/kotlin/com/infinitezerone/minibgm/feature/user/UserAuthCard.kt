@@ -38,8 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * 未登录访客状态个人卡片：
- * 结构与 [UserProfileHeaderCard] 严格对齐（76dp 质感头像 + 标题副标 + 紧凑操作入口），
+ * 未登录访客状态个人卡片（当前无调用点，保留备选形态）：
+ * 结构与 [UserProfileHero] 对齐（圆形头像 + 标题副标 + 紧凑操作入口），
  * 消除原本 400dp 大面积推销文案带来的臃肿感，登录前后视觉重心保持高度一致与克制。
  */
 @Composable

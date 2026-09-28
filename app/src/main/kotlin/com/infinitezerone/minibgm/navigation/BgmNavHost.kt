@@ -25,7 +25,6 @@ import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
-import com.infinitezerone.minibgm.core.navigation.UserCollectionsRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.feature.assistant.navigation.assistantEntry
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
@@ -40,7 +39,6 @@ import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
 import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
-import com.infinitezerone.minibgm.feature.user.navigation.userCollectionsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 
@@ -124,9 +122,7 @@ fun BgmNavHost(
                             )
 
                             userEntry(
-                                onCollectionClick = { type ->
-                                    navState.navigateTo(UserCollectionsRoute(type.value))
-                                },
+                                onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSettingsClick = { navState.navigateTo(SettingsRoute) },
                                 scrollToTop = userScrollToTop,
                                 metadata = bgmTopLevelTransitionMetadata,
@@ -141,12 +137,6 @@ fun BgmNavHost(
                             playbackRulesEntry(
                                 onBackClick = { navState.goBack() },
                                 onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
-                                metadata = bgmListPane(detailPlaceholder),
-                            )
-
-                            userCollectionsEntry(
-                                onSubjectClick = { route -> navState.navigateTo(route) },
-                                onBackClick = { navState.goBack() },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 

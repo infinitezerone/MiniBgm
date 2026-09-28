@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -29,268 +29,279 @@ import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 
 /**
- * 个人中心首帧加载骨架屏：
- * 在冷启动或首次切换进入「我的」Tab 且凭据库尚未返回有效会话判定前展示，
- * 严格对齐真实主页卡片的内外边距与几何形态，避免首帧突兀闪烁「未登录引导卡片」。
+ * 个人页首帧加载骨架屏：
+ * 在冷启动或首次切换进入「我的」Tab 且凭据库尚未返回有效会话判定前展示。
+ *
+ * 几何严格对齐四层结构的真实排版——身份头部（无卡片外壳）→ 通栏数字带 → 吸顶分区 Tab → 收藏内容流，
+ * 避免首帧突兀闪烁「未登录引导卡片」，也避免加载完成时整页跳版。
  */
 @Composable
 internal fun UserScreenSkeleton(
-    isWideScreen: Boolean,
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    if (isWideScreen) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(bottom = 96.dp),
+    ) {
+        UserProfileHeroSkeleton(skeletonState = skeletonState)
+        TrackingStatsSkeleton(skeletonState = skeletonState)
+        CollectionTabsSkeleton(skeletonState = skeletonState)
+        Spacer(modifier = Modifier.height(12.dp))
+        CollectionListSkeleton(skeletonState = skeletonState)
+    }
+}
+
+/** 第一层身份头部骨架：与 [UserProfileHero] 1:1 几何对齐（无卡片外壳，头像 88dp） */
+@Composable
+private fun UserProfileHeroSkeleton(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 18.dp),
+    ) {
         Row(
-            modifier =
-                modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(
+            SkeletonBox(
                 modifier =
                     Modifier
-                        .weight(0.45f)
-                        .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                UserProfileHeaderSkeleton(skeletonState = skeletonState)
-            }
+                        .size(88.dp)
+                        .clip(CircleShape),
+                state = skeletonState,
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
             Column(
-                modifier =
-                    Modifier
-                        .weight(0.55f)
-                        .fillMaxHeight(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                CollectionOverviewSkeleton(skeletonState = skeletonState)
+                // 昵称（headlineSmall）
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                    state = skeletonState,
+                )
+                // 身份元信息（@用户名 · UID）
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.40f)
+                            .height(13.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                    state = skeletonState,
+                )
+                // 入站年限
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.30f)
+                            .height(11.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                    state = skeletonState,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                // 会员 / 账号胶囊
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 84.dp, height = 20.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 84.dp, height = 20.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                        state = skeletonState,
+                    )
+                }
             }
         }
-    } else {
-        Column(
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 签名行
+        SkeletonBox(
             modifier =
-                modifier
-                    .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                Modifier
+                    .fillMaxWidth(0.75f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+            state = skeletonState,
+        )
+    }
+}
+
+/** 第二层通栏数字带骨架：等分三格 + 上下细分隔线 */
+@Composable
+private fun TrackingStatsSkeleton(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            UserProfileHeaderSkeleton(skeletonState = skeletonState)
-            CollectionOverviewSkeleton(skeletonState = skeletonState)
+            repeat(3) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 34.dp, height = 22.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 44.dp, height = 11.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                        state = skeletonState,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+        SkeletonBox(
+            modifier =
+                Modifier
+                    .padding(top = 7.dp)
+                    .size(width = 96.dp, height = 11.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .align(Alignment.CenterHorizontally),
+            state = skeletonState,
+        )
+    }
+}
+
+/** 第三层吸顶分区 Tab 骨架：五等分 */
+@Composable
+private fun CollectionTabsSkeleton(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            repeat(5) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 46.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                        state = skeletonState,
+                    )
+                }
+            }
         }
     }
 }
 
-/** 个人资料概览卡片骨架：与 [UserProfileHeaderCard] 1:1 几何对齐 */
+/** 第四层收藏内容流骨架：三张与 [UserCollectionCard] 同高的占位 */
 @Composable
-internal fun UserProfileHeaderSkeleton(
+private fun CollectionListSkeleton(
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+        repeat(3) {
+            Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
             ) {
-                // 圆形头像骨架
-                SkeletonBox(
+                Row(
                     modifier =
                         Modifier
-                            .size(76.dp)
-                            .clip(CircleShape),
-                    state = skeletonState,
-                )
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 昵称条骨架
                     SkeletonBox(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(0.55f)
-                                .height(24.dp)
-                                .clip(RoundedCornerShape(6.dp)),
+                        modifier = Modifier.size(width = 64.dp, height = 88.dp),
+                        shape = RoundedCornerShape(8.dp),
                         state = skeletonState,
                     )
-                    // 身份元信息条骨架（@用户名 · UID）
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(0.40f)
-                                .height(14.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                        state = skeletonState,
-                    )
-                    // 会员徽章胶囊骨架
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .size(width = 84.dp, height = 20.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .fillMaxWidth(0.65f)
+                                    .height(16.dp),
+                            shape = RoundedCornerShape(4.dp),
                             state = skeletonState,
                         )
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .size(width = 84.dp, height = 20.dp)
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .fillMaxWidth(0.35f)
+                                    .height(12.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        SkeletonBox(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .height(8.dp),
+                            shape = RoundedCornerShape(4.dp),
                             state = skeletonState,
                         )
                     }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 签名行骨架：与真实卡片的细线签名排版等高
-            SkeletonBox(
-                modifier =
-                    Modifier
-                        .fillMaxWidth(0.75f)
-                        .height(16.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                state = skeletonState,
-            )
-
-            // 追番统计条骨架：真实卡片在有追番足迹时追加 14dp 间距 + 三等分数字格，
-            // 骨架按「有足迹」这一常见形态对齐，避免加载完成时头部突然长出一行。
-            // 格子高度对 titleMedium 数字行与 labelSmall 标签行——行高由它决定（尾部「最近打卡」是同行内联，不影响高度）。
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    repeat(3) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            SkeletonBox(
-                                modifier =
-                                    Modifier
-                                        .size(width = 34.dp, height = 19.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                state = skeletonState,
-                            )
-                            SkeletonBox(
-                                modifier =
-                                    Modifier
-                                        .size(width = 44.dp, height = 11.dp)
-                                        .clip(RoundedCornerShape(3.dp)),
-                                state = skeletonState,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 收藏概览全景看板骨架：与 [CollectionOverviewCard] 1:1 几何对齐 */
-@Composable
-internal fun CollectionOverviewSkeleton(
-    modifier: Modifier = Modifier,
-    skeletonState: SkeletonState = rememberSkeletonState(),
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            // 头部标题与收藏总量骨架（终态：标题 + 「共 N 条」副标，无右上入口）
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .size(width = 88.dp, height = 20.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                    state = skeletonState,
-                )
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .size(width = 52.dp, height = 12.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                    state = skeletonState,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 核心主区三大状态（在看、想看、看过）数字看板骨架
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                repeat(3) {
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .height(80.dp)
-                                .clip(RoundedCornerShape(14.dp)),
-                        state = skeletonState,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 五维占比条骨架
-            SkeletonBox(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                state = skeletonState,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 次级归档区两大状态（搁置、抛弃）骨架
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                repeat(2) {
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .height(44.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                        state = skeletonState,
-                    )
                 }
             }
         }
@@ -301,9 +312,6 @@ internal fun CollectionOverviewSkeleton(
 @Composable
 private fun UserScreenSkeletonPreview() {
     MiniBgmTheme {
-        UserScreenSkeleton(
-            isWideScreen = false,
-            modifier = Modifier.fillMaxSize(),
-        )
+        UserScreenSkeleton(modifier = Modifier.fillMaxSize())
     }
 }

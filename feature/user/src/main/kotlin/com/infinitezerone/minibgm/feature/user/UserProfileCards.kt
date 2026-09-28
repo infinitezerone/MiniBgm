@@ -19,15 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -51,16 +47,17 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnCl
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 /**
- * 个人资料主卡：头像主色氛围光 + 身份信息 + 编辑化签名排版。
- * 账号管理入口统一收敛到顶栏与「N 个账号」胶囊，不再重复铺设底部按钮。
+ * 个人页第一层：沉浸式身份头部。
+ *
+ * 不做卡片外壳——身份块、数字带、分区 Tab 应当读作同一个「个人页头部」，而不是三张并列的卡。
+ * 背景保留头像主色的氛围光（[ambientGlow]），提取失败时自动退化为无光晕，绝不影响主体内容。
+ * 账号管理入口统一收敛到顶栏与「N 个账号」胶囊，头部不再重复铺设按钮。
  */
 @Composable
-internal fun UserProfileHeaderCard(
+internal fun UserProfileHero(
     profile: UserProfile?,
     savedAccountsCount: Int,
-    trackingFootprint: TrackingFootprint? = null,
     onManageAccountsClick: () -> Unit,
-    onFootprintClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val sign = profile?.sign.orEmpty()
@@ -68,235 +65,227 @@ internal fun UserProfileHeaderCard(
     val isAdmin = profile?.userGroup == 11
     val ambientGlowState = rememberAmbientDominantColorState()
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .ambientGlow(dominantColor = ambientGlowState.dominantColor)
+                .padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 18.dp),
     ) {
-        Column(
-            modifier =
-                Modifier
-                    // 头像主色光晕：纯装饰，提取失败时自动退化为无光晕，绝不影响主体内容
-                    .ambientGlow(dominantColor = ambientGlowState.dominantColor)
-                    .padding(20.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+            // 头像：主色调内环。88dp —— 个人页头部的视觉锚点，比列表场景再大一档
+            Surface(
+                shape = CircleShape,
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(88.dp),
             ) {
-                // 头像：主色调内环
-                Surface(
-                    shape = CircleShape,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(76.dp),
-                ) {
-                    val avatarUrl = profile?.avatar?.bestAvatar.orEmpty()
-                    if (avatarUrl.isNotBlank()) {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = "用户头像",
-                            contentScale = ContentScale.Crop,
-                            onSuccess = ambientGlowState::onImageSuccess,
-                            onError = { ambientGlowState.onImageError() },
-                            modifier = Modifier.fillMaxSize(),
+                val avatarUrl = profile?.avatar?.bestAvatar.orEmpty()
+                if (avatarUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = "用户头像",
+                        contentScale = ContentScale.Crop,
+                        onSuccess = ambientGlowState::onImageSuccess,
+                        onError = { ambientGlowState.onImageError() },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(46.dp),
                         )
-                    } else {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(42.dp),
-                            )
-                        }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = profile?.displayName?.ifBlank { "Bangumi 用户" } ?: "Bangumi 用户",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // 身份元信息收敛为一行：@用户名 · UID
+                val uid = profile?.id ?: 0L
+                val metaLine =
+                    buildString {
+                        if (username.isNotBlank()) append("@$username")
+                        if (uid > 0L) {
+                            if (isNotEmpty()) append(" · ")
+                            append("UID $uid")
+                        }
+                    }
+                if (metaLine.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = profile?.displayName?.ifBlank { "Bangumi 用户" } ?: "Bangumi 用户",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
+                        text = metaLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    // 身份元信息收敛为一行：@用户名 · UID，取代零散的 UID 胶囊
-                    val uid = profile?.id ?: 0L
-                    val metaLine =
-                        buildString {
-                            if (username.isNotBlank()) append("@$username")
-                            if (uid > 0L) {
-                                if (isNotEmpty()) append(" · ")
-                                append("UID $uid")
-                            }
-                        }
-                    if (metaLine.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = metaLine,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    // 入站年限：对齐主流个人页把注册时间作为次要元信息单独成行的做法，不占统计格
-                    profile?.registeredYear?.let { year ->
-                        val years = TimeUtils.currentCstYearMonth().first - year
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                }
+                // 入站年限：对齐主流个人页把注册时间作为次要元信息单独成行的做法，不占统计格
+                profile?.registeredYear?.let { year ->
+                    val years = TimeUtils.currentCstYearMonth().first - year
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 会员 / 管理员徽章
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color =
+                            if (isAdmin) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
                     ) {
-                        // 会员 / 管理员徽章
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.WorkspacePremium,
+                                contentDescription = null,
+                                tint =
+                                    if (isAdmin) {
+                                        MaterialTheme.colorScheme.onTertiaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = if (isAdmin) "管理员" else "Bangumi 会员",
+                                style = MaterialTheme.typography.labelSmall,
+                                color =
+                                    if (isAdmin) {
+                                        MaterialTheme.colorScheme.onTertiaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    },
+                            )
+                        }
+                    }
+
+                    if (savedAccountsCount > 1) {
                         Surface(
                             shape = RoundedCornerShape(50),
-                            color =
-                                if (isAdmin) {
-                                    MaterialTheme.colorScheme.tertiaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                },
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            modifier =
+                                Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable(onClick = onManageAccountsClick),
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.WorkspacePremium,
-                                    contentDescription = null,
-                                    tint =
-                                        if (isAdmin) {
-                                            MaterialTheme.colorScheme.onTertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSecondaryContainer
-                                        },
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = if (isAdmin) "管理员" else "Bangumi 会员",
+                                    text = "$savedAccountsCount 个账号",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color =
-                                        if (isAdmin) {
-                                            MaterialTheme.colorScheme.onTertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSecondaryContainer
-                                        },
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 )
-                            }
-                        }
-
-                        if (savedAccountsCount > 1) {
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                modifier =
-                                    Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .clickable(onClick = onManageAccountsClick),
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                ) {
-                                    Text(
-                                        text = "$savedAccountsCount 个账号",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(14.dp),
+                                )
                             }
                         }
                     }
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-            // 个性签名：左侧主题色细线引导，随文本高度自适应，替代灰底气泡
-            Row(
+        // 个性签名：左侧主题色细线引导，随文本高度自适应，替代灰底气泡
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+        ) {
+            Box(
                 modifier =
                     Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .width(3.dp)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = sign.ifBlank { "这个人很神秘，什么都没写~" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color =
-                        if (sign.isNotBlank()) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        },
-                    fontStyle = if (sign.isBlank()) FontStyle.Italic else FontStyle.Normal,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            // 追番统计条：数字并入头部（借鉴社区 App 头像旁数字带），点击直达「在看」列表
-            trackingFootprint?.let { footprint ->
-                Spacer(modifier = Modifier.height(14.dp))
-                TrackingStatsRow(
-                    footprint = footprint,
-                    onClick = onFootprintClick,
-                )
-            }
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = sign.ifBlank { "这个人很神秘，什么都没写~" },
+                style = MaterialTheme.typography.bodySmall,
+                color =
+                    if (sign.isNotBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    },
+                fontStyle = if (sign.isBlank()) FontStyle.Italic else FontStyle.Normal,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
-/** 头部追番统计条：在看 / 累计追集 / 本月打卡 + 最近打卡时刻（装饰性信息 fail-open） */
+/**
+ * 个人页第二层：通栏数字带。
+ *
+ * 形态纪律（见 `docs/PROFILE_HUB_REDESIGN.md` §3）：全页只有这一排同形数字，
+ * 不再叠加第二排数字格。三条等分 + 上下细分隔线，读作一条「带」而不是一张卡。
+ * 点击整条跳转到「在看」分区列表。
+ */
 @Composable
-private fun TrackingStatsRow(
+internal fun TrackingStatsRow(
     footprint: TrackingFootprint,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(12.dp)
-    val bounceState = rememberBounceOnClick(pressedScale = 0.97f)
-    Surface(
+    val bounceState = rememberBounceOnClick(pressedScale = 0.98f)
+    Column(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
-                .clip(shape)
                 .bounceClickable(state = bounceState, onClickLabel = "查看看番足迹") { onClick() },
-        shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        )
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TrackingStatCell(
@@ -314,16 +303,25 @@ private fun TrackingStatsRow(
                 value = footprint.monthActiveCount.toString(),
                 modifier = Modifier.weight(1f),
             )
-            formatLastActiveAt(footprint.lastActiveAtIso)?.let { lastActive ->
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "最近打卡 · $lastActive",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        }
+        HorizontalDivider(
+            thickness = 0.5.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        )
+        // 最近打卡：装饰性信息，解析失败或缺失时整行不渲染（fail-open）
+        formatLastActiveAt(footprint.lastActiveAtIso)?.let { lastActive ->
+            Text(
+                text = "最近打卡 · $lastActive",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 7.dp),
+            )
         }
     }
 }
@@ -337,7 +335,7 @@ private fun TrackingStatCell(
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -358,214 +356,5 @@ private fun formatLastActiveAt(lastActiveAtIso: String?): String? {
         days == 1 -> "昨天"
         days < 30 -> "$days 天前"
         else -> TimeUtils.formatIsoToCstDate(lastActiveAtIso)
-    }
-}
-
-@Composable
-internal fun MultiAccountQuickCard(
-    accounts: List<UserProfile>,
-    activeProfile: UserProfile?,
-    onSwitchAccount: (Long) -> Unit,
-    onManageAccountsClick: () -> Unit,
-    onAddAccountClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.SwapHoriz,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "账号快捷切换",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-                // 管理入口：图标化胶囊，取代「管理 (N) ↗」文字符号
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .clickable(onClick = onManageAccountsClick),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = "管理",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(11.dp),
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                accounts.forEach { account ->
-                    val isActive = account.id == activeProfile?.id
-                    Surface(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .then(
-                                    if (!isActive) {
-                                        Modifier.clickable { onSwitchAccount(account.id) }
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        shape = RoundedCornerShape(12.dp),
-                        color =
-                            if (isActive) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                        border =
-                            if (isActive) {
-                                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                            } else {
-                                null
-                            },
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(36.dp),
-                            ) {
-                                val avatarUrl = account.avatar?.bestAvatar.orEmpty()
-                                if (avatarUrl.isNotBlank()) {
-                                    AsyncImage(
-                                        model = avatarUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                } else {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Person,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = account.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = "@${account.username}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-
-                            if (isActive) {
-                                Surface(
-                                    shape = RoundedCornerShape(50),
-                                    color = MaterialTheme.colorScheme.primary,
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(11.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text(
-                                            text = "使用中",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onPrimary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 添加账号：描边幽灵行，与账号行明确区分
-            Surface(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onAddAccountClick),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "添加其他账号",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        }
     }
 }

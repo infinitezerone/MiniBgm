@@ -68,11 +68,6 @@ data class LinkedSubjectRoute(
 ) : DetailChainRoute
 
 @Serializable
-data class UserCollectionsRoute(
-    val initialType: Int = 3,
-) : SubFeatureRoute
-
-@Serializable
 data class EpisodeDetailRoute(
     val episodeId: Long,
     val subjectId: Long,
