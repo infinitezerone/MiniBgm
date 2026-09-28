@@ -114,6 +114,14 @@ interface AniListMappingDao {
     suspend fun upsertMonthEtag(etag: BangumiDataMonthEtagEntity)
 }
 
+/** 追番足迹聚合投影：单行统计结果（表为空时 COUNT=0、SUM=0、MAX=NULL） */
+data class WatchingFootprintProjection(
+    val watchingCount: Int,
+    val episodesWatched: Int,
+    val monthActiveCount: Int,
+    val lastActiveAt: String?,
+)
+
 @Dao
 interface UserCollectionDao {
     @Query("SELECT * FROM user_collections WHERE userId = :userId AND type = :type ORDER BY updatedAt DESC")
@@ -121,6 +129,27 @@ interface UserCollectionDao {
         userId: Long,
         type: Int,
     ): Flow<List<UserCollectionEntity>>
+
+    /**
+     * 追番足迹聚合（在看状态，type = 3）：在看部数、在看中累计追集、
+     * 本月有打卡动作的部数与最近一次打卡时刻。
+     * updatedAt 为归一化 ISO 文本（TimeUtils.normalizeIsoUtc），LIKE 前缀匹配即按月过滤。
+     */
+    @Query(
+        """
+        SELECT
+            COUNT(*) AS watchingCount,
+            COALESCE(SUM(epStatus), 0) AS episodesWatched,
+            COALESCE(SUM(CASE WHEN updatedAt LIKE :monthPrefix || '%' THEN 1 ELSE 0 END), 0) AS monthActiveCount,
+            MAX(updatedAt) AS lastActiveAt
+        FROM user_collections
+        WHERE userId = :userId AND type = 3
+        """,
+    )
+    fun observeWatchingFootprint(
+        userId: Long,
+        monthPrefix: String,
+    ): Flow<WatchingFootprintProjection>
 
     @Query("SELECT * FROM user_collections WHERE userId = :userId AND subjectId = :subjectId")
     fun getCollectionBySubjectId(

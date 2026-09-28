@@ -127,6 +127,7 @@ fun BgmNavHost(
                                 onCollectionClick = { type ->
                                     navState.navigateTo(UserCollectionsRoute(type.value))
                                 },
+                                onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSettingsClick = { navState.navigateTo(SettingsRoute) },
                                 scrollToTop = userScrollToTop,
                                 metadata = bgmTopLevelTransitionMetadata,

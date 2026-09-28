@@ -5,14 +5,18 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.UserProfile
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +25,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -36,6 +45,8 @@ data class UserUiState(
     val isSyncing: Boolean = false,
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
+    val trackingFootprint: TrackingFootprint? = null,
+    val subjectActivity: SubjectActivityState = SubjectActivityState(),
     val airingReminderEnabled: Boolean = true,
     val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
@@ -64,18 +75,22 @@ private data class SyncSlice(
     val airDelayOffsetMinutes: Int,
 )
 
-/** 本地 UI 域切片：手动同步、收藏统计与刷新标记 */
+/** 本地 UI 域切片：手动同步、收藏统计、追番足迹与刷新标记 */
 private data class LocalSlice(
     val manualSyncing: Boolean,
     val collectionCounts: Map<CollectionType, Int>,
     val isCountsLoading: Boolean,
     val isRefreshing: Boolean,
+    val trackingFootprint: TrackingFootprint?,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class UserViewModel(
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
+    private val communityRepository: CommunityRepository,
+    private val subjectRepository: SubjectRepository,
     private val settingsRepository: SettingsRepository,
     private val syncManager: SyncManager,
 ) : ViewModel() {
@@ -128,14 +143,72 @@ class UserViewModel(
             SyncSlice(settings, workSyncing, delayMinutes)
         }
 
+    /** 在追动态参与方上限：取最近在追的前 N 部拉取最新讨论，控制网络扇出 */
+    private companion object {
+        const val ACTIVITY_SUBJECT_LIMIT = 3
+        const val ACTIVITY_TOPIC_LIMIT = 1
+    }
+
+    /**
+     * 在追动态流：在追（DOING）收藏变化（按条目集合去重）后，
+     * 对前 N 部各取最新一条讨论。讨论拉取失败静默降级为缺失该条（fail-open），
+     * 全部失败即为空列表、卡片由 UI 隐藏。仅在 UI 订阅期间活跃（WhileSubscribed）。
+     */
+    private val subjectActivityFlow: Flow<SubjectActivityState> =
+        collectionRepository
+            .getCollectionsByTypeStream(CollectionType.DOING)
+            .map { collections -> collections.take(ACTIVITY_SUBJECT_LIMIT).map { it.subjectId } }
+            .distinctUntilChanged()
+            .flatMapLatest { subjectIds ->
+                if (subjectIds.isEmpty()) {
+                    flowOf(SubjectActivityState())
+                } else {
+                    combine(
+                        subjectIds.map { subjectId -> observeSubjectLatestTopic(subjectId) },
+                    ) { items ->
+                        SubjectActivityState(
+                            items =
+                                items
+                                    .filterNotNull()
+                                    .sortedByDescending(SubjectActivityItem::updatedAtMs),
+                        )
+                    }.onStart { emit(SubjectActivityState(isLoading = true)) }
+                }
+            }
+
+    /** 单部在追番剧的最新讨论（含番名补全）；任一环节失败发 null */
+    private fun observeSubjectLatestTopic(subjectId: Long): Flow<SubjectActivityItem?> =
+        flow {
+            val topicsResult = communityRepository.getSubjectTopics(subjectId, limit = ACTIVITY_TOPIC_LIMIT)
+            val topic = (topicsResult as? AppResult.Success)?.data?.firstOrNull()
+            if (topic == null) {
+                emit(null)
+            } else {
+                // 番名经详情接口补全（同时写入 SubjectRepository 内存缓存，详情页可直接复用）
+                val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
+                val subject = (subjectResult as? AppResult.Success)?.data
+                emit(
+                    SubjectActivityItem(
+                        subjectId = subjectId,
+                        subjectName = subject?.nameCn?.ifBlank { subject.name } ?: subject?.name.orEmpty(),
+                        topicId = topic.id,
+                        topicTitle = topic.title,
+                        replyCount = topic.replyCount,
+                        updatedAtMs = maxOf(topic.updatedAt, topic.createdAt),
+                    ),
+                )
+            }
+        }
+
     private val localSlice: Flow<LocalSlice> =
         combine(
             isManualSyncing,
             collectionCountsFlow,
             isCountsLoadingFlow,
             isRefreshingFlow,
-        ) { manualSyncing, collectionCounts, isCountsLoading, isRefreshing ->
-            LocalSlice(manualSyncing, collectionCounts, isCountsLoading, isRefreshing)
+            collectionRepository.observeTrackingFootprint(),
+        ) { manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint ->
+            LocalSlice(manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint)
         }
 
     val uiState: StateFlow<UserUiState> =
@@ -143,7 +216,8 @@ class UserViewModel(
             authSlice,
             syncSlice,
             localSlice,
-        ) { auth, sync, local ->
+            subjectActivityFlow,
+        ) { auth, sync, local, subjectActivity ->
             UserUiState(
                 isLoggedIn = auth.isLoggedIn,
                 activeProfile = auth.activeProfile,
@@ -156,6 +230,8 @@ class UserViewModel(
                 isSyncing = sync.workSyncing || local.manualSyncing,
                 collectionCounts = local.collectionCounts,
                 isCountsLoading = local.isCountsLoading,
+                trackingFootprint = local.trackingFootprint,
+                subjectActivity = subjectActivity,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
                 airingDailySummaryEnabled = sync.settings.airingDailySummaryEnabled,
                 airingPreAirEnabled = sync.settings.airingPreAirEnabled,

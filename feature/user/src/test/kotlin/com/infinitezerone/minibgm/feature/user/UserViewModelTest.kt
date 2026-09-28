@@ -1,14 +1,17 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfileAlt
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,6 +37,8 @@ class UserViewModelTest {
         authRepo: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = false),
         scheduleRepo: FakeScheduleRepository = FakeScheduleRepository(),
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
+        communityRepo: FakeCommunityRepository = FakeCommunityRepository(),
+        subjectRepo: FakeSubjectRepository = FakeSubjectRepository(),
         settingsRepo: FakeSettingsRepository = FakeSettingsRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
     ): Triple<UserViewModel, FakeScheduleRepository, FakeSettingsRepository> {
@@ -42,6 +47,8 @@ class UserViewModelTest {
                 authRepository = authRepo,
                 scheduleRepository = scheduleRepo,
                 collectionRepository = collectionRepo,
+                communityRepository = communityRepo,
+                subjectRepository = subjectRepo,
                 settingsRepository = settingsRepo,
                 syncManager = syncManager,
             )
@@ -231,6 +238,58 @@ class UserViewModelTest {
 
             val state = viewModel.uiState.first { it.collectionCounts.isNotEmpty() }
             assertEquals(1, state.collectionCounts[com.infinitezerone.minibgm.core.model.CollectionType.DOING])
+        }
+
+    @Test
+    fun loggedInState_emitsTrackingFootprint() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendTrackingFootprint(
+                TrackingFootprint(
+                    watchingCount = 8,
+                    episodesWatched = 96,
+                    monthActiveCount = 3,
+                    lastActiveAtIso = "2026-09-26T14:30:00Z",
+                ),
+            )
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            val state = viewModel.uiState.first { it.trackingFootprint != null }
+            assertEquals(8, state.trackingFootprint?.watchingCount)
+            assertEquals(96, state.trackingFootprint?.episodesWatched)
+            assertEquals(3, state.trackingFootprint?.monthActiveCount)
+        }
+
+    @Test
+    fun loggedInState_withoutDoingCollections_emitsStableEmptySubjectActivity() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo = FakeCollectionRepository()
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            val state = viewModel.uiState.first { !it.isLoading }
+            assertTrue(state.subjectActivity.items.isEmpty())
+            // 无在追收藏时动态卡保持稳定空态（非加载中），UI 层据此隐藏卡片
+            assertFalse(state.subjectActivity.isLoading)
+        }
+
+    @Test
+    fun loggedOutState_subjectActivityStaysEmpty() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first { !it.isLoading }
+            assertTrue(state.subjectActivity.items.isEmpty())
+            assertFalse(state.subjectActivity.isLoading)
         }
 
     @Test

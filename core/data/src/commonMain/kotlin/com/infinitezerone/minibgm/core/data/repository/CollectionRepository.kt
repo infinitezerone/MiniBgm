@@ -32,6 +32,12 @@ interface CollectionRepository : UserDataClearable {
     /** 观察指定分类（想看/在看/看过等）的收藏列表 */
     fun getCollectionsByTypeStream(type: CollectionType): Flow<List<UserCollection>>
 
+    /**
+     * 观察追番足迹（本地「在看」聚合）：在看部数、累计追集、本月活跃部数与最近打卡时刻。
+     * 响应式绑定当前活跃账号；未登录时发出 null。
+     */
+    fun observeTrackingFootprint(): Flow<TrackingFootprint?>
+
     /** 从远端拉取指定用户的收藏列表 */
     suspend fun fetchUserCollections(
         username: String,
@@ -112,6 +118,17 @@ interface CollectionRepository : UserDataClearable {
     suspend fun syncWatchingCollections(): AppResult<Unit>
 }
 
+/**
+ * 追番足迹：基于本地「在看」收藏的轻量聚合统计。
+ * 本地表仅同步在看状态，统计口径均为「在看中」的数据；评分与长短评不在本地，不做分布统计。
+ */
+data class TrackingFootprint(
+    val watchingCount: Int,
+    val episodesWatched: Int,
+    val monthActiveCount: Int,
+    val lastActiveAtIso: String?,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class CollectionRepositoryImpl(
     private val apiService: BangumiApiService,
@@ -144,6 +161,26 @@ class CollectionRepositoryImpl(
                     userCollectionDao
                         .getCollectionsByType(userId, type.value)
                         .map { list -> list.map { it.asExternalModel() } }
+                }
+            }.distinctUntilChanged()
+
+    override fun observeTrackingFootprint(): Flow<TrackingFootprint?> =
+        activeUserIdFlow
+            .flatMapLatest { userId ->
+                if (userId == null) {
+                    flowOf(null)
+                } else {
+                    userCollectionDao
+                        // 月份前缀在流构建时取值：跨月后随下次订阅/账号切换自然刷新
+                        .observeWatchingFootprint(userId, TimeUtils.currentCstMonthPrefix())
+                        .map { projection ->
+                            TrackingFootprint(
+                                watchingCount = projection.watchingCount,
+                                episodesWatched = projection.episodesWatched,
+                                monthActiveCount = projection.monthActiveCount,
+                                lastActiveAtIso = projection.lastActiveAt,
+                            )
+                        }
                 }
             }.distinctUntilChanged()
 

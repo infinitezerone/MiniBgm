@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
@@ -46,6 +47,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -54,6 +56,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UserScreen(
     onCollectionClick: (CollectionType) -> Unit = {},
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
@@ -90,6 +93,7 @@ fun UserScreen(
         onLogoutAccount = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
         onCollectionClick = onCollectionClick,
+        onSubjectClick = onSubjectClick,
         scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
@@ -107,6 +111,7 @@ fun UserScreenContent(
     onLogoutAccount: (Long) -> Unit,
     onLogoutAll: () -> Unit,
     onCollectionClick: (CollectionType) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
@@ -261,6 +266,31 @@ fun UserScreenContent(
                                     onLogin = onLogin,
                                 )
                             }
+
+                            uiState.trackingFootprint?.takeIf { it.watchingCount > 0 }?.let { footprint ->
+                                item(key = "wide_tracking_footprint") {
+                                    TrackingFootprintCard(
+                                        footprint = footprint,
+                                        onCollectionClick = onCollectionClick,
+                                    )
+                                }
+                            }
+
+                            if (uiState.subjectActivity.isLoading || uiState.subjectActivity.items.isNotEmpty()) {
+                                item(key = "wide_subject_activity") {
+                                    SubjectActivityCard(
+                                        state = uiState.subjectActivity,
+                                        onSubjectClick = { subjectId, subjectName ->
+                                            onSubjectClick(
+                                                SubjectDetailRoute(
+                                                    subjectId = subjectId,
+                                                    initialName = subjectName,
+                                                ),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -304,6 +334,31 @@ fun UserScreenContent(
                                 onCollectionClick = onCollectionClick,
                                 onLogin = onLogin,
                             )
+                        }
+
+                        uiState.trackingFootprint?.takeIf { it.watchingCount > 0 }?.let { footprint ->
+                            item(key = "tracking_footprint") {
+                                TrackingFootprintCard(
+                                    footprint = footprint,
+                                    onCollectionClick = onCollectionClick,
+                                )
+                            }
+                        }
+
+                        if (uiState.subjectActivity.isLoading || uiState.subjectActivity.items.isNotEmpty()) {
+                            item(key = "subject_activity") {
+                                SubjectActivityCard(
+                                    state = uiState.subjectActivity,
+                                    onSubjectClick = { subjectId, subjectName ->
+                                        onSubjectClick(
+                                            SubjectDetailRoute(
+                                                subjectId = subjectId,
+                                                initialName = subjectName,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -489,6 +544,13 @@ private fun UserScreenSingleAccountPreview() {
                             CollectionType.ON_HOLD to 3,
                             CollectionType.DROPPED to 1,
                         ),
+                    trackingFootprint =
+                        TrackingFootprint(
+                            watchingCount = 8,
+                            episodesWatched = 96,
+                            monthActiveCount = 3,
+                            lastActiveAtIso = "2026-09-26T14:30:00Z",
+                        ),
                 ),
             onLogin = {},
             onRefresh = {},
@@ -517,6 +579,13 @@ private fun UserScreenMultiAccountPreview() {
                             CollectionType.DOING to 8,
                             CollectionType.WISH to 24,
                             CollectionType.COLLECT to 142,
+                        ),
+                    trackingFootprint =
+                        TrackingFootprint(
+                            watchingCount = 8,
+                            episodesWatched = 96,
+                            monthActiveCount = 3,
+                            lastActiveAtIso = "2026-09-26T14:30:00Z",
                         ),
                 ),
             onLogin = {},

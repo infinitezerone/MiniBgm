@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircleOutline
@@ -92,7 +91,7 @@ internal fun CollectionOverviewCard(
             ),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            // 头部：标题、总量与完整列表入口
+            // 头部：标题与收藏总量（未登录时仅保留登录入口）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

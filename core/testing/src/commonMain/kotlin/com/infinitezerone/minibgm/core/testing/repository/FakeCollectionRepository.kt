@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import kotlinx.coroutines.flow.Flow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.map
 
 class FakeCollectionRepository : CollectionRepository {
     private val collectionsState = MutableStateFlow<Map<Long, UserCollection>>(emptyMap())
+    private val trackingFootprintState = MutableStateFlow<TrackingFootprint?>(null)
 
     var fetchUserCollectionsResult: AppResult<List<UserCollection>>? = null
     var fetchUserCollectionsCallCount: Int = 0
@@ -35,7 +37,13 @@ class FakeCollectionRepository : CollectionRepository {
         collectionsState.value = collectionsState.value + (collection.subjectId to collection)
     }
 
+    fun sendTrackingFootprint(footprint: TrackingFootprint?) {
+        trackingFootprintState.value = footprint
+    }
+
     override fun getCollectionStream(subjectId: Long): Flow<UserCollection?> = collectionsState.map { it[subjectId] }
+
+    override fun observeTrackingFootprint(): Flow<TrackingFootprint?> = trackingFootprintState
 
     override fun getCollectionsByTypeStream(type: CollectionType): Flow<List<UserCollection>> =
         collectionsState.map { it.values.filter { col -> col.type == type.value } }

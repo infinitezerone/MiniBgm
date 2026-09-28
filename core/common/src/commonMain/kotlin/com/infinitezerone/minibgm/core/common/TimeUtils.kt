@@ -176,6 +176,28 @@ object TimeUtils {
         return local.year to local.month.number
     }
 
+    /** 当前 CST 年月前缀（yyyy-MM），供本地 SQLite 对归一化 ISO 文本做按月前缀过滤 */
+    fun currentCstMonthPrefix(): String {
+        val (year, month) = currentCstYearMonth()
+        return "%04d-%02d".format(year, month)
+    }
+
+    /** ISO-8601 时刻距今的日历日天数（按 CST 计）；解析失败返回 null */
+    fun daysSinceIsoUtc(isoString: String): Int? {
+        val millis = epochMillisOfIso(isoString) ?: return null
+        return try {
+            val then = Instant.fromEpochMilliseconds(millis).toLocalDateTime(timeZoneCst).date
+            val today =
+                Clock.System
+                    .now()
+                    .toLocalDateTime(timeZoneCst)
+                    .date
+            then.daysUntil(today)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * 将 "HH:mm" 格式时间字符串转换为全天分钟数 (0..1439)；空或非法返回 9999
      */

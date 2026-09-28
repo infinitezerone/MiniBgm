@@ -10,6 +10,7 @@ import androidx.datastore.core.WriteScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
+import com.infinitezerone.minibgm.core.database.dao.WatchingFootprintProjection
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -90,6 +91,20 @@ class CollectionRepositoryImplTest {
             userId: Long,
             subjectId: Long,
         ): Flow<UserCollectionEntity?> = stored.map { list -> list.firstOrNull { it.userId == userId && it.subjectId == subjectId } }
+
+        override fun observeWatchingFootprint(
+            userId: Long,
+            monthPrefix: String,
+        ): Flow<WatchingFootprintProjection> =
+            stored.map { list ->
+                val watching = list.filter { it.userId == userId && it.type == 3 }
+                WatchingFootprintProjection(
+                    watchingCount = watching.size,
+                    episodesWatched = watching.sumOf { it.epStatus },
+                    monthActiveCount = watching.count { it.updatedAt.startsWith(monthPrefix) },
+                    lastActiveAt = watching.maxOfOrNull { it.updatedAt },
+                )
+            }
 
         override suspend fun insertCollection(collection: UserCollectionEntity) {
             stored.value = stored.value.filterNot { it.userId == collection.userId && it.subjectId == collection.subjectId } + collection

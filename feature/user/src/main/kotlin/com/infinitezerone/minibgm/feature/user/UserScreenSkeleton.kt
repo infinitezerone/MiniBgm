@@ -63,6 +63,7 @@ internal fun UserScreenSkeleton(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 CollectionOverviewSkeleton(skeletonState = skeletonState)
+                TrackingFootprintSkeleton(skeletonState = skeletonState)
             }
         }
     } else {
@@ -75,6 +76,7 @@ internal fun UserScreenSkeleton(
         ) {
             UserProfileHeaderSkeleton(skeletonState = skeletonState)
             CollectionOverviewSkeleton(skeletonState = skeletonState)
+            TrackingFootprintSkeleton(skeletonState = skeletonState)
         }
     }
 }
@@ -186,12 +188,8 @@ internal fun CollectionOverviewSkeleton(
             ),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            // 头部标题与完整列表入口骨架
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            // 头部标题与收藏总量骨架（终态：标题 + 「共 N 条」副标，无右上入口）
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 SkeletonBox(
                     modifier =
                         Modifier
@@ -202,8 +200,8 @@ internal fun CollectionOverviewSkeleton(
                 SkeletonBox(
                     modifier =
                         Modifier
-                            .size(width = 92.dp, height = 26.dp)
-                            .clip(RoundedCornerShape(13.dp)),
+                            .size(width = 52.dp, height = 12.dp)
+                            .clip(RoundedCornerShape(3.dp)),
                     state = skeletonState,
                 )
             }
@@ -253,6 +251,74 @@ internal fun CollectionOverviewSkeleton(
                                 .weight(1f)
                                 .height(44.dp)
                                 .clip(RoundedCornerShape(12.dp)),
+                        state = skeletonState,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 追番足迹卡骨架：与 [TrackingFootprintCard] 1:1 几何对齐 */
+@Composable
+internal fun TrackingFootprintSkeleton(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // 头部骨架：标题 + 副标 + 右上「最近打卡」胶囊
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 88.dp, height = 20.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .size(width = 104.dp, height = 12.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                        state = skeletonState,
+                    )
+                }
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .size(width = 108.dp, height = 24.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    state = skeletonState,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 三格数字看板骨架
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                repeat(3) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .height(80.dp)
+                                .clip(RoundedCornerShape(14.dp)),
                         state = skeletonState,
                     )
                 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 /** 「我的」个人中心主页条目（全屏 Dashboard，支持自适应双列） */
 fun EntryProviderScope<NavKey>.userEntry(
     onCollectionClick: (CollectionType) -> Unit = {},
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
@@ -24,6 +25,7 @@ fun EntryProviderScope<NavKey>.userEntry(
     entry<UserRoute>(metadata = metadata) {
         UserScreen(
             onCollectionClick = onCollectionClick,
+            onSubjectClick = onSubjectClick,
             onSettingsClick = onSettingsClick,
             scrollToTop = scrollToTop,
         )
