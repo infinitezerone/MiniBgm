@@ -2,7 +2,6 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
-import com.infinitezerone.minibgm.core.data.repository.RatingInsights
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -33,9 +32,6 @@ class FakeCollectionRepository : CollectionRepository {
     var fetchCollectionCountsCallCount: Int = 0
         private set
     var fetchCollectionCountsResult: AppResult<Map<CollectionType, Int>>? = null
-    var fetchRatingInsightsCallCount: Int = 0
-        private set
-    var fetchRatingInsightsResult: AppResult<RatingInsights>? = null
 
     fun sendCollection(collection: UserCollection) {
         collectionsState.value = collectionsState.value + (collection.subjectId to collection)
@@ -89,28 +85,6 @@ class FakeCollectionRepository : CollectionRepository {
                 collectionsState.value.values.count { it.type == type.value }
             }
         return AppResult.Success(counts)
-    }
-
-    override suspend fun fetchRatingInsights(
-        username: String,
-        force: Boolean,
-    ): AppResult<RatingInsights> {
-        fetchRatingInsightsCallCount++
-        fetchRatingInsightsResult?.let { return it }
-        val rated =
-            collectionsState.value.values
-                .filter { it.type == CollectionType.COLLECT.value && it.rate in 1..10 }
-                .map { it.rate }
-        val histogram = IntArray(11)
-        rated.forEach { histogram[it]++ }
-        return AppResult.Success(
-            RatingInsights(
-                ratedCount = rated.size,
-                averageRate = if (rated.isEmpty()) null else rated.sum().toDouble() / rated.size,
-                distribution = histogram.toList(),
-                truncated = false,
-            ),
-        )
     }
 
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> = AppResult.Success(collectionsState.value[subjectId])

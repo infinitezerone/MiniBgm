@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.round
 
 interface CollectionRepository : UserDataClearable {
     /** 观察指定条目的收藏状态（响应式绑定当前活跃账号） */
@@ -62,15 +61,6 @@ interface CollectionRepository : UserDataClearable {
         username: String,
         force: Boolean = false,
     ): AppResult<Map<CollectionType, Int>>
-
-    /**
-     * 获取指定用户的评分洞察（「看过」条目的评分分布与均分）。
-     * [force] 为 true 时绕过内存缓存重新分页拉取。
-     */
-    suspend fun fetchRatingInsights(
-        username: String,
-        force: Boolean = false,
-    ): AppResult<RatingInsights>
 
     /** 从远端拉取指定条目的收藏详情并更新本地 Room 缓存 */
     suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?>
@@ -137,28 +127,6 @@ data class TrackingFootprint(
     val episodesWatched: Int,
     val monthActiveCount: Int,
     val lastActiveAtIso: String?,
-)
-
-/**
- * 评分洞察：「看过」条目的评分分布与均分。
- *
- * **不落本地库**——`user_collections` 表不含评分列，本聚合按需分页拉取后在内存完成，
- * 形态与 [CollectionRepository.fetchCollectionCounts] 的 TTL 缓存一致，故不需要 schema 迁移。
- *
- * 口径说明：
- * - `rate` 为 0 表示「看过但未评分」，**从均分与分布中排除**（口径假设，未经服务端确认）；
- * - v0 收藏端点仅支持 `subject_type / type / limit / offset`，**无排序与时间过滤**，
- *   超出分页上限的部分不参与统计，由 [truncated] 告知调用方。
- */
-data class RatingInsights(
-    /** 参与统计的已评分条数（不含未评分） */
-    val ratedCount: Int,
-    /** 均分（一位小数）；无有效评分时为 null */
-    val averageRate: Double?,
-    /** 1..10 分档条数，索引 1..10 有效；索引 0 恒为 0（仅为下标对齐） */
-    val distribution: List<Int>,
-    /** 看过总数超过分页上限，统计只覆盖已拉取部分 */
-    val truncated: Boolean,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -261,23 +229,13 @@ class CollectionRepositoryImpl(
 
     private val countsMutex = Mutex()
     private val collectionCountsCache = mutableMapOf<String, CachedCounts>()
-    private val ratingInsightsCache = mutableMapOf<String, CachedRatingInsights>()
 
-    /** 收藏派生聚合的失效入口：写操作改变评分/状态后必须整体清空，避免陈旧叙事 */
-    private suspend fun clearCachedAggregates() {
-        countsMutex.withLock {
-            collectionCountsCache.clear()
-            ratingInsightsCache.clear()
-        }
+    private suspend fun clearCountsCache() {
+        countsMutex.withLock { collectionCountsCache.clear() }
     }
 
     private data class CachedCounts(
         val counts: Map<CollectionType, Int>,
-        val timestamp: Long,
-    )
-
-    private data class CachedRatingInsights(
-        val insights: RatingInsights,
         val timestamp: Long,
     )
 
@@ -314,77 +272,6 @@ class CollectionRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("获取收藏统计"))
         }
-
-    override suspend fun fetchRatingInsights(
-        username: String,
-        force: Boolean,
-    ): AppResult<RatingInsights> =
-        try {
-            val now = TimeUtils.nowEpochMillis()
-            val cached = countsMutex.withLock { ratingInsightsCache[username] }
-            if (!force && cached != null && (now - cached.timestamp) < CACHE_TTL_MILLIS) {
-                AppResult.Success(cached.insights)
-            } else {
-                val insights = aggregateRatingInsights(username)
-                countsMutex.withLock {
-                    ratingInsightsCache[username] = CachedRatingInsights(insights, now)
-                }
-                AppResult.Success(insights)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取评分统计"))
-        }
-
-    /**
-     * 分页拉取「看过」收藏并聚合评分分布。
-     *
-     * 串行分页（无并发）是刻意的：服务端未提供排序或批量聚合端点，10 网页量级的固定开销
-     * 换来的是不触发限流；页数封顶与 [syncWatchingCollections] 的防御口径一致，
-     * 用于兜住服务端 `total` 异常导致的长循环。
-     */
-    private suspend fun aggregateRatingInsights(username: String): RatingInsights {
-        val histogram = IntArray(MAX_RATE + 1)
-        var offset = 0
-        var total = Int.MAX_VALUE
-        var pages = 0
-        var ratedCount = 0
-        var rateSum = 0L
-        while (offset < total && pages < MAX_RATING_PAGES) {
-            val page =
-                apiService.getUserCollections(
-                    username = username,
-                    subjectType = 2,
-                    type = CollectionType.COLLECT.value,
-                    limit = RATING_PAGE_SIZE,
-                    offset = offset,
-                )
-            total = page.total
-            for (item in page.data) {
-                val rate = item.rate
-                if (rate in 1..MAX_RATE) {
-                    histogram[rate]++
-                    ratedCount++
-                    rateSum += rate
-                }
-            }
-            offset += RATING_PAGE_SIZE
-            pages++
-        }
-        val averageRate =
-            if (ratedCount > 0) {
-                round(rateSum.toDouble() / ratedCount * 10.0) / 10.0
-            } else {
-                null
-            }
-        return RatingInsights(
-            ratedCount = ratedCount,
-            averageRate = averageRate,
-            distribution = histogram.toList(),
-            truncated = offset < total,
-        )
-    }
 
     override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> {
         val activeUid = tokenProvider.activeUserId.first() ?: return AppResult.Success(null)
@@ -440,7 +327,7 @@ class CollectionRepositoryImpl(
                     private = private,
                     epStatus = epStatus,
                 )
-                clearCachedAggregates()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -498,7 +385,7 @@ class CollectionRepositoryImpl(
 
                 // 5. 远端打卡成功后，写入最终对齐状态
                 saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
-                clearCachedAggregates()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -537,7 +424,7 @@ class CollectionRepositoryImpl(
 
                 // 5. 远端打卡成功后，写入最终对齐状态
                 saveOptimisticCollection(activeUid, subjectId, subjectType, optimisticType, optimisticEpStatus)
-                clearCachedAggregates()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -582,7 +469,7 @@ class CollectionRepositoryImpl(
                         epStatus = targetEpStatus,
                     )
                 }
-                clearCachedAggregates()
+                clearCountsCache()
                 AppResult.Success(Unit)
             } catch (e: CancellationException) {
                 rollbackRoom(activeUid, subjectId, localPrevious)
@@ -787,27 +674,18 @@ class CollectionRepositoryImpl(
 
     override suspend fun clearUserData(userId: Long) =
         withContext(NonCancellable) {
-            clearCachedAggregates()
+            clearCountsCache()
             userCollectionDao.clearByUserId(userId)
         }
 
     override suspend fun clearAllUserData() =
         withContext(NonCancellable) {
-            clearCachedAggregates()
+            clearCountsCache()
             userCollectionDao.clearAll()
         }
 
     private companion object {
         const val CACHE_TTL_MILLIS = 10 * 60 * 1000L // 10 分钟缓存有效期
-
-        /** 服务端分页上限（v0 规范 limit maximum = 50） */
-        const val RATING_PAGE_SIZE = 50
-
-        /** 评分统计页数封顶：最多 1000 条「看过」，兜住 total 异常 */
-        const val MAX_RATING_PAGES = 20
-
-        /** Bangumi 评分为 1..10 */
-        const val MAX_RATE = 10
     }
 }
 
