@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -167,6 +168,45 @@ internal fun UserProfileHeaderSkeleton(
                         .clip(RoundedCornerShape(4.dp)),
                 state = skeletonState,
             )
+
+            // 追番统计条骨架：真实卡片在有追番足迹时追加 14dp 间距 + 三等分数字格，
+            // 骨架按「有足迹」这一常见形态对齐，避免加载完成时头部突然长出一行。
+            // 格子高度对 titleMedium 数字行与 labelSmall 标签行——行高由它决定（尾部「最近打卡」是同行内联，不影响高度）。
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(3) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            SkeletonBox(
+                                modifier =
+                                    Modifier
+                                        .size(width = 34.dp, height = 19.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                state = skeletonState,
+                            )
+                            SkeletonBox(
+                                modifier =
+                                    Modifier
+                                        .size(width = 44.dp, height = 11.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                state = skeletonState,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
