@@ -88,15 +88,36 @@ internal fun CollectionTypeTabs(
             modifier = Modifier.fillMaxWidth(),
         ) {
             COLLECTION_TYPES.forEach { type ->
+                val isSelected = selectedType == type
                 Tab(
-                    selected = selectedType == type,
+                    selected = isSelected,
                     onClick = { onSelectType(type) },
                     text = {
-                        Text(
-                            text = counts[type]?.let { "${type.label} $it" } ?: type.label,
-                            maxLines = 1,
-                            softWrap = false,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = type.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                            // 计数降一档字号 + 浅色：读作「分类角标」而非指标，
+                            // 不与上方通栏数字带的数字争夺视觉重量
+                            counts[type]?.let { count ->
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = count.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        },
+                                    maxLines = 1,
+                                    softWrap = false,
+                                )
+                            }
+                        }
                     },
                 )
             }

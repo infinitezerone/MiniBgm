@@ -64,7 +64,7 @@ private fun UserProfileHeroSkeleton(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 18.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -93,45 +93,15 @@ private fun UserProfileHeroSkeleton(
                             .clip(RoundedCornerShape(6.dp)),
                     state = skeletonState,
                 )
-                // 身份元信息（@用户名 · UID）
+                // 身份元信息（@用户名 · UID · 年加入，已合并为一行）
                 SkeletonBox(
                     modifier =
                         Modifier
-                            .fillMaxWidth(0.40f)
+                            .fillMaxWidth(0.58f)
                             .height(13.dp)
                             .clip(RoundedCornerShape(4.dp)),
                     state = skeletonState,
                 )
-                // 入站年限
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(0.30f)
-                            .height(11.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                    state = skeletonState,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                // 会员 / 账号胶囊
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .size(width = 84.dp, height = 20.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                        state = skeletonState,
-                    )
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .size(width = 84.dp, height = 20.dp)
-                                .clip(RoundedCornerShape(10.dp)),
-                        state = skeletonState,
-                    )
-                }
             }
         }
 
@@ -149,7 +119,7 @@ private fun UserProfileHeroSkeleton(
     }
 }
 
-/** 第二层通栏数字带骨架：等分三格 + 上下细分隔线 */
+/** 第二层通栏数字带骨架：等分两格 + 上下细分隔线（与 [TrackingStatsRow] 同形） */
 @Composable
 private fun TrackingStatsSkeleton(
     modifier: Modifier = Modifier,
@@ -162,10 +132,10 @@ private fun TrackingStatsSkeleton(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            repeat(3) {
+            repeat(2) {
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -189,15 +159,6 @@ private fun TrackingStatsSkeleton(
             }
         }
         HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
-        SkeletonBox(
-            modifier =
-                Modifier
-                    .padding(top = 7.dp)
-                    .size(width = 96.dp, height = 11.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .align(Alignment.CenterHorizontally),
-            state = skeletonState,
-        )
     }
 }
 

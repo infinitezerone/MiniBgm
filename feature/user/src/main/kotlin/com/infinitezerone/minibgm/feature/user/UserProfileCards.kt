@@ -2,8 +2,6 @@ package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -32,9 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -51,7 +47,14 @@ import com.infinitezerone.minibgm.core.model.UserProfile
  *
  * 不做卡片外壳——身份块、数字带、分区 Tab 应当读作同一个「个人页头部」，而不是三张并列的卡。
  * 背景保留头像主色的氛围光（[ambientGlow]），提取失败时自动退化为无光晕，绝不影响主体内容。
- * 账号管理入口统一收敛到顶栏与「N 个账号」胶囊，头部不再重复铺设按钮。
+ *
+ * 文案纪律（2026-09-28，「一行一义」）：头部只保留有区分度的身份信息。
+ * - **用户名与 UID 去重**：Bangumi 未设置用户名时 `username` 会退回数字 UID，二者同义，
+ *   原实现渲染为 `@1209850 · UID 1209850` 属纯重复
+ * - **入站年份并入身份元信息行**，不再单独占一行
+ * - **「Bangumi 会员」徽章不再展示**：注册用户人人皆是，零区分度；仅管理员保留标记，
+ *   且内联在昵称之后，不另起一行
+ * - **签名为空时整块不渲染**，不再用占位文案填充高度
  */
 @Composable
 internal fun UserProfileHero(
@@ -60,17 +63,34 @@ internal fun UserProfileHero(
     onManageAccountsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sign = profile?.sign.orEmpty()
-    val username = profile?.username.orEmpty()
+    val sign = profile?.sign.orEmpty().trim()
+    val username = profile?.username.orEmpty().trim()
     val isAdmin = profile?.userGroup == 11
+    val uid = profile?.id ?: 0L
     val ambientGlowState = rememberAmbientDominantColorState()
+
+    // 身份元信息合并为一行：@用户名 · UID · 入站年份。任一片段缺失即自动省略，不用占位符顶格。
+    val metaText =
+        buildString {
+            // 纯数字 username 与 UID 同义（Bangumi 未设置用户名时的回退值），此处去重
+            if (username.isNotBlank() && !username.all(Char::isDigit)) append("@$username")
+            if (uid > 0L) {
+                if (isNotEmpty()) append(" · ")
+                append("UID $uid")
+            }
+            profile?.registeredYear?.let { year ->
+                if (isNotEmpty()) append(" · ")
+                val years = TimeUtils.currentCstYearMonth().first - year
+                append(if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入")
+            }
+        }
 
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
                 .ambientGlow(dominantColor = ambientGlowState.dominantColor)
-                .padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 18.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -108,150 +128,129 @@ internal fun UserProfileHero(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = profile?.displayName?.ifBlank { "Bangumi 用户" } ?: "Bangumi 用户",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                // 身份元信息收敛为一行：@用户名 · UID
-                val uid = profile?.id ?: 0L
-                val metaLine =
-                    buildString {
-                        if (username.isNotBlank()) append("@$username")
-                        if (uid > 0L) {
-                            if (isNotEmpty()) append(" · ")
-                            append("UID $uid")
-                        }
-                    }
-                if (metaLine.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = metaLine,
+                        text = profile?.displayName?.ifBlank { "Bangumi 用户" } ?: "Bangumi 用户",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        // fill = false：昵称按内容宽度收窄，管理员标记紧随其后，不被推到行尾
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (isAdmin) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        AdminMark()
+                    }
+                }
+
+                if (metaText.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = metaText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                // 入站年限：对齐主流个人页把注册时间作为次要元信息单独成行的做法，不占统计格
-                profile?.registeredYear?.let { year ->
-                    val years = TimeUtils.currentCstYearMonth().first - year
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // 会员 / 管理员徽章
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color =
-                            if (isAdmin) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            },
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.WorkspacePremium,
-                                contentDescription = null,
-                                tint =
-                                    if (isAdmin) {
-                                        MaterialTheme.colorScheme.onTertiaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
-                                modifier = Modifier.size(12.dp),
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = if (isAdmin) "管理员" else "Bangumi 会员",
-                                style = MaterialTheme.typography.labelSmall,
-                                color =
-                                    if (isAdmin) {
-                                        MaterialTheme.colorScheme.onTertiaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
-                            )
-                        }
-                    }
 
-                    if (savedAccountsCount > 1) {
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            modifier =
-                                Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .clickable(onClick = onManageAccountsClick),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            ) {
-                                Text(
-                                    text = "$savedAccountsCount 个账号",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                )
-                                Icon(
-                                    imageVector = Icons.Filled.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                            }
-                        }
-                    }
+                // 多账号时提供就地切换入口（顶栏图标同名动作，此处直白写出「N 个账号」）
+                if (savedAccountsCount > 1) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AccountSwitchChip(
+                        count = savedAccountsCount,
+                        onClick = onManageAccountsClick,
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 个性签名：左侧主题色细线引导，随文本高度自适应，替代灰底气泡
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-        ) {
-            Box(
+        // 个性签名：左侧主题色细线引导，随文本高度自适应。签名为空时整块不渲染。
+        if (sign.isNotBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
                 modifier =
                     Modifier
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = sign,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/** 管理员标记：内联在昵称右侧的小尺寸 chip，普通注册用户不显示任何身份徽章 */
+@Composable
+private fun AdminMark(modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.WorkspacePremium,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(11.dp),
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
-                text = sign.ifBlank { "这个人很神秘，什么都没写~" },
-                style = MaterialTheme.typography.bodySmall,
-                color =
-                    if (sign.isNotBlank()) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    },
-                fontStyle = if (sign.isBlank()) FontStyle.Italic else FontStyle.Normal,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
+                text = "管理员",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
+        }
+    }
+}
+
+/** 账号切换胶囊：中性色 + 细描边，不与身份信息争夺注意力 */
+@Composable
+private fun AccountSwitchChip(
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 9.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
+        ) {
+            Text(
+                text = "$count 个账号",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
             )
         }
     }
@@ -260,9 +259,12 @@ internal fun UserProfileHero(
 /**
  * 个人页第二层：通栏数字带。
  *
- * 形态纪律（见 `docs/PROFILE_HUB_REDESIGN.md` §3）：全页只有这一排同形数字，
- * 不再叠加第二排数字格。三条等分 + 上下细分隔线，读作一条「带」而不是一张卡。
- * 点击整条跳转到「在看」分区列表。
+ * 形态纪律（见 `docs/PROFILE_HUB_REDESIGN.md` §3）：全页只有这一排同形数字。
+ *
+ * **本带不含「在看」**：该指标已由下方吸顶 Tab 承担，而 Tab 计数来自远端 legacy 统计、
+ * 本带若也放一份则来自 Room 本地聚合——两者不同源，同步滞后时会并排出现同一指标的
+ * 两个数字。因此本带只放 Tab 无法表达的累计量（累计追集 / 本月打卡），
+ * 与 Tab 的分区计数互不重叠。两条细分隔线夹一条「带」，不读作卡片。
  */
 @Composable
 internal fun TrackingStatsRow(
@@ -275,7 +277,7 @@ internal fun TrackingStatsRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .bounceClickable(state = bounceState, onClickLabel = "查看看番足迹") { onClick() },
+                .bounceClickable(state = bounceState, onClickLabel = "查看收藏明细") { onClick() },
     ) {
         HorizontalDivider(
             thickness = 0.5.dp,
@@ -285,14 +287,9 @@ internal fun TrackingStatsRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackingStatCell(
-                label = "在看",
-                value = footprint.watchingCount.toString(),
-                modifier = Modifier.weight(1f),
-            )
             TrackingStatCell(
                 label = "累计追集",
                 value = footprint.episodesWatched.toString(),
@@ -308,21 +305,6 @@ internal fun TrackingStatsRow(
             thickness = 0.5.dp,
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
         )
-        // 最近打卡：装饰性信息，解析失败或缺失时整行不渲染（fail-open）
-        formatLastActiveAt(footprint.lastActiveAtIso)?.let { lastActive ->
-            Text(
-                text = "最近打卡 · $lastActive",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 7.dp),
-            )
-        }
     }
 }
 
@@ -339,22 +321,11 @@ private fun TrackingStatCell(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-/** 最近打卡时刻 → 相对时间文案；无数据或解析失败返回 null */
-private fun formatLastActiveAt(lastActiveAtIso: String?): String? {
-    if (lastActiveAtIso.isNullOrBlank()) return null
-    val days = TimeUtils.daysSinceIsoUtc(lastActiveAtIso) ?: return null
-    return when {
-        days <= 0 -> "今天"
-        days == 1 -> "昨天"
-        days < 30 -> "$days 天前"
-        else -> TimeUtils.formatIsoToCstDate(lastActiveAtIso)
     }
 }
