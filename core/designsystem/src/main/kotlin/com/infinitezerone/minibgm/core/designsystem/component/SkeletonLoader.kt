@@ -1,7 +1,7 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -27,8 +27,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.positionInRoot
@@ -49,7 +51,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * 骨架屏配置状态，用于在多个骨架子节点间同步扫光动画进度。
@@ -88,8 +89,20 @@ fun rememberSkeletonState(
     shimmerWidth: Float = 800f,
     shimmerRatio: Float? = null,
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    highlightColor: Color = MaterialTheme.colorScheme.surfaceBright,
+    highlightColor: Color = Color.Unspecified,
 ): SkeletonState {
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val dynamicHighlight =
+        if (highlightColor != Color.Unspecified) {
+            highlightColor
+        } else if (isDarkSurface) {
+            MaterialTheme.colorScheme.onSurface
+                .copy(alpha = 0.12f)
+                .compositeOver(MaterialTheme.colorScheme.surfaceBright)
+        } else {
+            MaterialTheme.colorScheme.surfaceBright
+        }
+
     val transition = rememberInfiniteTransition(label = "skeleton_state")
     val progress =
         transition.animateFloat(
@@ -97,7 +110,7 @@ fun rememberSkeletonState(
             targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis, easing = LinearEasing),
+                    animation = tween(durationMillis, easing = FastOutSlowInEasing),
                     repeatMode = RepeatMode.Restart,
                 ),
             label = "skeleton_progress",
@@ -112,7 +125,7 @@ fun rememberSkeletonState(
                 shimmerWidth = shimmerWidth,
                 shimmerRatio = shimmerRatio,
                 baseColor = baseColor,
-                highlightColor = highlightColor,
+                highlightColor = dynamicHighlight,
                 progressState = progress,
             )
         }
@@ -123,7 +136,7 @@ fun rememberSkeletonState(
         state.durationMillis = durationMillis
         state.shimmerWidth = shimmerWidth
         state.baseColor = baseColor
-        state.highlightColor = highlightColor
+        state.highlightColor = dynamicHighlight
     }
     return state
 }
@@ -149,8 +162,16 @@ fun Modifier.skeletonNode(
         } else {
             Modifier
         }
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val fallbackBase = MaterialTheme.colorScheme.surfaceContainerHighest
-    val fallbackHighlight = MaterialTheme.colorScheme.surfaceBright
+    val fallbackHighlight =
+        if (isDarkSurface) {
+            MaterialTheme.colorScheme.onSurface
+                .copy(alpha = 0.12f)
+                .compositeOver(MaterialTheme.colorScheme.surfaceBright)
+        } else {
+            MaterialTheme.colorScheme.surfaceBright
+        }
     val resolvedBase = if (state.baseColor != Color.Unspecified) state.baseColor else fallbackBase
     val resolvedHighlight =
         if (state.highlightColor != Color.Unspecified) state.highlightColor else fallbackHighlight
@@ -183,7 +204,7 @@ fun Modifier.skeletonNode(
     angleDegrees: Float = 20f,
     shape: Shape = RoundedCornerShape(4.dp),
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    highlightColor: Color = MaterialTheme.colorScheme.surfaceBright,
+    highlightColor: Color = Color.Unspecified,
     durationMillis: Int = 1500,
     shimmerWidth: Float = 800f,
     shimmerRatio: Float? = null,
@@ -198,6 +219,17 @@ fun Modifier.skeletonNode(
         } else {
             Modifier
         }
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val resolvedHighlight =
+        if (highlightColor != Color.Unspecified) {
+            highlightColor
+        } else if (isDarkSurface) {
+            MaterialTheme.colorScheme.onSurface
+                .copy(alpha = 0.12f)
+                .compositeOver(MaterialTheme.colorScheme.surfaceBright)
+        } else {
+            MaterialTheme.colorScheme.surfaceBright
+        }
     return this
         .then(minSizeModifier)
         .then(
@@ -206,7 +238,7 @@ fun Modifier.skeletonNode(
                 angleDegrees = angleDegrees,
                 shape = shape,
                 baseColor = baseColor,
-                highlightColor = highlightColor,
+                highlightColor = resolvedHighlight,
                 durationMillis = durationMillis,
                 shimmerWidth = shimmerWidth,
                 shimmerRatio = shimmerRatio,
@@ -437,7 +469,7 @@ private class SkeletonNode(
                         progress.snapTo(0f)
                         progress.animateTo(
                             targetValue = 1f,
-                            animationSpec = tween(durationMillis, easing = LinearEasing),
+                            animationSpec = tween(durationMillis, easing = FastOutSlowInEasing),
                         )
                     }
                 } catch (_: CancellationException) {
@@ -497,15 +529,11 @@ private class SkeletonNode(
             }
         val rootSize = cachedRootSize
 
-        val maxDim =
-            if (rootSize != null) {
-                sqrt(rootSize.width.toFloat() * rootSize.width + rootSize.height.toFloat() * rootSize.height)
-            } else {
-                sqrt(size.width * size.width + size.height * size.height)
-            }
-        val start = -maxDim
-        val end = maxDim
-        val t = start + (end - start) * progressValue
+        val refWidth = rootSize?.width?.toFloat() ?: size.width
+        val refHeight = rootSize?.height?.toFloat() ?: size.height
+
+        // 光束正向投影的最大物理长度：W * cosθ + H * sinθ
+        val maxProj = refWidth * dx + refHeight * dy
 
         val originOffset =
             if (originInRoot != null && rootSize != null) {
@@ -517,10 +545,15 @@ private class SkeletonNode(
         val ratio = shimmerRatio
         val actualShimmerWidth =
             when {
-                ratio != null -> maxDim * ratio
-                !useRootCoordinates -> maxDim * 0.5f
+                ratio != null -> maxProj * ratio
+                !useRootCoordinates -> (size.width * dx + size.height * dy) * 0.8f
                 else -> shimmerWidth
             }
+
+        // 精确收敛扫描行程：从光束刚接触视野边缘到刚好完全离开，消除屏幕外大半虚空空跑
+        val start = -actualShimmerWidth
+        val end = maxProj
+        val t = start + (end - start) * progressValue
 
         val startPoint = Offset(t * dx, t * dy) - originOffset
         val endPoint =
@@ -531,7 +564,14 @@ private class SkeletonNode(
 
         val brush =
             Brush.linearGradient(
-                colors = listOf(baseColor, highlightColor, baseColor),
+                colorStops =
+                    arrayOf(
+                        0.00f to baseColor,
+                        0.25f to baseColor,
+                        0.50f to highlightColor,
+                        0.75f to baseColor,
+                        1.00f to baseColor,
+                    ),
                 start = startPoint,
                 end = endPoint,
             )

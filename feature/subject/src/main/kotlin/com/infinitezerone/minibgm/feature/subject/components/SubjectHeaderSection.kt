@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientGlowStyle
 import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
@@ -94,8 +95,10 @@ fun SubjectHeaderCard(
             modifier =
                 Modifier
                     // 封面主色光晕（Ambient Glow）：从海报提取主色，在卡片顶部铺一层柔和渐变氛围光
-                    .ambientGlow(dominantColor = ambientGlowState.dominantColor)
-                    .padding(14.dp),
+                    .ambientGlow(
+                        dominantColor = ambientGlowState.dominantColor,
+                        style = AmbientGlowStyle.HeroDiffuse,
+                    ).padding(14.dp),
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),

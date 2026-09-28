@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
@@ -28,20 +29,23 @@ import kotlin.math.roundToInt
 
 /** 光晕渐变形态 */
 enum class AmbientGlowStyle {
-    /** 纵向：光晕从顶部起势，向下收敛为透明（适合卡片/页头背景） */
+    /** 纵向：光晕从顶部起势，向下平滑收敛为透明（适合卡片/页头背景） */
     VerticalFade,
 
     /** 径向：光晕以中心为焦点，向四周收敛为透明（适合海报叠层） */
     RadialFocus,
+
+    /** 漫射：以左上方封面为发光原点，向右下方扇形自然弥散为透明（专为条目详情等海报卡片设计） */
+    HeroDiffuse,
 }
 
 /** 封面主色光晕的默认参数 */
 private object AmbientGlowDefaults {
-    /** 深色表面上的光晕峰值透明度（深色可承受更强的氛围） */
-    const val MAX_ALPHA_ON_DARK_SURFACE = 0.42f
+    /** 深色表面上的光晕峰值透明度（轻盈透气，避免暗沉脏色） */
+    const val MAX_ALPHA_ON_DARK_SURFACE = 0.22f
 
-    /** 浅色表面上的光晕峰值透明度（浅色下压低，避免冲掉深色前景文字对比度） */
-    const val MAX_ALPHA_ON_LIGHT_SURFACE = 0.30f
+    /** 浅色表面上的光晕峰值透明度（柔和通透，保留前景色阶对比） */
+    const val MAX_ALPHA_ON_LIGHT_SURFACE = 0.16f
 
     /** 主色切换时的渐变时长 */
     const val COLOR_ANIMATION_MILLIS = 450
@@ -139,13 +143,25 @@ private fun rememberAmbientGlowBrush(
     return when (style) {
         AmbientGlowStyle.VerticalFade ->
             Brush.verticalGradient(
-                0f to glow.copy(alpha = alpha),
-                0.55f to glow.copy(alpha = alpha * 0.28f),
-                1f to Color.Transparent,
+                0.0f to glow.copy(alpha = alpha),
+                0.20f to glow.copy(alpha = alpha * 0.75f),
+                0.45f to glow.copy(alpha = alpha * 0.30f),
+                0.70f to Color.Transparent,
+                1.0f to Color.Transparent,
             )
         AmbientGlowStyle.RadialFocus ->
             Brush.radialGradient(
                 colors = listOf(glow.copy(alpha = alpha), Color.Transparent),
+            )
+        AmbientGlowStyle.HeroDiffuse ->
+            Brush.radialGradient(
+                0.0f to glow.copy(alpha = alpha),
+                0.28f to glow.copy(alpha = alpha * 0.65f),
+                0.55f to glow.copy(alpha = alpha * 0.22f),
+                0.80f to glow.copy(alpha = alpha * 0.05f),
+                1.0f to Color.Transparent,
+                center = Offset(x = 160f, y = 180f),
+                radius = 1100f,
             )
     }
 }
