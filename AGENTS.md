@@ -15,8 +15,10 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 提交前唯一入口（取代手工四件套，含"绿≠测过"的 XML 真实性校验）：
 
 ```bash
-bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 结果校验
+bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试（含 :app 单测）→ :app:assembleDebug → 结果校验
 ```
+
+- 触及模块由 `jj diff --summary` 推断；工作副本无改动时（例如 `jj commit` 之后想再确认一次）退化为 `settings.gradle.kts` 声明的全量模块——不做这个退化就会跑出一个"0 个模块测试 / 0 份结果校验"的假绿。
 
 - KMP 模块测试源集是 `androidHostTest` / `androidDeviceTest` 且 host 测试 opt-in；Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`）只有 `testDebugUnitTest`。命名错误的源集会静默空跑——jgate 的 XML 校验（`tests > 0 && failures == 0`）负责拦。
 - 全量 `allTests testDebugUnitTest` 仅用于跨切面改动（build-logic / 版本目录 / `:core:model` / `:core:common`）及 PR 前；Android-only 模块没有 allTests。

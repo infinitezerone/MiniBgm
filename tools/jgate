@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # jgate —— 提交前置验证门（AGENTS.md 唯一认可的提交前置步骤）
-# 流程：spotlessApply（触及模块）→ 架构红线 + 触及模块测试 + :app:assembleDebug → 测试结果真实性校验
+# 流程：spotlessApply（触及模块）→ 架构红线 + 触及模块测试（含 :app 单测）+ :app:assembleDebug → 测试结果真实性校验
 # "绿≠测过"由最后的 XML 校验机械保证：tests>0 且 failures==0 且 errors==0，否则退出非零。
+# 工作副本无改动时（提交后复跑）推断不出触及模块，退化为全量模块——不做这个退化就会打印假绿。
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
@@ -44,11 +45,23 @@ else
 fi
 
 echo "[jgate] 2/3 架构红线 + 触及模块测试 + 装配门"
+# 推断不出"触及模块"时（工作副本无改动，例如 jj commit 之后想再确认一次；或改动只在
+# docs/ 等非模块路径）必须退化为全量。否则脚本会只做装配、跑 0 个模块测试、校验 0 份结果，
+# 并打印一个什么都没验证的 ✅ —— 与第 4 行"绿≠测过"的自我声明直接冲突（2026-09-28 实测复现）。
+# 全量清单直接取自 settings.gradle.kts，避免与模块增删漂移。
+if [ "${#modules[@]}" -eq 0 ]; then
+  echo "[jgate] ⚠️ 推断不出触及模块（工作副本无改动或改动不在模块内）→ 退化为全量验证"
+  while IFS= read -r m; do
+    [ -n "$m" ] && modules+=("$m")
+  done < <(sed -n 's/^include(":\(.*\)")$/\1/p' settings.gradle.kts | tr ':' '/')
+fi
+
 # 红线、触及模块测试、:app:assembleDebug 合并到同一次 gradle 调用，
 # 省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
 test_tasks=()
 for m in "${modules[@]+"${modules[@]}"}"; do
-  [ "$m" = "app" ] && continue # 装配门 :app:assembleDebug 已覆盖
+  # :app 不再跳过：装配门 :app:assembleDebug 只编译、不跑测试，历史上因此让破损的
+  # AppModuleTest 静默存活过一整个提交周期。:app 是 Android-only 模块，走 testDebugUnitTest。
   [ -f "$m/build.gradle.kts" ] || continue
   task_path=":${m//\//:}"
   if grep -q "minibgm.kmp" "$m/build.gradle.kts"; then
@@ -93,4 +106,9 @@ if [ "$fail" != "0" ]; then
   echo "[jgate] ❌ 验证门未通过，禁止提交"
   exit 1
 fi
-echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
+# 0 份结果时不说"0 份结果校验"就收尾——那半个句子本身就是假绿信号。
+if [ "$checked" = "0" ]; then
+  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，全部任务 UP-TO-DATE，沿用上次结果"
+else
+  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
+fi
