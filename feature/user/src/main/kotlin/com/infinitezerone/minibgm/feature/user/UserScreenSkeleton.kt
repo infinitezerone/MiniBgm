@@ -120,20 +120,20 @@ internal fun UserProfileHeaderSkeleton(
                         modifier =
                             Modifier
                                 .fillMaxWidth(0.55f)
-                                .height(22.dp)
+                                .height(24.dp)
                                 .clip(RoundedCornerShape(6.dp)),
                         state = skeletonState,
                     )
-                    // 用户名条骨架
+                    // 身份元信息条骨架（@用户名 · UID）
                     SkeletonBox(
                         modifier =
                             Modifier
-                                .fillMaxWidth(0.35f)
+                                .fillMaxWidth(0.40f)
                                 .height(14.dp)
                                 .clip(RoundedCornerShape(4.dp)),
                         state = skeletonState,
                     )
-                    // UID 与会员标签胶囊骨架
+                    // 会员徽章胶囊骨架
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -141,15 +141,15 @@ internal fun UserProfileHeaderSkeleton(
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .size(width = 64.dp, height = 18.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
+                                    .size(width = 84.dp, height = 20.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
                             state = skeletonState,
                         )
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .size(width = 72.dp, height = 18.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
+                                    .size(width = 84.dp, height = 20.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
                             state = skeletonState,
                         )
                     }
@@ -158,13 +158,13 @@ internal fun UserProfileHeaderSkeleton(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 签名条骨架
+            // 签名行骨架：与真实卡片的细线签名排版等高
             SkeletonBox(
                 modifier =
                     Modifier
-                        .fillMaxWidth()
-                        .height(36.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .fillMaxWidth(0.75f)
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(4.dp)),
                 state = skeletonState,
             )
         }
@@ -186,7 +186,7 @@ internal fun CollectionOverviewSkeleton(
             ),
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            // 头部标题与快捷入口骨架
+            // 头部标题与完整列表入口骨架
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -195,22 +195,22 @@ internal fun CollectionOverviewSkeleton(
                 SkeletonBox(
                     modifier =
                         Modifier
-                            .size(width = 110.dp, height = 20.dp)
+                            .size(width = 88.dp, height = 20.dp)
                             .clip(RoundedCornerShape(4.dp)),
                     state = skeletonState,
                 )
                 SkeletonBox(
                     modifier =
                         Modifier
-                            .size(width = 60.dp, height = 16.dp)
-                            .clip(RoundedCornerShape(4.dp)),
+                            .size(width = 92.dp, height = 26.dp)
+                            .clip(RoundedCornerShape(13.dp)),
                     state = skeletonState,
                 )
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 核心主区三大状态（在看、想看、看过）等宽数据看板骨架
+            // 核心主区三大状态（在看、想看、看过）数字看板骨架
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -220,14 +220,26 @@ internal fun CollectionOverviewSkeleton(
                         modifier =
                             Modifier
                                 .weight(1f)
-                                .height(76.dp)
+                                .height(80.dp)
                                 .clip(RoundedCornerShape(14.dp)),
                         state = skeletonState,
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 五维占比条骨架
+            SkeletonBox(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                state = skeletonState,
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // 次级归档区两大状态（搁置、抛弃）骨架
             Row(

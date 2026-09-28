@@ -1,13 +1,15 @@
 package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,33 +19,37 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
+import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
 import com.infinitezerone.minibgm.core.model.UserProfile
 
+/**
+ * 个人资料主卡：头像主色氛围光 + 身份信息 + 编辑化签名排版。
+ * 账号管理入口统一收敛到顶栏与「N 个账号」胶囊，不再重复铺设底部按钮。
+ */
 @Composable
 internal fun UserProfileHeaderCard(
     profile: UserProfile?,
@@ -53,6 +59,8 @@ internal fun UserProfileHeaderCard(
 ) {
     val sign = profile?.sign.orEmpty()
     val username = profile?.username.orEmpty()
+    val isAdmin = profile?.userGroup == 11
+    val ambientGlowState = rememberAmbientDominantColorState()
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -63,16 +71,20 @@ internal fun UserProfileHeaderCard(
             ),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier =
+                Modifier
+                    // 头像主色光晕：纯装饰，提取失败时自动退化为无光晕，绝不影响主体内容
+                    .ambientGlow(dominantColor = ambientGlowState.dominantColor)
+                    .padding(20.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // 头像：双层内描边与外环
+                // 头像：主色调内环
                 Surface(
                     shape = CircleShape,
-                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(76.dp),
                 ) {
@@ -82,6 +94,8 @@ internal fun UserProfileHeaderCard(
                             model = avatarUrl,
                             contentDescription = "用户头像",
                             contentScale = ContentScale.Crop,
+                            onSuccess = ambientGlowState::onImageSuccess,
+                            onError = { ambientGlowState.onImageError() },
                             modifier = Modifier.fillMaxSize(),
                         )
                     } else {
@@ -106,65 +120,93 @@ internal fun UserProfileHeaderCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (username.isNotBlank()) {
+                    // 身份元信息收敛为一行：@用户名 · UID，取代零散的 UID 胶囊
+                    val uid = profile?.id ?: 0L
+                    val metaLine =
+                        buildString {
+                            if (username.isNotBlank()) append("@$username")
+                            if (uid > 0L) {
+                                if (isNotEmpty()) append(" · ")
+                                append("UID $uid")
+                            }
+                        }
+                    if (metaLine.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "@$username",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = metaLine,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 会员 / 管理员徽章
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = RoundedCornerShape(50),
+                            color =
+                                if (isAdmin) {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                },
                         ) {
-                            Text(
-                                text = "UID: ${profile?.id ?: 0}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                        ) {
-                            Text(
-                                text = if (profile?.userGroup == 11) "管理员" else "Bangumi 会员",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.WorkspacePremium,
+                                    contentDescription = null,
+                                    tint =
+                                        if (isAdmin) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        },
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (isAdmin) "管理员" else "Bangumi 会员",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color =
+                                        if (isAdmin) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        },
+                                )
+                            }
                         }
 
                         if (savedAccountsCount > 1) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(50),
                                 color = MaterialTheme.colorScheme.tertiaryContainer,
-                                modifier = Modifier.clickable(onClick = onManageAccountsClick),
+                                modifier =
+                                    Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .clickable(onClick = onManageAccountsClick),
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.SwapHoriz,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
-                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
                                     Text(
-                                        text = "$savedAccountsCount 个账号 ▾",
+                                        text = "$savedAccountsCount 个账号",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Filled.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.size(14.dp),
                                     )
                                 }
                             }
@@ -175,54 +217,35 @@ internal fun UserProfileHeaderCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 签名气泡
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                modifier = Modifier.fillMaxWidth(),
+            // 个性签名：左侧主题色细线引导，随文本高度自适应，替代灰底气泡
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FormatQuote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = sign.ifBlank { "这个人很神秘，什么都没写~" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color =
-                            if (sign.isNotBlank()) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            },
-                        fontStyle = if (sign.isBlank()) FontStyle.Italic else FontStyle.Normal,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 核心快捷动作条
-            FilledTonalButton(
-                onClick = onManageAccountsClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ManageAccounts,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                Box(
+                    modifier =
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "账号切换与管理", style = MaterialTheme.typography.labelLarge)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = sign.ifBlank { "这个人很神秘，什么都没写~" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color =
+                        if (sign.isNotBlank()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                    fontStyle = if (sign.isBlank()) FontStyle.Italic else FontStyle.Normal,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -258,22 +281,44 @@ internal fun MultiAccountQuickCard(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp),
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "账号快捷切换",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                TextButton(
-                    onClick = onManageAccountsClick,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                // 管理入口：图标化胶囊，取代「管理 (N) ↗」文字符号
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onManageAccountsClick),
                 ) {
-                    Text(text = "管理 (${accounts.size}) ↗", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "管理",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(11.dp),
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 accounts.forEach { account ->
@@ -310,7 +355,7 @@ internal fun MultiAccountQuickCard(
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(38.dp),
+                                modifier = Modifier.size(36.dp),
                             ) {
                                 val avatarUrl = account.avatar?.bestAvatar.orEmpty()
                                 if (avatarUrl.isNotBlank()) {
@@ -326,7 +371,7 @@ internal fun MultiAccountQuickCard(
                                             imageVector = Icons.Filled.Person,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.size(22.dp),
+                                            modifier = Modifier.size(20.dp),
                                         )
                                     }
                                 }
@@ -351,7 +396,7 @@ internal fun MultiAccountQuickCard(
 
                             if (isActive) {
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
+                                    shape = RoundedCornerShape(50),
                                     color = MaterialTheme.colorScheme.primary,
                                 ) {
                                     Row(
@@ -362,22 +407,16 @@ internal fun MultiAccountQuickCard(
                                             imageVector = Icons.Filled.Check,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(12.dp),
+                                            modifier = Modifier.size(11.dp),
                                         )
                                         Spacer(modifier = Modifier.width(3.dp))
                                         Text(
-                                            text = "当前活跃",
+                                            text = "使用中",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onPrimary,
                                         )
                                     }
                                 }
-                            } else {
-                                Text(
-                                    text = "轻触切换",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
                             }
                         }
                     }
@@ -386,18 +425,36 @@ internal fun MultiAccountQuickCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            TextButton(
-                onClick = onAddAccountClick,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
+            // 添加账号：描边幽灵行，与账号行明确区分
+            Surface(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onAddAccountClick),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.PersonAdd,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "+ 添加其他 Bangumi 账号", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "添加其他账号",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }
