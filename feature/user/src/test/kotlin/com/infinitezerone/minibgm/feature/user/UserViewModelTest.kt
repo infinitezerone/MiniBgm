@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.RatingInsights
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
@@ -263,6 +264,78 @@ class UserViewModelTest {
             assertEquals(8, state.trackingFootprint?.watchingCount)
             assertEquals(96, state.trackingFootprint?.episodesWatched)
             assertEquals(3, state.trackingFootprint?.monthActiveCount)
+        }
+
+    @Test
+    fun loggedInState_emitsRatingInsights() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    fetchRatingInsightsResult =
+                        AppResult.Success(
+                            RatingInsights(
+                                ratedCount = 4,
+                                averageRate = 7.5,
+                                distribution =
+                                    List(11) { rate ->
+                                        if (rate == 8) {
+                                            3
+                                        } else if (rate == 7) {
+                                            1
+                                        } else {
+                                            0
+                                        }
+                                    },
+                                truncated = false,
+                            ),
+                        )
+                }
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            val state = viewModel.uiState.first { it.ratingInsights != null }
+            assertEquals(4, state.ratingInsights?.ratedCount)
+            assertEquals(7.5, state.ratingInsights?.averageRate)
+            assertEquals(3, state.ratingInsights?.distribution?.get(8))
+            assertFalse(state.isInsightsLoading)
+            assertEquals(1, collectionRepo.fetchRatingInsightsCallCount)
+        }
+
+    @Test
+    fun ratingInsightsFailure_keepsStateEmptyForFailOpenCard() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                )
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    // 远端失败一律降级为「没有这张卡」，不向上抛、不崩宿主页面
+                    fetchRatingInsightsResult = AppResult.Error(IllegalStateException("boom"), "获取评分统计失败")
+                }
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            val state = viewModel.uiState.first { it.isLoggedIn && it.activeProfile != null }
+            assertNull(state.ratingInsights)
+            assertFalse(state.isInsightsLoading)
+            assertEquals(1, collectionRepo.fetchRatingInsightsCallCount)
+        }
+
+    @Test
+    fun loggedOutState_doesNotRequestRatingInsights() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val collectionRepo = FakeCollectionRepository()
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            val state = viewModel.uiState.first { !it.isLoading }
+            assertNull(state.ratingInsights)
+            assertEquals(0, collectionRepo.fetchRatingInsightsCallCount)
         }
 
     @Test

@@ -234,6 +234,14 @@ fun UserScreenContent(
                                 )
                             }
 
+                            item(key = "wide_rating_insights") {
+                                RatingInsightsCard(
+                                    insights = uiState.ratingInsights,
+                                    isLoading = uiState.isInsightsLoading,
+                                    onClick = { onCollectionClick(CollectionType.COLLECT) },
+                                )
+                            }
+
                             if (uiState.savedAccounts.size > 1) {
                                 item(key = "wide_multi_account_card") {
                                     MultiAccountQuickCard(
@@ -303,6 +311,14 @@ fun UserScreenContent(
                                 trackingFootprint = uiState.trackingFootprint,
                                 onManageAccountsClick = { showAccountSheet = true },
                                 onFootprintClick = { onCollectionClick(CollectionType.DOING) },
+                            )
+                        }
+
+                        item(key = "rating_insights") {
+                            RatingInsightsCard(
+                                insights = uiState.ratingInsights,
+                                isLoading = uiState.isInsightsLoading,
+                                onClick = { onCollectionClick(CollectionType.COLLECT) },
                             )
                         }
 

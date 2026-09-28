@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.RatingInsights
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -45,6 +46,8 @@ data class UserUiState(
     val isSyncing: Boolean = false,
     val collectionCounts: Map<CollectionType, Int> = emptyMap(),
     val isCountsLoading: Boolean = false,
+    val ratingInsights: RatingInsights? = null,
+    val isInsightsLoading: Boolean = false,
     val trackingFootprint: TrackingFootprint? = null,
     val subjectActivity: SubjectActivityState = SubjectActivityState(),
     val airingReminderEnabled: Boolean = true,
@@ -75,11 +78,22 @@ private data class SyncSlice(
     val airDelayOffsetMinutes: Int,
 )
 
-/** 本地 UI 域切片：手动同步、收藏统计、追番足迹与刷新标记 */
-private data class LocalSlice(
-    val manualSyncing: Boolean,
+/**
+ * 收藏派生统计切片：五大分类计数与评分洞察。
+ * 二者同属「远端聚合 + 内存 TTL 缓存」，先归为一组再做上层合并，
+ * 以免 [LocalSlice] 的 combine 超出类型安全重载上限。
+ */
+private data class CollectionStatsSlice(
     val collectionCounts: Map<CollectionType, Int>,
     val isCountsLoading: Boolean,
+    val ratingInsights: RatingInsights?,
+    val isInsightsLoading: Boolean,
+)
+
+/** 本地 UI 域切片：手动同步、收藏派生统计、追番足迹与刷新标记 */
+private data class LocalSlice(
+    val manualSyncing: Boolean,
+    val collectionStats: CollectionStatsSlice,
     val isRefreshing: Boolean,
     val trackingFootprint: TrackingFootprint?,
 )
@@ -98,8 +112,11 @@ class UserViewModel(
     private val isRefreshingFlow = MutableStateFlow(false)
     private val collectionCountsFlow = MutableStateFlow<Map<CollectionType, Int>>(emptyMap())
     private val isCountsLoadingFlow = MutableStateFlow(false)
+    private val ratingInsightsFlow = MutableStateFlow<RatingInsights?>(null)
+    private val isInsightsLoadingFlow = MutableStateFlow(false)
     private var lastLoadedUserId: Long? = null
     private var countsJob: Job? = null
+    private var insightsJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -110,10 +127,12 @@ class UserViewModel(
                         if (lastLoadedUserId != profile.id || collectionCountsFlow.value.isEmpty()) {
                             lastLoadedUserId = profile.id
                             refreshCollectionCounts(profile, force = false)
+                            refreshRatingInsights(profile, force = false)
                         }
                     } else {
                         lastLoadedUserId = null
                         collectionCountsFlow.value = emptyMap()
+                        ratingInsightsFlow.value = null
                     }
                 }
         }
@@ -200,15 +219,24 @@ class UserViewModel(
             }
         }
 
+    private val collectionStatsSlice: Flow<CollectionStatsSlice> =
+        combine(
+            collectionCountsFlow,
+            isCountsLoadingFlow,
+            ratingInsightsFlow,
+            isInsightsLoadingFlow,
+        ) { collectionCounts, isCountsLoading, ratingInsights, isInsightsLoading ->
+            CollectionStatsSlice(collectionCounts, isCountsLoading, ratingInsights, isInsightsLoading)
+        }
+
     private val localSlice: Flow<LocalSlice> =
         combine(
             isManualSyncing,
-            collectionCountsFlow,
-            isCountsLoadingFlow,
+            collectionStatsSlice,
             isRefreshingFlow,
             collectionRepository.observeTrackingFootprint(),
-        ) { manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint ->
-            LocalSlice(manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint)
+        ) { manualSyncing, collectionStats, isRefreshing, trackingFootprint ->
+            LocalSlice(manualSyncing, collectionStats, isRefreshing, trackingFootprint)
         }
 
     val uiState: StateFlow<UserUiState> =
@@ -228,8 +256,10 @@ class UserViewModel(
                 syncInterval = sync.settings.syncInterval,
                 lastSyncTimestamp = sync.settings.bangumiDataLastSyncTimestamp,
                 isSyncing = sync.workSyncing || local.manualSyncing,
-                collectionCounts = local.collectionCounts,
-                isCountsLoading = local.isCountsLoading,
+                collectionCounts = local.collectionStats.collectionCounts,
+                isCountsLoading = local.collectionStats.isCountsLoading,
+                ratingInsights = local.collectionStats.ratingInsights,
+                isInsightsLoading = local.collectionStats.isInsightsLoading,
                 trackingFootprint = local.trackingFootprint,
                 subjectActivity = subjectActivity,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
@@ -261,6 +291,7 @@ class UserViewModel(
                     val currentProfile = (profileRes as? AppResult.Success)?.data ?: uiState.value.activeProfile
                     if (currentProfile != null) {
                         refreshCollectionCounts(currentProfile, force = true)
+                        refreshRatingInsights(currentProfile, force = true)
                     }
                     // 追番收藏同步失败必须反映到刷新结果，否则 UI 会误报成功、用户停留在过期收藏数据上
                     if (collectionRepository.syncWatchingCollections() is AppResult.Error) {
@@ -300,6 +331,36 @@ class UserViewModel(
                     }
                 } finally {
                     isCountsLoadingFlow.value = false
+                }
+            }
+    }
+
+    /**
+     * 刷新活跃用户的评分洞察（「看过」条目的评分分布与均分）。
+     * 首次拉取需分页请求（每页 50，最多 20 页）；命中仓储层 TTL 缓存时零请求。
+     * 失败时保留上次结果、不回填错误——卡片由 UI 按数据有无自行隐藏（fail-open）。
+     */
+    fun refreshRatingInsights(
+        profile: UserProfile? = null,
+        force: Boolean = false,
+    ) {
+        val currentProfile = profile ?: uiState.value.activeProfile ?: return
+        val username = currentProfile.username.ifBlank { currentProfile.id.toString() }
+        if (username.isBlank() || username == "0") return
+
+        if (!force && insightsJob?.isActive == true) return
+
+        insightsJob?.cancel()
+        insightsJob =
+            viewModelScope.launch {
+                isInsightsLoadingFlow.value = true
+                try {
+                    val res = collectionRepository.fetchRatingInsights(username, force = force)
+                    if (res is AppResult.Success) {
+                        ratingInsightsFlow.value = res.data
+                    }
+                } finally {
+                    isInsightsLoadingFlow.value = false
                 }
             }
     }

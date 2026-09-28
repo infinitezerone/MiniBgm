@@ -146,6 +146,18 @@ internal fun UserProfileHeaderCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    // 入站年限：对齐主流个人页把注册时间作为次要元信息单独成行的做法，不占统计格
+                    profile?.registeredYear?.let { year ->
+                        val years = TimeUtils.currentCstYearMonth().first - year
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),

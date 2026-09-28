@@ -37,6 +37,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -1055,6 +1056,84 @@ class CollectionRepositoryImplTest {
             val forceResult = harness.repository.fetchCollectionCounts("testuser", force = true)
             assertTrue(forceResult is AppResult.Success)
             assertEquals(2, harness.api.getUserCollectionStatsCallCount)
+        }
+
+    @Test
+    fun fetchRatingInsights_aggregatesHistogramExcludesUnratedAndCachesResult() =
+        runTest {
+            val harness = Harness()
+            // 两页：50 + 3，total=53 驱动翻页。id%10+1 让 rate 1..10 各出现 5 次
+            harness.api.collectionsTotal = 53
+            harness.api.collectionPages.value =
+                mapOf(
+                    0 to
+                        (1L..50L).map { id ->
+                            collection(id, type = CollectionType.COLLECT.value).copy(rate = (id % 10 + 1).toInt())
+                        },
+                    50 to
+                        listOf(
+                            // rate=0 表示「看过但未评分」，必须排除在均分与分布之外
+                            collection(51L, type = CollectionType.COLLECT.value).copy(rate = 0),
+                            collection(52L, type = CollectionType.COLLECT.value).copy(rate = 10),
+                            collection(53L, type = CollectionType.COLLECT.value).copy(rate = 10),
+                        ),
+                )
+
+            val firstResult = harness.repository.fetchRatingInsights("testuser", force = false)
+
+            assertIs<AppResult.Success<RatingInsights>>(firstResult)
+            val insights = firstResult.data
+            assertEquals(52, insights.ratedCount)
+            assertEquals(5, insights.distribution[1])
+            assertEquals(7, insights.distribution[10]) // 5 + 两条 10 分
+            assertEquals(0, insights.distribution[0]) // 索引 0 恒为 0
+            // (5×(1+..+9) + 7×10) / 52 = 295/52 ≈ 5.673 → 5.7
+            assertEquals(5.7, insights.averageRate)
+            assertFalse(insights.truncated)
+            assertEquals(2, harness.api.requests.size)
+
+            // 非强制二次调用命中内存缓存，不再发起分页请求
+            harness.repository.fetchRatingInsights("testuser", force = false)
+            assertEquals(2, harness.api.requests.size)
+
+            // 强制刷新绕过缓存，重新分页
+            harness.repository.fetchRatingInsights("testuser", force = true)
+            assertEquals(4, harness.api.requests.size)
+        }
+
+    @Test
+    fun fetchRatingInsights_whenLaterPageFails_returnsErrorInsteadOfPartialHistogram() =
+        runTest {
+            val harness = Harness()
+            // 第二页缺失 → 整体失败：宁可不展示，也不给一个只统计了前 50 条的假直方图
+            harness.api.collectionsTotal = 200
+            harness.api.collectionPages.value =
+                mapOf(
+                    0 to (1L..50L).map { collection(it, type = CollectionType.COLLECT.value).copy(rate = 8) },
+                )
+
+            val result = harness.repository.fetchRatingInsights("testuser", force = false)
+
+            assertIs<AppResult.Error>(result)
+        }
+
+    @Test
+    fun fetchRatingInsights_whenTotalExceedsPageCap_marksTruncated() =
+        runTest {
+            val harness = Harness()
+            // total 远超封顶（20 页 / 1000 条）：按封顶停手，并以 truncated 如实告知覆盖面
+            harness.api.collectionsTotal = 2000
+            harness.api.collectionPages.value =
+                (0 until 20).associate { page ->
+                    (page * 50) to listOf(collection((page + 1).toLong(), type = CollectionType.COLLECT.value).copy(rate = 9))
+                }
+
+            val result = harness.repository.fetchRatingInsights("testuser", force = false)
+
+            assertIs<AppResult.Success<RatingInsights>>(result)
+            assertEquals(20, result.data.ratedCount)
+            assertTrue(result.data.truncated)
+            assertEquals(20, harness.api.requests.size)
         }
 
     @Test

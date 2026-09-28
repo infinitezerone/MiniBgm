@@ -55,6 +55,7 @@ internal fun UserScreenSkeleton(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 UserProfileHeaderSkeleton(skeletonState = skeletonState)
+                RatingInsightsSkeleton(skeletonState = skeletonState)
             }
             Column(
                 modifier =
@@ -75,6 +76,7 @@ internal fun UserScreenSkeleton(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             UserProfileHeaderSkeleton(skeletonState = skeletonState)
+            RatingInsightsSkeleton(skeletonState = skeletonState)
             CollectionOverviewSkeleton(skeletonState = skeletonState)
         }
     }
@@ -132,6 +134,15 @@ internal fun UserProfileHeaderSkeleton(
                                 .fillMaxWidth(0.40f)
                                 .height(14.dp)
                                 .clip(RoundedCornerShape(4.dp)),
+                        state = skeletonState,
+                    )
+                    // 入站年限条骨架：真实卡片在 reg_time 可用时追加一行 labelSmall
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.30f)
+                                .height(11.dp)
+                                .clip(RoundedCornerShape(3.dp)),
                         state = skeletonState,
                     )
                     // 会员徽章胶囊骨架
@@ -207,6 +218,82 @@ internal fun UserProfileHeaderSkeleton(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 评分洞察卡骨架：与 [RatingInsightsCard] 1:1 几何对齐（标题行 + 均分列 + 56dp 柱图区） */
+@Composable
+internal fun RatingInsightsSkeleton(
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .size(width = 76.dp, height = 18.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                    state = skeletonState,
+                )
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .size(width = 84.dp, height = 12.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                    state = skeletonState,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 均分列：真实卡片固定 72dp 宽 + 16dp 间隔
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .size(width = 56.dp, height = 34.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                    state = skeletonState,
+                )
+                Spacer(modifier = Modifier.width(32.dp))
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                    state = skeletonState,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 两端刻度行
+            SkeletonBox(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                state = skeletonState,
+            )
         }
     }
 }
