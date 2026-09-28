@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
+import com.infinitezerone.minibgm.core.model.SearchResult
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -201,8 +202,9 @@ class SearchRepositoryImplTest {
             val repo = SearchRepositoryImpl(fakeApi, userPrefs)
 
             val result = repo.searchSubjectsAdvanced(SearchSubjectsRequest(keyword = "Gate"))
-            assertIs<AppResult.Success<List<Subject>>>(result)
-            assertEquals(1, result.data.size)
+            assertIs<AppResult.Success<SearchResult>>(result)
+            assertEquals(1, result.data.list.size)
+            assertEquals(1, result.data.total)
 
             fakeApi.cancellationToThrow = true
             assertFailsWith<CancellationException> {

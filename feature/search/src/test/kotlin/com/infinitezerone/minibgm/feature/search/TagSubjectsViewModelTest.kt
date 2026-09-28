@@ -3,8 +3,8 @@ package com.infinitezerone.minibgm.feature.search
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.SearchResult
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
-import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
@@ -165,14 +165,24 @@ class TagSubjectsViewModelTest {
                         request: SearchSubjectsRequest,
                         limit: Int,
                         offset: Int,
-                    ): AppResult<List<Subject>> {
+                    ): AppResult<SearchResult> {
                         lastRequest = request
                         return if (offset > 0) {
                             // 挂起直至测试放行；若取消逻辑正确，恢复时所在协程已被取消
                             releaseLoadMore.await()
-                            AppResult.Success(List(20) { sampleSubject.copy(id = 10_000L + it) })
+                            AppResult.Success(
+                                SearchResult(
+                                    total = 40,
+                                    list = List(20) { sampleSubject.copy(id = 10_000L + it) },
+                                ),
+                            )
                         } else {
-                            AppResult.Success(List(20) { sampleSubject.copy(id = it.toLong() + 1) })
+                            AppResult.Success(
+                                SearchResult(
+                                    total = 40,
+                                    list = List(20) { sampleSubject.copy(id = it.toLong() + 1) },
+                                ),
+                            )
                         }
                     }
 

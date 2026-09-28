@@ -100,12 +100,21 @@ data class SeasonalGuideUiState(
     val currentQuarter: SeasonQuarter = SeasonQuarter.WINTER,
     val selectedCategory: SeasonCategoryFilter = SeasonCategoryFilter.ALL,
     val availableYears: List<Int> = emptyList(),
+    /** 本季首播：Bangumi `air_date` 区间过滤的结果 */
     val subjects: List<Subject> = emptyList(),
+    /**
+     * 本季连载中：首播日不在本季、但本季确有播出事件的长期连载番。
+     * 仅当季/未来季有数据（播出事件来自滚动快照），历史季恒为空。
+     */
+    val ongoingSubjects: List<Subject> = emptyList(),
     val wishedSubjectIds: Set<Long> = emptySet(),
     val doingSubjectIds: Set<Long> = emptySet(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
+    val isLoadingOngoing: Boolean = false,
+    /** 服务端游标：下一页的 offset。不能用 subjects.size 代替——去重会丢弃重复条目导致错位 */
+    val pageOffset: Int = 0,
     val hasMore: Boolean = false,
     val error: String? = null,
     val userMessage: String? = null,
@@ -118,5 +127,13 @@ data class SeasonalGuideUiState(
                 subjects
             } else {
                 subjects.filter { matchesCategory(it, selectedCategory) }
+            }
+
+    val filteredOngoingSubjects: List<Subject>
+        get() =
+            if (selectedCategory == SeasonCategoryFilter.ALL) {
+                ongoingSubjects
+            } else {
+                ongoingSubjects.filter { matchesCategory(it, selectedCategory) }
             }
 }

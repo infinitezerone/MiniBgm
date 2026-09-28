@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.Tag
@@ -8,7 +9,9 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -32,15 +35,32 @@ class SeasonalGuideViewModelTest {
         searchRepository: FakeSearchRepository = FakeSearchRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
+        subjectRepository: FakeSubjectRepository = FakeSubjectRepository(),
         initialYear: Int = 0,
         initialSeasonMonth: Int = 0,
     ) = SeasonalGuideViewModel(
         searchRepository = searchRepository,
         collectionRepository = collectionRepository,
         authRepository = authRepository,
+        scheduleRepository = scheduleRepository,
+        subjectRepository = subjectRepository,
         initialYear = initialYear,
         initialSeasonMonth = initialSeasonMonth,
         timeProvider = { fixedDate },
+    )
+
+    /** 排期仓名册条目：`airDate` 为条目自身首播日，与窗口判定相关 */
+    private fun airSchedule(
+        id: Long,
+        title: String,
+        airDate: String,
+    ) = AirSchedule(
+        bgmId = id,
+        title = title,
+        titleCn = title,
+        airDate = airDate,
+        weekday = 1,
     )
 
     @Test
@@ -253,25 +273,203 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun loadMore_appendsUniqueSubjectsWhenHasMore() =
+    fun loadMore_usesServerCursorAndStopsAtServerTotal() =
         runTest {
             val searchRepository = FakeSearchRepository()
-            val firstBatch = List(50) { sampleSubject.copy(id = it.toLong() + 1) }
-            val secondBatch = List(10) { sampleSubject.copy(id = it.toLong() + 51) }
+            val firstBatch = List(20) { sampleSubject.copy(id = it.toLong() + 1) }
+            val secondBatch = List(10) { sampleSubject.copy(id = it.toLong() + 21) }
 
             searchRepository.advancedSearchResult = AppResult.Success(firstBatch)
+            // 服务端共 30 条，首页 20 条后仍有下一页
+            searchRepository.advancedSearchTotal = 30
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            assertEquals(50, viewModel.uiState.value.subjects.size)
+            assertEquals(20, viewModel.uiState.value.subjects.size)
             assertTrue(viewModel.uiState.value.hasMore)
+            // 单页宽度必须是 20：传更大只会被服务端静默截断，导致"满页即还有"的判定永远为假
+            assertEquals(20, searchRepository.lastAdvancedLimit)
+            assertEquals(0, searchRepository.lastAdvancedOffset)
 
             searchRepository.advancedSearchResult = AppResult.Success(secondBatch)
             viewModel.loadMore()
             advanceUntilIdle()
 
-            assertEquals(60, viewModel.uiState.value.subjects.size)
+            assertEquals(30, viewModel.uiState.value.subjects.size)
+            // 翻页 offset 取服务端游标而非已加载条数，去重丢弃条目后也不会错位
+            assertEquals(20, searchRepository.lastAdvancedOffset)
             assertFalse(viewModel.uiState.value.hasMore)
+        }
+
+    @Test
+    fun firstPage_marksNoMoreAsSoonAsServerTotalIsCovered() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(List(20) { sampleSubject.copy(id = it.toLong() + 1) })
+            searchRepository.advancedSearchTotal = 20
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+            assertFalse(viewModel.uiState.value.hasMore)
+        }
+
+    @Test
+    fun ongoing_keepsLongRunnersAiringThisSeasonAndDropsSeasonPremieres() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.schedulesAiringBetween =
+                listOf(
+                    airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"),
+                    airSchedule(id = 2001L, title = "本季新番", airDate = "2026-01-10"),
+                )
+
+            val subjectRepository = FakeSubjectRepository()
+            subjectRepository.sendSubject(
+                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
+            )
+            subjectRepository.sendSubject(
+                sampleSubject.copy(id = 2001L, name = "新番", nameCn = "本季新番", date = "2026-01-10"),
+            )
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    subjectRepository = subjectRepository,
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals(listOf(899L), state.ongoingSubjects.map { it.id })
+            assertFalse(state.isLoadingOngoing)
+            // 名册自带 airDate 的预筛就剔掉了本季首播那条，无需为它补一轮详情
+            assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
+            assertEquals("2026-01-01T00:00:00Z" to "2026-03-31T23:59:59Z", scheduleRepository.lastAiringWindow)
+        }
+
+    @Test
+    fun ongoing_usesBangumiDateAsFinalJudgeWhenRosterAirDateIsMissing() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+
+            val scheduleRepository = FakeScheduleRepository()
+            // 名册没给 airDate：预筛只能放行，必须靠 Bangumi 的 date 终判剔掉，否则会与网格重复
+            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 2001L, title = "本季新番", airDate = ""))
+
+            val subjectRepository = FakeSubjectRepository()
+            subjectRepository.sendSubject(
+                sampleSubject.copy(id = 2001L, name = "新番", nameCn = "本季新番", date = "2026-01-10"),
+            )
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    subjectRepository = subjectRepository,
+                )
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.ongoingSubjects
+                    .isEmpty(),
+            )
+            assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
+        }
+
+    @Test
+    fun ongoing_skipsDetailFetchFailureWithoutBreakingTheGroup() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.schedulesAiringBetween =
+                listOf(
+                    airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"),
+                    airSchedule(id = 404L, title = "已下架", airDate = "1997-04-01"),
+                )
+
+            val subjectRepository = FakeSubjectRepository()
+            subjectRepository.sendSubject(
+                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
+            )
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    subjectRepository = subjectRepository,
+                )
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(899L),
+                viewModel.uiState.value.ongoingSubjects
+                    .map { it.id },
+            )
+            assertFalse(viewModel.uiState.value.isLoadingOngoing)
+        }
+
+    @Test
+    fun ongoing_notQueriedForPastSeasonBecauseSnapshotHasNoHistory() =
+        runTest {
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"))
+
+            // 2024 春窗口末端 2024-06-30 早于"今天"(2026-02-15)：滚动快照里查不到任何事件，
+            // 与其给出"本季没有连载番"的错误结论，不如整组不呈现
+            val viewModel =
+                createViewModel(
+                    scheduleRepository = scheduleRepository,
+                    initialYear = 2024,
+                    initialSeasonMonth = 4,
+                )
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.ongoingSubjects
+                    .isEmpty(),
+            )
+            assertNull(scheduleRepository.lastAiringWindow)
+        }
+
+    @Test
+    fun switchingSeason_clearsPreviousOngoingGroup() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"))
+
+            val subjectRepository = FakeSubjectRepository()
+            subjectRepository.sendSubject(
+                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
+            )
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    subjectRepository = subjectRepository,
+                )
+            advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.ongoingSubjects.size)
+
+            // 切到历史季：上一季的连载中分组必须立刻清空，不能残留
+            scheduleRepository.schedulesAiringBetween = emptyList()
+            viewModel.selectSeason(2024, SeasonQuarter.SPRING)
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.ongoingSubjects
+                    .isEmpty(),
+            )
         }
 
     @Test

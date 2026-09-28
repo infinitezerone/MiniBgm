@@ -93,6 +93,20 @@ interface AirEventDao {
         fromIso: String,
         toIso: String,
     ): List<AirEventEntity>
+
+    /**
+     * 指定时间窗内确有播出事件的条目 id 去重列表（不限定"我追的"）。
+     * 供季度导视判断"本季在播"：长期连载番的首播日远在本季之前，
+     * 只能靠真实播出事件证明它本季仍在播。
+     */
+    @Query(
+        "SELECT DISTINCT subjectId FROM air_events " +
+            "WHERE airAtUtc >= :fromIso AND airAtUtc <= :toIso",
+    )
+    suspend fun getSubjectIdsWithEventsBetween(
+        fromIso: String,
+        toIso: String,
+    ): List<Long>
 }
 
 /**

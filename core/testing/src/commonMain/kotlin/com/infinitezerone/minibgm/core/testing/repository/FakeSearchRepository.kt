@@ -28,6 +28,13 @@ class FakeSearchRepository : SearchRepository {
         private set
     var advancedSearchResult: AppResult<List<Subject>> = AppResult.Success(emptyList())
 
+    /**
+     * 覆盖响应里的 `total`；负数表示"未设置"，此时取列表长度，
+     * 语义等价于"服务端总共就这么多条"（即当前已是最后一页）。
+     * 需要模拟"还有下一页"时显式设一个更大的值。
+     */
+    var advancedSearchTotal: Int = -1
+
     private val _searchHistory = MutableStateFlow<List<String>>(emptyList())
     var addHistoryCallCount: Int = 0
         private set
@@ -75,11 +82,21 @@ class FakeSearchRepository : SearchRepository {
         request: SearchSubjectsRequest,
         limit: Int,
         offset: Int,
-    ): AppResult<List<Subject>> {
+    ): AppResult<SearchResult> {
         advancedSearchCallCount++
         lastAdvancedRequest = request
         lastAdvancedOffset = offset
         lastAdvancedLimit = limit
-        return advancedSearchResult
+        return when (val result = advancedSearchResult) {
+            is AppResult.Success ->
+                AppResult.Success(
+                    SearchResult(
+                        total = if (advancedSearchTotal >= 0) advancedSearchTotal else result.data.size,
+                        list = result.data,
+                    ),
+                )
+            is AppResult.Error -> result
+            is AppResult.Loading -> result
+        }
     }
 }

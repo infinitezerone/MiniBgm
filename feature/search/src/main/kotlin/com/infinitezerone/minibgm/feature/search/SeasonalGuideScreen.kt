@@ -66,8 +66,10 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.search.components.OngoingAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -273,8 +275,10 @@ fun SeasonalGuideContent(
                         )
                     }
 
-                    // 空结果态
-                    !uiState.isLoading && uiState.filteredSubjects.isEmpty() -> {
+                    // 空结果态（「本季首播」与「本季连载中」两组都为空才算真的没有）
+                    !uiState.isLoading &&
+                        uiState.filteredSubjects.isEmpty() &&
+                        uiState.filteredOngoingSubjects.isEmpty() -> {
                         SeasonalGuideEmptyState(
                             selectedYear = uiState.selectedYear,
                             selectedQuarter = uiState.selectedQuarter,
@@ -298,6 +302,17 @@ fun SeasonalGuideContent(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
+                            // 「本季连载中」：首播早于本季、但本季确有播出事件的长期连载番，
+                            // 与下方"本季首播"网格互补，二者不会出现同一条目
+                            if (uiState.filteredOngoingSubjects.isNotEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    OngoingAnimeSection(
+                                        subjects = uiState.filteredOngoingSubjects,
+                                        onSubjectClick = onSubjectClick,
+                                    )
+                                }
+                            }
+
                             items(
                                 items = uiState.filteredSubjects,
                                 key = { it.id },
@@ -395,6 +410,51 @@ fun SeasonalGuideContent(
                 onDismiss = { showSeasonPicker = false },
             )
         }
+    }
+}
+
+/**
+ * 「本季连载中」横向分组。
+ *
+ * 只在当季/未来季出现：播出事件来自滚动快照，历史季度无数据可依，
+ * 与其给出"本季没有连载番"的错误结论，不如整组不显示。
+ */
+@Composable
+private fun OngoingAnimeSection(
+    subjects: List<Subject>,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "本季连载中",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "首播早于本季 · ${subjects.size} 部",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(
+                items = subjects,
+                key = { it.id },
+            ) { subject ->
+                OngoingAnimeCard(subject = subject, onClick = onSubjectClick)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
     }
 }
 

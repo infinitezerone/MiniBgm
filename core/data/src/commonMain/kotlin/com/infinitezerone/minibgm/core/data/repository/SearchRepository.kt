@@ -5,7 +5,6 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchResult
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
-import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
@@ -26,12 +25,18 @@ interface SearchRepository {
         offset: Int = 0,
     ): AppResult<SearchResult>
 
-    /** 高级多维搜索与探索条目 (POST /v0/search/subjects，API 限制单页最大 20 条) */
+    /**
+     * 高级多维搜索与探索条目 (POST /v0/search/subjects)。
+     *
+     * 服务端单页**硬上限 20 条**：请求 limit > 20 不会报错，只会静默按 20 截断，
+     * 因此翻页判定必须用响应里的 `total`（[SearchResult.total]）而不是"返回条数是否等于 limit"，
+     * 否则一旦 limit 传大于 20 就会永远判定为"没有下一页"。
+     */
     suspend fun searchSubjectsAdvanced(
         request: SearchSubjectsRequest,
         limit: Int = 20,
         offset: Int = 0,
-    ): AppResult<List<Subject>>
+    ): AppResult<SearchResult>
 
     /** 观察本地搜索历史列表（按最近使用降序） */
     fun getSearchHistory(): Flow<List<String>>
@@ -118,7 +123,7 @@ class SearchRepositoryImpl(
         request: SearchSubjectsRequest,
         limit: Int,
         offset: Int,
-    ): AppResult<List<Subject>> =
+    ): AppResult<SearchResult> =
         try {
             val response =
                 apiService.searchSubjectsAdvanced(
@@ -126,7 +131,7 @@ class SearchRepositoryImpl(
                     limit = limit,
                     offset = offset,
                 )
-            AppResult.Success(response.data)
+            AppResult.Success(SearchResult(total = response.total, list = response.data))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

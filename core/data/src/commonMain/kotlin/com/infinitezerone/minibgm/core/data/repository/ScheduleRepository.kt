@@ -64,6 +64,21 @@ interface ScheduleRepository {
     ): List<UpcomingAiring>
 
     /**
+     * 查询 [fromUtcIso, toUtcIso] 内确有播出事件的条目名单，按 Bangumi 评分降序。
+     *
+     * 与 [getUpcomingAiringForSubjects] 的区别：不限定"我追的"，且接受任意绝对时间窗而非相对小时数。
+     * 季度导视用它判断"本季在播"——长期连载番（名侦探柯南等）的首播日远在当季之前，
+     * Bangumi 的 `air_date` 区间过滤永远捞不到它们，只有真实播出事件能证明它本季仍在播。
+     *
+     * 注意：事件数据是滚动快照，只覆盖"当前 ± 数周/数季"，超出范围的**历史季度**会返回空，
+     * 调用方需自行判断该季度是否落在快照覆盖期内。
+     */
+    suspend fun getSchedulesAiringBetween(
+        fromUtcIso: String,
+        toUtcIso: String,
+    ): List<AirSchedule>
+
+    /**
      * 全量刷新管线（UX_REMEDIATION 诉求：所有数据源获取完再更新 UI 列表）：
      * 拉齐 AniList 周排期（名单发现 + 逐话真值）、bangumi-data 播放源与事件仲裁，
      * 期间对外流被闸门扣住，全部完成后才以最终状态对外发一次。
@@ -192,6 +207,19 @@ class ScheduleRepositoryImpl(
             return resolveFromStoredEvents(storedEvents, titles)
         }
         return resolveFromSchedulesFallback(subjectIds, titles, nowMillis, hoursAhead, lookbackHours)
+    }
+
+    override suspend fun getSchedulesAiringBetween(
+        fromUtcIso: String,
+        toUtcIso: String,
+    ): List<AirSchedule> {
+        val subjectIds = airEventDao.getSubjectIdsWithEventsBetween(fromUtcIso, toUtcIso)
+        if (subjectIds.isEmpty()) return emptyList()
+        return scheduleDao
+            .getSchedulesByIds(subjectIds)
+            .filter { it.bgmId > 0 }
+            .sortedByDescending { it.ratingScore }
+            .map { it.toModel(json) }
     }
 
     private fun resolveFromStoredEvents(

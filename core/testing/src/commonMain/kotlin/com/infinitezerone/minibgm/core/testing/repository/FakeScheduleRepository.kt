@@ -66,6 +66,19 @@ class FakeScheduleRepository : ScheduleRepository {
         return upcomingAiring.filter { it.subjectId in subjectIds.toSet() }
     }
 
+    /** 测试可预置的"指定窗口内在播"名单（按传入窗口原样返回） */
+    var schedulesAiringBetween: List<AirSchedule> = emptyList()
+    var lastAiringWindow: Pair<String, String>? = null
+        private set
+
+    override suspend fun getSchedulesAiringBetween(
+        fromUtcIso: String,
+        toUtcIso: String,
+    ): List<AirSchedule> {
+        lastAiringWindow = fromUtcIso to toUtcIso
+        return schedulesAiringBetween
+    }
+
     /** 测试可预置的默认筛选持久化值 */
     var scheduleDefaultOnlyWatching: Boolean = false
         private set

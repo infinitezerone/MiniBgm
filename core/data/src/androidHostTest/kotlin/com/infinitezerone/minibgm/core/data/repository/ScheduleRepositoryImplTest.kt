@@ -148,6 +148,15 @@ class ScheduleRepositoryImplTest {
             events.value.filter {
                 it.subjectId in subjectIds.toSet() && it.airAtUtc >= fromIso && it.airAtUtc <= toIso
             }
+
+        override suspend fun getSubjectIdsWithEventsBetween(
+            fromIso: String,
+            toIso: String,
+        ): List<Long> =
+            events.value
+                .filter { it.airAtUtc >= fromIso && it.airAtUtc <= toIso }
+                .map { it.subjectId }
+                .distinct()
     }
 
     /**
@@ -2447,4 +2456,67 @@ class ScheduleRepositoryImplTest {
             println("DEBUG-splitCour entity=" + entity)
             assertEquals(1, entity.nextEpisode, "拆季偏移应把 AniList 第 13 话还原为 Bangumi 第 1 话")
         }
+
+    @Test
+    fun getSchedulesAiringBetween_keepsOnlyWindowEvents_andOrdersByHeat() =
+        runTest {
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            airScheduleEntity(id = 899L, title = "名侦探柯南", ratingScore = 7.9),
+                            airScheduleEntity(id = 2L, title = "低热度连载", ratingScore = 5.2),
+                            airScheduleEntity(id = 3L, title = "窗口外", ratingScore = 9.9),
+                        ),
+                    )
+                }
+            val airEventDao =
+                FakeAirEventDao().apply {
+                    insertAirEvents(
+                        listOf(
+                            airEventEntity(subjectId = 899L, airAtUtc = "2026-02-10T12:00:00Z"),
+                            airEventEntity(subjectId = 2L, airAtUtc = "2026-03-01T12:00:00Z"),
+                            // 落在窗口外：不得进入结果
+                            airEventEntity(subjectId = 3L, airAtUtc = "2026-06-01T12:00:00Z"),
+                        ),
+                    )
+                }
+            val repo = createRepository(scheduleDao = dao, airEventDao = airEventDao)
+
+            val result =
+                repo.getSchedulesAiringBetween(
+                    fromUtcIso = "2026-01-01T00:00:00Z",
+                    toUtcIso = "2026-03-31T23:59:59Z",
+                )
+
+            assertEquals(listOf(899L, 2L), result.map { it.bgmId })
+            assertEquals("名侦探柯南", result.first().titleCn)
+        }
+
+    private fun airScheduleEntity(
+        id: Long,
+        title: String,
+        ratingScore: Double,
+    ) = AirScheduleEntity(
+        bgmId = id,
+        title = title,
+        titleCn = title,
+        coverUrl = "",
+        ratingScore = ratingScore,
+        weekday = 1,
+        timeCst = "",
+        timeJst = "",
+        sitesJson = "[]",
+    )
+
+    private fun airEventEntity(
+        subjectId: Long,
+        airAtUtc: String,
+    ) = AirEventEntity(
+        subjectId = subjectId,
+        episode = 1,
+        airAtUtc = airAtUtc,
+        kind = AirEventKind.ACTUAL,
+        source = "anilist",
+    )
 }

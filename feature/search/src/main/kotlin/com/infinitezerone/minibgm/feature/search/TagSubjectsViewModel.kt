@@ -125,7 +125,7 @@ class TagSubjectsViewModel(
                             )
                     ) {
                         is AppResult.Success -> {
-                            val newItems = result.data
+                            val newItems = result.data.list
                             _uiState.update { state ->
                                 val existingIds = state.subjects.map { it.id }.toSet()
                                 val uniqueNew = newItems.filter { it.id !in existingIds }
@@ -208,7 +208,7 @@ class TagSubjectsViewModel(
                             )
                     ) {
                         is AppResult.Success -> {
-                            val items = result.data
+                            val items = result.data.list
                             _uiState.update {
                                 it.copy(
                                     isLoading = false,

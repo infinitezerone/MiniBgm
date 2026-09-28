@@ -214,7 +214,7 @@ class ExploreViewModel(
                         )
                 ) {
                     is AppResult.Success -> {
-                        val newSubjects = result.data
+                        val newSubjects = result.data.list
                         _uiState.update {
                             val existingIds = it.subjects.map { s -> s.id }.toSet()
                             val uniqueNew = newSubjects.filter { s -> s.id !in existingIds }
@@ -286,13 +286,13 @@ class ExploreViewModel(
                             it.copy(
                                 isLoading = false,
                                 isRefreshing = false,
-                                subjects = result.data,
-                                hasMore = result.data.size >= PAGE_SIZE,
-                                pageOffset = result.data.size,
+                                subjects = result.data.list,
+                                hasMore = result.data.list.size >= PAGE_SIZE,
+                                pageOffset = result.data.list.size,
                                 error = null,
                             )
                         }
-                        fetchHotCommentsForSubjects(result.data)
+                        fetchHotCommentsForSubjects(result.data.list)
                     }
 
                     is AppResult.Error -> {
