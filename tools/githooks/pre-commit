@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 本仓库禁用 git 写路径：历史操作只用 jj（colocate 保护，见 AGENTS.md）。
+# 经 core.hooksPath 接线（tools/githooks/setup.sh），对任何发起方生效：人、AI、间接脚本。
+echo "[githooks] git commit 已禁用：本仓库历史操作只用 jj（jj commit / jj git push）。" >&2
+echo "[githooks] 极特殊需要请显式 --no-verify 并自担破坏 jj 操作日志的后果。" >&2
+exit 1

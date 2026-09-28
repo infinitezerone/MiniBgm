@@ -4,7 +4,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 版本控制
 
-仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要建议遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。
+仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要建议遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。git 只读（log/diff/show/ls-remote/tag/clone）——git 写子命令由 VCS 层的 `tools/githooks`（pre-commit / pre-push 硬拒）拦下，新 clone 跑一次 `tools/githooks/setup.sh` 接线，`tools/jgate` 会自愈补配；jj 不运行 git 钩子，与合法路径零冲突。
 
 - 一个提交一个目的；同一文件别混两个目的——事后 `jj split` 拆不出可编译的中间态。
 - 同一时刻只允许一条 Gradle 命令在跑（长构建后台 + 足够超时，避免 daemon 互踩）。
