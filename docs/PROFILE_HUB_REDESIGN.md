@@ -1,9 +1,9 @@
 # MiniBgm 个人中心架构迁移设计 (Profile Hub Redesign)
 
-> **状态：v3 设计 + P1 已实施（2026-09-28）。** §5 标注 ✅ 的项已落地并过 `tools/jgate`。
+> **状态：v3 设计；P1 曾实施、已按「高频页面请求纪律」回退（2026-09-28）。** 见 §5-P1 与 §7。
 > **v2 修订（2026-09-28）**：v1 的数据面结论基于仓库既有假设与二手资料，**存在错误**——尤其"社交数字无端点"。v2 改为逐条核对两份**官方 OpenAPI 规范原文**，已在 §2.4 列出全部更正。
 > **v3 修订（2026-09-28，决策）**：私有 API 能力虽已核实存在，但**决定不引入依赖**——成就带走 v0-only，不扩展凭据层承载 CookieSession，原生发评论不做。v2 中两处以私有 API 为数据源的表述同时作废，见 §2.5。
-> **实施修订（2026-09-28）**：原 P1「追番成就带」与 P3「评分叙事」**合并为「评分成就区」**并落地——纯数字行与已落地的头部统计条同形，合并后才有形态区分（§3 形态纪律）。
+> **实施修订（2026-09-28）**：原 P1「追番成就带」与 P3「评分叙事」曾合并为「评分成就区」落地，同日按新增的**高频页面请求纪律**（§7）回退——该功能进一次页面要发 `ceil(看过数/50)` 次串行分页，属"用多次请求拼装一个功能"。**结论：个人页不做它，直到数据能本地化。**
 > 关联文档：[ROADMAP.md §7 个人中心板块](../ROADMAP.md)、[UX_REMEDIATION.md](../UX_REMEDIATION.md)
 
 ---
@@ -17,10 +17,10 @@
 **但能力存在不等于要用。v3 决策：私有 API 收口——本轮设计与实现只依赖 v0（Bearer），不引入任何新的 `/p1` 依赖。** 落点：
 
 - 「不做社交数字」的性质从**被迫**改为**主动选择**（定位决策，非能力约束）；可得性已论证完，将来若要重启社交方向不必再查
-- 成就带改走 **v0-only**：计数用**已接线**的 `api.bgm.tv/user/{u}/collections/status`，入站年数用 `/v0/me` 的 `reg_time`，评分明细用 `/v0/users/{u}/collections`
+- 成就叙事原计划走 **v0-only**：计数用**已接线**的 `api.bgm.tv/user/{u}/collections/status`，入站年数用 `/v0/me` 的 `reg_time`，评分明细用 `/v0/users/{u}/collections`——**但评分明细部分已回退**（请求扇出，见 §5-P1）；计数与入站年限保留
 - 因而不扩展凭据层、不承载 CookieSession，不触碰 §7 的「凭据只存在于 `AuthTokensDataSource`」红线
 - `UserHomepage` 板块模型仍作为**结构参考**（§5-P6），但不依赖 `GET /p1/home` 拉取
-- **已落地（2026-09-28）**：② 评分成就区。落点与形态纪律见 §3、§5-P1
+- **新增硬约束（§7）**：高频页面只读本地与内存缓存，跨全量数据的聚合一律交给后台 Worker 或用户主动刷新
 
 ---
 
@@ -29,14 +29,14 @@
 | 能力 | 实现位置 | 数据来源 |
 |---|---|---|
 | 统计并入身份头部 | `feature/user/.../UserProfileCards.kt` → `TrackingStatsRow` | Room 本地聚合 |
-| 在追动态行式化 | `feature/user/.../UserSubjectActivityCard.kt` + `UserViewModel.subjectActivityFlow` | `/p1/subjects/{id}/topics` |
+| 在追动态行式化 | `feature/user/.../UserSubjectActivityCard.kt` + `UserViewModel.subjectActivityFlow` | `/p1/subjects/{id}/topics`（**扇出已收敛为 N 次**，番名本地取，见 §7） |
 | 收藏总览叙事化 | `feature/user/.../UserCollectionOverviewCard.kt` | v0 legacy `/user/{u}/collections/status` |
 | 头部骨架几何对齐 | `feature/user/.../UserScreenSkeleton.kt` | — |
-| **评分成就区**（均分 + 1–10 分布柱图） | `feature/user/.../UserRatingInsightsCard.kt` + `CollectionRepository.fetchRatingInsights` | v0 `/v0/users/{u}/collections`（`rate`） |
-| 入站年限（头部次要文字） | `core:model/UserProfile.regTime` + `registeredYear` | v0 `/v0/me` 的 `reg_time` |
-| 评分成就区骨架几何 | `feature/user/.../UserScreenSkeleton.kt` → `RatingInsightsSkeleton` | — |
+| 入站年限（头部次要文字） | `core:model/UserProfile.regTime` + `registeredYear` | v0 `/v0/me` 的 `reg_time`（零额外请求） |
 
-本地聚合口径见 `CollectionRepository.observeTrackingFootprint()`；评分聚合为远端拉取 + 内存 TTL 缓存（**不建表**）。DB 为 `version = 9`，**至今无 schema 迁移**。
+本地聚合口径见 `CollectionRepository.observeTrackingFootprint()`。DB 为 `version = 9`，**至今无 schema 迁移**。
+
+进一次个人页的网络请求：**收藏计数 1 次**（TTL 缓存）+ **在追动态 N 次**（N = min(在追部数, 3)，讨论本身无法本地化）。评分成就区已回退。
 
 ---
 
@@ -142,7 +142,7 @@ UserHomepageSection = anime | game | book | music | real | mono | blog | friend 
 | 收藏计数来源 | "私有 `UserStats.subject` 一次拿全、省一次调用" | **v0 legacy `api.bgm.tv/user/{u}/collections/status`**（带 `app_id` 参数）——**仓库早已接线**：`BangumiApiServiceImpl.getUserCollectionStats()` → `CollectionRepositoryImpl.fetchCollectionCounts()`（`CachedCounts` TTL 缓存）。私有方案并不比现状更优，v2 的"顺带省一次调用"因此不成立 |
 | 入站年数来源 | "私有 `User.joinedAt` 直接给" | **v0 `/v0/me` 的 `reg_time`**（spec 中为 required、`date-time`）——只需把它映射进 `UserProfile`（当前被丢弃）。Bearer 即可，无需 CookieSession |
 
-**`GET /p1/me` 的处置**：它是全部 165 个端点里**唯一只声明 `CookiesSession`、不接受 `HTTPBearer`** 的端点。要让它可用，需在 `AuthTokensDataSource` 新增 cookie 槽位并注入 `chiiNextSessionID`——这是一次凭据层扩展。**决定：不做。** 依赖它的只有 `stats.friend/group/blog` 与 `joinedAt`，两者对「评分成就区」都非必须，且 `joinedAt` 已有 v0 替代（`reg_time`）。
+**`GET /p1/me` 的处置**：它是全部 165 个端点里**唯一只声明 `CookiesSession`、不接受 `HTTPBearer`** 的端点。要让它可用，需在 `AuthTokensDataSource` 新增 cookie 槽位并注入 `chiiNextSessionID`——这是一次凭据层扩展。**决定：不做。** 依赖它的只有 `stats.friend/group/blog` 与 `joinedAt`，两者对个人页叙事都非必须，且入站年限已有 v0 替代（`reg_time`）。
 
 **连带结论**：§2.2 列出的社交 / 时间线端点虽技术可用（Bearer 即可，与已落地的 `/p1/.../like` 同源），本轮一律**不使用**——理由见 §3.1。
 
@@ -154,19 +154,19 @@ UserHomepageSection = anime | game | book | music | real | mono | blog | friend 
 
 | # | 区块 | 状态 | 数据源 | 请求成本 |
 |---|---|---|---|---|
-| ① | 身份头部 + 统计条 | ✅ 已落地 | 本地聚合 | 0 |
-| ② | **评分成就区**（均分大字 + 1–10 分布柱图） | ✅ 已落地 | v0 `/v0/users/{u}/collections`（`subject_type=2&type=2`，含 `rate`） | ceil(N/50)，页数封顶 20 |
-| ③ | **继续观看行** | 🆕 | 本地续播 DataStore（需补映射，见 §5-P2） | 0 |
+| ① | 身份头部 + 统计条 + 入站年限 | ✅ 已落地 | 本地聚合 + `/v0/me` 的 `reg_time` | 0（随 profile 一并返回） |
+| ② | ~~评分成就区（均分 + 1–10 分布柱图）~~ | ❌ **已实施后回退** | v0 `/v0/users/{u}/collections`（`rate`） | 曾为 ceil(N/50)、封顶 20 —— **违反 §7，故撤销** |
+| ③ | **继续观看行** | ✗ 不做（用户决定） | 本地续播 DataStore（需补映射，见 §5-P2） | 0 |
 | ④ | 收藏总览 | ✅ 已落地 | v0 legacy `/user/{u}/collections/status`（**维持现状，不迁移**） | 0（TTL 缓存内） |
-| ⑤ | 在追动态 | ✅ 已落地 | `/p1/subjects/{id}/topics`（已落地，唯一存量 `/p1` 读） | N（在追前 3） |
+| ⑤ | 在追动态 | ✅ 已落地 | `/p1/subjects/{id}/topics`（唯一存量 `/p1` 读） | **N = min(在追部数, 3)** |
 | ⑤′ | **友邻在看** | ✗ 本轮不做 | 私有 API `/p1/me/friends/subject-collections` | — |
 
-**形态纪律（2026-09-28 实施时确定）**：第二层只放**一种**数字形态。
+**形态纪律（2026-09-28）**：第二层只放**一种**数字形态。
 
 - 「数字行」全页**只有一排**——即已落地的 `TrackingStatsRow`（在看 / 累计追集 / 本月打卡），不再叠加第二排同形数字格
-- 成就叙事改用**图表形态**区分：均分大字 + 1–10 分布柱图（`RatingInsightsCard`），与数字行形成「读数字 / 看形状」的分工
 - **注册时间不占格子**：降级为头部一行次要文字（`$year 年加入 · 已 N 年`），与 GitHub / Twitter 头部的 "Joined …" 同构；`regTime` 缺失时整行不渲染
 - 原设计里的「入站年数 / 均分 / 看过」三格数字行**已废弃**——它与统计条同形，会形成两排重复数字
+- 原设想用「图表形态」（分布柱图）与数字行区分、从而让成就区成立——**该设想随 §7 一并作废**：不是形态不好，而是它拿不到零请求的数据
 
 ### 3.1 为什么仍然不做社交数字带
 
@@ -189,52 +189,47 @@ v1 的第一条理由是"数据不存在"——**这条已被推翻**。修正�
 - ✅ 离线可用、SQL 聚合快
 - ❌ **真正的成本不在加两列**：当前本地只同步 DOING（type=3），要支持"看过"分布得把同步面扩到全部收藏（上千条），本地库体积与首次同步耗时显著上升
 
-### B. 零迁移 · 按需拉取 + 内存 TTL 缓存 ← **推荐，已实施（2026-09-28）**
-新增 `fetchRatingInsights(username, force)`：分页拉 v0 collections（`subject_type=2&type=2`）聚合直方图/均分，按 `fetchCollectionCounts` 的既有模式缓存。
-- ✅ **实施结果**：`CollectionRepositoryImpl.fetchRatingInsights()` 走**串行分页**（`RATING_PAGE_SIZE = 50`、`MAX_RATING_PAGES = 20`），复用 `countsMutex` + `CachedRatingInsights` TTL 缓存；`DB version` 仍为 9，**零迁移**
-- ✅ 零迁移、不膨胀本地库、数据新鲜
-- ✅ **复用仓库既有先例**：`CollectionRepositoryImpl.fetchCollectionCounts()`（`:242`）已是"网络拉取 + `CachedCounts` TTL 缓存、不建表"
-- ⚠️ 成本（**已按真实上限修正**）：`ceil(N/50)` 请求；1000 部 ≈ 20 请求。实施取**串行**而非并发——服务端无限流提示，但 20 次串行分页的固定开销远小于触发风控的风险，页数另封顶 20 兜住 `total` 异常
-- ❌ 首次进页面有等待（骨架屏覆盖）；离线 fail-open 隐藏
+### B. 零迁移 · 按需拉取 + 内存 TTL 缓存 ← **曾实施，2026-09-28 已回退**
+新增 `fetchRatingInsights(username, force)`：分页拉 v0 collections（`subject_type=2&type=2`）聚合直方图/均分。
+- ✅ 零迁移、不膨胀本地库
+- ❌ **致命项（事后才发现）**：成本是 `ceil(N/50)` 次请求、页数上限 20。这不是"一次页面渲染"，而是**用多次请求拼装一个功能**——且缓存只在内存，冷启动每次重付。违反 §7，已撤销
+- 教训：判断成本不能只看"有没有缓存"，要看**缓存失效后一次交互的真实扇出**
 
-### C. 轻量聚合缓存表
-只存聚合结果（直方图/均分/快照时间）一行 JSON。
+### C. 轻量聚合快照（JSON 单行）
+只存聚合结果（直方图/均分/快照时间）一行 JSON——**Room 表或 DataStore 均可**（`SettingsRepository.playbackPositions` 已有"序列化 JSON 存 DataStore"的先例，可免迁移）。
 - ✅ 离线可读、体积小
-- ❌ 仍要迁移
+- ✅ **唯一能同时满足"保留功能"与 §7 的路径**：拉取交给后台 Worker / 下拉刷新，页面只读快照
+- ⚠️ 数据有滞后（需在卡片上标"截至 X"）
 
-**推荐 B 起步，量级或离线需求上升后升级 C。** 另外**计数类数据的既有实现已足够**——v0 legacy `/user/{u}/collections/status` + TTL 缓存，既不需要迁移，也不需要改走私有 API。
+**当前结论：B 已废弃。若要重做评分叙事，只能走 C**——先解决"页面零请求"，再谈展示。
+**计数类数据的既有实现已足够**——v0 legacy `/user/{u}/collections/status` + TTL 缓存，1 请求且长期有效。
 
 ---
 
 ## 5. 分期
 
 ### P0 · 已落地
-身份头部 + 统计条、收藏总览、在追动态、骨架几何对齐。
+身份头部 + 统计条 + 入站年限、收藏总览、在追动态（扇出已收敛，见 §7）、骨架几何对齐。
 
-### P1 · 评分成就区（✅ 已落地 2026-09-28，v0-only、零迁移、零新依赖）
+### P1 · 评分成就区 —— **已实施，同日回退（2026-09-28）；结论：不做**
 
-原 P1「追番成就带」与 P3「评分叙事」**合并**为本项——纯数字行与已落地的统计条同形，合并后才有形态区分（见 §3 形态纪律）。
+原 P1「追番成就带」与 P3「评分叙事」曾合并为「评分成就区」，**已实现、过门禁、入库**（`23addf89`），同日按 §7 撤销（`7688721a`）。
 
-- **数据源**（全部 v0 + Bearer）：
-  - 均分 / 1–10 分布 → `/v0/users/{username}/collections`（`subject_type=2&type=2`，`rate` 为 required；`rate = 0` 视为未评分，从均分与分布中排除）
-  - 入站年限 → `/v0/me` 的 `reg_time`（**已补映射**），仅作头部次要文字
-  - 收藏计数 → 复用**已接线**的 `api.bgm.tv/user/{username}/collections/status`（`fetchCollectionCounts`，TTL 缓存命中即 0 请求），本轮**未新增调用**
-- **实现落点**：
-  - `core:model`：`UserProfile.regTime`（`@SerialName("reg_time")`，可空）+ `registeredYear`（提取 4 位年份并做合理性区间校验，格式不符返回 null）
-  - `core:data`：`CollectionRepository.fetchRatingInsights(username, force)` + `RatingInsights{ratedCount, averageRate, distribution, truncated}`；串行分页聚合，复用 `countsMutex` + `CachedRatingInsights` TTL 缓存（与 `CachedCounts` 同模式），写操作经 `clearCachedAggregates()` 统一失效
-  - `feature:user`：新增 `RatingInsightsCard`（均分大字 + 1–10 柱图，空分档留极细基底）；`UserProfileCards` 头部加入站年限行；`UserScreen` 接线；`UserScreenSkeleton` 补 `RatingInsightsSkeleton` 等几何
-  - `core:testing`：`FakeCollectionRepository` 增 `fetchRatingInsights` 支持
-- **降级与边界**：未评分（`ratedCount == 0`）或拉取失败 → 整卡不渲染；加载中且无历史数据 → 等几何骨架；超过 20 页 → `truncated = true`，统计只覆盖已拉取部分
-- **不做**：`stats.friend/group/blog`（社交数字，§3.1 主动不做）；`/p1/users/{username}` 与 `/p1/me`（私有 API，本轮收口）
+- **撤销理由**：进一次个人页触发 `ceil(看过数/50)` 次串行分页（上限 20 页），内存缓存进程重启即失效——冷启动每次重付。
+- **为何不能改造成单请求**（已核实两套 API 均无聚合端点）：
+  - v0 收藏端点只有 `limit / offset / subject_type / type`，无排序、无聚合
+  - 私有 `UserStats.subject` 展开是 `{条目类型: {收藏状态: 计数}}`，**只有计数没有评分**
+  - 私有 `/p1/collections/subjects` 返回 `Subject[]`，**不含 `rate`**
+  - → 评分分布天然要求读到每一条评分，**无法降为单请求**
+- **若要重做**：只能先落 §4-C 的快照方案（后台聚合 + 页面 0 请求），并接受数据滞后
+- **保留部分**：`UserProfile.regTime` / `registeredYear` 与头部入站年限——随 `/v0/me` 一并返回，属零额外请求，不在撤销范围
 
 ### P2 · 继续观看行
 - **现状障碍**（不变）：续播持久化键是 `streamUrl → positionMs`（`SettingsRepository.MAX_PLAYBACK_POSITIONS = 50`），**无 subjectId / 封面**
 - **前提**：播放时额外写入 `subjectId / episodeId / 封面URL`（轻量 DataStore）
-- 纯客户端，不依赖远端
+- 纯客户端，不依赖远端。**用户已决定暂不做（2026-09-28）**
 
-### P3 · 评分叙事 —— **已并入 P1（2026-09-28）**
-- `fetchRatingInsights` + TTL 缓存 + fail-open 已按 §4-B 落地，见 P1
-- **未做**：`comment`（短评）虽在同一个响应里，短文叙事本轮不做
+### P3 · 评分叙事 —— **已并入 P1，随其一并撤销**
 
 ### P4 · 友邻在看 —— **本轮不做（2026-09-28 决策）**
 - 技术上现成：`/p1/me/friends/subject-collections?subjectType=2` → `FriendSubjectCollectionActivity{user, subject, collectionType, updatedAt}`，Bearer 即可，1 请求
@@ -267,10 +262,34 @@ v3 决策进一步固化：本轮不新增 `/p1` 依赖，时间线自然不在�
 - **观看时长统计** — 不做（两个 API 均无单集时长字段，维持 v1 判断）
 - **伪造封面图** — 不做。私有 `User` 有 `site` / `location` / `bio`，但无封面图字段；氛围可用 `AmbientGlow`，不得伪装成"用户封面"
 - **无限瀑布流** — 不做；定长区块 + 展开入口即终态
+- **跨全量收藏的聚合**（评分分布 / 均分 / 生涯档案 / 年度统计）— **本轮不做**。两个 API 均无聚合端点，实现方式只能是页面拉 N 页拼装，违反 §7。要走这条路必须先做 §4-C 的快照化
 
 ---
 
 ## 7. 验收口径
+
+### 7.1 高频页面请求纪律（**硬约束，2026-09-28 立**）
+
+> **高频页面（首页 / 时刻表 / 个人页 / 详情页 / 播放页）只读本地与内存缓存，不得在页面内串联多次请求拼装一个功能。**
+> 跨全量数据的聚合一律由后台 Worker 或用户主动刷新承担，结果以快照形式落 DataStore / Room，页面只读快照。
+
+判据与操作化：
+
+- **看的是"缓存失效后一次交互的真实扇出"**，不是"有没有缓存"。内存 TTL 缓存不算数——进程重启即失效，冷启动会重付
+- 一次页面渲染的请求数应与其**独立数据块数量同阶**（详情页 3 个数据块 = 3 次，是正例）
+- 超出的部分只有两种改法：**下沉到后台**（Worker / 用户主动刷新 + 快照），或**不做**
+- 反面案例见 §5-P1（评分成就区，`ceil(N/50)` 次 / 上限 20 次，已回退）
+
+正例参考（同一仓库，同一页面）：
+
+| 位置 | 请求数 | 为什么合规 |
+|---|---|---|
+| 详情页 `SubjectDetailViewModel.refresh` | 3（条目 / 分集 / 收藏） | 3 个独立数据块，各 1 次；社区段惰性加载且只拉一次 |
+| 个人页在追动态 | ≤3 | 番名改由本地排期表批量取（0 请求），只剩讨论请求，N 封顶 3 |
+| 后台 `BgmSyncWorker` | 2–3 / 轮 | 快照走 CDN 单请求（AniList 扫描在 CI 侧完成）+ 在看列表 1–2 页；有网络/电量约束与节流 |
+| 个人页收藏计数 | 1 | 单请求 + TTL 缓存 |
+
+### 7.2 其余口径
 
 - 每项通过 `bash tools/jgate`
 - 新增 UI 区块**必须同时更新 skeleton 几何**（先例 `7a48a777`）
@@ -282,11 +301,11 @@ v3 决策进一步固化：本轮不新增 `/p1` 依赖，时间线自然不在�
 
 ## 8. 未核实项（规范级核实之外）
 
-规范级核实不等于运行时核实。P1 已按**容错**方式落地，因此以下均不构成开工前提，仅作首次真机验证时的核对清单：
+规范级核实不等于运行时核实。**评分洞察部分已随 P1 撤销，故第 4、5 项不再阻塞任何在做的功能**，仅作将来重做时的核对清单：
 
 1. ~~`/p1/users/{username}` 的 `stats.subject` 实际 JSON 结构~~ → **本轮不需要**（收口决策，§2.5）
 2. ~~`/p1` 端点用现有 OAuth Bearer 是否全部放行~~ → **已核实（2026-09-28）**：165 个端点里**仅 `GET /p1/me` 只声明 `CookiesSession`**，其余 204 个（含全部社交 / 时间线读端点）Bearer 均可用。因本轮不引入 `/p1` 依赖，该空位无需填补
 3. ~~`/p1/timeline` 的 `mode` 参数取值~~ → **本轮不需要**（时间线押后）
 4. v0 `/v0/users/{username}/collections` 在**未登录**状态下能否读到自己（`OptionalHTTPBearer`）以及私有收藏的可见性
-5. ~~`rate = 0` 的实际语义（未评分 vs 评 0 分）~~ → **已按「未评分」处理并落地**（`rate in 1..10` 才算有效评分，`0` 与越界值一并排除）。若将来实测证明 `rate = 0` 是"评 0 分"，需回头改口径——但 1–10 分制下该解读不成立，风险低
+5. ~~`rate = 0` 的实际语义（未评分 vs 评 0 分）~~ → **随 P1 撤销而不再相关**。曾按「未评分」处理（`rate in 1..10` 才算有效）；若将来重做评分叙事，需先确认该口径
 6. **`/v0/me` 的 `reg_time` 实测响应体** —— **已容错落地，不再阻塞**：`UserProfile.regTime` 可空，`registeredYear` 只做「提取 4 位数字 + 合理性区间」而不依赖具体日期格式，字段缺失或格式不符即返回 null、头部整行不渲染（fail-open）。仍建议首次真机验证时顺带核对字段名，但不构成开工前提
