@@ -228,7 +228,9 @@ fun UserScreenContent(
                                 UserProfileHeaderCard(
                                     profile = uiState.activeProfile,
                                     savedAccountsCount = uiState.savedAccounts.size,
+                                    trackingFootprint = uiState.trackingFootprint,
                                     onManageAccountsClick = { showAccountSheet = true },
+                                    onFootprintClick = { onCollectionClick(CollectionType.DOING) },
                                 )
                             }
 
@@ -267,15 +269,6 @@ fun UserScreenContent(
                                 )
                             }
 
-                            uiState.trackingFootprint?.takeIf { it.watchingCount > 0 }?.let { footprint ->
-                                item(key = "wide_tracking_footprint") {
-                                    TrackingFootprintCard(
-                                        footprint = footprint,
-                                        onCollectionClick = onCollectionClick,
-                                    )
-                                }
-                            }
-
                             if (uiState.subjectActivity.isLoading || uiState.subjectActivity.items.isNotEmpty()) {
                                 item(key = "wide_subject_activity") {
                                     SubjectActivityCard(
@@ -307,7 +300,9 @@ fun UserScreenContent(
                             UserProfileHeaderCard(
                                 profile = uiState.activeProfile,
                                 savedAccountsCount = uiState.savedAccounts.size,
+                                trackingFootprint = uiState.trackingFootprint,
                                 onManageAccountsClick = { showAccountSheet = true },
+                                onFootprintClick = { onCollectionClick(CollectionType.DOING) },
                             )
                         }
 
@@ -334,15 +329,6 @@ fun UserScreenContent(
                                 onCollectionClick = onCollectionClick,
                                 onLogin = onLogin,
                             )
-                        }
-
-                        uiState.trackingFootprint?.takeIf { it.watchingCount > 0 }?.let { footprint ->
-                            item(key = "tracking_footprint") {
-                                TrackingFootprintCard(
-                                    footprint = footprint,
-                                    onCollectionClick = onCollectionClick,
-                                )
-                            }
                         }
 
                         if (uiState.subjectActivity.isLoading || uiState.subjectActivity.items.isNotEmpty()) {

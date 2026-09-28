@@ -42,8 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
+import com.infinitezerone.minibgm.core.designsystem.component.bounceClickable
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 /**
@@ -54,7 +58,9 @@ import com.infinitezerone.minibgm.core.model.UserProfile
 internal fun UserProfileHeaderCard(
     profile: UserProfile?,
     savedAccountsCount: Int,
+    trackingFootprint: TrackingFootprint? = null,
     onManageAccountsClick: () -> Unit,
+    onFootprintClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val sign = profile?.sign.orEmpty()
@@ -247,7 +253,99 @@ internal fun UserProfileHeaderCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+
+            // 追番统计条：数字并入头部（借鉴社区 App 头像旁数字带），点击直达「在看」列表
+            trackingFootprint?.let { footprint ->
+                Spacer(modifier = Modifier.height(14.dp))
+                TrackingStatsRow(
+                    footprint = footprint,
+                    onClick = onFootprintClick,
+                )
+            }
         }
+    }
+}
+
+/** 头部追番统计条：在看 / 累计追集 / 本月打卡 + 最近打卡时刻（装饰性信息 fail-open） */
+@Composable
+private fun TrackingStatsRow(
+    footprint: TrackingFootprint,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val bounceState = rememberBounceOnClick(pressedScale = 0.97f)
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .bounceClickable(state = bounceState, onClickLabel = "查看看番足迹") { onClick() },
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TrackingStatCell(
+                label = "在看",
+                value = footprint.watchingCount.toString(),
+                modifier = Modifier.weight(1f),
+            )
+            TrackingStatCell(
+                label = "累计追集",
+                value = footprint.episodesWatched.toString(),
+                modifier = Modifier.weight(1f),
+            )
+            TrackingStatCell(
+                label = "本月打卡",
+                value = footprint.monthActiveCount.toString(),
+                modifier = Modifier.weight(1f),
+            )
+            formatLastActiveAt(footprint.lastActiveAtIso)?.let { lastActive ->
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "最近打卡 · $lastActive",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackingStatCell(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** 最近打卡时刻 → 相对时间文案；无数据或解析失败返回 null */
+private fun formatLastActiveAt(lastActiveAtIso: String?): String? {
+    if (lastActiveAtIso.isNullOrBlank()) return null
+    val days = TimeUtils.daysSinceIsoUtc(lastActiveAtIso) ?: return null
+    return when {
+        days <= 0 -> "今天"
+        days == 1 -> "昨天"
+        days < 30 -> "$days 天前"
+        else -> TimeUtils.formatIsoToCstDate(lastActiveAtIso)
     }
 }
 
