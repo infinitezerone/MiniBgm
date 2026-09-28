@@ -86,6 +86,17 @@ class FakeScheduleRepository : ScheduleRepository {
         return AppResult.Success(Unit)
     }
 
+    /** 本地番名表（模拟排期表已收录的条目）：只返回请求 ids 命中的部分 */
+    var localSubjectTitles: Map<Long, String> = emptyMap()
+
+    var getLocalSubjectTitlesCallCount: Int = 0
+        private set
+
+    override suspend fun getLocalSubjectTitles(ids: List<Long>): Map<Long, String> {
+        getLocalSubjectTitlesCallCount++
+        return if (ids.isEmpty()) emptyMap() else localSubjectTitles.filterKeys { it in ids }
+    }
+
     override suspend fun searchLocalSubjects(
         query: String,
         limit: Int,

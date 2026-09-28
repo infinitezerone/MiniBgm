@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -153,6 +154,9 @@ class UserViewModel(
      * 在追动态流：在追（DOING）收藏变化（按条目集合去重）后，
      * 对前 N 部各取最新一条讨论。讨论拉取失败静默降级为缺失该条（fail-open），
      * 全部失败即为空列表、卡片由 UI 隐藏。仅在 UI 订阅期间活跃（WhileSubscribed）。
+     *
+     * 番名一次性由本地排期表批量补齐（0 请求）：时刻表的名单裁剪会保留用户所有在追条目，
+     * 故无需逐部回源详情接口——单次渲染的网络扇出因此固定为 N 次讨论请求。
      */
     private val subjectActivityFlow: Flow<SubjectActivityState> =
         collectionRepository
@@ -163,8 +167,11 @@ class UserViewModel(
                 if (subjectIds.isEmpty()) {
                     flowOf(SubjectActivityState())
                 } else {
+                    val localTitles = scheduleRepository.getLocalSubjectTitles(subjectIds)
                     combine(
-                        subjectIds.map { subjectId -> observeSubjectLatestTopic(subjectId) },
+                        subjectIds.map { subjectId ->
+                            observeSubjectLatestTopic(subjectId, localTitles[subjectId].orEmpty())
+                        },
                     ) { items ->
                         SubjectActivityState(
                             items =
@@ -176,27 +183,44 @@ class UserViewModel(
                 }
             }
 
-    /** 单部在追番剧的最新讨论（含番名补全）；任一环节失败发 null */
-    private fun observeSubjectLatestTopic(subjectId: Long): Flow<SubjectActivityItem?> =
+    /**
+     * 单部在追番剧的最新讨论。
+     *
+     * 番名优先取本地排期表；本地未命中时退回条目内存缓存（同会话内看过该条目详情即有值）；
+     * 两者都缺失则跳过该条，不为此再补一次详情请求——宁可少一条，也不把页面变成请求放大器。
+     */
+    private fun observeSubjectLatestTopic(
+        subjectId: Long,
+        localName: String,
+    ): Flow<SubjectActivityItem?> =
         flow {
             val topicsResult = communityRepository.getSubjectTopics(subjectId, limit = ACTIVITY_TOPIC_LIMIT)
             val topic = (topicsResult as? AppResult.Success)?.data?.firstOrNull()
             if (topic == null) {
                 emit(null)
             } else {
-                // 番名经详情接口补全（同时写入 SubjectRepository 内存缓存，详情页可直接复用）
-                val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
-                val subject = (subjectResult as? AppResult.Success)?.data
-                emit(
-                    SubjectActivityItem(
-                        subjectId = subjectId,
-                        subjectName = subject?.nameCn?.ifBlank { subject.name } ?: subject?.name.orEmpty(),
-                        topicId = topic.id,
-                        topicTitle = topic.title,
-                        replyCount = topic.replyCount,
-                        updatedAtMs = maxOf(topic.updatedAt, topic.createdAt),
-                    ),
-                )
+                val subjectName =
+                    localName.ifBlank {
+                        subjectRepository
+                            .getSubjectStream(subjectId)
+                            .firstOrNull()
+                            ?.let { it.nameCn.ifBlank { it.name } }
+                            .orEmpty()
+                    }
+                if (subjectName.isBlank()) {
+                    emit(null)
+                } else {
+                    emit(
+                        SubjectActivityItem(
+                            subjectId = subjectId,
+                            subjectName = subjectName,
+                            topicId = topic.id,
+                            topicTitle = topic.title,
+                            replyCount = topic.replyCount,
+                            updatedAtMs = maxOf(topic.updatedAt, topic.createdAt),
+                        ),
+                    )
+                }
             }
         }
 
