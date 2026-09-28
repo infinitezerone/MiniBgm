@@ -155,6 +155,20 @@ class SeasonalGuideViewModel(
         _uiState.update { it.copy(selectedCategory = category) }
     }
 
+    /** 切换海报网格／紧凑列表；纯展示偏好，不重新取数（翻页游标对两种形态是同一份数据） */
+    fun toggleViewMode() {
+        _uiState.update {
+            it.copy(
+                viewMode =
+                    if (it.viewMode == SeasonalViewMode.LIST) {
+                        SeasonalViewMode.POSTER
+                    } else {
+                        SeasonalViewMode.LIST
+                    },
+            )
+        }
+    }
+
     fun toggleCollection(
         subjectId: Long,
         targetType: CollectionType,

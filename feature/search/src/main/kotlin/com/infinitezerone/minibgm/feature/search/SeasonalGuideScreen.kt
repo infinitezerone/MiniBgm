@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -21,9 +22,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -71,6 +75,7 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.OngoingAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
+import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeRow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -145,11 +150,16 @@ fun SeasonalGuideContent(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
     var showSeasonPicker by remember { mutableStateOf(false) }
 
-    LaunchedEffect(scrollToTop) {
+    LaunchedEffect(scrollToTop, uiState.viewMode) {
         scrollToTop?.collect {
-            gridState.animateScrollToItem(0)
+            // 只滚动当前形态的容器：另一个容器下次切回时本就停在原位，不该被顺带重置
+            when (uiState.viewMode) {
+                SeasonalViewMode.LIST -> listState.animateScrollToItem(0)
+                SeasonalViewMode.POSTER -> gridState.animateScrollToItem(0)
+            }
         }
     }
 
@@ -161,12 +171,22 @@ fun SeasonalGuideContent(
         }
     }
 
-    // 触底无限加载监控
-    LaunchedEffect(gridState, uiState.hasMore, uiState.isLoadingMore) {
+    // 触底无限加载监控：列表与网格的滚动状态互相独立，必须订阅当前形态对应的那一个，
+    // 否则切到列表后会继续读网格的布局信息（网格不再滚动，永远触不了底）
+    LaunchedEffect(uiState.viewMode, uiState.hasMore, uiState.isLoadingMore) {
         snapshotFlow {
-            val layoutInfo = gridState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val (totalItems, lastVisible) =
+                when (uiState.viewMode) {
+                    SeasonalViewMode.LIST -> {
+                        val info = listState.layoutInfo
+                        info.totalItemsCount to (info.visibleItemsInfo.lastOrNull()?.index ?: 0)
+                    }
+
+                    SeasonalViewMode.POSTER -> {
+                        val info = gridState.layoutInfo
+                        info.totalItemsCount to (info.visibleItemsInfo.lastOrNull()?.index ?: 0)
+                    }
+                }
             totalItems > 0 && lastVisible >= totalItems - 6
         }.collect { shouldLoadMore ->
             if (shouldLoadMore && uiState.hasMore && !uiState.isLoadingMore && !uiState.isLoading) {
@@ -252,6 +272,31 @@ fun SeasonalGuideContent(
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // 3. 视图形态切换（紧凑列表 ↔ 海报网格），与搜索结果页的操作条同形态
+                    IconButton(
+                        onClick = viewModel::toggleViewMode,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (uiState.viewMode == SeasonalViewMode.LIST) {
+                                    Icons.Filled.GridView
+                                } else {
+                                    Icons.AutoMirrored.Filled.ViewList
+                                },
+                            contentDescription =
+                                if (uiState.viewMode == SeasonalViewMode.LIST) {
+                                    "切换为海报网格"
+                                } else {
+                                    "切换为紧凑列表"
+                                },
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
                 }
 
                 // 加载进度条
@@ -261,9 +306,13 @@ fun SeasonalGuideContent(
 
                 // 4. 内容主体状态机
                 when {
-                    // 首次加载全屏骨架屏
+                    // 首次加载全屏骨架屏（跟随当前形态，避免在列表视图下先闪一屏网格）
                     uiState.isLoading && uiState.subjects.isEmpty() -> {
-                        SeasonalGuideSkeletonGrid(modifier = Modifier.fillMaxSize())
+                        if (uiState.viewMode == SeasonalViewMode.LIST) {
+                            SeasonalGuideSkeletonList(modifier = Modifier.fillMaxSize())
+                        } else {
+                            SeasonalGuideSkeletonGrid(modifier = Modifier.fillMaxSize())
+                        }
                     }
 
                     // 错误重试态
@@ -286,7 +335,60 @@ fun SeasonalGuideContent(
                         )
                     }
 
-                    // 正常双列/自适应响应式网格
+                    // 紧凑行式列表（默认）：一屏约 6-7 条，标题之外还能读到集数／放送电视台／题材
+                    uiState.viewMode == SeasonalViewMode.LIST -> {
+                        LazyColumn(
+                            state = listState,
+                            contentPadding =
+                                PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = 8.dp,
+                                    bottom = if (isTopLevel && !isWideScreen) 96.dp else 32.dp,
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            // 「本季连载中」保持横向分组：它自成一组且条目有限，横滑一次即可扫完
+                            if (uiState.filteredOngoingSubjects.isNotEmpty()) {
+                                item(key = "ongoing") {
+                                    OngoingAnimeSection(
+                                        subjects = uiState.filteredOngoingSubjects,
+                                        onSubjectClick = onSubjectClick,
+                                    )
+                                }
+                            }
+
+                            items(
+                                items = uiState.filteredSubjects,
+                                key = { it.id },
+                            ) { subject ->
+                                SeasonalAnimeRow(
+                                    subject = subject,
+                                    isWished = uiState.wishedSubjectIds.contains(subject.id),
+                                    isDoing = uiState.doingSubjectIds.contains(subject.id),
+                                    onSubjectClick = onSubjectClick,
+                                    onToggleCollection = viewModel::toggleCollection,
+                                )
+                            }
+
+                            if (uiState.isLoadingMore) {
+                                item(key = "loadingMore") {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 海报展板网格（2:3 自适应列宽，手机两列）
                     else -> {
                         LazyVerticalGrid(
                             columns = GridCells.Adaptive(minSize = 150.dp),
@@ -455,6 +557,67 @@ private fun OngoingAnimeSection(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+/** 骨架屏加载列表（行式：58dp 封面块 + 三根文本条，与真实行等高） */
+@Composable
+private fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
+    val skeletonState = rememberSkeletonState()
+    LazyColumn(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        userScrollEnabled = false,
+        modifier = modifier,
+    ) {
+        items(6) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .width(58.dp)
+                            .height(83.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    state = skeletonState,
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.9f)
+                                .height(16.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.55f)
+                                .height(14.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.35f)
+                                .height(12.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                }
+            }
+        }
     }
 }
 

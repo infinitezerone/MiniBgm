@@ -42,6 +42,21 @@ enum class SeasonQuarter(
 }
 
 /**
+ * 导视页视图形态。
+ *
+ * 与 `SearchViewMode` 同构（两态、操作条上一个图标按钮切换），差异只在默认值：
+ * 导视的首要诉求是"一季有哪些番、几点在哪台播"，行式列表一屏约 6-7 条且带集数／电视台／题材，
+ * 海报网格一屏只容 4 部、除封面外几乎没有信息，因此默认取 [LIST]。
+ */
+enum class SeasonalViewMode {
+    /** 紧凑行式列表：封面 + 标题 + 集数 · 电视台 + 题材标签 */
+    LIST,
+
+    /** 2:3 海报展板网格 */
+    POSTER,
+}
+
+/**
  * 导视条目播出形式分类筛选
  */
 enum class SeasonCategoryFilter(
@@ -99,6 +114,8 @@ data class SeasonalGuideUiState(
     val currentYear: Int = 2026,
     val currentQuarter: SeasonQuarter = SeasonQuarter.WINTER,
     val selectedCategory: SeasonCategoryFilter = SeasonCategoryFilter.ALL,
+    /** 视图形态；纯展示偏好，切换不需要重新取数 */
+    val viewMode: SeasonalViewMode = SeasonalViewMode.LIST,
     val availableYears: List<Int> = emptyList(),
     /** 本季首播：Bangumi `air_date` 区间过滤的结果 */
     val subjects: List<Subject> = emptyList(),

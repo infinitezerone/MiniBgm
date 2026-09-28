@@ -44,6 +44,21 @@ data class Subject(
                 .map { it.trim() }
                 .filter { it.isNotBlank() && it.length <= MAX_ALIAS_LENGTH }
                 .distinct()
+
+    /**
+     * 放送电视台（infobox `播放电视台`，如 "TOKYO MX / BS11"）；未收录时为空串。
+     *
+     * 与 [titleAliases] 同类：都是 infobox 的派生读取，多态的 `value` 形状统一由 [flatValues]
+     * 处理。放在模型层是为了让 UI（如导视列表的"集数 · 电视台"行）不必各自解一遍 JSON。
+     */
+    val broadcastStation: String
+        get() =
+            infobox
+                .firstOrNull { it.key == INFOBOX_BROADCAST_STATION }
+                ?.flatValues()
+                ?.firstOrNull { it.isNotBlank() }
+                ?.trim()
+                .orEmpty()
 }
 
 /** 与片名相关的 infobox 条目；`日文名` 常与 [Subject.name] 重复，去重时会被合并 */
@@ -51,6 +66,9 @@ private val ALIAS_INFOBOX_KEYS = setOf("中文名", "别名", "第二中文名",
 
 /** 别名里偶有整段简介混入，过长的不是片名 */
 private const val MAX_ALIAS_LENGTH = 60
+
+/** 放送电视台所在的 infobox 键名 */
+private const val INFOBOX_BROADCAST_STATION = "播放电视台"
 
 /**
  * Bangumi infobox 条目。

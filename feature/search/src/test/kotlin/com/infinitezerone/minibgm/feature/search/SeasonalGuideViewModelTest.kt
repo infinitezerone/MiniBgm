@@ -572,4 +572,44 @@ class SeasonalGuideViewModelTest {
         assertTrue(matchesCategory(movieSubject, SeasonCategoryFilter.MOVIE_OVA))
         assertFalse(matchesCategory(movieSubject, SeasonCategoryFilter.TV))
     }
+
+    @Test
+    fun viewMode_defaultsToCompactListAndTogglesBothWays() =
+        runTest {
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // 默认紧凑列表：导视的首要诉求是"一季有哪些番"，行式一屏约 6-7 条且带集数／电视台／题材
+            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.value.viewMode)
+
+            viewModel.toggleViewMode()
+            assertEquals(SeasonalViewMode.POSTER, viewModel.uiState.value.viewMode)
+
+            viewModel.toggleViewMode()
+            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.value.viewMode)
+        }
+
+    @Test
+    fun toggleViewMode_keepsLoadedDataAndDoesNotRefetch() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+            searchRepository.advancedSearchTotal = 1
+
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+            val callsBeforeToggle = searchRepository.advancedSearchCallCount
+
+            viewModel.toggleViewMode()
+            advanceUntilIdle()
+
+            // 视图形态是纯展示偏好：条目、翻页游标与是否还有下一页都不应变，也不该再打一次网络
+            assertEquals(
+                listOf(sampleSubject.id),
+                viewModel.uiState.value.subjects
+                    .map { it.id },
+            )
+            assertEquals(callsBeforeToggle, searchRepository.advancedSearchCallCount)
+            assertFalse(viewModel.uiState.value.hasMore)
+        }
 }

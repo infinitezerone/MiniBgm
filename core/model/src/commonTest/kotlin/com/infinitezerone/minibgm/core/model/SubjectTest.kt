@@ -56,4 +56,39 @@ class SubjectTest {
 
         assertTrue(subject.titleAliases.isEmpty())
     }
+
+    @Test
+    fun `broadcastStation 取 infobox 播放电视台的首个值`() {
+        // 真实响应里该字段同时存在字符串与列表两种形状（/v0/search/subjects 与 /v0/subjects/{id}）
+        val subject =
+            json.decodeFromString<Subject>(
+                """
+                {"id":1,"name":"x","name_cn":"无职转生 第三季",
+                 "infobox":[
+                   {"key":"放送星期","value":"星期日"},
+                   {"key":"播放电视台","value":"TOKYO MX / BS11"},
+                   {"key":"其他电视台","value":"BS11"}
+                 ]}
+                """.trimIndent(),
+            )
+
+        assertEquals("TOKYO MX / BS11", subject.broadcastStation)
+    }
+
+    @Test
+    fun `broadcastStation 在列表形态与缺失时分别取首项与空串`() {
+        val listed =
+            json.decodeFromString<Subject>(
+                """
+                {"id":1,"name":"x",
+                 "infobox":[{"key":"播放电视台","value":[{"v":"AT-X"},{"v":"TOKYO MX"}]}]}
+                """.trimIndent(),
+            )
+        val missing = json.decodeFromString<Subject>("""{"id":1,"name":"x"}""")
+        val blank = json.decodeFromString<Subject>("""{"id":1,"name":"x","infobox":[{"key":"播放电视台","value":" "}]}""")
+
+        assertEquals("AT-X", listed.broadcastStation)
+        assertEquals("", missing.broadcastStation)
+        assertEquals("", blank.broadcastStation)
+    }
 }
