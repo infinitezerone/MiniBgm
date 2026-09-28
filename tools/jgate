@@ -2,62 +2,118 @@
 # jgate —— 提交前置验证门（AGENTS.md 唯一认可的提交前置步骤）
 # 流程：spotlessApply（触及模块）→ 架构红线 + 触及模块测试（含 :app 单测）+ :app:assembleDebug → 测试结果真实性校验
 # "绿≠测过"由最后的 XML 校验机械保证：tests>0 且 failures==0 且 errors==0，否则退出非零。
-# 工作副本无改动时（提交后复跑）推断不出触及模块，退化为全量模块——不做这个退化就会打印假绿。
+#
+# 验证目标是"改动"，不是"全仓库"：
+#   ① 工作副本 @ 有改动   → 验证工作副本（主路径：改完就跑）
+#   ② @ 干净、@- 有改动   → 验证最近一次提交（jj commit 之后复跑，不再退化为全量）
+#   ③ 改动触及跨切面路径   → 提升为全量（build-logic / gradle / 根构建脚本 / 版本目录）
+#   ④ 以上都不成立         → 明确报错要求 --all 或显式模块：既不静默放行（假绿），也不静默全量（慢）
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
+
+usage() {
+  cat <<'USAGE'
+用法：bash tools/jgate [选项] [模块...]
+
+选项：
+  -a, --all     强制验证全部模块（跨切面改动、PR 前）
+  -n, --plan    只打印本次验证目标与将要执行的 gradle 任务，不执行任何命令（别名 --dry-run）
+  -h, --help    显示本帮助
+
+模块可显式指定（`feature/user`、`feature:user`、`:feature:user` 均可）；一旦指定就不再自动推断。
+
+不带参数时按改动自动推断：工作副本 @ → 最近一次提交 @- → 报错。
+USAGE
+}
+
+plan_only=0
+force_all=0
+cli_modules=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -a|--all) force_all=1 ;;
+    -n|--plan|--dry-run) plan_only=1 ;;
+    -h|--help) usage; exit 0 ;;
+    --) shift; while [ "$#" -gt 0 ]; do cli_modules+=("$1"); shift; done; break ;;
+    -*) echo "[jgate] ❌ 未知选项：$1" >&2; usage; exit 2 ;;
+    *) cli_modules+=("$1") ;;
+  esac
+  shift
+done
 
 # 自愈：确保本 clone 的 git 钩子已接线（其他机器 clone 后无需人工记得跑 setup.sh）
 if [ "$(git config core.hooksPath || true)" != "tools/githooks" ]; then
   git config core.hooksPath tools/githooks && echo "[jgate] 已自动接线 core.hooksPath → tools/githooks"
 fi
 
-fail=0
-stamp=$(mktemp)
-touch "$stamp"
-
-# 从 jj 工作副本差异提取触及的模块目录（app 单独一段）；spotless 与测试任务都复用它
-diff_summary=$(jj diff --summary 2>/dev/null || true)
-modules=()
-while IFS= read -r line; do
-  [ -n "$line" ] && modules+=("$line")
-done < <(printf '%s\n' "$diff_summary" | tr '\\' '/' | awk '{print $NF}' | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u)
-
-run_gradle() {
-  echo "[jgate] gradle $*"
-  local start=$SECONDS
-  ./gradlew "$@" --console=plain || { echo "[jgate] ❌ gradle $* 失败"; fail=1; return 1; }
-  echo "[jgate]   ↳ $((SECONDS - start))s"
+normalize_module() {
+  printf '%s' "${1#:}" | tr ':' '/'
 }
 
-echo "[jgate] 1/3 spotless（只跑触及模块）"
-# 全量 spotlessApply 即使全部 UP-TO-DATE 也要 hash 18 个模块的全部源码（实测 ~16s）；
-# 触及模块级调用把这一阶段压到几秒。工作副本无任何改动时直接跳过（提交后跑 jgate 的常见场景）。
+all_modules() {
+  sed -n 's/^include(":\(.*\)")$/\1/p' settings.gradle.kts | tr ':' '/'
+}
+
+# ---- 1. 确定验证目标 ----------------------------------------------------------
+# 工作副本改动优先；干净时退到最近一次提交（@-），而不是全量——提交后复跑是高频动作，
+# 退化为全量等于每次都要重新 hash 19 个模块的全部源码。
+work_diff=$(jj diff --summary 2>/dev/null || true)
+diff_summary=""
+target_desc=""
+
+if [ "$force_all" = "1" ]; then
+  target_desc="全量（--all）"
+elif [ "${#cli_modules[@]}" -gt 0 ]; then
+  target_desc="显式指定模块"
+elif [ -n "$work_diff" ]; then
+  diff_summary="$work_diff"
+  target_desc="工作副本 @"
+else
+  diff_summary=$(jj diff --summary -r @- 2>/dev/null || true)
+  if [ -n "$diff_summary" ]; then
+    target_desc="最近一次提交 @-（工作副本无改动）"
+  else
+    echo "[jgate] ❌ 工作副本与最近一次提交都没有改动，没有可验证的内容" >&2
+    echo "[jgate]    强制全量：bash tools/jgate --all      指定模块：bash tools/jgate feature/user" >&2
+    exit 1
+  fi
+fi
+
+# 改动路径（jj 在 Windows 输出反斜杠，统一成 /）
+paths=""
+if [ -n "$diff_summary" ]; then
+  paths=$(printf '%s\n' "$diff_summary" | awk '{print $NF}' | sed 's/\\/\//g')
+fi
+
+# ---- 2. 跨切面改动 → 提升为全量 ----------------------------------------------
+# 这些路径的改动会影响所有模块的编译/依赖解析，只验证"触及模块"是无效的。
+# 注意：它们都是低频改动，所以这条提升不会把日常路径拖成全量。
+cross_re='^(build-logic/|gradle/|gradle\.properties$|settings\.gradle\.kts$|[^/]*\.gradle\.kts$)'
+if [ "$force_all" != "1" ] && [ -n "$paths" ] && printf '%s\n' "$paths" | grep -qE "$cross_re"; then
+  force_all=1
+  target_desc="$target_desc ＋ 跨切面改动 → 提升为全量"
+fi
+
+# ---- 3. 解析模块集合 ----------------------------------------------------------
+modules=()
+if [ "$force_all" = "1" ]; then
+  while IFS= read -r m; do [ -n "$m" ] && modules+=("$m"); done < <(all_modules)
+elif [ "${#cli_modules[@]}" -gt 0 ]; then
+  for raw in "${cli_modules[@]}"; do
+    modules+=("$(normalize_module "$raw")")
+  done
+else
+  while IFS= read -r m; do [ -n "$m" ] && modules+=("$m"); done < <(
+    printf '%s\n' "$paths" | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u
+  )
+fi
+
+# ---- 4. 任务清单 --------------------------------------------------------------
 spotless_targets=()
 for m in "${modules[@]+"${modules[@]}"}"; do
   [ -f "$m/build.gradle.kts" ] && spotless_targets+=(":${m//\//:}:spotlessApply")
 done
-if [ -z "$diff_summary" ]; then
-  echo "[jgate] 工作副本无改动，跳过 spotless"
-elif [ "${#spotless_targets[@]}" -gt 0 ]; then
-  run_gradle "${spotless_targets[@]}" -q
-else
-  run_gradle spotlessApply -q
-fi
 
-echo "[jgate] 2/3 架构红线 + 触及模块测试 + 装配门"
-# 推断不出"触及模块"时（工作副本无改动，例如 jj commit 之后想再确认一次；或改动只在
-# docs/ 等非模块路径）必须退化为全量。否则脚本会只做装配、跑 0 个模块测试、校验 0 份结果，
-# 并打印一个什么都没验证的 ✅ —— 与第 4 行"绿≠测过"的自我声明直接冲突（2026-09-28 实测复现）。
-# 全量清单直接取自 settings.gradle.kts，避免与模块增删漂移。
-if [ "${#modules[@]}" -eq 0 ]; then
-  echo "[jgate] ⚠️ 推断不出触及模块（工作副本无改动或改动不在模块内）→ 退化为全量验证"
-  while IFS= read -r m; do
-    [ -n "$m" ] && modules+=("$m")
-  done < <(sed -n 's/^include(":\(.*\)")$/\1/p' settings.gradle.kts | tr ':' '/')
-fi
-
-# 红线、触及模块测试、:app:assembleDebug 合并到同一次 gradle 调用，
-# 省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
 test_tasks=()
 for m in "${modules[@]+"${modules[@]}"}"; do
   # :app 不再跳过：装配门 :app:assembleDebug 只编译、不跑测试，历史上因此让破损的
@@ -71,11 +127,59 @@ for m in "${modules[@]+"${modules[@]}"}"; do
   fi
 done
 
-if [ "${#test_tasks[@]}" -gt 0 ]; then
-  run_gradle :core:testing:testAndroid "${test_tasks[@]}" :app:assembleDebug
-else
-  run_gradle :core:testing:testAndroid :app:assembleDebug
+# 红线宿主 :core:testing 每次都跑（架构规则测试）；装配门也每次都跑（最上层编译）。
+# 去重：:core:testing 既可能自己就是触及模块，重复入图会让 gradle 报 "task may only be used once" 之外的噪音。
+# 不用关联数组——macOS 自带 bash 3.2 没有 declare -A，而本脚本要在其他机器 clone 后直接可用。
+gradle_tasks=()
+append_task() {
+  local t
+  for t in "${gradle_tasks[@]+"${gradle_tasks[@]}"}"; do
+    [ "$t" = "$1" ] && return 0
+  done
+  gradle_tasks+=("$1")
+}
+append_task ":core:testing:testAndroid"
+for t in "${test_tasks[@]+"${test_tasks[@]}"}"; do append_task "$t"; done
+append_task ":app:assembleDebug"
+
+echo "[jgate] 验证目标：$target_desc"
+if [ "${#modules[@]}" -eq 0 ]; then
+  echo "[jgate] ⚠️ 改动不触及任何 Gradle 模块（如只改了 docs/、tools/）→ 跳过 spotless 与模块测试，只跑架构红线 + 装配门"
 fi
+echo "[jgate] 模块 ${#modules[@]} 个：${modules[*]:-（无）}"
+echo "[jgate] 将执行：${gradle_tasks[*]}"
+
+if [ "$plan_only" = "1" ]; then
+  echo "[jgate] --plan：以上仅为计划，未执行任何命令"
+  exit 0
+fi
+
+fail=0
+stamp=$(mktemp)
+touch "$stamp"
+
+run_gradle() {
+  echo "[jgate] gradle $*"
+  local start=$SECONDS
+  ./gradlew "$@" --console=plain || { echo "[jgate] ❌ gradle $* 失败"; fail=1; return 1; }
+  echo "[jgate]   ↳ $((SECONDS - start))s"
+}
+
+echo "[jgate] 1/3 spotless"
+# 全量 spotlessApply 即使全部 UP-TO-DATE 也要 hash 18 个模块的全部源码（实测 ~16s）；
+# 触及模块级调用把这一阶段压到几秒。只有"工作副本真有改动"才需要格式化——
+# 目标是 @- 时工作副本本身干净，格式化是空转。
+if [ -z "$work_diff" ]; then
+  echo "[jgate] 工作副本无改动，跳过 spotless"
+elif [ "${#spotless_targets[@]}" -gt 0 ]; then
+  run_gradle "${spotless_targets[@]}" -q
+else
+  echo "[jgate] 触及路径均不在模块内，跳过 spotless"
+fi
+
+echo "[jgate] 2/3 架构红线 + 触及模块测试 + 装配门"
+# 三项合并到同一次 gradle 调用，省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
+run_gradle "${gradle_tasks[@]}"
 
 echo "[jgate] 3/3 测试结果真实性校验"
 checked=0
@@ -108,7 +212,7 @@ if [ "$fail" != "0" ]; then
 fi
 # 0 份结果时不说"0 份结果校验"就收尾——那半个句子本身就是假绿信号。
 if [ "$checked" = "0" ]; then
-  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，全部任务 UP-TO-DATE，沿用上次结果"
+  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，任务全部 UP-TO-DATE，沿用上次结果"
 else
   echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
 fi
