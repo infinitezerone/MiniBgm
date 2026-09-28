@@ -263,8 +263,12 @@ private fun AccountSwitchChip(
  *
  * **本带不含「在看」**：该指标已由下方吸顶 Tab 承担，而 Tab 计数来自远端 legacy 统计、
  * 本带若也放一份则来自 Room 本地聚合——两者不同源，同步滞后时会并排出现同一指标的
- * 两个数字。因此本带只放 Tab 无法表达的累计量（累计追集 / 本月打卡），
+ * 两个数字。因此本带只放 Tab 无法表达的累计量（在看集数 / 本月打卡），
  * 与 Tab 的分区计数互不重叠。两条细分隔线夹一条「带」，不读作卡片。
+ *
+ * 命名口径：「在看集数」对应 `SUM(epStatus) WHERE type = 3`，即**当前在看那批番的已看集数之和**。
+ * 番剧看完转为「看过」后即退出统计，数字会回落——所以它不是"累计"，旧名「累计追集」名不副实，
+ * 已按实际口径更名。本地表只同步 DOING，无法给出跨状态的真正累计值。
  */
 @Composable
 internal fun TrackingStatsRow(
@@ -291,7 +295,7 @@ internal fun TrackingStatsRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TrackingStatCell(
-                label = "累计追集",
+                label = "在看集数",
                 value = footprint.episodesWatched.toString(),
                 modifier = Modifier.weight(1f),
             )

@@ -32,7 +32,7 @@
 | 层 | 能力 | 实现位置 | 数据来源 | 请求 |
 |---|---|---|---|---|
 | ① | 沉浸式身份头部（头像 88dp / 昵称 / `UID · 入站年份` 单行 / 签名） | `feature/user/.../UserProfileCards.kt` → `UserProfileHero` | 本地 profile + v0 `/v0/me` 的 `reg_time` | 0 |
-| ② | 通栏数字带（累计追集 / 本月打卡） | 同上 → `TrackingStatsRow` | Room 本地聚合 `observeTrackingFootprint()` | 0 |
+| ② | 通栏数字带（在看集数 / 本月打卡） | 同上 → `TrackingStatsRow` | Room 本地聚合 `observeTrackingFootprint()` | 0 |
 | ③ | 吸顶分区 Tab（在看 / 想看 / 看过 / 搁置 / 抛弃，带计数） | `feature/user/.../UserCollectionListParts.kt` → `CollectionTypeTabs` | 计数走 `collectionCounts`（TTL 缓存） | 0（缓存内） |
 | ④ | 当前分区的收藏内容流（就地渲染 + 触底分页 + 条目类型筛选） | `feature/user/.../UserCollectionListParts.kt` + `UserCollectionsViewModel` | v0 `/v0/users/{u}/collections` | 进入分区 1 次 |
 | — | 骨架几何对齐四层 | `feature/user/.../UserScreenSkeleton.kt` | — | — |
@@ -44,7 +44,11 @@
 - **「Bangumi 会员」徽章移除**：注册用户人人皆是，零区分度。仅 `userGroup == 11` 的管理员保留标记，且内联在昵称之后
 - **签名为空时整块不渲染**：不再用「这个人很神秘，什么都没写~」占位文案填充高度（占位文案同时制造了"这个用户有签名"的误读）
 
-**② 为什么不再放「在看」（口径不重叠，2026-09-28）**：同一屏下曾同时出现两组数字——数字带的「在看 N」来自 Room 本地聚合（`observeTrackingFootprint()`），吸顶 Tab 的「在看 N」来自远端 v0 legacy 统计 + TTL 缓存。**两者不同源**，本地同步滞后或远端缓存过期时会并排显示同一指标的两个不同值。现由 ③ 独家承担分区计数（它天然要显示五维计数），② 只放 ③ 无法表达的累计量。同时删除「最近打卡」副标：它与「本月打卡」语义重叠，且实测数据下自相矛盾（本月打卡 9 次 vs 最近打卡 20 天前，二者不可能同时成立）。
+**② 为什么不再放「在看」（口径不重叠，2026-09-28）**：同一屏下曾同时出现两组数字——数字带的「在看 N」来自 Room 本地聚合（`observeTrackingFootprint()`），吸顶 Tab 的「在看 N」来自远端 v0 legacy 统计 + TTL 缓存。**两者不同源**，本地同步滞后或远端缓存过期时会并排显示同一指标的两个不同值。现由 ③ 独家承担分区计数（它天然要显示五维计数），② 只放 ③ 无法表达的量：**在看集数 / 本月打卡**。
+
+**「累计追集」更名为「在看集数」（口径更正）**：该值对应 `SUM(epStatus) WHERE type = 3`，是**当前在看那批番的已看集数之和**。番剧看完转为「看过」后即退出统计，数字会**回落**——它从来不是"累计"。本地 `user_collections` 只同步 DOING，拿不到跨状态的真正累计值，所以正确做法是把名字改准而不是假装口径更宽。旧名沿用了首轮改造，属未核实的想当然。
+
+**「最近打卡」副标删除（判断更正）**：初稿把「本月打卡 9 次」与「最近打卡 20 天前」描述为"自相矛盾"，**这是错的**——`monthActiveCount` 统计"本月内有更新的部数"，`lastActiveAt` 是 `MAX(updatedAt)`，20 天前仍落在当月内，二者可以同时成立。真实问题有两条：① **语义重叠**——两者同属「活跃度」维度，取自同一条 `observeWatchingFootprint` 聚合投影；② **位置悬空**——它被排在数字带下分隔线之外自成一行，读起来不属于任何一层（这正是"排版一言难尽"的直接来源之一）。精确到天的"最近打卡"对个人页也无决策价值。
 
 **已删除**：`UserCollectionOverviewCard.kt`（数字瓦片 + 占比条 → 并入 ③ 的 Tab 标签）、`MultiAccountQuickCard`（入口已在顶栏 + ① 的「N 个账号」胶囊 + 账号 BottomSheet）、`UserCollectionsScreen.kt` 与 `UserCollectionsRoute`（④ 内联后无入口）。
 
@@ -181,7 +185,7 @@ UserHomepageSection = anime | game | book | music | real | mono | blog | friend 
 | 层 | 区块 | 状态 | 数据源 | 请求成本 |
 |---|---|---|---|---|
 | ① | 沉浸式身份头部 | ✅ 已落地 | 本地 profile + `/v0/me` 的 `reg_time` | 0 |
-| ② | 通栏数字带（累计追集 / 本月打卡） | ✅ 已落地 | Room 本地聚合 | 0 |
+| ② | 通栏数字带（在看集数 / 本月打卡） | ✅ 已落地 | Room 本地聚合 | 0 |
 | ③ | **吸顶分区 Tab**（在看 / 想看 / 看过 / 搁置 / 抛弃，带计数） | ✅ 已落地 | 计数走 v0 legacy `/user/{u}/collections/status` + TTL 缓存 | 0（缓存内） |
 | ④ | **当前分区内容流**（就地渲染 + 触底分页 + 条目类型筛选） | ✅ 已落地 | v0 `/v0/users/{u}/collections` | 进入分区 1 次 |
 | — | ~~评分成就区（均分 + 1–10 分布柱图）~~ | ❌ 已实施后回退 | v0 `/v0/users/{u}/collections`（`rate`） | 曾为 ceil(N/50)、封顶 20 —— **违反 §7，故撤销** |
@@ -191,7 +195,7 @@ UserHomepageSection = anime | game | book | music | real | mono | blog | friend 
 
 **形态纪律（2026-09-28）**：第二层只放**一种**数字形态，且**同一指标不得跨层重复**。
 
-- 「数字行」全页**只有一排**——即已落地的 `TrackingStatsRow`（累计追集 / 本月打卡），不再叠加第二排同形数字格
+- 「数字行」全页**只有一排**——即已落地的 `TrackingStatsRow`（在看集数 / 本月打卡），不再叠加第二排同形数字格
 - **指标不许跨层重复**（2026-09-28 补）：一个指标只出现在一层。「在看」在第三层 Tab 上（它天然要显示五维计数），第二层就不再放它——两层的取数口径不同源（本地聚合 vs 远端 TTL 统计），并排展示会出现同一指标两个数字。第二层只放第三层无法表达的**累计量**
 - **注册时间不占格子**：并入头部身份元信息行（`UID · $year 年加入 · 已 N 年`），与 GitHub / Twitter 头部的 "Joined …" 同构；`regTime` 缺失时该片段自动省略
 - 原设计里的「入站年数 / 均分 / 看过」三格数字行**已废弃**——它与统计条同形，会形成两排重复数字
