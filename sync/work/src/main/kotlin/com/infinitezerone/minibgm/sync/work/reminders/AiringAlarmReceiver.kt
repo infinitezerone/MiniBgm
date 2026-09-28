@@ -74,11 +74,13 @@ class AiringAlarmReceiver :
                 .orEmpty()
                 .map { it.subjectId }
 
+        // 回看窗口与 [AiringReminderPlanner.PRE_AIR_GRACE_MINUTES] 同源：闹钟可能被系统
+        // 晚投递至多 1 小时，窗口若窄于容错区间会让本该补发的提醒查不出来
         val upcoming =
             scheduleRepository.getUpcomingAiringForSubjects(
                 subjectIds = trackedSubjectIds,
                 hoursAhead = 4L,
-                lookbackHours = 1L,
+                lookbackHours = AiringReminderPlanner.preAirLookbackHours(prefs.airDelayOffsetMinutes.toLong()),
             )
 
         val notifier = AiringReminderNotifier(context)
@@ -118,10 +120,12 @@ class AiringAlarmReceiver :
                 }
             }
 
-            // 更新已通知去重键
+            // 更新已通知去重键。裁剪放宽到「今天 + 昨天」：容错窗口放大到 1 小时后，
+            // 临近午夜开播的剧集可能在日期翻转之后才被补发，若只保留当日键，
+            // 同一集会在跨日后被重新判定为未通知而重复推送。
             val keptKeys =
-                prefs.airingReminderNotifiedKeys
-                    .filter { it.startsWith("$today:") }
+                AiringReminderPlanner
+                    .pruneNotifiedKeys(prefs.airingReminderNotifiedKeys, today)
                     .toSet() + preAir.map { AiringReminderPlanner.preAirKey(today, it) }
             userPreferences.setAiringReminderNotifiedKeys(keptKeys.toList())
         }

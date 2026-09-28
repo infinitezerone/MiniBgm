@@ -215,7 +215,7 @@ class AiringReminderPlannerTest {
 
     @Test
     fun pickPreAir_picksWithinGraceWindowWhenSlightlyLate() {
-        // 在 10 分钟容错窗口内（例如晚了 5 分钟），仍能捕获到通知（已开播状态）
+        // 在容错窗口内（例如晚了 5 分钟），仍能捕获到通知（已开播状态）
         val planned = pickPreAir(airingAt(-5))
 
         assertEquals(1, planned.size)
@@ -223,11 +223,32 @@ class AiringReminderPlannerTest {
     }
 
     @Test
+    fun pickPreAir_picksLateArrivalWithinAlignedGraceWindow() {
+        // 回归：容错窗口与 setAndAllowWhileIdle 的 1 小时调度窗口对齐后，
+        // 系统晚唤醒 45 分钟仍应补发「现已开播」，而不是静默丢弃
+        val item = airingAt(-45)
+        val planned = pickPreAir(item)
+
+        assertEquals(1, planned.size)
+        assertTrue(AiringReminderPlanner.isAlreadyStarted(item, nowEpochMillis))
+    }
+
+    @Test
     fun pickPreAir_skipsBeyondGraceWindow() {
-        // 超过 10 分钟容错窗口（例如已过去 15 分钟），不再打扰用户
-        val planned = pickPreAir(airingAt(-15))
+        // 超出容错窗口（已过去 61 分钟），不再打扰用户
+        val planned = pickPreAir(airingAt(-61))
 
         assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun preAirLookbackHours_coversGraceWindowAndDelayOffset() {
+        // 回看窗口必须同时覆盖容错窗口与源延迟偏移，否则条目在进入容错判定前就被 SQL 排除
+        assertEquals(1L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 0L))
+        assertEquals(2L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 15L))
+        assertEquals(3L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 120L))
+        // 负值（提前提醒）不应让回看窗口缩到容错区间以下
+        assertEquals(1L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = -60L))
     }
 
     @Test
@@ -254,7 +275,7 @@ class AiringReminderPlannerTest {
     fun nextAiringSchedule_picksNearestFutureEpisode() {
         val ep1 = airingAt(30)
         val ep2 = airingAt(10)
-        val ep3 = airingAt(-20) // 已过期
+        val ep3 = airingAt(-90) // 超出容错窗口，已过期
 
         val next =
             AiringReminderPlanner.nextAiringSchedule(
@@ -267,6 +288,70 @@ class AiringReminderPlannerTest {
         // ep2 开播在 10 分钟后，提前 15 分钟应当立刻触发 (maxOf(now, targetTrigger) == now)
         assertEquals(ep2.subjectId, next?.first?.subjectId)
         assertEquals(nowEpochMillis, next?.second)
+    }
+
+    @Test
+    fun nextAiringSchedule_schedulesImmediateCatchUpForLateEpisode() {
+        // 回归：App 在开播后重新核准（冷启动 / 重装 / 开机 / 改时区）时，
+        // 容错窗口内刚错过的剧集必须仍被选为「立即触发」——这是配合查询侧
+        // lookback 把漏掉的提醒补回来的关键一环
+        val late = airingAt(-45)
+
+        val next =
+            AiringReminderPlanner.nextAiringSchedule(
+                notifiedKeys = emptyList(),
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 0L,
+                upcoming = listOf(late),
+            )
+
+        assertEquals(late.subjectId, next?.first?.subjectId)
+        assertEquals(nowEpochMillis, next?.second)
+    }
+
+    @Test
+    fun nextAiringSchedule_ignoresEpisodeBeyondGraceWindow() {
+        val next =
+            AiringReminderPlanner.nextAiringSchedule(
+                notifiedKeys = emptyList(),
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 0L,
+                upcoming = listOf(airingAt(-61)),
+            )
+
+        assertEquals(null, next)
+    }
+
+    @Test
+    fun pruneNotifiedKeys_retainsYesterdayToSurviveMidnightRollover() {
+        val yesterdayKey = "2026-09-05:633836:4:2026-09-07T14:00:00Z"
+        val todayKey = "$today:633836:5:2026-09-08T14:00:00Z"
+        val staleKey = "2026-09-04:633836:3:2026-09-06T14:00:00Z"
+
+        val retained =
+            AiringReminderPlanner.pruneNotifiedKeys(
+                existing = listOf(yesterdayKey, todayKey, staleKey),
+                today = today,
+            )
+
+        // 跨日补发时仍能比对到昨天的键，避免同一集被重复推送；更早的键正常回收
+        assertEquals(listOf(yesterdayKey, todayKey), retained)
+    }
+
+    @Test
+    fun pruneNotifiedKeys_fallsBackToLiteralPrefixWhenDateUnparsable() {
+        // 防御分支：日期不可解析时回退为字面前缀匹配——既不抛异常，也不因裁剪规则
+        // 失效而把当期键一并删掉（删掉会导致同一集重复推送）
+        val literalKey = "not-a-date:633836:4:2026-09-07T14:00:00Z"
+        val staleKey = "2026-09-05:633836:3:2026-09-06T14:00:00Z"
+
+        val retained =
+            AiringReminderPlanner.pruneNotifiedKeys(
+                existing = listOf(literalKey, staleKey),
+                today = "not-a-date",
+            )
+
+        assertEquals(listOf(literalKey), retained)
     }
 
     @Test

@@ -65,11 +65,14 @@ class AiringAlarmScheduler(
             return
         }
 
-        // 检索未来 48 小时内的开播事件
+        // 检索未来 48 小时内的开播事件；回看窗口必须覆盖容错区间，否则「刚错过几分钟」
+        // 的剧集会在进入 [AiringReminderPlanner.nextAiringSchedule] 的迟到判定前就被
+        // 查询本身排除，导致重新核准（冷启动 / 重装 / 开机 / 改时区）无法补发
         val upcoming =
             scheduleRepository.getUpcomingAiringForSubjects(
                 subjectIds = trackedSubjectIds,
                 hoursAhead = 48L,
+                lookbackHours = AiringReminderPlanner.preAirLookbackHours(prefs.airDelayOffsetMinutes.toLong()),
             )
 
         val nextDecision =
