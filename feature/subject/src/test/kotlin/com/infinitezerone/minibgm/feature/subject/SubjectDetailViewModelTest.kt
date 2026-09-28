@@ -1574,4 +1574,32 @@ class SubjectDetailViewModelTest {
             assertEquals("https://cdn.example.com/a.m3u8", route.streamUrl)
             assertEquals(sampleSubject.displayName, route.subjectName)
         }
+
+    @Test
+    fun episodesLoadingState_correctlyTracksLifecycle() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            // 数据拉取完成后，isEpisodesLoading 应当为 false，且分集数据正常呈现
+            val state = viewModel.uiState.first { it.episodes.isNotEmpty() }
+            assertFalse(state.isEpisodesLoading)
+            assertEquals(sampleEpisodeList, state.episodes)
+
+            // 切换排序
+            viewModel.setEpisodeSortDescending(descending = true)
+            val updatedState = viewModel.uiState.first { it.episodeSortDescending }
+            assertFalse(updatedState.isEpisodesLoading)
+        }
 }

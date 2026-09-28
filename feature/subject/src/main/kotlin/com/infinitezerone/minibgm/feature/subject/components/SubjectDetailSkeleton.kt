@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 
 /**
  * 条目详情完整首屏骨架屏（用于深层直达无前序缓存时的秒级加载态）。
@@ -271,6 +272,97 @@ fun SubjectDetailBodySkeleton(
                                 state = skeletonState,
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 章节网格加载骨架（与真实 EpisodeGrid 单元格 1:1 几何尺寸同构）
+ */
+@Composable
+fun EpisodeGridSkeleton(
+    columns: Int = 6,
+    rowCount: Int = 2,
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    val columnCount = columns.coerceAtLeast(1)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        repeat(rowCount) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                repeat(columnCount) {
+                    SkeletonBox(
+                        modifier = Modifier.weight(1f).aspectRatio(1f),
+                        shape = BgmShapes.small,
+                        state = skeletonState,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 章节列表加载骨架（与真实 EpisodeListItem 几何尺寸同构）
+ */
+@Composable
+fun EpisodeListSkeleton(
+    itemCount: Int = 4,
+    modifier: Modifier = Modifier,
+    skeletonState: SkeletonState = rememberSkeletonState(),
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        repeat(itemCount) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = BgmShapes.large,
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+            ) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // 左侧集数标牌骨架
+                    SkeletonBox(
+                        modifier = Modifier.size(46.dp),
+                        shape = BgmShapes.medium,
+                        state = skeletonState,
+                    )
+
+                    // 右侧标题与副标题骨架
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.6f).height(16.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.35f).height(12.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
                     }
                 }
             }

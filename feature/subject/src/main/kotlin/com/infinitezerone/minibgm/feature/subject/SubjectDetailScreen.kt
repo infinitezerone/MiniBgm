@@ -81,9 +81,11 @@ import com.infinitezerone.minibgm.feature.subject.components.CharacterImagePrevi
 import com.infinitezerone.minibgm.feature.subject.components.CharactersSection
 import com.infinitezerone.minibgm.feature.subject.components.CollectionStatusBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGrid
+import com.infinitezerone.minibgm.feature.subject.components.EpisodeGridSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroupFilterChips
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeListItem
+import com.infinitezerone.minibgm.feature.subject.components.EpisodeListSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.EpisodesSectionHeader
 import com.infinitezerone.minibgm.feature.subject.components.PersonDetailBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.RatingDistributionCard
@@ -951,68 +953,84 @@ private fun SubjectDetailContent(
                         }
                     }
 
-                    if (currentEpisodes.isEmpty()) {
-                        item(key = "episodes_empty") {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = if (uiState.isLoading) "正在加载章节列表..." else "暂无分集信息",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    when {
+                        (uiState.isEpisodesLoading || uiState.isLoading) && currentEpisodes.isEmpty() -> {
+                            item(key = "episodes_skeleton") {
+                                if (isGridView) {
+                                    EpisodeGridSkeleton(columns = gridColumns)
+                                } else {
+                                    EpisodeListSkeleton()
+                                }
+                            }
+                        }
+
+                        currentEpisodes.isEmpty() -> {
+                            item(key = "episodes_empty") {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 32.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "暂无分集信息",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+
+                        isGridView -> {
+                            item(key = "episodes_grid") {
+                                EpisodeGrid(
+                                    episodes = currentEpisodes,
+                                    watchedCount = uiState.collection?.epStatus ?: 0,
+                                    hasProgress = uiState.collection != null,
+                                    onToggleWatched = onToggleEpisodeWatched,
+                                    onEpisodeLongClick = { episode ->
+                                        val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
+                                        if (!isWatched && episode.type == 0) {
+                                            onBatchMarkEpisode(episode)
+                                        } else {
+                                            onSelectEpisodeForDetail(episode)
+                                        }
+                                    },
+                                    columns = gridColumns,
                                 )
                             }
                         }
-                    } else if (isGridView) {
-                        item(key = "episodes_grid") {
-                            EpisodeGrid(
-                                episodes = currentEpisodes,
-                                watchedCount = uiState.collection?.epStatus ?: 0,
-                                hasProgress = uiState.collection != null,
-                                onToggleWatched = onToggleEpisodeWatched,
-                                onEpisodeLongClick = { episode ->
-                                    val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
-                                    if (!isWatched && episode.type == 0) {
-                                        onBatchMarkEpisode(episode)
-                                    } else {
-                                        onSelectEpisodeForDetail(episode)
-                                    }
-                                },
-                                columns = gridColumns,
-                            )
-                        }
-                    } else {
-                        items(items = currentEpisodes, key = { it.id }) { episode ->
-                            val watchedCount = uiState.collection?.epStatus ?: 0
-                            val isWatched = isEpisodeWatched(episode, watchedCount)
-                            val isNextToWatch =
-                                isEpisodeNextToWatch(episode, watchedCount, hasProgress = uiState.collection != null)
-                            EpisodeListItem(
-                                episode = episode,
-                                isWatched = isWatched,
-                                isNextToWatch = isNextToWatch,
-                                onClick = { onSelectEpisodeForDetail(episode) },
-                                onToggleWatched = {
-                                    onToggleEpisodeWatched(episode, !isWatched)
-                                },
-                                onPlayClick =
-                                    if (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) {
-                                        { onPlayEpisode(episode) }
-                                    } else {
-                                        null
+
+                        else -> {
+                            items(items = currentEpisodes, key = { it.id }) { episode ->
+                                val watchedCount = uiState.collection?.epStatus ?: 0
+                                val isWatched = isEpisodeWatched(episode, watchedCount)
+                                val isNextToWatch =
+                                    isEpisodeNextToWatch(episode, watchedCount, hasProgress = uiState.collection != null)
+                                EpisodeListItem(
+                                    episode = episode,
+                                    isWatched = isWatched,
+                                    isNextToWatch = isNextToWatch,
+                                    onClick = { onSelectEpisodeForDetail(episode) },
+                                    onToggleWatched = {
+                                        onToggleEpisodeWatched(episode, !isWatched)
                                     },
-                                onLongClick = {
-                                    if (!isWatched && episode.type == 0) {
-                                        onBatchMarkEpisode(episode)
-                                    } else {
-                                        onSelectEpisodeForDetail(episode)
-                                    }
-                                },
-                            )
+                                    onPlayClick =
+                                        if (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) {
+                                            { onPlayEpisode(episode) }
+                                        } else {
+                                            null
+                                        },
+                                    onLongClick = {
+                                        if (!isWatched && episode.type == 0) {
+                                            onBatchMarkEpisode(episode)
+                                        } else {
+                                            onSelectEpisodeForDetail(episode)
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
 

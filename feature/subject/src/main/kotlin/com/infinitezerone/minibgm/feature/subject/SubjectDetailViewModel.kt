@@ -80,6 +80,7 @@ enum class SubjectDetailTab(
 data class SubjectDetailUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
+    val isEpisodesLoading: Boolean = true,
     val isLoggedIn: Boolean = false,
     val selectedTab: SubjectDetailTab = SubjectDetailTab.EPISODES,
     val isEpisodeGridView: Boolean = true,
@@ -219,6 +220,7 @@ class SubjectDetailViewModel(
                         episodes = episodes,
                         collection = mergedCollection,
                         isLoading = if (subject != null || state.subject != null) false else state.isLoading,
+                        isEpisodesLoading = if (episodes.isNotEmpty()) false else state.isEpisodesLoading,
                     )
                 }
             }
@@ -268,43 +270,64 @@ class SubjectDetailViewModel(
                     current.copy(
                         isLoading = if (isUserPullToRefresh || current.subject == null) true else false,
                         isRefreshing = isUserPullToRefresh,
+                        isEpisodesLoading = current.episodes.isEmpty(),
                         error = null,
                     )
                 }
 
-                // 核心首屏数据平滑有序拉取：条目详情 -> 分集列表 -> 收藏状态（串行平滑，杜绝并发冲击）
-                val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
-                val episodesResult = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
-                val collectionResult = collectionRepository.fetchCollection(subjectId)
+                try {
+                    // 1. 条目基本信息
+                    val subjectResult = subjectRepository.fetchSubjectDetail(subjectId)
+                    subjectResult.onError { _, message ->
+                        if (_uiState.value.subject == null) {
+                            _uiState.update { it.copy(error = message) }
+                        }
+                    }
+                    _uiState.update { current ->
+                        current.copy(
+                            isLoading = false,
+                            subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
+                        )
+                    }
 
-                subjectResult.onError { _, message ->
-                    if (_uiState.value.subject == null) {
-                        _uiState.update { it.copy(error = message) }
+                    // 2. 分集数据（拉取完成后立即退出分集骨架态）
+                    val episodesResult = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
+                    episodesResult.onError { _, message ->
+                        if (_uiState.value.subject == null) {
+                            _uiState.update { it.copy(error = message) }
+                        }
                     }
-                }
-                episodesResult.onError { _, message ->
-                    if (_uiState.value.subject == null) {
-                        _uiState.update { it.copy(error = message) }
+                    _uiState.update { current ->
+                        current.copy(
+                            isEpisodesLoading = false,
+                        )
                     }
-                }
-                collectionResult.onError { _, message ->
-                    if (_uiState.value.subject == null) {
-                        _uiState.update { it.copy(error = message) }
-                    }
-                }
 
-                _uiState.update { current ->
-                    current.copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        subject = (subjectResult as? AppResult.Success)?.data ?: current.subject,
-                        collection =
-                            if (collectionResult is AppResult.Success) {
-                                collectionResult.data
-                            } else {
-                                current.collection
-                            },
-                    )
+                    // 3. 收藏状态
+                    val collectionResult = collectionRepository.fetchCollection(subjectId)
+                    collectionResult.onError { _, message ->
+                        if (_uiState.value.subject == null) {
+                            _uiState.update { it.copy(error = message) }
+                        }
+                    }
+                    _uiState.update { current ->
+                        current.copy(
+                            collection =
+                                if (collectionResult is AppResult.Success) {
+                                    collectionResult.data
+                                } else {
+                                    current.collection
+                                },
+                        )
+                    }
+                } finally {
+                    _uiState.update { current ->
+                        current.copy(
+                            isLoading = false,
+                            isRefreshing = false,
+                            isEpisodesLoading = false,
+                        )
+                    }
                 }
             }
     }
@@ -327,9 +350,10 @@ class SubjectDetailViewModel(
     /** 分集排序方向：切换后按新方向重载首屏（降序从最新一话开始） */
     fun setEpisodeSortDescending(descending: Boolean) {
         if (_uiState.value.episodeSortDescending == descending) return
-        _uiState.update { it.copy(episodeSortDescending = descending) }
+        _uiState.update { it.copy(episodeSortDescending = descending, isEpisodesLoading = true) }
         viewModelScope.launch {
             subjectRepository.loadEpisodes(subjectId, descending)
+            _uiState.update { it.copy(isEpisodesLoading = false) }
         }
     }
 
