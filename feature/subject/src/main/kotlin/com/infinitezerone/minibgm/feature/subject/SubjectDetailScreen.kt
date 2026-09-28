@@ -3,12 +3,14 @@ package com.infinitezerone.minibgm.feature.subject
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -38,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -60,6 +64,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientBlurBackdrop
 import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -359,190 +364,210 @@ fun SubjectDetailScreen(
     var showSourcesBottomSheet by rememberSaveable { mutableStateOf(false) }
     var selectedEpisodeForSources by remember { mutableStateOf<Episode?>(null) }
 
-    Scaffold(
-        topBar = {
-            BgmTopAppBar(
-                title = {
-                    Text(
-                        text = displaySubject?.displayName ?: "条目详情",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                        )
-                    }
-                },
-            )
-        },
-        snackbarHost = { BgmSnackbarHost(snackbarHostState) },
-        modifier = modifier,
-    ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = {
-                viewModel.refresh(isUserPullToRefresh = true)
-                when (uiState.selectedTab) {
-                    SubjectDetailTab.EPISODES -> Unit
-                    SubjectDetailTab.DETAILS -> viewModel.loadDetailsTabIfNeeded(force = true)
-                    SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
-                }
-            },
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+    ) {
+        AmbientBlurBackdrop(
+            imageUrl = displaySubject?.images?.bestImage,
             modifier =
                 Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                when {
-                    displaySubject == null && uiState.isLoading -> {
-                        SubjectDetailFullSkeleton()
-                    }
+                    .fillMaxWidth()
+                    .height(420.dp),
+        )
 
-                    displaySubject == null && uiState.error != null -> {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Card(
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
+        Scaffold(
+            topBar = {
+                BgmTopAppBar(
+                    title = {
+                        Text(
+                            text = displaySubject?.displayName ?: "条目详情",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                        ),
+                )
+            },
+            snackbarHost = { BgmSnackbarHost(snackbarHostState) },
+            containerColor = Color.Transparent,
+            modifier = Modifier.fillMaxSize(),
+        ) { innerPadding ->
+            PullToRefreshBox(
+                isRefreshing = uiState.isRefreshing,
+                onRefresh = {
+                    viewModel.refresh(isUserPullToRefresh = true)
+                    when (uiState.selectedTab) {
+                        SubjectDetailTab.EPISODES -> Unit
+                        SubjectDetailTab.DETAILS -> viewModel.loadDetailsTabIfNeeded(force = true)
+                        SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
+                    }
+                },
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    when {
+                        displaySubject == null && uiState.isLoading -> {
+                            SubjectDetailFullSkeleton()
+                        }
+
+                        displaySubject == null && uiState.error != null -> {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(24.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                Card(
+                                    colors =
+                                        CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        ),
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ErrorOutline,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(48.dp),
-                                    )
-                                    Text(
-                                        text = "条目加载失败",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                    Text(
-                                        text = uiState.error.orEmpty(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                    Button(
-                                        onClick = viewModel::refresh,
-                                        modifier = Modifier.padding(top = 8.dp),
+                                    Column(
+                                        modifier = Modifier.padding(24.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
-                                        Text(text = "重新加载")
+                                        Icon(
+                                            imageVector = Icons.Filled.ErrorOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(48.dp),
+                                        )
+                                        Text(
+                                            text = "条目加载失败",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                        Text(
+                                            text = uiState.error.orEmpty(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                        Button(
+                                            onClick = viewModel::refresh,
+                                            modifier = Modifier.padding(top = 8.dp),
+                                        ) {
+                                            Text(text = "重新加载")
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    displaySubject != null -> {
-                        val totalEpisodes =
-                            if (displaySubject.eps > 0) displaySubject.eps else displaySubject.totalEpisodes
-                        val fullSubject = if (isTransitionStabilizing) null else uiState.subject
+                        displaySubject != null -> {
+                            val totalEpisodes =
+                                if (displaySubject.eps > 0) displaySubject.eps else displaySubject.totalEpisodes
+                            val fullSubject = if (isTransitionStabilizing) null else uiState.subject
 
-                        val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
-                            if (uiState.isLoggedIn) {
-                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
+                                if (uiState.isLoggedIn) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                }
+                                val epNumber =
+                                    if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                viewModel.toggleEpisodeWatched(
+                                    episodeId = episode.id,
+                                    isWatched = isWatched,
+                                    epNumber = epNumber,
+                                    episodeType = episode.type,
+                                )
                             }
-                            val epNumber =
-                                if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
-                            viewModel.toggleEpisodeWatched(
-                                episodeId = episode.id,
-                                isWatched = isWatched,
-                                epNumber = epNumber,
-                                episodeType = episode.type,
-                            )
-                        }
 
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
-                            SubjectDetailContent(
-                                displaySubject = displaySubject,
-                                fullSubject = fullSubject,
-                                subjectType = subjectType,
-                                uiState = uiState,
-                                source = source,
-                                totalEpisodes = totalEpisodes,
-                                selectedTab = uiState.selectedTab,
-                                onSelectTab = viewModel::selectTab,
-                                currentEpisodes = currentEpisodes,
-                                availableGroups = availableGroups,
-                                groupedEpisodes = groupedEpisodes,
-                                activeGroup = activeGroup,
-                                onSelectGroup = { selectedGroup = it },
-                                isGridView = uiState.isEpisodeGridView,
-                                onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
-                                episodeSortDescending = uiState.episodeSortDescending,
-                                hasMoreEpisodes = uiState.hasMoreEpisodes,
-                                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
-                                onToggleEpisodeSort = {
-                                    viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
-                                },
-                                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
-                                onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
-                                onToggleWatching = {
-                                    val wasWatching = uiState.collection?.type == CollectionType.DOING.value
-                                    viewModel.toggleWatching()
-                                    if (!wasWatching && uiState.isLoggedIn) {
-                                        val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
-                                        if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
-                                            showAiringReminderPrompt = true
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.TopCenter,
+                            ) {
+                                SubjectDetailContent(
+                                    displaySubject = displaySubject,
+                                    fullSubject = fullSubject,
+                                    subjectType = subjectType,
+                                    uiState = uiState,
+                                    source = source,
+                                    totalEpisodes = totalEpisodes,
+                                    selectedTab = uiState.selectedTab,
+                                    onSelectTab = viewModel::selectTab,
+                                    currentEpisodes = currentEpisodes,
+                                    availableGroups = availableGroups,
+                                    groupedEpisodes = groupedEpisodes,
+                                    activeGroup = activeGroup,
+                                    onSelectGroup = { selectedGroup = it },
+                                    isGridView = uiState.isEpisodeGridView,
+                                    onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
+                                    episodeSortDescending = uiState.episodeSortDescending,
+                                    hasMoreEpisodes = uiState.hasMoreEpisodes,
+                                    isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                                    onToggleEpisodeSort = {
+                                        viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
+                                    },
+                                    onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
+                                    onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
+                                    onToggleWatching = {
+                                        val wasWatching = uiState.collection?.type == CollectionType.DOING.value
+                                        viewModel.toggleWatching()
+                                        if (!wasWatching && uiState.isLoggedIn) {
+                                            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                                            if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                                                showAiringReminderPrompt = true
+                                            }
                                         }
-                                    }
-                                },
-                                onToggleEpisodeWatched = onToggleEpisodeWatched,
-                                onSelectEpisodeForDetail = onSelectEpisodeForDetail,
-                                onSubjectClick = onSubjectClick,
-                                onTagClick = onTagClick,
-                                onCharacterClick = handleCharacterClick,
-                                onPersonClick = handlePersonClick,
-                                onPreviewCharacter = { previewCharacter = it },
-                                onLinkClick = handleLinkClick,
-                                onTopicClick = onTopicClick,
-                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
-                                isTransitionStabilizing = isTransitionStabilizing,
-                                onBatchMarkEpisode = { episode ->
-                                    if (!uiState.isLoggedIn) {
-                                        viewModel.promptLogin()
-                                    } else {
-                                        batchMarkTargetEpisode = episode
-                                    }
-                                },
-                                onPlayEpisode = { episode ->
-                                    onPlayClick(viewModel.buildPlayerRoute(episode))
-                                },
-                                onPlayNextEpisode = {
-                                    viewModel.nextEpisodeToWatch()?.let { nextEp ->
-                                        onPlayClick(viewModel.buildPlayerRoute(nextEp))
-                                    }
-                                },
-                                onOpenSources = {
-                                    // 「播放源」只负责打开来源向导；带出下一待看集以启用分集级匹配
-                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
-                                    showSourcesBottomSheet = true
-                                },
-                                modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
-                            )
+                                    },
+                                    onToggleEpisodeWatched = onToggleEpisodeWatched,
+                                    onSelectEpisodeForDetail = onSelectEpisodeForDetail,
+                                    onSubjectClick = onSubjectClick,
+                                    onTagClick = onTagClick,
+                                    onCharacterClick = handleCharacterClick,
+                                    onPersonClick = handlePersonClick,
+                                    onPreviewCharacter = { previewCharacter = it },
+                                    onLinkClick = handleLinkClick,
+                                    onTopicClick = onTopicClick,
+                                    onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
+                                    isTransitionStabilizing = isTransitionStabilizing,
+                                    onBatchMarkEpisode = { episode ->
+                                        if (!uiState.isLoggedIn) {
+                                            viewModel.promptLogin()
+                                        } else {
+                                            batchMarkTargetEpisode = episode
+                                        }
+                                    },
+                                    onPlayEpisode = { episode ->
+                                        onPlayClick(viewModel.buildPlayerRoute(episode))
+                                    },
+                                    onPlayNextEpisode = {
+                                        viewModel.nextEpisodeToWatch()?.let { nextEp ->
+                                            onPlayClick(viewModel.buildPlayerRoute(nextEp))
+                                        }
+                                    },
+                                    onOpenSources = {
+                                        // 「播放源」只负责打开来源向导；带出下一待看集以启用分集级匹配
+                                        selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
+                                        showSourcesBottomSheet = true
+                                    },
+                                    modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
+                                )
+                            }
                         }
                     }
                 }

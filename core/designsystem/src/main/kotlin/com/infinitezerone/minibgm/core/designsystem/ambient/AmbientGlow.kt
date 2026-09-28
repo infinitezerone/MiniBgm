@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,13 +16,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
+import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import kotlin.math.max
 import kotlin.math.min
@@ -97,6 +105,66 @@ fun AmbientGlow(
     intensity: Float = 1f,
 ) {
     Box(modifier = modifier.background(brush = rememberAmbientGlowBrush(dominantColor, style, intensity)))
+}
+
+/**
+ * 页面级全景封面高斯模糊氛围层（Ambient Blur Backdrop）。
+ *
+ * 将海报封面进行大半径硬件高斯模糊，在页面顶部全景漫射，
+ * 底部通过纵向渐隐遮罩与页面背景色 [MaterialTheme.colorScheme.surface] 平滑融合。
+ *
+ * - 全景透光：自然保留封面本身的丰富色相（天空、夕阳、发色、服饰），彻底告别单色渐变画笔的局限；
+ * - 性能轻盈：复用 Coil 内存缓存，0 额外网络开销；Android 12+ 走 GPU RenderEffect 硬件加速；
+ * - 容错机制：URL 为空或加载异常时不阻碍页面，装饰性功能 fail-open 绝不崩溃。
+ */
+@Composable
+fun AmbientBlurBackdrop(
+    imageUrl: String?,
+    modifier: Modifier = Modifier,
+    blurRadius: Dp = 48.dp,
+    intensity: Float = 1f,
+) {
+    if (imageUrl.isNullOrBlank()) return
+
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val baseAlpha = if (isDarkSurface) 0.36f else 0.22f
+    val resolvedAlpha = (baseAlpha * intensity.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+    val surfaceColor = MaterialTheme.colorScheme.surface
+
+    Box(
+        modifier =
+            modifier
+                .clipToBounds()
+                .background(surfaceColor),
+    ) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = resolvedAlpha
+                    }.blur(radius = blurRadius),
+        )
+
+        // 垂直平滑遮罩：顶部保持通透微光，中部渐次柔和过渡，底部完全融合入页面背景色
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush =
+                            Brush.verticalGradient(
+                                0.0f to Color.Transparent,
+                                0.35f to surfaceColor.copy(alpha = 0.25f),
+                                0.70f to surfaceColor.copy(alpha = 0.80f),
+                                1.0f to surfaceColor,
+                            ),
+                    ),
+        )
+    }
 }
 
 /**
