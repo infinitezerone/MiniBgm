@@ -53,7 +53,7 @@ sealed interface BbInlineElement {
     ) : BbInlineElement
 
     /**
-     * 样式文本：支持粗体、斜体、下划线、删除线、超链接、字号缩放
+     * 样式文本：支持粗体、斜体、下划线、删除线、超链接、字号缩放、字体颜色
      */
     data class Styled(
         val text: String,
@@ -63,14 +63,16 @@ sealed interface BbInlineElement {
         val isStrikethrough: Boolean = false,
         val url: String? = null,
         val sizeScale: Float? = null,
+        val colorHex: String? = null,
     ) : BbInlineElement
 
     /**
-     * 黑幕 / 剧透文本：如 [mask]剧透[/mask]，支持点击揭开
+     * 黑幕 / 剧透文本：如 [mask]剧透[/mask]，支持点击揭开，支持内部嵌套样式与表情
      */
     data class Mask(
         val id: String,
         val text: String,
+        val elements: List<BbInlineElement> = emptyList(),
     ) : BbInlineElement
 
     /**
@@ -104,9 +106,13 @@ object BgmBbCodeParser {
     private val MASKED_IMG_REGEX =
         Regex("""\[__bgm_masked_img__((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/__bgm_masked_img__\]""", RegexOption.IGNORE_CASE)
     private val QUOTE_AUTHOR_REGEX = Regex("""^(?:\[b\])?(.*?)(?:\[/b\])?\s*(?:说|:)\s*:\s*([\s\S]*)$""", RegexOption.DOT_MATCHES_ALL)
-    private val STICKER_REGEX = Regex("""\((bgm|musume_?|blake_?)(\d+)\)""", RegexOption.IGNORE_CASE)
-    private val MASK_REGEX = Regex("""\[mask\]([\s\S]*?)\[/mask\]""", RegexOption.IGNORE_CASE)
-    private val UNWANTED_TAGS_REGEX = Regex("""\[/?(?:photo=\d+|right|size=\d+|color=[^\]]+)\]""", RegexOption.IGNORE_CASE)
+    private val STRIPPED_TAGS_REGEX = Regex("""\[/?(?:photo=\d+|right)\]""", RegexOption.IGNORE_CASE)
+    private val INLINE_TOKEN_REGEX =
+        Regex(
+            """\[(/?)([a-zA-Z]+)(?:=([^\]]+))?\]|\((bgm|musume_?|blake_?)(\d+)\)|https?://[a-zA-Z0-9_\-.~:/?#@!$&*+,;%=]+""",
+            RegexOption.IGNORE_CASE,
+        )
+    private val SUPPORTED_INLINE_TAGS = setOf("b", "i", "u", "s", "mask", "color", "size", "url")
 
     /**
      * 将包含 [img] 的 [mask] 标签解构转换：使其中的图片标记为 [__bgm_masked_img__]，
@@ -327,82 +333,6 @@ object BgmBbCodeParser {
         return w to h
     }
 
-    /**
-     * 将一段非块级文本解析为包含丰富行内样式的 Paragraph
-     */
-    fun parseParagraph(rawParagraph: String): BbCodeBlock.Paragraph {
-        // 先清理不影响排版的未知废弃标签（如 [right] 等）
-        val cleanParagraph = rawParagraph.replace(UNWANTED_TAGS_REGEX, "")
-
-        val elements = mutableListOf<BbInlineElement>()
-        var maskCounter = 0
-
-        // 正则识别 [mask]...[/mask] 与 (bgmXX) / (musume_XX) / (blake_XX) 贴图
-        val inlineTokenRegex =
-            Regex(
-                """(\[mask\][\s\S]*?\[/mask\]|\((?:bgm|musume_?|blake_?)\d+\))""",
-                RegexOption.IGNORE_CASE,
-            )
-        var currentIndex = 0
-
-        val matches = inlineTokenRegex.findAll(cleanParagraph)
-        for (match in matches) {
-            val range = match.range
-            if (range.first > currentIndex) {
-                val textChunk = cleanParagraph.substring(currentIndex, range.first)
-                if (textChunk.isNotEmpty()) {
-                    elements.addAll(parseFormattedText(textChunk))
-                }
-            }
-
-            val token = match.value
-            if (token.startsWith("[mask", ignoreCase = true)) {
-                val inner =
-                    MASK_REGEX
-                        .find(token)
-                        ?.groupValues
-                        ?.get(1)
-                        .orEmpty()
-                val maskId = "mask_${++maskCounter}_${inner.hashCode()}"
-                elements.add(BbInlineElement.Mask(id = maskId, text = inner))
-            } else if (token.startsWith("(", ignoreCase = true)) {
-                val stickerMatch = STICKER_REGEX.find(token)
-                if (stickerMatch != null) {
-                    val prefix = stickerMatch.groupValues[1].lowercase().removeSuffix("_")
-                    val num = stickerMatch.groupValues[2].toIntOrNull() ?: 0
-                    val paddedNum = num.toString().padStart(2, '0')
-                    val (category, url, isLarge) =
-                        when (prefix) {
-                            "musume" -> Triple("musume", "https://lain.bgm.tv/img/smiles/musume/musume_$paddedNum.gif", true)
-                            "blake" -> Triple("blake", "https://lain.bgm.tv/img/smiles/blake/blake_$paddedNum.gif", true)
-                            else -> Triple("bgm", "https://lain.bgm.tv/img/smiles/tv/$paddedNum.gif", false)
-                        }
-                    val stickerId = "${category}_$paddedNum"
-                    elements.add(
-                        BbInlineElement.Sticker(
-                            code = token,
-                            stickerId = stickerId,
-                            url = url,
-                            isLarge = isLarge,
-                        ),
-                    )
-                }
-            }
-
-            currentIndex = range.last + 1
-        }
-
-        if (currentIndex < cleanParagraph.length) {
-            val remaining = cleanParagraph.substring(currentIndex)
-            if (remaining.isNotEmpty()) {
-                elements.addAll(parseFormattedText(remaining))
-            }
-        }
-
-        return BbCodeBlock.Paragraph(rawText = cleanParagraph, elements = elements)
-    }
-
-    private val RAW_URL_REGEX = Regex("""https?://[a-zA-Z0-9_\-.~:/?#@!$&*+,;%=]+""")
     private val TRAILING_PUNCTUATION =
         charArrayOf(
             '.',
@@ -427,201 +357,157 @@ object BgmBbCodeParser {
             '’',
         )
 
-    /** 行内样式的可继承表示：嵌套标签时子元素在父样式上叠加 */
+    private sealed interface Token {
+        data class TagOpen(
+            val name: String,
+            val arg: String?,
+            val raw: String,
+        ) : Token
+
+        data class TagClose(
+            val name: String,
+            val raw: String,
+        ) : Token
+
+        data class Sticker(
+            val code: String,
+            val stickerId: String,
+            val url: String,
+            val isLarge: Boolean,
+        ) : Token
+
+        data class RawUrl(
+            val url: String,
+        ) : Token
+
+        data class Text(
+            val content: String,
+        ) : Token
+    }
+
+    private data class StyleScope(
+        val tag: String,
+        val arg: String?,
+    )
+
+    private class MaskFrame(
+        val id: String,
+        val elements: MutableList<BbInlineElement> = mutableListOf(),
+    )
+
     private data class InlineStyle(
         val isBold: Boolean = false,
         val isItalic: Boolean = false,
         val isUnderline: Boolean = false,
         val isStrikethrough: Boolean = false,
         val url: String? = null,
+        val sizeScale: Float? = null,
+        val colorHex: String? = null,
     ) {
         val isEmpty: Boolean
-            get() = !isBold && !isItalic && !isUnderline && !isStrikethrough && url == null
+            get() = !isBold && !isItalic && !isUnderline && !isStrikethrough && url == null && sizeScale == null && colorHex == null
     }
 
-    private fun InlineStyle.merge(other: InlineStyle): InlineStyle =
-        InlineStyle(
-            isBold = isBold || other.isBold,
-            isItalic = isItalic || other.isItalic,
-            isUnderline = isUnderline || other.isUnderline,
-            isStrikethrough = isStrikethrough || other.isStrikethrough,
-            url = other.url ?: url,
-        )
+    private fun computeActiveStyle(styleStack: Collection<StyleScope>): InlineStyle {
+        var isBold = false
+        var isItalic = false
+        var isUnderline = false
+        var isStrikethrough = false
+        var url: String? = null
+        var sizeScale: Float? = null
+        var colorHex: String? = null
 
-    private fun applyStyle(
-        elements: List<BbInlineElement>,
-        style: InlineStyle,
-    ): List<BbInlineElement> =
-        elements.map { element ->
-            when (element) {
-                is BbInlineElement.Plain ->
-                    BbInlineElement.Styled(
-                        text = element.text,
-                        isBold = style.isBold,
-                        isItalic = style.isItalic,
-                        isUnderline = style.isUnderline,
-                        isStrikethrough = style.isStrikethrough,
-                        url = style.url,
-                    )
-                is BbInlineElement.Styled ->
-                    element.copy(
-                        isBold = element.isBold || style.isBold,
-                        isItalic = element.isItalic || style.isItalic,
-                        isUnderline = element.isUnderline || style.isUnderline,
-                        isStrikethrough = element.isStrikethrough || style.isStrikethrough,
-                        url = element.url ?: style.url,
-                    )
-                else -> element // Mask / Sticker 保持原样
-            }
-        }
-
-    /**
-     * 解析基础格式化标签：[b], [i], [s], [u], [url] 以及裸 URL 链接识别。
-     * 支持嵌套（如 [b]粗体[i]粗斜体[/i][/b]）：子标签在父样式上递归叠加，
-     * 未被任何标签识别的内容原样保留，不会把原始标签文本渲染给用户。
-     */
-    private fun parseFormattedText(
-        text: String,
-        style: InlineStyle = InlineStyle(),
-    ): List<BbInlineElement> {
-        if (!text.contains('[') || !text.contains(']')) {
-            return parsePlainAndRawUrls(text, style)
-        }
-
-        val results = mutableListOf<BbInlineElement>()
-        val tagRegex = Regex("""\[(b|i|s|u|url)(?:=([^\]]+))?\]([\s\S]*?)\[/\1\]""", RegexOption.IGNORE_CASE)
-        var currentIndex = 0
-
-        val matches = tagRegex.findAll(text)
-        for (match in matches) {
-            val range = match.range
-            if (range.first > currentIndex) {
-                val plainPart = text.substring(currentIndex, range.first)
-                if (plainPart.isNotEmpty()) {
-                    results.addAll(parsePlainAndRawUrls(plainPart, style))
-                }
-            }
-
-            val tagName =
-                match.groups[1]
-                    ?.value
-                    .orEmpty()
-                    .lowercase()
-            val tagArg = match.groups[2]?.value?.trim('"', '\'')
-            val innerContent = match.groups[3]?.value.orEmpty()
-
-            when (tagName) {
-                "b" -> results.addAll(applyStyle(parseFormattedText(innerContent, style), style.copy(isBold = true)))
-                "i" -> results.addAll(applyStyle(parseFormattedText(innerContent, style), style.copy(isItalic = true)))
-                "s" ->
-                    results.addAll(
-                        applyStyle(parseFormattedText(innerContent, style), style.copy(isStrikethrough = true)),
-                    )
-                "u" ->
-                    results.addAll(
-                        applyStyle(parseFormattedText(innerContent, style), style.copy(isUnderline = true)),
-                    )
+        for (scope in styleStack) {
+            when (scope.tag) {
+                "b" -> isBold = true
+                "i" -> isItalic = true
+                "u" -> isUnderline = true
+                "s" -> isStrikethrough = true
                 "url" -> {
-                    val url = tagArg?.ifBlank { null } ?: innerContent.trim()
-                    // 子内容递归解析：内容即 URL 时裸链接自动美化 Bangumi 文案，
-                    // 自定义文案则作为 Plain 被叠加 url + 下划线样式
-                    results.addAll(
-                        applyStyle(
-                            parseFormattedText(innerContent, style),
-                            style.merge(InlineStyle(isUnderline = true, url = url)),
-                        ),
-                    )
+                    isUnderline = true
+                    if (scope.arg != null) url = scope.arg
                 }
-                else -> {
-                    results.addAll(parsePlainAndRawUrls(innerContent, style))
-                }
-            }
-
-            currentIndex = range.last + 1
-        }
-
-        if (currentIndex < text.length) {
-            val remaining = text.substring(currentIndex)
-            if (remaining.isNotEmpty()) {
-                results.addAll(parsePlainAndRawUrls(remaining, style))
+                "color" -> if (scope.arg != null) colorHex = scope.arg
+                "size" ->
+                    if (scope.arg != null) {
+                        val pt = scope.arg.toIntOrNull() ?: 14
+                        sizeScale = (pt.toFloat() / 14f).coerceIn(0.7f, 1.8f)
+                    }
             }
         }
-
-        return if (results.isEmpty()) {
-            applyStyle(listOf(BbInlineElement.Plain(text)), style)
-        } else {
-            results
-        }
+        return InlineStyle(
+            isBold = isBold,
+            isItalic = isItalic,
+            isUnderline = isUnderline,
+            isStrikethrough = isStrikethrough,
+            url = url,
+            sizeScale = sizeScale,
+            colorHex = colorHex,
+        )
     }
 
-    /**
-     * 解析普通文本段落中的裸 URL（Autolink），并自动美化 Bangumi 内部链接文案
-     */
-    private fun parsePlainAndRawUrls(
-        text: String,
-        style: InlineStyle = InlineStyle(),
-    ): List<BbInlineElement> {
-        if (!text.contains("http://", ignoreCase = true) && !text.contains("https://", ignoreCase = true)) {
-            return when {
-                text.isEmpty() -> emptyList()
-                style.isEmpty -> listOf(BbInlineElement.Plain(text))
-                else -> applyStyle(listOf(BbInlineElement.Plain(text)), style)
-            }
-        }
-
-        val results = mutableListOf<BbInlineElement>()
+    private fun tokenize(text: String): List<Token> {
+        val tokens = mutableListOf<Token>()
         var currentIndex = 0
-        val matches = RAW_URL_REGEX.findAll(text)
+        val matches = INLINE_TOKEN_REGEX.findAll(text)
 
         for (match in matches) {
             val range = match.range
             if (range.first > currentIndex) {
                 val plainBefore = text.substring(currentIndex, range.first)
                 if (plainBefore.isNotEmpty()) {
-                    results.add(
-                        if (style.isEmpty) {
-                            BbInlineElement.Plain(plainBefore)
-                        } else {
-                            applyStyle(listOf(BbInlineElement.Plain(plainBefore)), style).first()
-                        },
-                    )
+                    tokens.add(Token.Text(plainBefore))
                 }
             }
 
-            var rawUrl = match.value
-            var trailingPunct = ""
-            while (rawUrl.isNotEmpty() && rawUrl.last() in TRAILING_PUNCTUATION) {
-                trailingPunct = rawUrl.last() + trailingPunct
-                rawUrl = rawUrl.dropLast(1)
-            }
+            val raw = match.value
+            val isCloseSlash = match.groups[1]?.value?.isNotEmpty() == true
+            val tagName = match.groups[2]?.value?.lowercase()
 
-            if (rawUrl.isNotEmpty()) {
-                val link = BgmUrlParser.parse(rawUrl)
-                val displayText =
-                    if (link !is BgmLink.External) {
-                        BgmUrlParser.formatDisplayLabel(link)
+            if (tagName != null) {
+                if (tagName in SUPPORTED_INLINE_TAGS) {
+                    if (isCloseSlash) {
+                        tokens.add(Token.TagClose(name = tagName, raw = raw))
                     } else {
-                        rawUrl
+                        val tagArg =
+                            match.groups[3]
+                                ?.value
+                                ?.trim()
+                                ?.trim('"', '\'')
+                        tokens.add(Token.TagOpen(name = tagName, arg = tagArg, raw = raw))
                     }
-                results.add(
-                    BbInlineElement.Styled(
-                        text = displayText,
-                        url = rawUrl,
-                        isUnderline = true,
-                        isBold = style.isBold,
-                        isItalic = style.isItalic,
-                        isStrikethrough = style.isStrikethrough,
-                    ),
-                )
-            }
-            if (trailingPunct.isNotEmpty()) {
-                results.add(
-                    if (style.isEmpty) {
-                        BbInlineElement.Plain(trailingPunct)
-                    } else {
-                        applyStyle(listOf(BbInlineElement.Plain(trailingPunct)), style).first()
-                    },
-                )
+                } else {
+                    tokens.add(Token.Text(raw))
+                }
+            } else if (match.groups[4] != null) {
+                val prefix =
+                    match.groups[4]!!
+                        .value
+                        .lowercase()
+                        .removeSuffix("_")
+                val num = match.groups[5]?.value?.toIntOrNull() ?: 0
+                val paddedNum = num.toString().padStart(2, '0')
+                val (category, url, isLarge) =
+                    when (prefix) {
+                        "musume" -> Triple("musume", "https://lain.bgm.tv/img/smiles/musume/musume_$paddedNum.gif", true)
+                        "blake" -> Triple("blake", "https://lain.bgm.tv/img/smiles/blake/blake_$paddedNum.gif", true)
+                        else -> Triple("bgm", "https://lain.bgm.tv/img/smiles/tv/$paddedNum.gif", false)
+                    }
+                val stickerId = "${category}_$paddedNum"
+                tokens.add(Token.Sticker(code = raw, stickerId = stickerId, url = url, isLarge = isLarge))
+            } else {
+                var rawUrl = raw
+                var trailingPunct = ""
+                while (rawUrl.isNotEmpty() && rawUrl.last() in TRAILING_PUNCTUATION) {
+                    trailingPunct = rawUrl.last() + trailingPunct
+                    rawUrl = rawUrl.dropLast(1)
+                }
+                if (rawUrl.isNotEmpty()) {
+                    tokens.add(Token.RawUrl(rawUrl))
+                }
+                if (trailingPunct.isNotEmpty()) {
+                    tokens.add(Token.Text(trailingPunct))
+                }
             }
 
             currentIndex = range.last + 1
@@ -630,20 +516,215 @@ object BgmBbCodeParser {
         if (currentIndex < text.length) {
             val remaining = text.substring(currentIndex)
             if (remaining.isNotEmpty()) {
-                results.add(
-                    if (style.isEmpty) {
-                        BbInlineElement.Plain(remaining)
-                    } else {
-                        applyStyle(listOf(BbInlineElement.Plain(remaining)), style).first()
-                    },
-                )
+                tokens.add(Token.Text(remaining))
             }
         }
 
-        return if (results.isEmpty()) {
-            applyStyle(listOf(BbInlineElement.Plain(text)), style)
-        } else {
-            results
+        return tokens
+    }
+
+    private fun List<BbInlineElement>.extractPlainText(): String =
+        joinToString("") { element ->
+            when (element) {
+                is BbInlineElement.Plain -> element.text
+                is BbInlineElement.Styled -> element.text
+                is BbInlineElement.Mask -> element.text
+                is BbInlineElement.Sticker -> element.code
+            }
         }
+
+    private fun MutableList<BbInlineElement>.addOrMerge(element: BbInlineElement) {
+        if (element is BbInlineElement.Plain && element.text.isEmpty()) return
+        if (element is BbInlineElement.Styled && element.text.isEmpty()) return
+
+        if (isEmpty()) {
+            add(element)
+            return
+        }
+        val last = last()
+        if (last is BbInlineElement.Plain && element is BbInlineElement.Plain) {
+            set(lastIndex, BbInlineElement.Plain(last.text + element.text))
+        } else if (last is BbInlineElement.Styled &&
+            element is BbInlineElement.Styled &&
+            last.isBold == element.isBold &&
+            last.isItalic == element.isItalic &&
+            last.isUnderline == element.isUnderline &&
+            last.isStrikethrough == element.isStrikethrough &&
+            last.url == element.url &&
+            last.sizeScale == element.sizeScale &&
+            last.colorHex == element.colorHex
+        ) {
+            set(lastIndex, last.copy(text = last.text + element.text))
+        } else {
+            add(element)
+        }
+    }
+
+    /**
+     * 将一段非块级文本解析为包含丰富行内样式的 Paragraph。
+     * 采用词法 Token 流 + 作用域下推栈（Pushdown Stack Automaton）算法，
+     * 彻底解决同名嵌套、交叉嵌套、未闭合容错与黑幕内部富文本支持。
+     */
+    fun parseParagraph(rawParagraph: String): BbCodeBlock.Paragraph {
+        val cleanParagraph = rawParagraph.replace(STRIPPED_TAGS_REGEX, "")
+        if (cleanParagraph.isEmpty()) {
+            return BbCodeBlock.Paragraph(rawText = "", elements = emptyList())
+        }
+
+        val tokens = tokenize(cleanParagraph)
+        val styleStack = mutableListOf<StyleScope>()
+        val maskStack = ArrayDeque<MaskFrame>()
+        val rootElements = mutableListOf<BbInlineElement>()
+        var maskCounter = 0
+
+        fun addElement(element: BbInlineElement) {
+            val targetList = if (maskStack.isNotEmpty()) maskStack.last().elements else rootElements
+            targetList.addOrMerge(element)
+        }
+
+        for (token in tokens) {
+            when (token) {
+                is Token.TagOpen -> {
+                    if (token.name == "mask") {
+                        val maskId = "mask_${++maskCounter}_${token.raw.hashCode()}"
+                        maskStack.addLast(MaskFrame(id = maskId))
+                    } else {
+                        styleStack.add(StyleScope(tag = token.name, arg = token.arg))
+                    }
+                }
+                is Token.TagClose -> {
+                    if (token.name == "mask") {
+                        if (maskStack.isNotEmpty()) {
+                            val frame = maskStack.removeLast()
+                            val plainText = frame.elements.extractPlainText()
+                            val maskElement =
+                                BbInlineElement.Mask(
+                                    id = frame.id,
+                                    text = plainText,
+                                    elements = frame.elements.toList(),
+                                )
+                            addElement(maskElement)
+                        } else {
+                            addElement(BbInlineElement.Plain(token.raw))
+                        }
+                    } else {
+                        val lastIdx = styleStack.indexOfLast { it.tag == token.name }
+                        if (lastIdx >= 0) {
+                            styleStack.removeAt(lastIdx)
+                        } else {
+                            addElement(BbInlineElement.Plain(token.raw))
+                        }
+                    }
+                }
+
+                is Token.Text -> {
+                    val activeUrl = styleStack.lastOrNull { it.tag == "url" }
+                    if (activeUrl != null && activeUrl.arg == null) {
+                        val trimmedUrl = token.content.trim()
+                        val link = BgmUrlParser.parse(trimmedUrl)
+                        val displayText =
+                            if (link !is BgmLink.External) {
+                                BgmUrlParser.formatDisplayLabel(link)
+                            } else {
+                                token.content
+                            }
+                        val style = computeActiveStyle(styleStack)
+                        addElement(
+                            BbInlineElement.Styled(
+                                text = displayText,
+                                url = trimmedUrl,
+                                isUnderline = true,
+                                isBold = style.isBold,
+                                isItalic = style.isItalic,
+                                isStrikethrough = style.isStrikethrough,
+                                sizeScale = style.sizeScale,
+                                colorHex = style.colorHex,
+                            ),
+                        )
+                    } else {
+                        val style = computeActiveStyle(styleStack)
+                        if (style.isEmpty) {
+                            addElement(BbInlineElement.Plain(token.content))
+                        } else {
+                            addElement(
+                                BbInlineElement.Styled(
+                                    text = token.content,
+                                    isBold = style.isBold,
+                                    isItalic = style.isItalic,
+                                    isUnderline = style.isUnderline,
+                                    isStrikethrough = style.isStrikethrough,
+                                    url = style.url,
+                                    sizeScale = style.sizeScale,
+                                    colorHex = style.colorHex,
+                                ),
+                            )
+                        }
+                    }
+                }
+                is Token.RawUrl -> {
+                    val activeUrl = styleStack.lastOrNull { it.tag == "url" }
+                    if (activeUrl != null && activeUrl.arg != null) {
+                        val style = computeActiveStyle(styleStack)
+                        addElement(
+                            BbInlineElement.Styled(
+                                text = token.url,
+                                isBold = style.isBold,
+                                isItalic = style.isItalic,
+                                isUnderline = style.isUnderline,
+                                isStrikethrough = style.isStrikethrough,
+                                url = style.url,
+                                sizeScale = style.sizeScale,
+                                colorHex = style.colorHex,
+                            ),
+                        )
+                    } else {
+                        val link = BgmUrlParser.parse(token.url)
+                        val displayText =
+                            if (link !is BgmLink.External) {
+                                BgmUrlParser.formatDisplayLabel(link)
+                            } else {
+                                token.url
+                            }
+                        val style = computeActiveStyle(styleStack)
+                        addElement(
+                            BbInlineElement.Styled(
+                                text = displayText,
+                                url = token.url,
+                                isUnderline = true,
+                                isBold = style.isBold,
+                                isItalic = style.isItalic,
+                                isStrikethrough = style.isStrikethrough,
+                                sizeScale = style.sizeScale,
+                                colorHex = style.colorHex,
+                            ),
+                        )
+                    }
+                }
+                is Token.Sticker -> {
+                    addElement(
+                        BbInlineElement.Sticker(
+                            code = token.code,
+                            stickerId = token.stickerId,
+                            url = token.url,
+                            isLarge = token.isLarge,
+                        ),
+                    )
+                }
+            }
+        }
+
+        while (maskStack.isNotEmpty()) {
+            val frame = maskStack.removeLast()
+            val plainText = frame.elements.extractPlainText()
+            val maskElement =
+                BbInlineElement.Mask(
+                    id = frame.id,
+                    text = plainText,
+                    elements = frame.elements.toList(),
+                )
+            addElement(maskElement)
+        }
+
+        return BbCodeBlock.Paragraph(rawText = cleanParagraph, elements = rootElements)
     }
 }

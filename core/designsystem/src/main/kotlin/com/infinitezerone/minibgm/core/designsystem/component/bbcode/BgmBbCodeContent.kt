@@ -358,10 +358,22 @@ private fun BgmBbCodeParagraph(
 ) {
     val revealedMasks = remember { mutableStateMapOf<String, Boolean>() }
 
+    fun collectStickers(elements: List<BbInlineElement>): List<BbInlineElement.Sticker> {
+        val list = mutableListOf<BbInlineElement.Sticker>()
+        for (el in elements) {
+            when (el) {
+                is BbInlineElement.Sticker -> list.add(el)
+                is BbInlineElement.Mask -> list.addAll(collectStickers(el.elements))
+                else -> Unit
+            }
+        }
+        return list
+    }
+
     val inlineContent =
         remember(paragraph.elements) {
             val map = mutableMapOf<String, InlineTextContent>()
-            paragraph.elements.filterIsInstance<BbInlineElement.Sticker>().forEach { sticker ->
+            collectStickers(paragraph.elements).forEach { sticker ->
                 val key = "sticker_${sticker.stickerId}_${sticker.hashCode()}"
                 val size = if (sticker.isLarge) 34.sp else 18.sp
                 val align =
@@ -400,7 +412,11 @@ private fun BgmBbCodeParagraph(
     val annotatedString =
         remember(paragraph, revealedMasks.toMap(), primaryColor, onSurface) {
             buildAnnotatedString {
-                paragraph.elements.forEach { element ->
+                fun renderInline(
+                    element: BbInlineElement,
+                    inMask: Boolean = false,
+                    maskRevealed: Boolean = false,
+                ) {
                     when (element) {
                         is BbInlineElement.Plain -> {
                             append(element.text)
@@ -415,6 +431,21 @@ private fun BgmBbCodeParagraph(
                                     else -> null
                                 }
                             val isBgmLink = element.url != null && BgmUrlParser.parse(element.url) !is BgmLink.External
+                            val parsedColor = element.colorHex?.let { parseBbColor(it) }
+                            val elementColor =
+                                when {
+                                    inMask && !maskRevealed -> Color.Transparent
+                                    element.url != null -> primaryColor
+                                    parsedColor != null -> parsedColor
+                                    inMask && maskRevealed -> onPrimaryContainer
+                                    else -> Color.Unspecified
+                                }
+                            val fontSize =
+                                if (element.sizeScale != null && style.fontSize.isSpecified) {
+                                    (style.fontSize.value * element.sizeScale).sp
+                                } else {
+                                    TextUnit.Unspecified
+                                }
                             withStyle(
                                 SpanStyle(
                                     fontWeight =
@@ -425,7 +456,8 @@ private fun BgmBbCodeParagraph(
                                         },
                                     fontStyle = if (element.isItalic) FontStyle.Italic else null,
                                     textDecoration = textDecorations,
-                                    color = if (element.url != null) primaryColor else Color.Unspecified,
+                                    color = elementColor,
+                                    fontSize = fontSize,
                                 ),
                             ) {
                                 if (element.url != null) {
@@ -466,7 +498,13 @@ private fun BgmBbCodeParagraph(
                                     color = if (isRevealed) onPrimaryContainer else Color.Transparent,
                                 ),
                             ) {
-                                append(element.text.ifEmpty { " " })
+                                if (element.elements.isNotEmpty()) {
+                                    element.elements.forEach { sub ->
+                                        renderInline(sub, inMask = true, maskRevealed = isRevealed)
+                                    }
+                                } else {
+                                    append(element.text.ifEmpty { " " })
+                                }
                             }
                             pop()
                         }
@@ -475,6 +513,10 @@ private fun BgmBbCodeParagraph(
                             appendInlineContent(id = key, alternateText = element.code)
                         }
                     }
+                }
+
+                paragraph.elements.forEach { element ->
+                    renderInline(element)
                 }
             }
         }
@@ -515,4 +557,48 @@ private fun BgmBbCodeParagraph(
         color = color,
         modifier = modifier,
     )
+}
+
+/**
+ * 将 BBCode 的颜色字符串（命名颜色或 16 进制颜色）解析为 Compose Color
+ */
+internal fun parseBbColor(colorStr: String): Color? {
+    val clean = colorStr.trim().lowercase()
+    if (clean.startsWith("#")) {
+        val hex = clean.removePrefix("#")
+        return runCatching {
+            when (hex.length) {
+                3 -> {
+                    val r = hex[0].digitToInt(16) * 17
+                    val g = hex[1].digitToInt(16) * 17
+                    val b = hex[2].digitToInt(16) * 17
+                    Color(r, g, b)
+                }
+                6 -> {
+                    val num = hex.toLong(16)
+                    Color(0xFF000000 or num)
+                }
+                8 -> {
+                    val num = hex.toLong(16)
+                    Color(num)
+                }
+                else -> null
+            }
+        }.getOrNull()
+    }
+    return when (clean) {
+        "red" -> Color(0xFFE53935)
+        "green" -> Color(0xFF43A047)
+        "blue" -> Color(0xFF1E88E5)
+        "orange" -> Color(0xFFFB8C00)
+        "yellow" -> Color(0xFFFDD835)
+        "purple" -> Color(0xFF8E24AA)
+        "pink" -> Color(0xFFD81B60)
+        "gray", "grey" -> Color(0xFF757575)
+        "cyan" -> Color(0xFF00ACC1)
+        "brown" -> Color(0xFF6D4C41)
+        "black" -> Color(0xFF212121)
+        "white" -> Color(0xFFFAFAFA)
+        else -> null
+    }
 }

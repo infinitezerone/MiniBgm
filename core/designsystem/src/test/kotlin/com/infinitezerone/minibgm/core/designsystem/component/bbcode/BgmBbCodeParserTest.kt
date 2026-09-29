@@ -395,4 +395,90 @@ class BgmBbCodeParserTest {
         assertTrue(styledElements[1].isUnderline)
         assertEquals("https://bgm.tv/subject/1", styledElements[1].url)
     }
+
+    @Test
+    fun parseParagraph_nestedSameTags_properlyScoped() {
+        val input = "[b]A [b]B[/b] C[/b] plain"
+        val paragraph = BgmBbCodeParser.parseParagraph(input)
+
+        val elements = paragraph.elements
+        val styled = elements.filterIsInstance<BbInlineElement.Styled>()
+        // 具有相同样式的连续文本会被自然合并，避免 AnnotatedString 碎片化
+        assertEquals(1, styled.size)
+        assertEquals("A B C", styled[0].text)
+        assertTrue(styled[0].isBold)
+
+        val plain = elements.filterIsInstance<BbInlineElement.Plain>().single()
+        assertEquals(" plain", plain.text)
+
+        // 验证内部嵌套不同样式并在闭合后恢复原样式
+        val inputMixed = "[b]A [i]B[/i] C[/b]"
+        val mixedElements = BgmBbCodeParser.parseParagraph(inputMixed).elements
+        val mixedStyled = mixedElements.filterIsInstance<BbInlineElement.Styled>()
+        assertEquals(3, mixedStyled.size)
+        assertEquals("A ", mixedStyled[0].text)
+        assertTrue(mixedStyled[0].isBold)
+        assertFalse(mixedStyled[0].isItalic)
+
+        assertEquals("B", mixedStyled[1].text)
+        assertTrue(mixedStyled[1].isBold)
+        assertTrue(mixedStyled[1].isItalic)
+
+        assertEquals(" C", mixedStyled[2].text)
+        assertTrue(mixedStyled[2].isBold)
+        assertFalse(mixedStyled[2].isItalic)
+    }
+
+    @Test
+    fun parseParagraph_crossNestedTags_handledGracefully() {
+        val input = "[b][i]italic-bold[/b]italic-only[/i]"
+        val paragraph = BgmBbCodeParser.parseParagraph(input)
+
+        val styled = paragraph.elements.filterIsInstance<BbInlineElement.Styled>()
+        assertEquals(2, styled.size)
+        assertEquals("italic-bold", styled[0].text)
+        assertTrue(styled[0].isBold)
+        assertTrue(styled[0].isItalic)
+
+        // [/b] 出栈后，'italic-only' 仍保有未闭合的 italic 样式
+        assertEquals("italic-only", styled[1].text)
+        assertFalse(styled[1].isBold)
+        assertTrue(styled[1].isItalic)
+    }
+
+    @Test
+    fun parseParagraph_colorAndSizeTags() {
+        val input = "[color=red]red text[/color] [size=18]big text[/size]"
+        val paragraph = BgmBbCodeParser.parseParagraph(input)
+
+        val styled = paragraph.elements.filterIsInstance<BbInlineElement.Styled>()
+        assertEquals(2, styled.size)
+        assertEquals("red text", styled[0].text)
+        assertEquals("red", styled[0].colorHex)
+
+        assertEquals("big text", styled[1].text)
+        assertEquals(18f / 14f, styled[1].sizeScale ?: 1f, 0.01f)
+    }
+
+    @Test
+    fun parseParagraph_maskWithNestedFormattingAndStickers() {
+        val input = "[mask]secret [b]bold secret[/b] (bgm38)[/mask]"
+        val paragraph = BgmBbCodeParser.parseParagraph(input)
+
+        val mask = paragraph.elements.filterIsInstance<BbInlineElement.Mask>().single()
+        assertEquals("secret bold secret (bgm38)", mask.text)
+        assertEquals(4, mask.elements.size)
+        assertTrue(mask.elements[0] is BbInlineElement.Plain)
+        assertEquals("secret ", (mask.elements[0] as BbInlineElement.Plain).text)
+
+        val styledInside = mask.elements[1] as BbInlineElement.Styled
+        assertEquals("bold secret", styledInside.text)
+        assertTrue(styledInside.isBold)
+
+        val spaceInside = mask.elements[2] as BbInlineElement.Plain
+        assertEquals(" ", spaceInside.text)
+
+        val stickerInside = mask.elements[3] as BbInlineElement.Sticker
+        assertEquals("bgm_38", stickerInside.stickerId)
+    }
 }
