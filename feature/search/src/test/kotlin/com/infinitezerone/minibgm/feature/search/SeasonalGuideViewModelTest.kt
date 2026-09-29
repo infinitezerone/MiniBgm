@@ -278,6 +278,57 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
+    fun selectWesternOrigin_doesNotRefetchBecauseTheRequestIsUnchanged() =
+        runTest {
+            // 「欧美」不下推服务端，所以它与「全部」发出的是**同一个请求**。
+            // 旧实现按"筛选条件变了"换挡：等于拿同样的请求再取一遍，还把已加载的页与滚动位置全丢掉。
+            // 现在换挡判据是 RequestKey，这种情况下一次请求都不该发。
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchPages =
+                mapOf(
+                    0 to List(20) { sampleSubject.copy(id = it.toLong() + 1) },
+                    20 to List(20) { sampleSubject.copy(id = it.toLong() + 101) },
+                )
+            searchRepository.advancedSearchTotal = 60
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+            assertEquals(2, searchRepository.advancedSearchCallCount)
+            assertEquals(40, viewModel.uiState.value.subjects.size)
+
+            viewModel.selectOrigin(SeasonOriginFilter.WESTERN)
+            advanceUntilIdle()
+
+            // 请求没变 → 不重取；已加载的两页与游标都原样留着
+            assertEquals(2, searchRepository.advancedSearchCallCount)
+            assertEquals(40, viewModel.uiState.value.subjects.size)
+            assertEquals(40, viewModel.uiState.value.pageOffset)
+        }
+
+    @Test
+    fun formToggleThatDoesNotChangePushedTags_doesNotRefetch() =
+        runTest {
+            // 「正片」与「正片+短片」都下推不了服务端（serverMetaTagOf 返回 null），请求体相同。
+            // 开关短片只是把客户端谓词放宽，不该触发重新取数。
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult =
+                AppResult.Success(List(20) { sampleSubject.copy(id = it.toLong() + 1) })
+            searchRepository.advancedSearchTotal = 60
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+
+            viewModel.toggleForm(SeasonFormFilter.SHORT)
+            advanceUntilIdle()
+
+            assertEquals(setOf(SeasonFormFilter.MAIN, SeasonFormFilter.SHORT), viewModel.uiState.value.selectedForms)
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+        }
+
+    @Test
     fun defaultFormFilter_keepsOnlyMainFeatures() =
         runTest {
             val searchRepository = FakeSearchRepository()
@@ -372,10 +423,14 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun shortFormFilter_keepsFetchingPagesUntilSomethingIsVisible() =
+    fun clientOnlyFormFilter_doesNotRefetch_andLoadMoreWalksUntilSomethingIsVisible() =
         runTest {
             // 热度排序下片段型普遍靠后：前两页整页都是正片，第 3 页才出现 1 条 MV。
             // 若不在过滤后继续往后取，用户会停在"列表空白、又因为没有内容而无法滚动"的死角上。
+            //
+            // 「正片」与「短片」都下推不了服务端（meta_tags 多值是 AND、又没有排除语法），
+            // 这两个开关只改客户端谓词：请求体一字不变，就不该重新取数、更不该丢掉已加载的页。
+            // 补取改由 loadMore 驱动——UI 侧看到 filteredSubjects 不足一屏时就会调它。
             val searchRepository = FakeSearchRepository()
             searchRepository.advancedSearchPages =
                 mapOf(
@@ -393,13 +448,27 @@ class SeasonalGuideViewModelTest {
             viewModel.toggleForm(SeasonFormFilter.SHORT)
             advanceUntilIdle()
 
+            // 纯客户端筛选：请求体没变，一次都没多发
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+            // 已取到的首屏原样留着，没有因为换筛选被清空
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+            // 但当前条件下可见条目为 0 —— 这正是需要补取的信号
+            assertTrue(
+                viewModel.uiState.value.filteredSubjects
+                    .isEmpty(),
+            )
+            assertTrue(viewModel.uiState.value.hasMore)
+
+            viewModel.loadMore()
+            advanceUntilIdle()
+
             assertEquals(
                 listOf(999L),
                 viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
-            // 首屏 1 次 + 关掉正片 1 次 + 「短片 / MV」档下连续取了 3 页（片段型在第 3 页才出现）
-            assertEquals(5, searchRepository.advancedSearchCallCount)
+            // 首屏 1 次 + 补取连续取了 2 页（offset 20 整页正片，offset 40 才出现 MV）
+            assertEquals(3, searchRepository.advancedSearchCallCount)
             // 三页原始条目都留在 state 里：过滤不参与游标推进，所以滚到底仍是完整结果
             assertEquals(41, viewModel.uiState.value.subjects.size)
         }

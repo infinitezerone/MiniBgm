@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -37,7 +38,14 @@ import java.time.LocalDate
  */
 private const val PAGE_SIZE = 20
 
-/** 一次查询的完整条件；五者任一变化都构成一次**新查询** */
+/**
+ * 界面上的完整筛选条件：**服务端条件**（年份／季度／排序／能下推的标签）与**客户端条件**
+ * （产地／形式）绑成一份不可分状态，作为 UI 的单一输入源。
+ *
+ * 它**不等于**"一次网络请求"——决定请求的是 [requestKey]。这个分离是本类的核心：
+ * 产地切「欧美」、形式开关「短片」这类只改动客户端谓词的筛选不产生新请求，
+ * 已取到的条目原样留着，不再退回第一页重取。
+ */
 private data class SeasonQuery(
     val year: Int,
     val quarter: SeasonQuarter,
@@ -45,6 +53,46 @@ private data class SeasonQuery(
     val forms: Set<SeasonFormFilter>,
     val sort: SeasonSortOption,
 )
+
+/**
+ * 一次网络请求的全部输入 —— **换挡的唯一判据**。
+ *
+ * 由 [SeasonQuery] 投影而来，只保留真正会写进请求体的部分：产地取 [SeasonOriginFilter.metaTag]，
+ * 形式取 [SeasonFormFilter.serverMetaTagOf]。于是「全部→欧美」「正片→正片+短片」这类
+ * 下推结果相同的改动折叠成同一个 key，被 `distinctUntilChanged` 挡在门外，一次请求都不多发。
+ */
+private data class RequestKey(
+    val year: Int,
+    val quarter: SeasonQuarter,
+    val sort: SeasonSortOption,
+    val metaTags: List<String>,
+)
+
+private fun SeasonQuery.requestKey(): RequestKey =
+    RequestKey(
+        year = year,
+        quarter = quarter,
+        sort = sort,
+        // 顺序固定为「产地在前、形式在后」，保证 key 的相等性稳定
+        metaTags = listOfNotNull(origin.metaTag, SeasonFormFilter.serverMetaTagOf(forms)),
+    )
+
+private fun RequestKey.toRequest(): SearchSubjectsRequest {
+    val (startDay, endDay) = quarter.getAirDateRange(year)
+    // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + 剧场版」）。
+    // 产地「欧美」不下推：服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"这种"或"表达不了。
+    // 形式里只有"恰好只选剧场版"能下推；正片（TV 或 WEB）与短片（MV 或 PV 或 …）都是"或"关系，
+    // 服务端多值又是 AND、没有排除语法，只能客户端筛。见 SeasonalGuideUiState.filteredSubjects。
+    return SearchSubjectsRequest(
+        sort = sort.apiValue,
+        filter =
+            SearchFilter(
+                type = listOf(2),
+                airDate = listOf(">=$startDay", "<=$endDay"),
+                metaTags = metaTags.ifEmpty { null },
+            ),
+    )
+}
 
 /** 「本季首播」分页链路的投影；[pageOffset] 是顺序游标，见 [SeasonalGuideViewModel.pagedSubjects] */
 private data class PagedSubjects(
@@ -78,8 +126,11 @@ private sealed interface PageSignal {
  *
  * 状态是「底层事件流的数学映射」，不是被命令式修改的容器：
  * - 可变状态只剩**用户意图**（档期 / 产地 / 形式 / 视图形态）与两个一次性 UI 提示位；
- * - 「本季首播」是 [seasonQuery] 经 `flatMapLatest` 换挡的分页链——查询一变，旧链整条被取消、
- *   游标随之重置，**不需要手动管理 fetchJob / loadMoreJob 的判空与判序**；
+ * - 「本季首播」是 [seasonQuery] 先投影成 [RequestKey]、再经 `distinctUntilChanged` + `flatMapLatest`
+ *   换挡的分页链——**换挡判据是"请求是否真的变了"**，不是"筛选条件是否变了"。因此
+ *   「全部→欧美」「正片→正片+短片」这类服务端表达不了、只由客户端补筛的改动不会重取，
+ *   已加载的条目与滚动位置都留着；只有请求真变时旧链才整条取消、游标才重置，
+ *   **不需要手动管理 fetchJob / loadMoreJob 的判空与判序**；
  * - 登录态与收藏集合是仓库流，直接作为上游 `combine` 汇入——因此**不存在乐观更新与手动回滚**，
  *   Room 流在写入后会自己重发，单一事实源。
  *
@@ -196,23 +247,27 @@ class SeasonalGuideViewModel(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
     init {
-        // 分页链：查询换挡即重置游标；三条触发流 merge 成一条信号流，每个信号触发一次会话
-        // （作为信号流的副作用挂起执行）。用 onEach 顺序处理而非 collectLatest——
-        // 同一查询内的连续信号应当排队，中途取消会话会把进行中的标记位永久留在 true。
+        // 分页链只在**请求本身**变化时换挡：先投影成 RequestKey 再 distinctUntilChanged，
+        // 于是「欧美」「正片↔正片+短片」这类只改客户端谓词的筛选既不重取、也不会取消在飞的请求
+        // （客户端谓词一变就取消分页会话，会把进行中的标记位永久留在 true）。
+        // 三条触发流 merge 成一条信号流，每个信号触发一次会话（作为信号流的副作用挂起执行）。
+        // 用 onEach 顺序处理而非 collectLatest——同一请求内的连续信号应当排队。
         seasonQuery
+            .map { it.requestKey() }
+            .distinctUntilChanged()
             .onEach { pagedSubjects.value = PagedSubjects() }
-            .flatMapLatest { query -> onPageSignals(query) }
+            .flatMapLatest { key -> onPageSignals(key) }
             .launchIn(viewModelScope)
     }
 
     /** 三条触发流汇成一条信号流；进页 / 换挡后自动先取一次首页 */
-    private fun onPageSignals(query: SeasonQuery): Flow<PageSignal> =
+    private fun onPageSignals(key: RequestKey): Flow<PageSignal> =
         merge(
             retryTrigger.map { PageSignal.Retry },
             refreshTrigger.map { PageSignal.Refresh },
             loadMoreTrigger.map { PageSignal.More },
         ).onStart { emit(PageSignal.Initial) }
-            .onEach { signal -> runPagingSession(query, signal) }
+            .onEach { signal -> runPagingSession(key, signal) }
 
     fun selectYear(year: Int) = setQuery { it.copy(year = year) }
 
@@ -223,10 +278,20 @@ class SeasonalGuideViewModel(
         quarter: SeasonQuarter,
     ) = setQuery { it.copy(year = year, quarter = quarter) }
 
-    /** 切换产地筛选；是否下推服务端由 [SeasonOriginFilter.metaTag] 决定 */
+    /**
+     * 切换产地筛选。
+     *
+     * 日本／国产能下推服务端 → [RequestKey] 变 → 重新取数（服务端筛过，total 与分页才准）；
+     * 全部／欧美不下推 → key 不变 → **一次请求都不发**，只在已取到的条目上重算可见性。
+     */
     fun selectOrigin(origin: SeasonOriginFilter) = setQuery { it.copy(origin = origin) }
 
-    /** 开关一档放送形式。允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致 */
+    /**
+     * 开关一档放送形式。允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致。
+     *
+     * 只有「恰好只选剧场版」这一种组合能下推服务端；其余组合 key 不变，不重新取数，
+     * 改由 [loadMore] 在可见条目不足时补取。
+     */
     fun toggleForm(form: SeasonFormFilter) =
         setQuery { current ->
             current.copy(forms = if (form in current.forms) current.forms - form else current.forms + form)
@@ -301,6 +366,13 @@ class SeasonalGuideViewModel(
         retryTrigger.tryEmit(Unit)
     }
 
+    /**
+     * 触底追加。
+     *
+     * 它同时是**客户端筛选后的补取入口**：改产地／形式若不下推服务端，就不会重新取数，
+     * 于是可能出现"可见条目为 0、列表滚不动"的死角。UI 侧观察 `filteredSubjects.size < 阈值`
+     * 时调这里，会话会一路取到可见条目确实变多或取尽为止（见 [runPagingSession] 的判据）。
+     */
     fun loadMore() {
         loadMoreTrigger.tryEmit(Unit)
     }
@@ -317,10 +389,13 @@ class SeasonalGuideViewModel(
     // ── 分页会话：从当前游标连续取页，直到"可见条目比会话开始时多"或取尽 ──
 
     private suspend fun runPagingSession(
-        query: SeasonQuery,
+        key: RequestKey,
         signal: PageSignal,
     ) {
         val resetting = signal != PageSignal.More
+        // 客户端谓词始终取**最新**的一份：换挡时它可能与 key 一起变（产地/形式同属一次改动），
+        // 而同请求内的触底加载只改它。判定可见性必须用当前值，否则"取到可见条目变多"的判据会错位。
+        val filter = seasonQuery.value
         // 判据是"可见条目数比会话开始时多"：客户端还压着服务端表达不了的过滤
         // （产地「欧美」是"或"关系、正片与短片是"以上皆非"），会整页整页地把条目滤掉——
         // 若只取一页就收工，可见内容与滚动范围都不变，触底加载会卡死（滑到底不动、不转圈也不加载）。
@@ -328,7 +403,7 @@ class SeasonalGuideViewModel(
             if (resetting) {
                 0
             } else {
-                pagedSubjects.value.subjects.count { it.isVisibleUnder(query) }
+                pagedSubjects.value.subjects.count { it.isVisibleUnder(filter) }
             }
         if (resetting) {
             pagedSubjects.value = PagedSubjects()
@@ -348,7 +423,7 @@ class SeasonalGuideViewModel(
                     error = null,
                 )
 
-            when (val result = searchRepository.searchSubjectsAdvanced(requestOf(query), PAGE_SIZE, current.pageOffset)) {
+            when (val result = searchRepository.searchSubjectsAdvanced(key.toRequest(), PAGE_SIZE, current.pageOffset)) {
                 is AppResult.Error -> {
                     val message = result.message
                     settle(error = message)
@@ -395,7 +470,7 @@ class SeasonalGuideViewModel(
                 settle()
                 return
             }
-            if (settled.pageOffset > 0 && settled.subjects.count { it.isVisibleUnder(query) } > visibleBefore) {
+            if (settled.pageOffset > 0 && settled.subjects.count { it.isVisibleUnder(filter) } > visibleBefore) {
                 settle()
                 return
             }
@@ -412,28 +487,6 @@ class SeasonalGuideViewModel(
     /** 投递一次性事件；`Channel.BUFFERED` 的容量足够，正常情况下不会挂起也不会丢 */
     private suspend fun postEffect(effect: UiEffect) {
         _uiEffects.send(effect)
-    }
-
-    private fun requestOf(query: SeasonQuery): SearchSubjectsRequest {
-        val (startDay, endDay) = query.quarter.getAirDateRange(query.year)
-        // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + 剧场版」）。
-        // 产地「欧美」不下推：服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"这种"或"表达不了。
-        // 形式里只有"恰好只选剧场版"能下推；正片（TV 或 WEB）与短片（MV 或 PV 或 …）都是"或"关系，
-        // 服务端多值又是 AND、没有排除语法，只能客户端筛。见 SeasonalGuideUiState.filteredSubjects。
-        val metaTags =
-            listOfNotNull(
-                query.origin.metaTag,
-                SeasonFormFilter.serverMetaTagOf(query.forms),
-            )
-        return SearchSubjectsRequest(
-            sort = query.sort.apiValue,
-            filter =
-                SearchFilter(
-                    type = listOf(2),
-                    airDate = listOf(">=$startDay", "<=$endDay"),
-                    metaTags = metaTags.ifEmpty { null },
-                ),
-        )
     }
 
     /** 按已加载条目的 id 去重后追加一页 */
