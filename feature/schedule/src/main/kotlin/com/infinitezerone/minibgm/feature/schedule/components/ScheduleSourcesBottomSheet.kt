@@ -62,7 +62,7 @@ fun ScheduleSourcesBottomSheet(
     schedule: AirSchedule,
     onDismissRequest: () -> Unit,
     onOpenUrl: (String) -> Unit,
-    onAiSourceSearch: () -> Unit = {},
+    onAiSourceSearch: (() -> Unit)? = null,
     /** 应用内播放：由调用方按追番进度定位下一集并组装播放器路由 */
     onInternalPlayClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -201,25 +201,27 @@ fun ScheduleSourcesBottomSheet(
                     )
                 }
 
-                Text(
-                    text = "AI 找源",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                )
+                if (onAiSourceSearch != null) {
+                    Text(
+                        text = "AI 找源",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
 
-                ScheduleSourceCard(
-                    title = "让 AI 助手找源",
-                    subtitle = "解析可播放地址与集数，结果在助手会话中展示",
-                    iconVector = Icons.Filled.AutoAwesome,
-                    onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
-                            onAiSourceSearch()
-                        }
-                    },
-                )
+                    ScheduleSourceCard(
+                        title = "让 AI 助手找源",
+                        subtitle = "解析可播放地址与集数，结果在助手会话中展示",
+                        iconVector = Icons.Filled.AutoAwesome,
+                        onClick = {
+                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                                onDismissRequest()
+                                onAiSourceSearch()
+                            }
+                        },
+                    )
+                }
 
                 Text(
                     text = "外部跳转",

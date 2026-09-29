@@ -123,6 +123,7 @@ interface BangumiApiService {
         comment: String? = null,
         private: Boolean = false,
         epStatus: Int? = null,
+        tags: List<String>? = null,
     )
 
     /**
@@ -267,6 +268,7 @@ class BangumiApiServiceImpl(
         val comment: String? = null,
         val `private`: Boolean = false,
         @kotlinx.serialization.SerialName("ep_status") val epStatus: Int? = null,
+        val tags: List<String>? = null,
     )
 
     override suspend fun updateCollection(
@@ -276,6 +278,7 @@ class BangumiApiServiceImpl(
         comment: String?,
         private: Boolean,
         epStatus: Int?,
+        tags: List<String>?,
     ) {
         client.post("$baseUrl/v0/users/-/collections/$subjectId") {
             contentType(ContentType.Application.Json)
@@ -286,6 +289,7 @@ class BangumiApiServiceImpl(
                     comment = comment,
                     private = private,
                     epStatus = epStatus,
+                    tags = tags,
                 ),
             )
         }

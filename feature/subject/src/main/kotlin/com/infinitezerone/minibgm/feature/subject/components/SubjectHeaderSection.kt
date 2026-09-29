@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -684,6 +685,9 @@ fun SubjectPersonalProgressCard(
     onOpenSheet: () -> Unit,
     onToggleWatching: () -> Unit,
     modifier: Modifier = Modifier,
+    onIncrementWatched: (() -> Unit)? = null,
+    onPlayNext: (() -> Unit)? = null,
+    nextEpSort: Float? = null,
 ) {
     val currentEp = collection?.epStatus ?: 0
     val progress = if (totalEpisodes > 0) (currentEp.toFloat() / totalEpisodes).coerceIn(0f, 1f) else 0f
@@ -696,20 +700,89 @@ fun SubjectPersonalProgressCard(
             SubjectType.ANIME, SubjectType.REAL -> "我的追番与进度"
         }
 
-    val actionButtonText =
-        if (collection != null) {
-            "修改"
-        } else {
-            when (subjectType) {
-                SubjectType.BOOK -> "追读"
-                SubjectType.MUSIC -> "收听"
-                SubjectType.GAME -> "在玩"
-                SubjectType.ANIME, SubjectType.REAL -> "追番"
-            }
+    val actionVerb =
+        when (subjectType) {
+            SubjectType.BOOK -> "追读"
+            SubjectType.MUSIC -> "收听"
+            SubjectType.GAME -> "在玩"
+            SubjectType.ANIME, SubjectType.REAL -> "追番"
         }
 
+    if (collection == null) {
+        Card(
+            onClick = onToggleWatching,
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+        ) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Bookmark,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "未加入$actionVerb",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "点击一键加入，实时同步开播时刻与进度",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                FilledTonalButton(
+                    onClick = onToggleWatching,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = actionVerb,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+        return
+    }
+
     Card(
-        onClick = onOpenSheet,
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors =
@@ -722,7 +795,7 @@ fun SubjectPersonalProgressCard(
                 Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -744,127 +817,157 @@ fun SubjectPersonalProgressCard(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
-                    if (collection != null) {
-                        val verb = CollectionType.fromValue(collection.type).getVerb(subjectType)
+                    val verb = CollectionType.fromValue(collection.type).getVerb(subjectType)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Text(
+                            text = verb,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        )
+                    }
+                    if (collection.rate > 0) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = RatingGold.copy(alpha = 0.15f),
                         ) {
                             Text(
-                                text = verb,
+                                text = "★ ${collection.rate}分",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                color = RatingGold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
                     }
                 }
 
                 FilledTonalButton(
-                    onClick = if (collection != null) onOpenSheet else onToggleWatching,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    onClick = onOpenSheet,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Icon(
-                        imageVector = if (collection != null) Icons.Filled.Edit else Icons.Filled.Add,
+                        imageVector = Icons.Filled.Edit,
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = actionButtonText,
+                        text = "编辑",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                     )
                 }
             }
 
-            if (collection != null) {
-                if (subjectType == SubjectType.GAME) {
-                    val statusVerb = CollectionType.fromValue(collection.type).getVerb(subjectType)
+            if (subjectType == SubjectType.GAME) {
+                val statusVerb = CollectionType.fromValue(collection.type).getVerb(subjectType)
+                Text(
+                    text = "游玩状态：$statusVerb",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            } else if (totalEpisodes > 0 || (subjectType == SubjectType.BOOK && collection.volStatus > 0)) {
+                val progressLabel =
+                    when (subjectType) {
+                        SubjectType.BOOK -> {
+                            val vol = collection.volStatus
+                            val ep = collection.epStatus
+                            if (vol > 0) "已读 $vol 卷 · $ep 话" else "已读 $ep / 全 $totalEpisodes 话"
+                        }
+                        SubjectType.MUSIC -> "已听 $currentEp / 全 $totalEpisodes 首"
+                        else -> "已看 $currentEp / 全 $totalEpisodes 话"
+                    }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = "游玩状态：$statusVerb",
+                        text = progressLabel,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                } else if (totalEpisodes > 0 || (subjectType == SubjectType.BOOK && collection.volStatus > 0)) {
-                    val progressLabel =
-                        when (subjectType) {
-                            SubjectType.BOOK -> {
-                                val vol = collection.volStatus
-                                val ep = collection.epStatus
-                                if (vol > 0) "已读 $vol 卷 · $ep 话" else "已读 $ep / 全 $totalEpisodes 话"
-                            }
-                            SubjectType.MUSIC -> "已听 $currentEp / 全 $totalEpisodes 首"
-                            else -> "已看 $currentEp / 全 $totalEpisodes 话"
-                        }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    if (totalEpisodes > 0) {
                         Text(
-                            text = progressLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            text = "${(progress * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
                         )
-                        if (totalEpisodes > 0) {
+                    }
+                }
+
+                if (totalEpisodes > 0) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                }
+            }
+
+            if (onIncrementWatched != null && (totalEpisodes <= 0 || currentEp < totalEpisodes) && subjectType != SubjectType.GAME) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilledTonalButton(
+                        onClick = onIncrementWatched,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "+1 话",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+
+                    if (onPlayNext != null && nextEpSort != null) {
+                        FilledTonalButton(
+                            onClick = onPlayNext,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${(progress * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "续看第 ${nextEpSort.toEpisodeLabel()} 话",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
-
-                    if (totalEpisodes > 0) {
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        )
-                    }
                 }
+            }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (collection.rate > 0) {
-                        Text(
-                            text = "★ ${collection.rate}分 · ${getScoreLabel(collection.rate)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = RatingGold,
-                        )
-                    }
-                    if (collection.comment.isNotBlank()) {
-                        Text(
-                            text = "「${collection.comment}」",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            } else {
-                val idlePrompt =
-                    when (subjectType) {
-                        SubjectType.BOOK -> "点击记录阅读状态、已读卷数与个人短评"
-                        SubjectType.MUSIC -> "点击记录收听状态、已听曲目与个人短评"
-                        SubjectType.GAME -> "点击记录游玩状态、通关评价与心得打分"
-                        SubjectType.ANIME, SubjectType.REAL -> "点击记录追番状态、更新观看进度与个人打分"
-                    }
+            if (collection.comment.isNotBlank()) {
                 Text(
-                    text = idlePrompt,
+                    text = "「${collection.comment}」",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

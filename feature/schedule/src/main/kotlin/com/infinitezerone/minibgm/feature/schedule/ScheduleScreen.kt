@@ -77,9 +77,9 @@ fun ScheduleScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
-    onAssistantClick: () -> Unit = {},
+    onAssistantClick: (() -> Unit)? = null,
     onSourceSearch: (String) -> Unit = {},
-    onPlayClick: (PlayerRoute) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
@@ -171,11 +171,13 @@ fun ScheduleScreen(
                     )
                 },
                 actions = {
-                    IconButton(onClick = onAssistantClick) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "AI 追番助手",
-                        )
+                    if (onAssistantClick != null) {
+                        IconButton(onClick = onAssistantClick) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = "AI 追番助手",
+                            )
+                        }
                     }
                     IconButton(onClick = onSearchClick) {
                         Icon(
@@ -334,18 +336,25 @@ fun ScheduleScreen(
             schedule = schedule,
             onDismissRequest = { selectedScheduleForSources = null },
             onOpenUrl = handleLaunchStreamingUrl,
-            onAiSourceSearch = {
-                val title = schedule.titleCn.ifBlank { schedule.title }
-                onSourceSearch(
-                    "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
-                )
-            },
-            onInternalPlayClick = {
-                // 由 ViewModel 按追番进度定位下一集并匹配片单直链（失败时回退一体化路由）
-                coroutineScope.launch {
-                    onPlayClick(viewModel.resolvePlayRoute(schedule))
-                }
-            },
+            onAiSourceSearch =
+                if (onAssistantClick != null) {
+                    {
+                        val title = schedule.titleCn.ifBlank { schedule.title }
+                        onSourceSearch(
+                            "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
+                        )
+                    }
+                } else {
+                    null
+                },
+            onInternalPlayClick =
+                onPlayClick?.let { play ->
+                    {
+                        coroutineScope.launch {
+                            play(viewModel.resolvePlayRoute(schedule))
+                        }
+                    }
+                },
         )
     }
 
@@ -449,7 +458,7 @@ private fun DayScheduleList(
     onDismissNextUpAction: () -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     onPlayClick: (String) -> Unit,
-    onPlayInApp: (PlayerRoute) -> Unit,
+    onPlayInApp: ((PlayerRoute) -> Unit)? = null,
     onSwitchToAll: () -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,

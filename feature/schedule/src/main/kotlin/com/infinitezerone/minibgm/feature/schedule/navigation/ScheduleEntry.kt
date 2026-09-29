@@ -12,9 +12,9 @@ import kotlinx.coroutines.flow.Flow
 fun EntryProviderScope<NavKey>.scheduleEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
-    onAssistantClick: () -> Unit = {},
+    onAssistantClick: (() -> Unit)? = null,
     onSourceSearch: (String) -> Unit = {},
-    onPlayClick: (PlayerRoute) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {

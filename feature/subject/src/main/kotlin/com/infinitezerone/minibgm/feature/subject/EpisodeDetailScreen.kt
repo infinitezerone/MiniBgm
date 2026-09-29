@@ -91,8 +91,8 @@ fun EpisodeDetailScreen(
     onCharacterClick: (Long) -> Unit,
     onPersonClick: (Long) -> Unit,
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
-    onPlayClick: (PlayerRoute) -> Unit = {},
-    onSourceSearch: (String) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onSourceSearch: ((String) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: EpisodeDetailViewModel =
@@ -111,7 +111,7 @@ fun EpisodeDetailScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is EpisodeDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
-                is EpisodeDetailUiEvent.OpenSourceSearch -> onSourceSearch(event.prefillPrompt)
+                is EpisodeDetailUiEvent.OpenSourceSearch -> onSourceSearch?.invoke(event.prefillPrompt)
             }
         }
     }
@@ -333,17 +333,19 @@ fun EpisodeDetailScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Button(
-                                        onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.PlayArrow,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(text = "播放本集")
+                                    if (onPlayClick != null) {
+                                        Button(
+                                            onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
+                                            modifier = Modifier.weight(1f),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(text = "播放本集")
+                                        }
                                     }
                                     FilledTonalButton(
                                         onClick = { showSourcesSheet = true },
@@ -596,15 +598,26 @@ fun EpisodeDetailScreen(
                     },
                 )
             },
-            onInternalPlayClick = { route ->
-                showSourcesSheet = false
-                onPlayClick(route)
-            },
-            onAiSourceSearch = { viewModel.requestSourceSearch() },
-            onManageRules = {
-                showSourcesSheet = false
-                onManageRules?.invoke()
-            },
+            onInternalPlayClick =
+                onPlayClick?.let { play ->
+                    { route ->
+                        showSourcesSheet = false
+                        play(route)
+                    }
+                },
+            onAiSourceSearch =
+                if (onSourceSearch != null) {
+                    { viewModel.requestSourceSearch() }
+                } else {
+                    null
+                },
+            onManageRules =
+                onManageRules?.let { manage ->
+                    {
+                        showSourcesSheet = false
+                        manage()
+                    }
+                },
             playbackRules = uiState.playbackRules,
             playlists = uiState.playlists,
             failedSourceReasons = uiState.failedSourceReasons,

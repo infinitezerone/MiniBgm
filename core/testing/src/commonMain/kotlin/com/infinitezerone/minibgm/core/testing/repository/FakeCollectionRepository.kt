@@ -97,6 +97,7 @@ class FakeCollectionRepository : CollectionRepository {
         private: Boolean,
         epStatus: Int?,
         subjectType: Int,
+        tags: List<String>?,
     ): AppResult<Unit> {
         updateCollectionCallCount++
         updateCollectionResult?.let { return it }
@@ -108,6 +109,7 @@ class FakeCollectionRepository : CollectionRepository {
                 rate = rate ?: current.rate,
                 comment = comment ?: current.comment,
                 epStatus = epStatus ?: current.epStatus,
+                tags = tags ?: current.tags,
                 subjectType = resolvedSubjectType,
             ) ?: UserCollection(
                 subjectId = subjectId,

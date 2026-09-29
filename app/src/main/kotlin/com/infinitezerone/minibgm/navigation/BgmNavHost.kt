@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
@@ -88,19 +89,36 @@ fun BgmNavHost(
                             scheduleEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
-                                onAssistantClick = { navState.navigateTo(AssistantRoute()) },
+                                onAssistantClick =
+                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                        { navState.navigateTo(AssistantRoute()) }
+                                    } else {
+                                        null
+                                    },
                                 onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
-                                onPlayClick = { route -> navState.navigateTo(route) },
+                                onPlayClick =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { route -> navState.navigateTo(route) }
+                                    } else {
+                                        null
+                                    },
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
-                            assistantEntry(
-                                onSubjectClick = { route -> navState.navigateTo(route) },
-                                onPlaySource = { route -> navState.navigateTo(route) },
-                                onBackClick = { navState.goBack() },
-                                metadata = bgmListPane(detailPlaceholder),
-                            )
+                            if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                assistantEntry(
+                                    onSubjectClick = { route -> navState.navigateTo(route) },
+                                    onPlaySource =
+                                        if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                            { route -> navState.navigateTo(route) }
+                                        } else {
+                                            { _ -> }
+                                        },
+                                    onBackClick = { navState.goBack() },
+                                    metadata = bgmListPane(detailPlaceholder),
+                                )
+                            }
 
                             exploreEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
@@ -130,15 +148,23 @@ fun BgmNavHost(
 
                             settingsEntry(
                                 onBackClick = { navState.goBack() },
-                                onPlaybackRulesClick = { navState.navigateTo(PlaybackRulesRoute) },
+                                onPlaybackRulesClick =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { navState.navigateTo(PlaybackRulesRoute) }
+                                    } else {
+                                        null
+                                    },
+                                enableAiConfig = BuildConfig.ENABLE_AI_ASSISTANT,
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
-                            playbackRulesEntry(
-                                onBackClick = { navState.goBack() },
-                                onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
-                                metadata = bgmListPane(detailPlaceholder),
-                            )
+                            if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                playbackRulesEntry(
+                                    onBackClick = { navState.goBack() },
+                                    onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                    metadata = bgmListPane(detailPlaceholder),
+                                )
+                            }
 
                             subjectEntry(
                                 onBackClick = { navState.goBack() },
@@ -146,15 +172,30 @@ fun BgmNavHost(
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
-                                onPlayClick = { route -> navState.navigateTo(route) },
+                                onPlayClick =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { route -> navState.navigateTo(route) }
+                                    } else {
+                                        null
+                                    },
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
-                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
-                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                onManageRules =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { navState.navigateTo(PlaybackRulesRoute) }
+                                    } else {
+                                        null
+                                    },
+                                onSourceSearch =
+                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                        { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
+                                    } else {
+                                        null
+                                    },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -164,15 +205,30 @@ fun BgmNavHost(
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
-                                onPlayClick = { route -> navState.navigateTo(route) },
+                                onPlayClick =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { route -> navState.navigateTo(route) }
+                                    } else {
+                                        null
+                                    },
                                 onTagClick = { tag ->
                                     navState.navigateTo(TagSubjectsRoute(tag = tag))
                                 },
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
-                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
-                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                onManageRules =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { navState.navigateTo(PlaybackRulesRoute) }
+                                    } else {
+                                        null
+                                    },
+                                onSourceSearch =
+                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                        { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
+                                    } else {
+                                        null
+                                    },
                                 metadata = bgmExtraPane(),
                             )
 
@@ -193,9 +249,24 @@ fun BgmNavHost(
                                 onTopicClick = { topicId, title ->
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
-                                onPlayClick = { route -> navState.navigateTo(route) },
-                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
-                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
+                                onPlayClick =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { route -> navState.navigateTo(route) }
+                                    } else {
+                                        null
+                                    },
+                                onSourceSearch =
+                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                        { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
+                                    } else {
+                                        null
+                                    },
+                                onManageRules =
+                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        { navState.navigateTo(PlaybackRulesRoute) }
+                                    } else {
+                                        null
+                                    },
                                 metadata = bgmExtraPane(),
                             )
 
@@ -210,20 +281,22 @@ fun BgmNavHost(
                                 metadata = bgmExtraPane(),
                             )
 
-                            playerEntry(
-                                onBackClick = { navState.goBack() },
-                                onRequestOpenSources = { route ->
-                                    val title = route.subjectName.ifBlank { "当前条目" }
-                                    navState.navigateTo(
-                                        AssistantRoute(
-                                            prefillPrompt =
-                                                "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${route.subjectId}）",
-                                        ),
-                                    )
-                                },
-                                onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
-                                metadata = bgmExtraPane(),
-                            )
+                            if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                playerEntry(
+                                    onBackClick = { navState.goBack() },
+                                    onRequestOpenSources = { route ->
+                                        val title = route.subjectName.ifBlank { "当前条目" }
+                                        navState.navigateTo(
+                                            AssistantRoute(
+                                                prefillPrompt =
+                                                    "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${route.subjectId}）",
+                                            ),
+                                        )
+                                    },
+                                    onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
+                                    metadata = bgmExtraPane(),
+                                )
+                            }
                         },
                     ),
                 onBack = { navState.goBack() },

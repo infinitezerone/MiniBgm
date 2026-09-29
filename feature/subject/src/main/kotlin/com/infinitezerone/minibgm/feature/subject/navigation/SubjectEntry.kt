@@ -13,11 +13,11 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
-    onPlayClick: (PlayerRoute) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
-    onManageRules: () -> Unit = {},
-    onSourceSearch: (String) -> Unit = {},
+    onManageRules: (() -> Unit)? = null,
+    onSourceSearch: ((String) -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SubjectDetailRoute>(metadata = metadata) { route ->
@@ -44,11 +44,11 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
-    onPlayClick: (PlayerRoute) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
     onTagClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
-    onManageRules: () -> Unit = {},
-    onSourceSearch: (String) -> Unit = {},
+    onManageRules: (() -> Unit)? = null,
+    onSourceSearch: ((String) -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<LinkedSubjectRoute>(metadata = metadata) { route ->

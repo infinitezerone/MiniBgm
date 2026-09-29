@@ -141,6 +141,7 @@ class SubjectRepositoryImplTest {
             comment: String?,
             private: Boolean,
             epStatus: Int?,
+            tags: List<String>?,
         ) = Unit
 
         override suspend fun updateEpisodeStatus(

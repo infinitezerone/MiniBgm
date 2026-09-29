@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
@@ -23,7 +21,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -128,48 +125,6 @@ fun SeasonalAnimeCard(
                                 color = Color.White,
                             )
                         }
-                    }
-                }
-
-                // 快捷收藏/追番悬浮轻量按钮（右上角）
-                Surface(
-                    shape = RoundedCornerShape(bottomStart = 8.dp, topEnd = 10.dp),
-                    color = Color.Black.copy(alpha = 0.60f),
-                    modifier = Modifier.align(Alignment.TopEnd),
-                ) {
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onToggleCollection(
-                                subject.id,
-                                if (isWished) CollectionType.DOING else CollectionType.WISH,
-                            )
-                        },
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector =
-                                when {
-                                    isDoing -> Icons.Filled.Check
-                                    isWished -> Icons.Filled.Bookmark
-                                    else -> Icons.Filled.BookmarkBorder
-                                },
-                            contentDescription =
-                                if (isDoing) {
-                                    "在看"
-                                } else if (isWished) {
-                                    "想看"
-                                } else {
-                                    "标记想看"
-                                },
-                            tint =
-                                when {
-                                    isDoing -> MaterialTheme.colorScheme.primaryContainer
-                                    isWished -> RatingGold
-                                    else -> Color.White
-                                },
-                            modifier = Modifier.size(18.dp),
-                        )
                     }
                 }
             }

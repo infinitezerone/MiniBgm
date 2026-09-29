@@ -104,7 +104,7 @@ elif [ "${#cli_modules[@]}" -gt 0 ]; then
   done
 else
   while IFS= read -r m; do [ -n "$m" ] && modules+=("$m"); done < <(
-    printf '%s\n' "$paths" | grep -E '^(app|core|feature|sync)/' | sed -E 's#^((app|core|feature|sync)/[^/]+).*#\1#' | sort -u
+    printf '%s\n' "$paths" | sed -E 's#^app(/.*)?$#app#; s#^((core|feature|sync)/[^/]+).*#\1#' | grep -E '^(app|core|feature|sync)' | sort -u
   )
 fi
 

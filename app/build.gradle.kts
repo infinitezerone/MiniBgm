@@ -16,11 +16,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val tier = (project.findProperty("minibgm.tier") as? String) ?: "standard"
+val isPreview = tier == "preview"
+val enableAi = (project.findProperty("minibgm.enableAi") as? String)?.toBoolean() ?: isPreview
+val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.toBoolean() ?: isPreview
+
 androidApplication {
     namespace = "com.infinitezerone.minibgm"
 
     defaultConfig {
         applicationId = "com.infinitezerone.minibgm"
+        buildConfigField("Boolean", "ENABLE_AI_ASSISTANT", enableAi.toString())
+        buildConfigField("Boolean", "ENABLE_INTERNAL_PLAYER", enablePlayer.toString())
+        buildConfigField("String", "BUILD_TIER", "\"$tier\"")
     }
 
     signingConfigs {

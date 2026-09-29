@@ -62,7 +62,8 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onPlaybackRulesClick: () -> Unit = {},
+    onPlaybackRulesClick: (() -> Unit)? = null,
+    enableAiConfig: Boolean = true,
     viewModel: UserViewModel = koinViewModel(),
 ) {
     val context = LocalContext.current
@@ -167,6 +168,7 @@ fun SettingsScreen(
         onLogoutCurrent = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
+        enableAiConfig = enableAiConfig,
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -242,7 +244,8 @@ fun SettingsScreenContent(
     onLogoutAll: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
-    onPlaybackRulesClick: () -> Unit = {},
+    onPlaybackRulesClick: (() -> Unit)? = null,
+    enableAiConfig: Boolean = true,
 ) {
     var showLogoutAllDialog by remember { mutableStateOf(false) }
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
@@ -294,7 +297,12 @@ fun SettingsScreenContent(
                     hasNotificationPermission = hasNotificationPermission,
                     airingReminderHour = airingReminderHour,
                     aiConfig = uiState.aiConfig,
-                    onOpenAiSettingsDialog = { showAiSettingsDialog = true },
+                    onOpenAiSettingsDialog =
+                        if (enableAiConfig) {
+                            { showAiSettingsDialog = true }
+                        } else {
+                            null
+                        },
                     onOpenReminderHourDialog = { showReminderHourDialog = true },
                     airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
                     onOpenTimingBottomSheet = { showTimingBottomSheet = true },

@@ -99,6 +99,7 @@ class SearchRepositoryImplTest {
             comment: String?,
             private: Boolean,
             epStatus: Int?,
+            tags: List<String>?,
         ) = Unit
 
         override suspend fun updateEpisodeStatus(

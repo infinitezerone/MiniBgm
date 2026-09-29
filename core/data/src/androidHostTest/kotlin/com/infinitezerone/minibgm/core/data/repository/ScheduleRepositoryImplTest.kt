@@ -314,6 +314,7 @@ class ScheduleRepositoryImplTest {
             comment: String?,
             private: Boolean,
             epStatus: Int?,
+            tags: List<String>?,
         ) = error("Not implemented")
 
         override suspend fun updateEpisodeStatus(

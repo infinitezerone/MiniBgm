@@ -15,8 +15,8 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
     onCharacterClick: (Long) -> Unit = {},
     onPersonClick: (Long) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
-    onPlayClick: (PlayerRoute) -> Unit = {},
-    onSourceSearch: (String) -> Unit = {},
+    onPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onSourceSearch: ((String) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {

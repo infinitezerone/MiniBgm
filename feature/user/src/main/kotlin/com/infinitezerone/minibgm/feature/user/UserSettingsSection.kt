@@ -88,7 +88,7 @@ internal fun SettingsSection(
     airingReminderHour: Int,
     hasNotificationPermission: Boolean = true,
     aiConfig: AiConfig = AiConfig(),
-    onOpenAiSettingsDialog: () -> Unit = {},
+    onOpenAiSettingsDialog: (() -> Unit)? = null,
     onOpenReminderHourDialog: () -> Unit,
     airingNotificationOffsetMinutes: Int = -15,
     onOpenTimingBottomSheet: () -> Unit = {},
@@ -99,7 +99,7 @@ internal fun SettingsSection(
     onClearCache: () -> Unit,
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
-    onOpenPlaybackRules: () -> Unit = {},
+    onOpenPlaybackRules: (() -> Unit)? = null,
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
@@ -162,37 +162,39 @@ internal fun SettingsSection(
             }
         }
 
-        // Group 1: 播放设置
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "播放设置",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
+        // Group 1: 播放设置 (仅在支持播放源/内置播放器时展示)
+        if (onOpenPlaybackRules != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+            ) {
+                Column(modifier = Modifier.padding(vertical = 10.dp)) {
+                    Text(
+                        text = "播放设置",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                    )
 
-                SettingsItemRow(
-                    icon = Icons.Filled.PictureInPictureAlt,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "自动画中画",
-                    subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
-                    onClick = { onTogglePipEnabled(!pipEnabled) },
-                    trailing = {
-                        Switch(
-                            checked = pipEnabled,
-                            onCheckedChange = onTogglePipEnabled,
-                        )
-                    },
-                )
+                    SettingsItemRow(
+                        icon = Icons.Filled.PictureInPictureAlt,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = "自动画中画",
+                        subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
+                        onClick = { onTogglePipEnabled(!pipEnabled) },
+                        trailing = {
+                            Switch(
+                                checked = pipEnabled,
+                                onCheckedChange = onTogglePipEnabled,
+                            )
+                        },
+                    )
+                }
             }
         }
 
@@ -279,13 +281,15 @@ internal fun SettingsSection(
                     onClick = if (!isSyncing) onSyncNow else null,
                 )
 
-                SettingsItemRow(
-                    icon = Icons.Filled.PlayCircleOutline,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "播放源管理",
-                    subtitle = "导入自备片单、维护第三方解析规则",
-                    onClick = onOpenPlaybackRules,
-                )
+                if (onOpenPlaybackRules != null) {
+                    SettingsItemRow(
+                        icon = Icons.Filled.PlayCircleOutline,
+                        iconTint = MaterialTheme.colorScheme.tertiary,
+                        title = "播放源管理",
+                        subtitle = "导入自备片单、维护第三方解析规则",
+                        onClick = onOpenPlaybackRules,
+                    )
+                }
 
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 18.dp),
@@ -430,18 +434,20 @@ internal fun SettingsSection(
                         }
                     }
 
-                SettingsItemRow(
-                    icon = Icons.Filled.AutoAwesome,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "AI 追番助手配置",
-                    subtitle = "$providerDisplay · $modelDisplay",
-                    onClick = onOpenAiSettingsDialog,
-                )
+                if (onOpenAiSettingsDialog != null) {
+                    SettingsItemRow(
+                        icon = Icons.Filled.AutoAwesome,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = "AI 追番助手配置",
+                        subtitle = "$providerDisplay · $modelDisplay",
+                        onClick = onOpenAiSettingsDialog,
+                    )
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
+                }
 
                 SettingsItemRow(
                     icon = Icons.Filled.CleaningServices,

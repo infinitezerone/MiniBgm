@@ -192,6 +192,7 @@ class CollectionRepositoryImplTest {
             val comment: String?,
             val private: Boolean,
             val epStatus: Int?,
+            val tags: List<String>?,
         )
 
         data class UpdateEpisodeCall(
@@ -258,12 +259,13 @@ class CollectionRepositoryImplTest {
             comment: String?,
             private: Boolean,
             epStatus: Int?,
+            tags: List<String>?,
         ) {
             onBeforeUpdateCollection?.invoke()
             if (shouldThrowOnUpdateCollection) {
                 throw BgmNetworkException.ServerError(500, "Mock server error")
             }
-            updateCollectionCalls.add(UpdateCollectionCall(subjectId, type, rate, comment, private, epStatus))
+            updateCollectionCalls.add(UpdateCollectionCall(subjectId, type, rate, comment, private, epStatus, tags))
         }
 
         var throwNotFoundOnFirstUpdateEpisode = false

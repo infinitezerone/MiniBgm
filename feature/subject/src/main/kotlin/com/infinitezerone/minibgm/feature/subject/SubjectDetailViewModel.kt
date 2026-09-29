@@ -508,6 +508,8 @@ class SubjectDetailViewModel(
         rate: Int? = null,
         comment: String? = null,
         private: Boolean = false,
+        epStatus: Int? = null,
+        tags: List<String>? = null,
     ) {
         if (!isLoggedIn.value) {
             _uiState.update { it.copy(showCollectionSheet = false, showLoginPromptDialog = true) }
@@ -520,11 +522,15 @@ class SubjectDetailViewModel(
         val previousCollection = _uiState.value.collection
         val resolvedSubjectType = _uiState.value.subject?.type ?: previousCollection?.subjectType ?: 2
         // 1. 本地立即乐观更新 UI 状态中的 collection
+        val targetEpStatus = epStatus ?: previousCollection?.epStatus ?: 0
+        val targetTags = tags ?: previousCollection?.tags.orEmpty()
         val optimisticCollection =
             previousCollection?.copy(
                 type = type.value,
                 rate = rate ?: previousCollection.rate,
                 comment = comment ?: previousCollection.comment,
+                epStatus = targetEpStatus,
+                tags = targetTags,
                 subjectType = resolvedSubjectType,
             ) ?: UserCollection(
                 userId = 0L,
@@ -533,7 +539,8 @@ class SubjectDetailViewModel(
                 rate = rate ?: 0,
                 type = type.value,
                 comment = comment.orEmpty(),
-                epStatus = 0,
+                tags = targetTags,
+                epStatus = targetEpStatus,
                 volStatus = 0,
                 updatedAt = "",
             )
@@ -547,6 +554,8 @@ class SubjectDetailViewModel(
                     rate = rate,
                     comment = comment,
                     private = private,
+                    epStatus = epStatus,
+                    tags = tags,
                     subjectType = resolvedSubjectType,
                 )
             result.onError { _, message ->
@@ -554,6 +563,41 @@ class SubjectDetailViewModel(
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
                 _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "更新收藏状态失败，请确认是否已登录账号" }))
             }
+        }
+    }
+
+    /** +1 话快捷打卡当前待看的下一集，并发送撤销事件 */
+    fun incrementWatchedEpisode() {
+        if (!isLoggedIn.value) {
+            _uiState.update { it.copy(showLoginPromptDialog = true) }
+            viewModelScope.launch {
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
+            }
+            return
+        }
+        val currentEp = _uiState.value.collection?.epStatus ?: 0
+        val nextEpNum = currentEp + 1
+        val nextEpisode =
+            _uiState.value.episodes.firstOrNull {
+                it.type == 0 && (if (it.ep > 0f) it.ep.toInt() else it.sort.toInt()) == nextEpNum
+            }
+        if (nextEpisode != null) {
+            toggleEpisodeWatched(
+                episodeId = nextEpisode.id,
+                isWatched = true,
+                epNumber = nextEpNum,
+                episodeType = 0,
+            )
+        } else {
+            markWatchedUpTo(
+                Episode(
+                    id = 0L,
+                    sort = nextEpNum.toFloat(),
+                    ep = nextEpNum.toFloat(),
+                    type = 0,
+                    name = "第 $nextEpNum 话",
+                ),
+            )
         }
     }
 

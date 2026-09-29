@@ -1602,4 +1602,95 @@ class SubjectDetailViewModelTest {
             val updatedState = viewModel.uiState.first { it.episodeSortDescending }
             assertFalse(updatedState.isEpisodesLoading)
         }
+
+    @Test
+    fun incrementWatchedEpisode_loggedOut_showsLoginPrompt() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = false),
+                )
+
+            viewModel.incrementWatchedEpisode()
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
+        }
+
+    @Test
+    fun incrementWatchedEpisode_loggedIn_incrementsProgress() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection.copy(subjectId = sampleSubject.id, epStatus = 0))
+                }
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+
+            viewModel.uiState.first { it.collection != null }
+            viewModel.incrementWatchedEpisode()
+
+            // epStatus increments from 0 to 1
+            assertEquals(
+                1,
+                viewModel.uiState.value.collection
+                    ?.epStatus,
+            )
+        }
+
+    @Test
+    fun updateCollectionStatus_withEpStatusAndTags_persists() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                }
+            val collectionRepo = FakeCollectionRepository()
+
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                )
+
+            val customTags = listOf("科幻", "经典")
+            viewModel.updateCollectionStatus(
+                type = CollectionType.DOING,
+                rate = 9,
+                comment = "神作！",
+                private = false,
+                epStatus = 5,
+                tags = customTags,
+            )
+
+            val state = viewModel.uiState.value
+            assertEquals(CollectionType.DOING.value, state.collection?.type)
+            assertEquals(9, state.collection?.rate)
+            assertEquals("神作！", state.collection?.comment)
+            assertEquals(5, state.collection?.epStatus)
+            assertEquals(customTags, state.collection?.tags)
+        }
 }

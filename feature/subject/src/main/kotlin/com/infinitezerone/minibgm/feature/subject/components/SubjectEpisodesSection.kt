@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapVert
@@ -80,6 +81,8 @@ fun EpisodesSectionHeader(
     onOpenSources: (() -> Unit)? = null,
     episodeSortDescending: Boolean = false,
     onToggleSort: (() -> Unit)? = null,
+    nextUpEpisodeSort: Float? = null,
+    onJumpToNextUp: (() -> Unit)? = null,
 ) {
     val headerTitle =
         when (subjectType) {
@@ -127,6 +130,32 @@ fun EpisodesSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            if (nextUpEpisodeSort != null && onJumpToNextUp != null) {
+                Surface(
+                    onClick = onJumpToNextUp,
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MyLocation,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+            }
             if (onPlayNext != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
                 Surface(
                     onClick = onPlayNext,
@@ -669,6 +698,7 @@ fun EpisodeGrid(
     modifier: Modifier = Modifier,
     columns: Int = 6,
     hasProgress: Boolean = true,
+    onEpisodeClick: ((Episode) -> Unit)? = null,
 ) {
     val columnCount = columns.coerceAtLeast(1)
     Column(
@@ -734,7 +764,13 @@ fun EpisodeGrid(
                                     },
                                 ).background(cellBackground)
                                 .combinedClickable(
-                                    onClick = { onToggleWatched(episode, !isWatched) },
+                                    onClick = {
+                                        if (onEpisodeClick != null) {
+                                            onEpisodeClick(episode)
+                                        } else {
+                                            onToggleWatched(episode, !isWatched)
+                                        }
+                                    },
                                     onLongClick = { onEpisodeLongClick(episode) },
                                 ),
                         contentAlignment = Alignment.Center,

@@ -35,13 +35,15 @@ fun EntryProviderScope<NavKey>.userEntry(
 /** 应用「全局设置」二级页面条目 */
 fun EntryProviderScope<NavKey>.settingsEntry(
     onBackClick: () -> Unit = {},
-    onPlaybackRulesClick: () -> Unit = {},
+    onPlaybackRulesClick: (() -> Unit)? = null,
+    enableAiConfig: Boolean = true,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SettingsRoute>(metadata = metadata) {
         SettingsScreen(
             onBackClick = onBackClick,
             onPlaybackRulesClick = onPlaybackRulesClick,
+            enableAiConfig = enableAiConfig,
         )
     }
 }

@@ -77,7 +77,7 @@ fun SubjectSourcesBottomSheet(
     episode: Episode? = null,
     mikanId: String? = null,
     onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
-    onAiSourceSearch: () -> Unit = {},
+    onAiSourceSearch: (() -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
     playlists: List<PlaybackPlaylist> = emptyList(),
@@ -192,14 +192,17 @@ fun SubjectSourcesBottomSheet(
                         Spacer(modifier = Modifier.height(4.dp))
                     }
 
-                    SourcesSectionLabel("AI 找源")
-                    EpisodeSourceActionCard(
-                        title = "让 AI 助手找源",
-                        subtitle = "解析可播放地址与集数，结果在助手会话中展示",
-                        iconVector = Icons.Filled.AutoAwesome,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        onClick = { runAfterDismiss(onAiSourceSearch) },
-                    )
+                    if (onAiSourceSearch != null) {
+                        SourcesSectionLabel("AI 找源")
+                        EpisodeSourceActionCard(
+                            title = "让 AI 助手找源",
+                            subtitle = "解析可播放地址与集数，结果在助手会话中展示",
+                            iconVector = Icons.Filled.AutoAwesome,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            onClick = { runAfterDismiss(onAiSourceSearch) },
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
 
                     if (onManageRules != null) {
                         EpisodeSourceActionCard(
@@ -494,16 +497,17 @@ fun SubjectSourcesBottomSheet(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     // 分组 1.5：AI 找源——解析可播放地址，检索在助手会话中显式触发
-                    SourcesSectionLabel("AI 找源")
-                    EpisodeSourceActionCard(
-                        title = "让 AI 助手找源",
-                        subtitle = "解析可播放地址与集数，结果在助手会话中展示",
-                        iconVector = Icons.Filled.AutoAwesome,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        onClick = { runAfterDismiss(onAiSourceSearch) },
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
+                    if (onAiSourceSearch != null) {
+                        SourcesSectionLabel("AI 找源")
+                        EpisodeSourceActionCard(
+                            title = "让 AI 助手找源",
+                            subtitle = "解析可播放地址与集数，结果在助手会话中展示",
+                            iconVector = Icons.Filled.AutoAwesome,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            onClick = { runAfterDismiss(onAiSourceSearch) },
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
 
                     // 分组 2：外部跳转
                     SourcesSectionLabel("外部跳转")

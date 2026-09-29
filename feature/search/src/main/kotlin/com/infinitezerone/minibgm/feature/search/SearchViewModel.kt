@@ -8,28 +8,49 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.LocalSubjectMatch
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 内部搜索与分页独立状态载体 */
+private data class SearchPaginationState(
+    val query: String = "",
+    val hasSearched: Boolean = false,
+    val selectedType: Int = 0,
+    val selectedSort: SearchSort = SearchSort.MATCH,
+    val viewMode: SearchViewMode = SearchViewMode.LIST,
+    val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val hasMore: Boolean = false,
+    val totalCount: Int = 0,
+    val results: List<Subject> = emptyList(),
+    val localMatches: List<LocalSubjectMatch> = emptyList(),
+    val offlineNotice: String? = null,
+    val error: String? = null,
+)
+
 /**
  * 搜索功能 ViewModel：
+ * - 声明式数据流架构：Room 收藏与搜索历史作为唯一真源直接进入 [uiState] 响应式合并；
  * - [onQueryChange] 仅更新输入框内容，空白时自动重置搜索结果回到历史发现页；
  * - [search] 响应软键盘搜索/手动点击搜索按钮，触发网络请求；
  * - [onTypeSelect] 切换分类（已搜索时即时以新分类重搜）；
  * - [onSortChange] 切换排序维度（综合 / 热门 / 高分 / 排名）；
  * - [onViewModeToggle] 切换列表 / 3列海报网格视图；
- * - [toggleCollection] 0ms 乐观快捷打卡（自适应动词：想看/想读/想听/想玩），未登录弹窗拦截；
+ * - [toggleCollection] 快捷打卡（自适应动词：想看/想读/想听/想玩），未登录弹窗拦截；
  * - [loadMore] 触底增量分页加载；
  * - [clearQuery] 一键清空输入与结果。
  */
@@ -39,8 +60,56 @@ class SearchViewModel(
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(SearchUiState())
-    val uiState: StateFlow<SearchUiState> = _uiState.asStateFlow()
+    private val paginationState = MutableStateFlow(SearchPaginationState())
+    private val loginPromptVisible = MutableStateFlow(false)
+    private val userMessage = MutableStateFlow<String?>(null)
+
+    private val collectionsStream: Flow<Map<Long, CollectionType>> =
+        combine(
+            collectionRepository.getCollectionsByTypeStream(CollectionType.WISH),
+            collectionRepository.getCollectionsByTypeStream(CollectionType.DOING),
+            collectionRepository.getCollectionsByTypeStream(CollectionType.COLLECT),
+        ) { wish, doing, collect ->
+            val map = HashMap<Long, CollectionType>(wish.size + doing.size + collect.size)
+            wish.forEach { map[it.subjectId] = CollectionType.WISH }
+            doing.forEach { map[it.subjectId] = CollectionType.DOING }
+            collect.forEach { map[it.subjectId] = CollectionType.COLLECT }
+            map as Map<Long, CollectionType>
+        }.catch { emit(emptyMap<Long, CollectionType>()) }
+
+    /** 对外只读不可变 UI 快照：响应式多路合并 */
+    val uiState: StateFlow<SearchUiState> =
+        combine(
+            paginationState,
+            collectionsStream,
+            searchRepository.getSearchHistory().catch { emit(emptyList()) },
+            loginPromptVisible,
+            userMessage,
+        ) { pagination, collections, history, loginPrompt, msg ->
+            SearchUiState(
+                query = pagination.query,
+                hasSearched = pagination.hasSearched,
+                selectedType = pagination.selectedType,
+                selectedSort = pagination.selectedSort,
+                viewMode = pagination.viewMode,
+                isLoading = pagination.isLoading,
+                isLoadingMore = pagination.isLoadingMore,
+                hasMore = pagination.hasMore,
+                totalCount = pagination.totalCount,
+                results = pagination.results,
+                localMatches = pagination.localMatches,
+                offlineNotice = pagination.offlineNotice,
+                error = pagination.error,
+                userCollections = collections,
+                searchHistory = history,
+                showLoginPromptDialog = loginPrompt,
+                userMessage = msg,
+            )
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = SearchUiState(),
+        )
 
     private var searchJob: Job? = null
     private var loadMoreJob: Job? = null
@@ -69,42 +138,9 @@ class SearchViewModel(
     var searchGeneration: Int = 0
         private set
 
-    init {
-        observeSearchHistory()
-        observeCollections()
-    }
-
-    private fun observeSearchHistory() {
-        viewModelScope.launch {
-            searchRepository.getSearchHistory().collect { history ->
-                _uiState.update { it.copy(searchHistory = history) }
-            }
-        }
-    }
-
-    private fun observeCollections() {
-        viewModelScope.launch {
-            combine(
-                collectionRepository.getCollectionsByTypeStream(CollectionType.WISH),
-                collectionRepository.getCollectionsByTypeStream(CollectionType.DOING),
-                collectionRepository.getCollectionsByTypeStream(CollectionType.COLLECT),
-            ) { wish, doing, collect ->
-                val map = mutableMapOf<Long, CollectionType>()
-                wish.forEach { map[it.subjectId] = CollectionType.WISH }
-                doing.forEach { map[it.subjectId] = CollectionType.DOING }
-                collect.forEach { map[it.subjectId] = CollectionType.COLLECT }
-                map
-            }.catch {
-                // Ignore collection observe errors
-            }.collect { collectionsMap ->
-                _uiState.update { it.copy(userCollections = collectionsMap) }
-            }
-        }
-    }
-
     fun onQueryChange(query: String) {
-        if (_uiState.value.query == query) return
-        _uiState.update {
+        if (paginationState.value.query == query) return
+        paginationState.update {
             it.copy(
                 query = query,
                 hasSearched = false,
@@ -116,7 +152,7 @@ class SearchViewModel(
             searchJob?.cancel()
             loadMoreJob?.cancel()
             rawSearchResults = emptyList()
-            _uiState.update {
+            paginationState.update {
                 it.copy(
                     isLoading = false,
                     isLoadingMore = false,
@@ -130,36 +166,36 @@ class SearchViewModel(
     }
 
     fun onTypeSelect(type: Int) {
-        if (_uiState.value.selectedType == type) return
-        _uiState.update { it.copy(selectedType = type) }
-        val currentQuery = _uiState.value.query.trim()
-        if (currentQuery.isNotBlank() && _uiState.value.hasSearched) {
-            performSearch(currentQuery, type, _uiState.value.selectedSort)
+        if (paginationState.value.selectedType == type) return
+        paginationState.update { it.copy(selectedType = type) }
+        val currentQuery = paginationState.value.query.trim()
+        if (currentQuery.isNotBlank() && paginationState.value.hasSearched) {
+            performSearch(currentQuery, type, paginationState.value.selectedSort)
         }
     }
 
     fun onSortChange(sort: SearchSort) {
-        if (_uiState.value.selectedSort == sort) return
+        if (paginationState.value.selectedSort == sort) return
         // 1. 本地即刻 0ms 视觉即时响应
-        _uiState.update {
+        paginationState.update {
             it.copy(
                 selectedSort = sort,
                 results = sortResults(rawSearchResults, sort),
             )
         }
-        val currentQuery = _uiState.value.query.trim()
-        if (currentQuery.isNotBlank() && _uiState.value.hasSearched) {
+        val currentQuery = paginationState.value.query.trim()
+        if (currentQuery.isNotBlank() && paginationState.value.hasSearched) {
             // 2. 服务端异步全局排序查询
             performSearch(
                 query = currentQuery,
-                type = _uiState.value.selectedType,
+                type = paginationState.value.selectedType,
                 sort = sort,
             )
         }
     }
 
     fun onViewModeToggle() {
-        _uiState.update {
+        paginationState.update {
             val nextMode = if (it.viewMode == SearchViewMode.LIST) SearchViewMode.GRID else SearchViewMode.LIST
             it.copy(viewMode = nextMode)
         }
@@ -172,11 +208,11 @@ class SearchViewModel(
         viewModelScope.launch {
             val isLoggedIn = authRepository.isLoggedIn.first()
             if (!isLoggedIn) {
-                _uiState.update { it.copy(showLoginPromptDialog = true) }
+                loginPromptVisible.value = true
                 return@launch
             }
 
-            val currentType = _uiState.value.userCollections[subject.id]
+            val currentType = uiState.value.userCollections[subject.id]
             if (currentType == targetType) {
                 // 已标记为该状态，无需重复打卡（Bangumi v0 API 不支持 Subject 删除收藏操作）
                 return@launch
@@ -184,14 +220,6 @@ class SearchViewModel(
 
             val subjectType = SubjectType.fromValue(subject.type)
             val verb = targetType.getVerb(subjectType)
-            val feedbackMsg = "已标记为「$verb」"
-
-            // 0ms 乐观更新本地 UI
-            _uiState.update { state ->
-                val updated = state.userCollections.toMutableMap()
-                updated[subject.id] = targetType
-                state.copy(userCollections = updated, userMessage = feedbackMsg)
-            }
 
             // 后台静默同步至 Bangumi 远端（防因导航切换取消）
             withContext(NonCancellable) {
@@ -202,20 +230,16 @@ class SearchViewModel(
                         subjectType = subject.type,
                     )
 
-                if (syncResult is AppResult.Error) {
-                    // 同步失败，回滚状态
-                    _uiState.update { current ->
-                        val rollback = current.userCollections.toMutableMap()
-                        if (currentType != null) {
-                            rollback[subject.id] = currentType
-                        } else {
-                            rollback.remove(subject.id)
-                        }
-                        current.copy(
-                            userCollections = rollback,
-                            userMessage = "打卡失败：${syncResult.message.ifBlank { "网络异常" }}",
-                        )
+                when (syncResult) {
+                    is AppResult.Success -> {
+                        userMessage.value = "已标记为「$verb」"
                     }
+
+                    is AppResult.Error -> {
+                        userMessage.value = "打卡失败：${syncResult.message.ifBlank { "网络异常" }}"
+                    }
+
+                    is AppResult.Loading -> Unit
                 }
             }
         }
@@ -223,23 +247,23 @@ class SearchViewModel(
 
     /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开，保持 ViewModel 与 Android Context 零耦合） */
     suspend fun beginLogin(): String {
-        _uiState.update { it.copy(showLoginPromptDialog = false) }
+        loginPromptVisible.value = false
         return authRepository.beginLogin()
     }
 
     fun dismissLoginPrompt() {
-        _uiState.update { it.copy(showLoginPromptDialog = false) }
+        loginPromptVisible.value = false
     }
 
     fun clearUserMessage() {
-        _uiState.update { it.copy(userMessage = null) }
+        userMessage.value = null
     }
 
     fun search(overrideQuery: String? = null) {
-        val targetQuery = (overrideQuery ?: _uiState.value.query).trim()
+        val targetQuery = (overrideQuery ?: paginationState.value.query).trim()
         if (targetQuery.isNotBlank()) {
-            _uiState.update { it.copy(query = targetQuery, hasSearched = true) }
-            performSearch(targetQuery, _uiState.value.selectedType, _uiState.value.selectedSort)
+            paginationState.update { it.copy(query = targetQuery, hasSearched = true) }
+            performSearch(targetQuery, paginationState.value.selectedType, paginationState.value.selectedSort)
         }
     }
 
@@ -286,7 +310,7 @@ class SearchViewModel(
         loadMoreJob?.cancel()
         rawSearchResults = emptyList()
         resetScrollState()
-        _uiState.update {
+        paginationState.update {
             it.copy(
                 query = "",
                 hasSearched = false,
@@ -303,13 +327,13 @@ class SearchViewModel(
     }
 
     fun loadMore() {
-        val state = _uiState.value
+        val state = paginationState.value
         if (state.isLoading || state.isLoadingMore || !state.hasMore || state.query.isBlank()) return
 
         loadMoreJob?.cancel()
         loadMoreJob =
             viewModelScope.launch {
-                _uiState.update { it.copy(isLoadingMore = true) }
+                paginationState.update { it.copy(isLoadingMore = true) }
                 val currentOffset = serverCursor
                 when (
                     val result =
@@ -331,7 +355,7 @@ class SearchViewModel(
                         val newTotal = if (result.data.total > 0) result.data.total else state.totalCount
                         val sorted = sortResults(rawSearchResults, state.selectedSort)
 
-                        _uiState.update { current ->
+                        paginationState.update { current ->
                             current.copy(
                                 isLoadingMore = false,
                                 results = sorted,
@@ -342,7 +366,7 @@ class SearchViewModel(
                     }
 
                     is AppResult.Error -> {
-                        _uiState.update { it.copy(isLoadingMore = false) }
+                        paginationState.update { it.copy(isLoadingMore = false) }
                     }
 
                     is AppResult.Loading -> Unit
@@ -353,7 +377,7 @@ class SearchViewModel(
     private fun performSearch(
         query: String,
         type: Int,
-        sort: SearchSort = _uiState.value.selectedSort,
+        sort: SearchSort = paginationState.value.selectedSort,
     ) {
         val trimmedQuery = query.trim()
         if (trimmedQuery.isNotBlank()) {
@@ -366,7 +390,7 @@ class SearchViewModel(
         loadMoreJob?.cancel()
         searchJob =
             viewModelScope.launch {
-                _uiState.update {
+                paginationState.update {
                     it.copy(
                         hasSearched = true,
                         isLoading = true,
@@ -395,7 +419,7 @@ class SearchViewModel(
                         rawSearchResults = data.list
                         serverCursor = data.list.size
                         val sorted = sortResults(data.list, sort)
-                        _uiState.update {
+                        paginationState.update {
                             it.copy(
                                 isLoading = false,
                                 results = sorted,
@@ -413,7 +437,7 @@ class SearchViewModel(
                         // 07-A：弱网降级——本地索引命中时降级为软提示 + 离线结果；否则维持全屏错误
                         val offline = localMatches.take(6)
                         if (offline.isNotEmpty()) {
-                            _uiState.update {
+                            paginationState.update {
                                 it.copy(
                                     isLoading = false,
                                     localMatches = offline,
@@ -421,7 +445,7 @@ class SearchViewModel(
                                 )
                             }
                         } else {
-                            _uiState.update {
+                            paginationState.update {
                                 it.copy(
                                     isLoading = false,
                                     error = result.message,
@@ -433,7 +457,7 @@ class SearchViewModel(
                     }
 
                     is AppResult.Loading -> {
-                        _uiState.update { it.copy(isLoading = true) }
+                        paginationState.update { it.copy(isLoading = true) }
                     }
                 }
             }

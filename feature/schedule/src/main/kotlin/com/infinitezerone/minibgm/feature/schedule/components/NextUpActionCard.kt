@@ -43,8 +43,8 @@ fun NextUpActionCard(
     action: NextUpAction,
     onPlayClick: (String) -> Unit,
     /** 应用内直达路由：非 null 时「播放」直接进内置播放器，否则退回外部跳转 */
-    playRoute: PlayerRoute?,
-    onPlayInApp: (PlayerRoute) -> Unit,
+    playRoute: PlayerRoute? = null,
+    onPlayInApp: ((PlayerRoute) -> Unit)? = null,
     onMarkWatched: (Long, Int) -> Unit,
     onDismiss: () -> Unit,
     onClick: () -> Unit,
@@ -192,13 +192,15 @@ fun NextUpActionCard(
                                 }
                             }
 
-                            if (playLink != null || playRoute != null) {
+                            val canPlayInApp = playRoute != null && onPlayInApp != null
+                            val canPlayExternal = playLink != null
+                            if (canPlayInApp || canPlayExternal) {
                                 Button(
                                     onClick = {
-                                        if (playRoute != null) {
+                                        if (playRoute != null && onPlayInApp != null) {
                                             onPlayInApp(playRoute)
-                                        } else {
-                                            onPlayClick(playLink?.playUrl.orEmpty())
+                                        } else if (playLink != null) {
+                                            onPlayClick(playLink.playUrl)
                                         }
                                     },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),

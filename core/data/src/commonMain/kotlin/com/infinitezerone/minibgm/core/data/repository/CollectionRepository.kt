@@ -74,6 +74,7 @@ interface CollectionRepository : UserDataClearable {
         private: Boolean = false,
         epStatus: Int? = null,
         subjectType: Int = 0,
+        tags: List<String>? = null,
     ): AppResult<Unit>
 
     /**
@@ -296,6 +297,7 @@ class CollectionRepositoryImpl(
         private: Boolean,
         epStatus: Int?,
         subjectType: Int,
+        tags: List<String>?,
     ): AppResult<Unit> =
         withContext(NonCancellable) {
             val activeUid = tokenProvider.activeUserId.first()
@@ -326,6 +328,7 @@ class CollectionRepositoryImpl(
                     comment = comment,
                     private = private,
                     epStatus = epStatus,
+                    tags = tags,
                 )
                 clearCountsCache()
                 AppResult.Success(Unit)
