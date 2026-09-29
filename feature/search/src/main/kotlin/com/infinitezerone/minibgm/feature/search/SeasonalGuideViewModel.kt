@@ -5,30 +5,21 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
-import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
-import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
-import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -46,21 +37,13 @@ import java.time.LocalDate
  */
 private const val PAGE_SIZE = 20
 
-/** 「本季连载中」最多补充的条目数：限制逐条补全详情的网络开销 */
-private const val MAX_ONGOING_SUBJECTS = 20
-
-/** 补全连载中条目详情时的并发上限，避免瞬间打满连接 */
-private const val ONGOING_FETCH_CONCURRENCY = 4
-
-/** "YYYY-MM-DD" 的固定长度；比它短的（如仅年份、空串）无法参与日历比较 */
-private const val NORMALIZED_DATE_LENGTH = 10
-
-/** 一次查询的完整条件；四者任一变化都构成一次**新查询** */
+/** 一次查询的完整条件；五者任一变化都构成一次**新查询** */
 private data class SeasonQuery(
     val year: Int,
     val quarter: SeasonQuarter,
     val origin: SeasonOriginFilter,
     val forms: Set<SeasonFormFilter>,
+    val sort: SeasonSortOption,
 )
 
 /** 「本季首播」分页链路的投影；[pageOffset] 是顺序游标，见 [SeasonalGuideViewModel.pagedSubjects] */
@@ -72,12 +55,6 @@ private data class PagedSubjects(
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val error: String? = null,
-)
-
-/** 「本季连载中」分组；加载失败时整组退化为空（best-effort，绝不崩主列表） */
-private data class OngoingFeed(
-    val loading: Boolean = false,
-    val subjects: List<Subject> = emptyList(),
 )
 
 /**
@@ -97,13 +74,12 @@ private sealed interface PageSignal {
 }
 
 /**
- * 季度新番导视 ViewModel —— **方案 B：响应式派生流**。
+ * 季度片单 ViewModel —— **方案 B：响应式派生流**。
  *
  * 状态是「底层事件流的数学映射」，不是被命令式修改的容器：
  * - 可变状态只剩**用户意图**（档期 / 产地 / 形式 / 视图形态）与两个一次性 UI 提示位；
  * - 「本季首播」是 [seasonQuery] 经 `flatMapLatest` 换挡的分页链——查询一变，旧链整条被取消、
  *   游标随之重置，**不需要手动管理 fetchJob / loadMoreJob 的判空与判序**；
- * - 「本季连载中」从排期仓 `flatMapLatest` 派生，`catch` 一层即完成"失败降级为没有这一组"；
  * - 登录态与收藏集合是仓库流，直接作为上游 `combine` 汇入——因此**不存在乐观更新与手动回滚**，
  *   Room 流在写入后会自己重发，单一事实源。
  *
@@ -115,14 +91,11 @@ class SeasonalGuideViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
-    private val scheduleRepository: ScheduleRepository,
-    private val subjectRepository: SubjectRepository,
     initialYear: Int = 0,
     initialSeasonMonth: Int = 0,
     timeProvider: () -> LocalDate = { LocalDate.now() },
 ) : ViewModel() {
     private val currentDate = timeProvider()
-    private val todayIso: String = currentDate.toString()
 
     // ── 输入：用户意图。这是本类仅有的可变状态 ──
     // 四个查询条件绑成一个不可分状态：若拆成四个 MutableStateFlow 再 combine，
@@ -139,6 +112,7 @@ class SeasonalGuideViewModel(
                     },
                 origin = SeasonOriginFilter.ALL,
                 forms = SeasonFormFilter.DEFAULT,
+                sort = SeasonSortOption.DEFAULT,
             ),
         )
     private val viewMode = MutableStateFlow(SeasonalViewMode.LIST)
@@ -162,13 +136,6 @@ class SeasonalGuideViewModel(
     //    竞态全部交给下面的 flatMapLatest：查询一变，旧链取消、游标重置。──
     private val pagedSubjects = MutableStateFlow(PagedSubjects())
 
-    // ── 本季连载中：排期仓派生，随查询换挡，失败整组退化为空 ──
-    // Eagerly：与"进页即取数"的原语义一致，也让单测不必先订阅就能读到投影结果
-    private val ongoingFeed: StateFlow<OngoingFeed> =
-        seasonQuery
-            .flatMapLatest { query -> ongoingFeedOf(query) }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, OngoingFeed())
-
     /** 常量部分：年份/季度选项与「当季」标记，建一次不再变 */
     private val stateTemplate =
         SeasonalGuideUiState(
@@ -190,12 +157,13 @@ class SeasonalGuideViewModel(
      */
     val uiState: StateFlow<SeasonalGuideUiState> =
         combine(
-            combine(pagedSubjects, ongoingFeed, seasonQuery, viewMode) { pages, ongoing, query, mode ->
+            combine(pagedSubjects, seasonQuery, viewMode) { pages, query, mode ->
                 stateTemplate.copy(
                     selectedYear = query.year,
                     selectedQuarter = query.quarter,
                     selectedOrigin = query.origin,
                     selectedForms = query.forms,
+                    selectedSort = query.sort,
                     viewMode = mode,
                     subjects = pages.subjects,
                     pageOffset = pages.pageOffset,
@@ -204,8 +172,6 @@ class SeasonalGuideViewModel(
                     isRefreshing = pages.isRefreshing,
                     isLoadingMore = pages.isLoadingMore,
                     error = pages.error,
-                    ongoingSubjects = ongoing.subjects,
-                    isLoadingOngoing = ongoing.loading,
                 )
             },
             combine(
@@ -265,6 +231,9 @@ class SeasonalGuideViewModel(
         setQuery { current ->
             current.copy(forms = if (form in current.forms) current.forms - form else current.forms + form)
         }
+
+    /** 切换排序方式；服务端排序，切换即一次新查询 */
+    fun selectSort(sort: SeasonSortOption) = setQuery { it.copy(sort = sort) }
 
     /** 一次改一个条件，且值未变时不发射——combine 的上游少一次无谓换挡 */
     private inline fun setQuery(transform: (SeasonQuery) -> SeasonQuery) {
@@ -457,7 +426,7 @@ class SeasonalGuideViewModel(
                 SeasonFormFilter.serverMetaTagOf(query.forms),
             )
         return SearchSubjectsRequest(
-            sort = "heat",
+            sort = query.sort.apiValue,
             filter =
                 SearchFilter(
                     type = listOf(2),
@@ -465,58 +434,6 @@ class SeasonalGuideViewModel(
                     metaTags = metaTags.ifEmpty { null },
                 ),
         )
-    }
-
-    /**
-     * 「本季连载中」：窗口内确有播出事件、但首播日不在本季的条目。
-     *
-     * 用排期名册自带的 airDate 粗筛一遍、再以 Bangumi 权威 `date` 终判（名册 airDate 可能缺失），
-     * 因此不会有条目同时出现在"本季首播"列表与"本季连载中"分组里。
-     * 整段 best-effort：任何失败都退化为"没有这一组"，绝不崩掉主列表。
-     */
-    private fun ongoingFeedOf(query: SeasonQuery): Flow<OngoingFeed> {
-        val (startDay, endDay) = query.quarter.getAirDateRange(query.year)
-        // 播出事件来自滚动快照，历史季查不到任何事件；强行查询会把"没有数据"
-        // 误报成"本季没有连载番"，所以干脆不呈现这一组。
-        if (endDay < todayIso) return flowOf(OngoingFeed())
-
-        return flow { emit(scheduleRepository.getSchedulesAiringBetween("${startDay}T00:00:00Z", "${endDay}T23:59:59Z")) }
-            .map { roster ->
-                roster
-                    .filter { candidate -> !isPremiereWithin(candidate.airDate, startDay, endDay) }
-                    .take(MAX_ONGOING_SUBJECTS)
-                    .fetchSubjectDetails()
-                    .filter { subject -> !isPremiereWithin(subject.date, startDay, endDay) }
-                    .distinctBy { it.id }
-            }.map { OngoingFeed(loading = false, subjects = it) }
-            .onStart { emit(OngoingFeed(loading = true)) }
-            .catch { emit(OngoingFeed()) }
-    }
-
-    /** 逐条补全条目详情；单条失败只跳过该条，不影响整组 */
-    private suspend fun List<AirSchedule>.fetchSubjectDetails(): List<Subject> =
-        coroutineScope {
-            chunked(ONGOING_FETCH_CONCURRENCY)
-                .flatMap { chunk ->
-                    chunk
-                        .map { candidate -> async { subjectRepository.fetchSubjectDetail(candidate.bgmId) } }
-                        .awaitAll()
-                        .mapNotNull { (it as? AppResult.Success)?.data }
-                }.distinctBy { it.id }
-        }
-
-    /**
-     * 首播日是否落在 [startDay, endDay] 内（含两端）。
-     * 空/非法日期视为"无法证明在本季首播"，交由后续以 Bangumi `date` 终判。
-     */
-    private fun isPremiereWithin(
-        date: String,
-        startDay: String,
-        endDay: String,
-    ): Boolean {
-        val day = date.take(NORMALIZED_DATE_LENGTH)
-        if (day.length < NORMALIZED_DATE_LENGTH) return false
-        return day >= startDay && day <= endDay
     }
 
     /** 按已加载条目的 id 去重后追加一页 */

@@ -45,7 +45,7 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 
 /**
- * 季度新番导视 2:3 黄金比例海报展板卡片
+ * 季度片单 2:3 黄金比例海报展板卡片
  */
 @Composable
 fun SeasonalAnimeCard(

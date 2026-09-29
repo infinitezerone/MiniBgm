@@ -7,7 +7,7 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.SeasonalGuideScreen
 
 /**
- * 季度新番导视大盘界面的导航条目；由 `:app` 的 BgmNavHost 聚合（NiA 模式）
+ * 季度片单界面的导航条目；由 `:app` 的 BgmNavHost 聚合（NiA 模式）
  */
 fun EntryProviderScope<NavKey>.seasonalGuideEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,

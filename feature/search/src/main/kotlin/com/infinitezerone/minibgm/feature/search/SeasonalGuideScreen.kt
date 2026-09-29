@@ -77,10 +77,8 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
-import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
-import com.infinitezerone.minibgm.feature.search.components.OngoingAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeRow
 import kotlinx.coroutines.flow.Flow
@@ -96,7 +94,7 @@ import org.koin.core.parameter.parametersOf
 private const val MIN_VISIBLE_ITEMS = 12
 
 /**
- * 季度新番导视大盘界面（独立二级页容器）
+ * 季度片单界面（独立二级页容器）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,7 +114,7 @@ fun SeasonalGuideScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = "新番导视",
+                        text = "季度片单",
                         fontWeight = FontWeight.Bold,
                     )
                 },
@@ -145,7 +143,7 @@ fun SeasonalGuideScreen(
 }
 
 /**
- * 季度新番导视大盘可复用内容组件：
+ * 季度片单可复用内容组件：
  * 支持直接嵌入探索双 Tab 页面或作为独立二级页面主体。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -422,6 +420,23 @@ fun SeasonalGuideContent(
                                     )
                                 }
                             }
+
+                            // 排序（单选）。服务端排序，切换即一次新查询；只提供 API 真实支持的档位
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SeasonSortOption.entries.forEach { sort ->
+                                    SeasonalGuideFilterChip(
+                                        label = sort.label,
+                                        selected = uiState.selectedSort == sort,
+                                        onClick = {
+                                            filterExpanded = false
+                                            viewModel.selectSort(sort)
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -445,16 +460,14 @@ fun SeasonalGuideContent(
                     // 错误重试态
                     uiState.error != null && uiState.subjects.isEmpty() -> {
                         SeasonalGuideErrorState(
-                            errorMessage = uiState.error ?: "加载新番导视失败",
+                            errorMessage = uiState.error ?: "加载季度片单失败",
                             onRetry = viewModel::retry,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
 
-                    // 空结果态（「本季首播」与「本季连载中」两组都为空才算真的没有）
-                    !uiState.isLoading &&
-                        uiState.filteredSubjects.isEmpty() &&
-                        uiState.filteredOngoingSubjects.isEmpty() -> {
+                    // 空结果态
+                    !uiState.isLoading && uiState.filteredSubjects.isEmpty() -> {
                         SeasonalGuideEmptyState(
                             selectedYear = uiState.selectedYear,
                             selectedQuarter = uiState.selectedQuarter,
@@ -476,16 +489,6 @@ fun SeasonalGuideContent(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
-                            // 「本季连载中」保持横向分组：它自成一组且条目有限，横滑一次即可扫完
-                            if (uiState.filteredOngoingSubjects.isNotEmpty()) {
-                                item(key = "ongoing") {
-                                    OngoingAnimeSection(
-                                        subjects = uiState.filteredOngoingSubjects,
-                                        onSubjectClick = onSubjectClick,
-                                    )
-                                }
-                            }
-
                             items(
                                 items = uiState.filteredSubjects,
                                 key = { it.id },
@@ -531,17 +534,6 @@ fun SeasonalGuideContent(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
-                            // 「本季连载中」：首播早于本季、但本季确有播出事件的长期连载番，
-                            // 与下方"本季首播"网格互补，二者不会出现同一条目
-                            if (uiState.filteredOngoingSubjects.isNotEmpty()) {
-                                item(span = { GridItemSpan(maxLineSpan) }) {
-                                    OngoingAnimeSection(
-                                        subjects = uiState.filteredOngoingSubjects,
-                                        onSubjectClick = onSubjectClick,
-                                    )
-                                }
-                            }
-
                             items(
                                 items = uiState.filteredSubjects,
                                 key = { it.id },
@@ -639,51 +631,6 @@ fun SeasonalGuideContent(
                 onDismiss = { showSeasonPicker = false },
             )
         }
-    }
-}
-
-/**
- * 「本季连载中」横向分组。
- *
- * 只在当季/未来季出现：播出事件来自滚动快照，历史季度无数据可依，
- * 与其给出"本季没有连载番"的错误结论，不如整组不显示。
- */
-@Composable
-private fun OngoingAnimeSection(
-    subjects: List<Subject>,
-    onSubjectClick: (SubjectDetailRoute) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "本季连载中",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = "首播早于本季 · ${subjects.size} 部",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(
-                items = subjects,
-                key = { it.id },
-            ) { subject ->
-                OngoingAnimeCard(subject = subject, onClick = onSubjectClick)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
     }
 }
 
@@ -1071,7 +1018,7 @@ private fun SeasonQuarterCard(
 /**
  * 导视筛选 chip。
  *
- * 产地（单选）与形式（多选）两行共用同一形态——两行只有"能不能多选"的差别，
+ * 产地（单选）、形式（多选）与排序（单选）三行共用同一 chip 形态——各行的差别只在取值域，
  * 样式分叉会让人误以为层级也不同。多选的语义靠 chip 自身的选中态表达即可。
  */
 @Composable

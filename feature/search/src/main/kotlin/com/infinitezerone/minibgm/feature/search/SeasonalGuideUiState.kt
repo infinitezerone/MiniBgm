@@ -215,7 +215,7 @@ fun formBucketOf(subject: Subject): SeasonFormFilter =
  * 空集合表示「不筛形式」；否则按 [formBucketOf] 归类后看该档是否被选中。
  *
  * 服务端只在「恰好只选剧场版」时筛过一遍，且其判据与 [formBucketOf] 同源，重复筛不会误杀；
- * 其余组合服务端都表达不了，只能靠这里补——「本季连载中」分组不走搜索接口，更是只能靠这里。
+ * 其余组合服务端都表达不了，只能靠这里补。
  */
 fun matchesForm(
     subject: Subject,
@@ -223,9 +223,29 @@ fun matchesForm(
 ): Boolean = forms.isEmpty() || formBucketOf(subject) in forms
 
 /**
- * 季度新番导视 UI 状态。
+ * 排序方式。只有服务端真实支持的取值才进得来：
+ * - `heat` 混合热度（默认）；
+ * - `score` 评分降序——注意服务端会让只有个位数打分的 10 分小样本排在最前，这是 API 固有行为；
+ * - `rank` **不可用**：实测服务端把无排名（rank=0）的条目排在最前，对季度筛选场景是坏的；
+ * - `air_date` 服务端 400 拒绝，客户端排序又会破坏无限翻页的完整性，故不提供。
+ */
+enum class SeasonSortOption(
+    val label: String,
+    val apiValue: String,
+) {
+    HEAT("热度", "heat"),
+    SCORE("评分", "score"),
+    ;
+
+    companion object {
+        val DEFAULT = HEAT
+    }
+}
+
+/**
+ * 季度片单 UI 状态。
  *
- * 这是**投影**而非容器（方案 B·响应式派生流）：ViewModel 把筛选输入、分页结果、排期仓与收藏仓的流
+ * 这是**投影**而非容器（方案 B·响应式派生流）：ViewModel 把筛选输入、分页结果与收藏仓的流
  * `combine` 成这一份只读快照——状态是"底层事件流的数学映射"，没有谁去"改"它，上游变了它自然变。
  * 因此这里不该出现 setter，也不该有人对它做 `copy` 后回写。
  */
@@ -238,22 +258,18 @@ data class SeasonalGuideUiState(
     val selectedOrigin: SeasonOriginFilter = SeasonOriginFilter.ALL,
     /** 二级筛选可多选；**空集合 = 不筛形式**（显示全部） */
     val selectedForms: Set<SeasonFormFilter> = SeasonFormFilter.DEFAULT,
+    /** 排序方式；服务端排序，切换即一次新查询 */
+    val selectedSort: SeasonSortOption = SeasonSortOption.DEFAULT,
     /** 视图形态；纯展示偏好，切换不需要重新取数 */
     val viewMode: SeasonalViewMode = SeasonalViewMode.LIST,
     val availableYears: List<Int> = emptyList(),
     /** 本季首播：Bangumi `air_date` 区间过滤的结果 */
     val subjects: List<Subject> = emptyList(),
-    /**
-     * 本季连载中：首播日不在本季、但本季确有播出事件的长期连载番。
-     * 仅当季/未来季有数据（播出事件来自滚动快照），历史季恒为空。
-     */
-    val ongoingSubjects: List<Subject> = emptyList(),
     val wishedSubjectIds: Set<Long> = emptySet(),
     val doingSubjectIds: Set<Long> = emptySet(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val isLoadingOngoing: Boolean = false,
     /** 服务端游标：下一页的 offset。不能用 subjects.size 代替——去重会丢弃重复条目导致错位 */
     val pageOffset: Int = 0,
     val hasMore: Boolean = false,
@@ -276,10 +292,6 @@ data class SeasonalGuideUiState(
                 val originMatches = !selectedOrigin.needsClientFilter || matchesOrigin(subject, selectedOrigin)
                 originMatches && matchesForm(subject, selectedForms)
             }
-
-    /** 「本季连载中」来自本地排期仓，不经搜索接口，故两层筛选都要在客户端补上 */
-    val filteredOngoingSubjects: List<Subject>
-        get() = ongoingSubjects.filter { matchesOrigin(it, selectedOrigin) && matchesForm(it, selectedForms) }
 
     /**
      * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 正片」「正片+剧场版」「全部」。

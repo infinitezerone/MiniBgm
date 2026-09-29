@@ -20,7 +20,7 @@ sealed interface BgmRoute : NavKey
 sealed interface TopLevelRoute : BgmRoute
 
 /**
- * 二级功能/列表页路由层级（搜索、收藏、AI 追番助手、新番导视等）。
+ * 二级功能/列表页路由层级（搜索、收藏、AI 追番助手、季度片单等）。
  * 进入时清理先前残留的详情层级，同类型二级页按层级替换而非堆叠。
  */
 sealed interface SubFeatureRoute : BgmRoute
@@ -97,7 +97,7 @@ data class AssistantRoute(
 ) : SubFeatureRoute
 
 /**
- * 季度新番导视大盘交互界面路由。
+ * 季度片单交互界面路由。
  * [initialYear] 与 [initialSeasonMonth] 为 0 时默认定位到当期年份与季度。
  */
 @Serializable

@@ -61,7 +61,7 @@ import org.koin.androidx.compose.koinViewModel
 
 /**
  * 统一探索发现中心界面：
- * - 顶部双 Tab：【新番导视】(当季大盘、年份/四季切换、黄金比例海报、1-Tap快捷追番) + 【淘番榜单】(殿堂神作、高分口碑、心境/题材漫游、多维筛选瀑布流)；
+ * - 顶部双 Tab：【季度片单】(季度目录、产地/形式/排序筛选、海报与行式双视图、1-Tap快捷追番) + 【淘番榜单】(殿堂神作、高分口碑、心境/题材漫游、多维筛选瀑布流)；
  * - 消除探索与导视的重复冗余，打造一站式二次元发现大中心；
  * - 支持下拉刷新、触底无限加载、高级多维筛选半屏抽屉与未登录拦截。
  */
@@ -76,7 +76,7 @@ fun ExploreScreen(
     seasonalGuideViewModel: SeasonalGuideViewModel = koinViewModel(),
 ) {
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = remember { listOf("新番导视", "淘番榜单") }
+    val tabs = remember { listOf("季度片单", "淘番榜单") }
 
     val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -197,7 +197,7 @@ fun ExploreScreen(
                         .padding(innerPadding),
             ) {
                 if (selectedTabIndex == 0) {
-                    // Tab 0: 季度新番导视大盘
+                    // Tab 0: 季度片单
                     SeasonalGuideContent(
                         onSubjectClick = onSubjectClick,
                         modifier = Modifier.fillMaxSize(),

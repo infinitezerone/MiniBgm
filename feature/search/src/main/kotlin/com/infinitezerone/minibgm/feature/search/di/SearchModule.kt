@@ -29,8 +29,6 @@ val searchModule =
                 searchRepository = get(),
                 collectionRepository = get(),
                 authRepository = get(),
-                scheduleRepository = get(),
-                subjectRepository = get(),
                 initialYear = initialYear,
                 initialSeasonMonth = initialSeasonMonth,
             )

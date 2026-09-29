@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.Tag
@@ -9,9 +8,7 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,16 +37,12 @@ class SeasonalGuideViewModelTest {
         searchRepository: FakeSearchRepository = FakeSearchRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
-        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
-        subjectRepository: FakeSubjectRepository = FakeSubjectRepository(),
         initialYear: Int = 0,
         initialSeasonMonth: Int = 0,
     ) = SeasonalGuideViewModel(
         searchRepository = searchRepository,
         collectionRepository = collectionRepository,
         authRepository = authRepository,
-        scheduleRepository = scheduleRepository,
-        subjectRepository = subjectRepository,
         initialYear = initialYear,
         initialSeasonMonth = initialSeasonMonth,
         timeProvider = { fixedDate },
@@ -63,19 +56,6 @@ class SeasonalGuideViewModelTest {
         // Unconfined：注册时立即挂到 receive 上，避免"先 send 后订阅"的时序依赖
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.collect { into += it } }
     }
-
-    /** 排期仓名册条目：`airDate` 为条目自身首播日，与窗口判定相关 */
-    private fun airSchedule(
-        id: Long,
-        title: String,
-        airDate: String,
-    ) = AirSchedule(
-        bgmId = id,
-        title = title,
-        titleCn = title,
-        airDate = airDate,
-        weekday = 1,
-    )
 
     @Test
     fun initialLoadWithDefaultDate_queriesAdvancedSearchWithWinter2026() =
@@ -207,6 +187,26 @@ class SeasonalGuideViewModelTest {
             assertEquals(2, searchRepository.advancedSearchCallCount)
             assertEquals(listOf("中国"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
             assertEquals(0, searchRepository.lastAdvancedOffset)
+        }
+
+    @Test
+    fun selectSort_pushesServerSideSortAndRefetchesFromStart() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            // 默认热度
+            assertEquals("heat", searchRepository.lastAdvancedRequest?.sort)
+
+            viewModel.selectSort(SeasonSortOption.SCORE)
+            advanceUntilIdle()
+
+            // 排序是服务端能力：直接下推，且换挡后从 offset 0 重建
+            assertEquals("score", searchRepository.lastAdvancedRequest?.sort)
+            assertEquals(0, searchRepository.lastAdvancedOffset)
+            assertEquals(SeasonSortOption.SCORE, viewModel.uiState.value.selectedSort)
         }
 
     @Test
@@ -611,164 +611,6 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun ongoing_keepsLongRunnersAiringThisSeasonAndDropsSeasonPremieres() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val scheduleRepository = FakeScheduleRepository()
-            scheduleRepository.schedulesAiringBetween =
-                listOf(
-                    airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"),
-                    airSchedule(id = 2001L, title = "本季新番", airDate = "2026-01-10"),
-                )
-
-            val subjectRepository = FakeSubjectRepository()
-            subjectRepository.sendSubject(
-                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
-            )
-            subjectRepository.sendSubject(
-                sampleSubject.copy(id = 2001L, name = "新番", nameCn = "本季新番", date = "2026-01-10"),
-            )
-
-            val viewModel =
-                createViewModel(
-                    searchRepository = searchRepository,
-                    scheduleRepository = scheduleRepository,
-                    subjectRepository = subjectRepository,
-                )
-            advanceUntilIdle()
-
-            val state = viewModel.uiState.value
-            assertEquals(listOf(899L), state.ongoingSubjects.map { it.id })
-            assertFalse(state.isLoadingOngoing)
-            // 名册自带 airDate 的预筛就剔掉了本季首播那条，无需为它补一轮详情
-            assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
-            assertEquals("2025-12-21T00:00:00Z" to "2026-03-20T23:59:59Z", scheduleRepository.lastAiringWindow)
-        }
-
-    @Test
-    fun ongoing_usesBangumiDateAsFinalJudgeWhenRosterAirDateIsMissing() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val scheduleRepository = FakeScheduleRepository()
-            // 名册没给 airDate：预筛只能放行，必须靠 Bangumi 的 date 终判剔掉，否则会与网格重复
-            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 2001L, title = "本季新番", airDate = ""))
-
-            val subjectRepository = FakeSubjectRepository()
-            subjectRepository.sendSubject(
-                sampleSubject.copy(id = 2001L, name = "新番", nameCn = "本季新番", date = "2026-01-10"),
-            )
-
-            val viewModel =
-                createViewModel(
-                    searchRepository = searchRepository,
-                    scheduleRepository = scheduleRepository,
-                    subjectRepository = subjectRepository,
-                )
-            advanceUntilIdle()
-
-            assertTrue(
-                viewModel.uiState.value.ongoingSubjects
-                    .isEmpty(),
-            )
-            assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
-        }
-
-    @Test
-    fun ongoing_skipsDetailFetchFailureWithoutBreakingTheGroup() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val scheduleRepository = FakeScheduleRepository()
-            scheduleRepository.schedulesAiringBetween =
-                listOf(
-                    airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"),
-                    airSchedule(id = 404L, title = "已下架", airDate = "1997-04-01"),
-                )
-
-            val subjectRepository = FakeSubjectRepository()
-            subjectRepository.sendSubject(
-                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
-            )
-
-            val viewModel =
-                createViewModel(
-                    searchRepository = searchRepository,
-                    scheduleRepository = scheduleRepository,
-                    subjectRepository = subjectRepository,
-                )
-            advanceUntilIdle()
-
-            assertEquals(
-                listOf(899L),
-                viewModel.uiState.value.ongoingSubjects
-                    .map { it.id },
-            )
-            assertFalse(viewModel.uiState.value.isLoadingOngoing)
-        }
-
-    @Test
-    fun ongoing_notQueriedForPastSeasonBecauseSnapshotHasNoHistory() =
-        runTest {
-            val scheduleRepository = FakeScheduleRepository()
-            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"))
-
-            // 2024 春窗口末端 2024-06-30 早于"今天"(2026-02-15)：滚动快照里查不到任何事件，
-            // 与其给出"本季没有连载番"的错误结论，不如整组不呈现
-            val viewModel =
-                createViewModel(
-                    scheduleRepository = scheduleRepository,
-                    initialYear = 2024,
-                    initialSeasonMonth = 4,
-                )
-            advanceUntilIdle()
-
-            assertTrue(
-                viewModel.uiState.value.ongoingSubjects
-                    .isEmpty(),
-            )
-            assertNull(scheduleRepository.lastAiringWindow)
-        }
-
-    @Test
-    fun switchingSeason_clearsPreviousOngoingGroup() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val scheduleRepository = FakeScheduleRepository()
-            scheduleRepository.schedulesAiringBetween = listOf(airSchedule(id = 899L, title = "名侦探柯南", airDate = "1996-01-08"))
-
-            val subjectRepository = FakeSubjectRepository()
-            subjectRepository.sendSubject(
-                sampleSubject.copy(id = 899L, name = "名探偵コナン", nameCn = "名侦探柯南", date = "1996-01-08"),
-            )
-
-            val viewModel =
-                createViewModel(
-                    searchRepository = searchRepository,
-                    scheduleRepository = scheduleRepository,
-                    subjectRepository = subjectRepository,
-                )
-            advanceUntilIdle()
-            assertEquals(1, viewModel.uiState.value.ongoingSubjects.size)
-
-            // 切到历史季：上一季的连载中分组必须立刻清空，不能残留
-            scheduleRepository.schedulesAiringBetween = emptyList()
-            viewModel.selectSeason(2024, SeasonQuarter.SPRING)
-            advanceUntilIdle()
-
-            assertTrue(
-                viewModel.uiState.value.ongoingSubjects
-                    .isEmpty(),
-            )
-        }
-
-    @Test
     fun toggleCollection_whenSwitchingFromDoingToWish_andErrorOccurs_leavesRepositoryStateUntouched() =
         runTest {
             val collectionRepository = FakeCollectionRepository()
@@ -937,8 +779,6 @@ class SeasonalGuideViewModelTest {
                     searchRepository = FakeSearchRepository(),
                     collectionRepository = FakeCollectionRepository(),
                     authRepository = FakeAuthRepository(),
-                    scheduleRepository = FakeScheduleRepository(),
-                    subjectRepository = FakeSubjectRepository(),
                     timeProvider = { LocalDate.of(2026, 9, 29) },
                 )
             advanceUntilIdle()
