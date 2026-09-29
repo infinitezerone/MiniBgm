@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -25,6 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -350,7 +357,9 @@ private fun CollectionStatusBadge(
     }
 }
 
-/** 热门标签芯片流 */
+private const val COLLAPSED_TAGS_LIMIT = 10
+
+/** 热门标签芯片流：支持过多时默认折叠（前 10 个），支持平滑展开与收起 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagsSection(
@@ -358,23 +367,61 @@ private fun TagsSection(
     onTagClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    val canCollapse = tags.size > COLLAPSED_TAGS_LIMIT
+    val displayedTags = if (isExpanded || !canCollapse) tags else tags.take(COLLAPSED_TAGS_LIMIT)
+    val hiddenCount = tags.size - COLLAPSED_TAGS_LIMIT
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "热门标签",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "热门标签 (${tags.size})",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            if (canCollapse) {
+                Surface(
+                    onClick = { isExpanded = !isExpanded },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = if (isExpanded) "收起" else "展开全部",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
 
         FlowRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().animateContentSize(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            tags.forEach { tag ->
+            displayedTags.forEach { tag ->
                 Surface(
                     onClick = { onTagClick(tag.name) },
                     shape = RoundedCornerShape(8.dp),
@@ -398,6 +445,33 @@ private fun TagsSection(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
+                }
+            }
+
+            if (!isExpanded && canCollapse) {
+                Surface(
+                    onClick = { isExpanded = true },
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "+$hiddenCount 更多",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
                     }
                 }
             }
