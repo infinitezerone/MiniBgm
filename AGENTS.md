@@ -23,6 +23,7 @@ bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试（�
 
 - KMP 模块测试源集是 `androidHostTest` / `androidDeviceTest` 且 host 测试 opt-in；Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`）只有 `testDebugUnitTest`。命名错误的源集会静默空跑——jgate 的 XML 校验（`tests > 0 && failures == 0`）负责拦。
 - 全量 `allTests testDebugUnitTest` 仅用于跨切面改动（build-logic / 版本目录 / `:core:model` / `:core:common`）及 PR 前；Android-only 模块没有 allTests。
+- **素材体积门（jgate 第 1 步）**：改动涉及的图片单张 > 200 KB 或合计 > 1 MB 直接拦下。原因是截图会**不可逆**地撑大仓库历史——git 保留每一版，一张 `screencap` 原始输出（1272×2772 PNG，280 KB～1 MB）只能靠改写历史清掉，而同样内容的 800px WebP 约 95 KB。截图一律走 `bash tools/optimize-screenshots`（800px + WebP，转完删原图）产出。**不要指望 git pre-commit 钩子**——jj 不运行钩子。
 - 模块依赖边变化后跑 `./gradlew graphUpdate` 重建各 README 依赖图。
 - Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 独立 job 只拦新增；修复代码后基线残留无害，勿手工编辑基线。
 

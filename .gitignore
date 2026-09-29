@@ -10,6 +10,9 @@ captures/
 .cxx/
 *.apk
 *.aab
+# Windows 保留设备名：`> nul` 重定向会在仓库里落下同名空文件，
+# 一旦提交就永久留在历史里（且会让 git filter-repo 在 Windows 上直接失败）。
+nul
 .kotlin/
 keystore/
 keystore.properties

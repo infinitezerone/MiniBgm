@@ -165,7 +165,46 @@ run_gradle() {
   echo "[jgate]   ↳ $((SECONDS - start))s"
 }
 
-echo "[jgate] 1/3 spotless"
+# ---- 素材体积门 ---------------------------------------------------------------
+# 截图是唯一会让仓库历史**不可逆**膨胀的资产：git 保留每一版，误提交一张 1 MB 的
+# screencap 原始输出，之后只能靠改写历史才能清掉。所以在提交前就拦住。
+# 放在 spotless 之前——这一步不依赖 gradle，几毫秒就能判死。
+#
+# 为什么不是 git pre-commit 钩子：jj 不运行 git 钩子（见 AGENTS.md），钩子对本仓库无效。
+echo "[jgate] 1/4 素材体积"
+asset_limit_kb=200
+asset_total_limit_kb=1024
+if [ -n "$paths" ]; then
+  asset_total_kb=0
+  asset_bad=""
+  while IFS= read -r p; do
+    case "$p" in
+      *.png | *.PNG | *.jpg | *.JPG | *.jpeg | *.JPEG | *.gif | *.GIF | *.bmp | *.BMP | *.webp | *.WEBP) ;;
+      *) continue ;;
+    esac
+    [ -f "$p" ] || continue
+    kb=$(((($(wc -c <"$p") + 1023)) / 1024))
+    asset_total_kb=$((asset_total_kb + kb))
+    if [ "$kb" -gt "$asset_limit_kb" ]; then
+      asset_bad="${asset_bad}  ${kb} KB  ${p}
+"
+    fi
+  done <<<"$paths"
+  if [ -n "$asset_bad" ]; then
+    echo "[jgate] ❌ 以下素材单张超过 ${asset_limit_kb} KB，先压缩再提交：" >&2
+    printf '%s' "$asset_bad" >&2
+    echo "[jgate]    转换：bash tools/optimize-screenshots" >&2
+    exit 1
+  fi
+  if [ "$asset_total_kb" -gt "$asset_total_limit_kb" ]; then
+    echo "[jgate] ❌ 本次改动涉及的素材合计 ${asset_total_kb} KB，超过 ${asset_total_limit_kb} KB 上限" >&2
+    echo "[jgate]    转换：bash tools/optimize-screenshots" >&2
+    exit 1
+  fi
+  echo "[jgate]   ↳ 素材合计 ${asset_total_kb} KB（单张上限 ${asset_limit_kb} KB）"
+fi
+
+echo "[jgate] 2/4 spotless"
 # 全量 spotlessApply 即使全部 UP-TO-DATE 也要 hash 18 个模块的全部源码（实测 ~16s）；
 # 触及模块级调用把这一阶段压到几秒。只有"工作副本真有改动"才需要格式化——
 # 目标是 @- 时工作副本本身干净，格式化是空转。
@@ -177,11 +216,11 @@ else
   echo "[jgate] 触及路径均不在模块内，跳过 spotless"
 fi
 
-echo "[jgate] 2/3 架构红线 + 触及模块测试 + 装配门"
+echo "[jgate] 3/4 架构红线 + 触及模块测试 + 装配门"
 # 三项合并到同一次 gradle 调用，省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
 run_gradle "${gradle_tasks[@]}"
 
-echo "[jgate] 3/3 测试结果真实性校验"
+echo "[jgate] 4/4 测试结果真实性校验"
 checked=0
 for m in "${modules[@]+"${modules[@]}"}"; do
   [ -f "$m/build.gradle.kts" ] || continue
@@ -212,7 +251,7 @@ if [ "$fail" != "0" ]; then
 fi
 # 0 份结果时不说"0 份结果校验"就收尾——那半个句子本身就是假绿信号。
 if [ "$checked" = "0" ]; then
-  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，任务全部 UP-TO-DATE，沿用上次结果"
+  echo "[jgate] ✅ 验证门通过（素材 / spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，任务全部 UP-TO-DATE，沿用上次结果"
 else
-  echo "[jgate] ✅ 验证门通过（spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
+  echo "[jgate] ✅ 验证门通过（素材 / spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
 fi

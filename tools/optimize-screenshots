@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# 把截图转成 README 用的规格：800px 宽 + WebP。
+#
+# 为什么必须走这里：git 保留每一版文件，一张 screencap 原始输出（1272×2772 PNG）是
+# 280 KB～1 MB，而同样内容的 800px WebP 只有约 95 KB——差 4～10 倍，且这个差值会
+# 永久留在历史里，只能靠改写历史才能清掉。jgate 的「素材体积门」负责拦超标文件，
+# 本脚本是它报错时指向的修法。
+#
+# 用法：
+#   bash tools/optimize-screenshots              # 处理 docs/screenshots/ 下所有 png/jpg
+#   bash tools/optimize-screenshots a.png b.jpg  # 只处理指定文件
+#
+# 可用环境变量覆盖默认规格：SCREENSHOT_WIDTH（默认 800）、SCREENSHOT_QUALITY（默认 88）、
+# PYTHON（指定解释器）。转换成功后原图会被删除——README 引用的是 .webp。
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+WIDTH="${SCREENSHOT_WIDTH:-800}"
+QUALITY="${SCREENSHOT_QUALITY:-88}"
+
+files=("$@")
+if [ "${#files[@]}" -eq 0 ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] && files+=("$f")
+  done < <(find docs/screenshots -maxdepth 1 -type f \
+    \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) 2>/dev/null | sort)
+fi
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "没有需要处理的文件（docs/screenshots/ 下没有 png/jpg）"
+  exit 0
+fi
+
+# 找一个装了 Pillow 的解释器；找不到就明确报错，不要静默跳过
+python_bin=""
+for candidate in "${PYTHON:-}" python3 python py; do
+  [ -n "$candidate" ] || continue
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import PIL' >/dev/null 2>&1; then
+    python_bin="$candidate"
+    break
+  fi
+done
+if [ -z "$python_bin" ]; then
+  echo "❌ 需要一个装了 Pillow 的 Python 解释器。安装：python -m pip install Pillow" >&2
+  echo "   也可用 PYTHON=/path/to/python 指定。" >&2
+  exit 1
+fi
+
+"$python_bin" - "$WIDTH" "$QUALITY" "${files[@]}" <<'PY'
+import os
+import sys
+
+from PIL import Image
+
+width = int(sys.argv[1])
+quality = int(sys.argv[2])
+
+total_before = total_after = 0
+for src in sys.argv[3:]:
+    if not os.path.isfile(src):
+        print("跳过（不存在）: %s" % src)
+        continue
+    dst = os.path.splitext(src)[0] + ".webp"
+    before = os.path.getsize(src)
+    image = Image.open(src).convert("RGB")
+    w, h = image.size
+    if w > width:
+        image = image.resize((width, round(h * width / w)), Image.LANCZOS)
+    image.save(dst, quality=quality, method=6)
+    after = os.path.getsize(dst)
+    # 源文件后缀不同，转换成功后删掉原图，避免两份并存又各自进历史
+    if os.path.abspath(dst) != os.path.abspath(src):
+        os.remove(src)
+    total_before += before
+    total_after += after
+    print("%-46s %6.0f KB -> %5.0f KB" % (src, before / 1024, after / 1024))
+
+if total_before:
+    print("\n合计 %.0f KB -> %.0f KB（省 %.0f%%）"
+          % (total_before / 1024, total_after / 1024,
+             (1 - total_after / total_before) * 100))
+PY
+
+echo
+echo "完成。README 引用的应是 .webp 路径；原图已删除。"
