@@ -17,6 +17,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,8 +31,10 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,9 +80,16 @@ private data class OngoingFeed(
     val subjects: List<Subject> = emptyList(),
 )
 
-/** 取页信号：`Load`＝从零取首页（进页/重试），`Refresh`＝下拉刷新，`More`＝接着游标再取 */
+/**
+ * 取页信号：由各用户意图触发流 `merge` 而来。
+ *
+ * `Initial` 是进页 / 查询换挡时的自动首取；`Retry` / `Refresh` / `More` 分别对应
+ * 重试、下拉刷新、触底追加。
+ */
 private sealed interface PageSignal {
-    data object Load : PageSignal
+    data object Initial : PageSignal
+
+    data object Retry : PageSignal
 
     data object Refresh : PageSignal
 
@@ -133,12 +143,20 @@ class SeasonalGuideViewModel(
         )
     private val viewMode = MutableStateFlow(SeasonalViewMode.LIST)
 
-    // 一次性提示位：它们本来就是"发生了事件要告诉 UI"，不是能从流里推导的投影
-    private val userMessage = MutableStateFlow<String?>(null)
+    // 一次性提示的载体：对话框要不要弹是**状态**（关掉前一直成立），所以留在投影里；
+    // Toast 这类"发生一次就该消失"的事件走 Channel，与状态流物理隔离、消费即消失
     private val loginPromptVisible = MutableStateFlow(false)
 
-    /** 取页信号。SharedFlow 而非 StateFlow：连续两次「再取一页」不该被去重掉 */
-    private val pageSignals = MutableSharedFlow<PageSignal>(extraBufferCapacity = 16)
+    // 形态与 ScheduleViewModel 的 _userMessage 一致：Channel(BUFFERED) + receiveAsFlow
+    private val _uiEffects = Channel<UiEffect>(Channel.BUFFERED)
+
+    /** 一次性事件流。UI 收集它来弹提示 / 触发跳转；不需要也不应该有人回写它 */
+    val uiEffects: Flow<UiEffect> = _uiEffects.receiveAsFlow()
+
+    /** 取页信号源：每个用户意图一条流，`merge` 后汇入 `flatMapLatest`（见 [onPageSignals]） */
+    private val retryTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val refreshTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val loadMoreTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     // ── 本季首播：分页投影。游标是顺序状态（第 N 页依赖第 N-1 页的 offset），留一个私有容器；
     //    竞态全部交给下面的 flatMapLatest：查询一变，旧链取消、游标重置。──
@@ -201,30 +219,34 @@ class SeasonalGuideViewModel(
                     doingSubjectIds = doing.map { it.subjectId }.toSet(),
                 )
             },
-            userMessage,
             loginPromptVisible,
-        ) { data, identity, message, prompt ->
+        ) { data, identity, prompt ->
             data.copy(
                 isLoggedIn = identity.isLoggedIn,
                 wishedSubjectIds = identity.wishedSubjectIds,
                 doingSubjectIds = identity.doingSubjectIds,
-                userMessage = message,
                 showLoginPromptDialog = prompt,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
     init {
-        // 分页链：查询换挡即重置游标；每个信号触发一次会话（作为信号流的副作用挂起执行）。
-        // 用 onEach 顺序处理而非 collectLatest——同一查询内的连续信号应当排队，
-        // 中途取消会话会把进行中的标记位永久留在 true（上一个 try/finally 事故的教训）。
+        // 分页链：查询换挡即重置游标；三条触发流 merge 成一条信号流，每个信号触发一次会话
+        // （作为信号流的副作用挂起执行）。用 onEach 顺序处理而非 collectLatest——
+        // 同一查询内的连续信号应当排队，中途取消会话会把进行中的标记位永久留在 true。
         seasonQuery
             .onEach { pagedSubjects.value = PagedSubjects() }
-            .flatMapLatest { query ->
-                pageSignals
-                    .onStart { emit(PageSignal.Load) }
-                    .onEach { signal -> runPagingSession(query, signal) }
-            }.launchIn(viewModelScope)
+            .flatMapLatest { query -> onPageSignals(query) }
+            .launchIn(viewModelScope)
     }
+
+    /** 三条触发流汇成一条信号流；进页 / 换挡后自动先取一次首页 */
+    private fun onPageSignals(query: SeasonQuery): Flow<PageSignal> =
+        merge(
+            retryTrigger.map { PageSignal.Retry },
+            refreshTrigger.map { PageSignal.Refresh },
+            loadMoreTrigger.map { PageSignal.More },
+        ).onStart { emit(PageSignal.Initial) }
+            .onEach { signal -> runPagingSession(query, signal) }
 
     fun selectYear(year: Int) = setQuery { it.copy(year = year) }
 
@@ -270,23 +292,24 @@ class SeasonalGuideViewModel(
         subjectId: Long,
         targetType: CollectionType,
     ) {
-        // 登录态是投影的一部分：直接读当前快照，不再另存一份布尔
-        if (!uiState.value.isLoggedIn) {
-            loginPromptVisible.value = true
-            return
-        }
-        // 已在目标列表就不重复写：判据读的是投影，与 UI 看到的完全一致
-        val alreadyThere =
-            when (targetType) {
-                CollectionType.DOING -> subjectId in uiState.value.doingSubjectIds
-                CollectionType.WISH -> subjectId in uiState.value.wishedSubjectIds
-                else -> false
-            }
-        if (alreadyThere) {
-            userMessage.value = "已在您的「${targetType.label}」列表中"
-            return
-        }
         viewModelScope.launch {
+            // 登录态是投影的一部分：直接读当前快照，不再另存一份布尔
+            if (!uiState.value.isLoggedIn) {
+                loginPromptVisible.value = true
+                return@launch
+            }
+            // 已在目标列表就不重复写：判据读的是投影，与 UI 看到的完全一致
+            val alreadyThere =
+                when (targetType) {
+                    CollectionType.DOING -> subjectId in uiState.value.doingSubjectIds
+                    CollectionType.WISH -> subjectId in uiState.value.wishedSubjectIds
+                    else -> false
+                }
+            if (alreadyThere) {
+                postEffect(UiEffect.ShowMessage("已在您的「${targetType.label}」列表中"))
+                return@launch
+            }
+
             val result =
                 withContext(NonCancellable) {
                     collectionRepository.updateCollectionStatus(
@@ -296,25 +319,21 @@ class SeasonalGuideViewModel(
                     )
                 }
             if (result is AppResult.Error) {
-                userMessage.value = result.message.ifBlank { "操作失败，请重试" }
+                postEffect(UiEffect.ShowMessage(result.message.ifBlank { "操作失败，请重试" }))
             }
         }
     }
 
     fun refresh() {
-        pageSignals.tryEmit(PageSignal.Refresh)
+        refreshTrigger.tryEmit(Unit)
     }
 
     fun retry() {
-        pageSignals.tryEmit(PageSignal.Load)
+        retryTrigger.tryEmit(Unit)
     }
 
     fun loadMore() {
-        pageSignals.tryEmit(PageSignal.More)
-    }
-
-    fun clearUserMessage() {
-        userMessage.value = null
+        loadMoreTrigger.tryEmit(Unit)
     }
 
     fun dismissLoginPrompt() {
@@ -354,7 +373,7 @@ class SeasonalGuideViewModel(
             val current = pagedSubjects.value
             pagedSubjects.value =
                 current.copy(
-                    isLoading = signal is PageSignal.Load,
+                    isLoading = signal is PageSignal.Initial || signal is PageSignal.Retry,
                     isRefreshing = signal is PageSignal.Refresh,
                     isLoadingMore = signal is PageSignal.More,
                     error = null,
@@ -362,7 +381,13 @@ class SeasonalGuideViewModel(
 
             when (val result = searchRepository.searchSubjectsAdvanced(requestOf(query), PAGE_SIZE, current.pageOffset)) {
                 is AppResult.Error -> {
-                    settle(error = result.message)
+                    val message = result.message
+                    settle(error = message)
+                    // 列表还有内容时失败属于"追加失败"，用 Snackbar 提示即可；
+                    // 列表为空则交由全屏错误态（uiState.error）呈现，不重复弹
+                    if (pagedSubjects.value.subjects.isNotEmpty()) {
+                        postEffect(UiEffect.ShowMessage("加载更多失败：$message"))
+                    }
                     return
                 }
 
@@ -413,6 +438,11 @@ class SeasonalGuideViewModel(
         val current = pagedSubjects.value
         pagedSubjects.value =
             current.copy(isLoading = false, isRefreshing = false, isLoadingMore = false, error = error)
+    }
+
+    /** 投递一次性事件；`Channel.BUFFERED` 的容量足够，正常情况下不会挂起也不会丢 */
+    private suspend fun postEffect(effect: UiEffect) {
+        _uiEffects.send(effect)
     }
 
     private fun requestOf(query: SeasonQuery): SearchSubjectsRequest {

@@ -258,7 +258,6 @@ data class SeasonalGuideUiState(
     val pageOffset: Int = 0,
     val hasMore: Boolean = false,
     val error: String? = null,
-    val userMessage: String? = null,
     val isLoggedIn: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
 ) {

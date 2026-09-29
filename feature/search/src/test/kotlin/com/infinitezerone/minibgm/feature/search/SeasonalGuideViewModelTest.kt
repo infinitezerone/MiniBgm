@@ -15,6 +15,10 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -50,6 +54,15 @@ class SeasonalGuideViewModelTest {
         initialSeasonMonth = initialSeasonMonth,
         timeProvider = { fixedDate },
     )
+
+    /** 订阅一次性事件流；backgroundScope 在测试结束时会自动取消，也不阻塞 advanceUntilIdle */
+    private fun TestScope.collectUiEffects(
+        flow: Flow<UiEffect>,
+        into: MutableList<UiEffect>,
+    ) {
+        // Unconfined：注册时立即挂到 receive 上，避免"先 send 后订阅"的时序依赖
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.collect { into += it } }
+    }
 
     /** 排期仓名册条目：`airDate` 为条目自身首播日，与窗口判定相关 */
     private fun airSchedule(
@@ -502,6 +515,8 @@ class SeasonalGuideViewModelTest {
             val collectionRepository = FakeCollectionRepository()
             val viewModel = createViewModel(collectionRepository = collectionRepository)
             advanceUntilIdle()
+            val effects = mutableListOf<UiEffect>()
+            collectUiEffects(viewModel.uiEffects, effects)
 
             viewModel.toggleCollection(100L, CollectionType.DOING)
             advanceUntilIdle()
@@ -514,7 +529,7 @@ class SeasonalGuideViewModelTest {
             )
             assertEquals(1, collectionRepository.updateCollectionCallCount)
             // 成功不给 toast：列表里那一条的状态变化本身就是反馈
-            assertNull(viewModel.uiState.value.userMessage)
+            assertTrue("成功不应发一次性事件", effects.isEmpty())
         }
 
     @Test
@@ -524,6 +539,8 @@ class SeasonalGuideViewModelTest {
             collectionRepository.updateCollectionResult = AppResult.Error(Exception("Network failure"), "网络异常")
             val viewModel = createViewModel(collectionRepository = collectionRepository)
             advanceUntilIdle()
+            val effects = mutableListOf<UiEffect>()
+            collectUiEffects(viewModel.uiEffects, effects)
 
             viewModel.toggleCollection(100L, CollectionType.WISH)
             advanceUntilIdle()
@@ -532,7 +549,7 @@ class SeasonalGuideViewModelTest {
                 viewModel.uiState.value.wishedSubjectIds
                     .contains(100L),
             )
-            assertEquals("网络异常", viewModel.uiState.value.userMessage)
+            assertEquals("网络异常", (effects.single() as UiEffect.ShowMessage).text)
         }
 
     @Test
@@ -759,6 +776,8 @@ class SeasonalGuideViewModelTest {
             collectionRepository.updateCollectionResult = AppResult.Error(Exception("Network error"), "网络异常")
             val viewModel = createViewModel(collectionRepository = collectionRepository)
             advanceUntilIdle()
+            val effects = mutableListOf<UiEffect>()
+            collectUiEffects(viewModel.uiEffects, effects)
 
             assertTrue(
                 viewModel.uiState.value.doingSubjectIds
@@ -781,7 +800,7 @@ class SeasonalGuideViewModelTest {
                 viewModel.uiState.value.wishedSubjectIds
                     .contains(100L),
             )
-            assertEquals("网络异常", viewModel.uiState.value.userMessage)
+            assertEquals("网络异常", (effects.single() as UiEffect.ShowMessage).text)
         }
 
     @Test
@@ -792,6 +811,8 @@ class SeasonalGuideViewModelTest {
             collectionRepository.updateCollectionResult = AppResult.Error(Exception("Server error"), "服务器开小差了")
             val viewModel = createViewModel(collectionRepository = collectionRepository)
             advanceUntilIdle()
+            val effects = mutableListOf<UiEffect>()
+            collectUiEffects(viewModel.uiEffects, effects)
 
             assertTrue(
                 viewModel.uiState.value.wishedSubjectIds
@@ -814,7 +835,7 @@ class SeasonalGuideViewModelTest {
                 viewModel.uiState.value.doingSubjectIds
                     .contains(200L),
             )
-            assertEquals("服务器开小差了", viewModel.uiState.value.userMessage)
+            assertEquals("服务器开小差了", (effects.single() as UiEffect.ShowMessage).text)
         }
 
     @Test
@@ -824,12 +845,14 @@ class SeasonalGuideViewModelTest {
             collectionRepository.sendCollection(UserCollection(subjectId = 300L, type = CollectionType.DOING.value))
             val viewModel = createViewModel(collectionRepository = collectionRepository)
             advanceUntilIdle()
+            val effects = mutableListOf<UiEffect>()
+            collectUiEffects(viewModel.uiEffects, effects)
 
             viewModel.toggleCollection(300L, CollectionType.DOING)
             advanceUntilIdle()
 
             assertEquals(0, collectionRepository.updateCollectionCallCount)
-            assertEquals("已在您的「在看」列表中", viewModel.uiState.value.userMessage)
+            assertEquals("effects 个数", 1, effects.size)
         }
 
     @Test

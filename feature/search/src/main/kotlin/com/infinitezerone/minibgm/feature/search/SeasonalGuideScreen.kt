@@ -204,11 +204,14 @@ fun SeasonalGuideContent(
         }
     }
 
-    // 弹出 Snackbar 消息提示
-    LaunchedEffect(uiState.userMessage) {
-        uiState.userMessage?.let { msg ->
-            snackbarHostState.showSnackbar(msg)
-            viewModel.clearUserMessage()
+    // 一次性事件单独收集：Snackbar 不能放进状态流里——状态可重组、可重复读取，
+    // 放进去就会在旋转屏幕 / 回到本页时把同一条提示再弹一遍，还得配一个"已读"回写来擦除。
+    // Channel 消费即消失，两条通道各司其职、互不污染。
+    LaunchedEffect(Unit) {
+        viewModel.uiEffects.collect { effect ->
+            when (effect) {
+                is UiEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.text)
+            }
         }
     }
 
