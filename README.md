@@ -17,9 +17,9 @@
 
 | 放送时间表 | 番剧详情 |
 |---|---|
-| ![放送时间表](docs/screenshots/schedule.png) | ![番剧详情](docs/screenshots/detail.png) |
+| ![放送时间表](docs/screenshots/schedule.webp) | ![番剧详情](docs/screenshots/detail.webp) |
 | **探索发现** | **搜索** |
-| ![探索发现](docs/screenshots/explore.png) | ![搜索](docs/screenshots/search.png) |
+| ![探索发现](docs/screenshots/explore.webp) | ![搜索](docs/screenshots/search.webp) |
 
 ## ✨ 功能特性
 
