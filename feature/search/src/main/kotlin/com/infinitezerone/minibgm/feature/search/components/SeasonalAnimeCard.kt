@@ -134,18 +134,18 @@ fun SeasonalAnimeCard(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
             ) {
                 Text(
                     text = primaryTitle,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     minLines = 2,
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -153,8 +153,8 @@ fun SeasonalAnimeCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = airDate.ifBlank { "放送日期待定" },
-                        style = MaterialTheme.typography.bodySmall,
+                        text = airDate.ifBlank { "待定" },
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -162,7 +162,7 @@ fun SeasonalAnimeCard(
                     )
 
                     if (subject.eps > 0) {
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                         Text(
                             text = "${subject.eps}话",
                             style = MaterialTheme.typography.labelSmall,
@@ -171,7 +171,7 @@ fun SeasonalAnimeCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // 3. 底部 1-Tap 快捷追番按钮
                 FilledTonalButton(
@@ -183,8 +183,8 @@ fun SeasonalAnimeCard(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(32.dp),
-                    shape = RoundedCornerShape(8.dp),
+                            .height(28.dp),
+                    shape = RoundedCornerShape(6.dp),
                     colors =
                         ButtonDefaults.filledTonalButtonColors(
                             containerColor =
@@ -202,14 +202,14 @@ fun SeasonalAnimeCard(
                         ),
                     contentPadding =
                         androidx.compose.foundation.layout
-                            .PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            .PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                 ) {
                     Icon(
                         imageVector = if (isDoing) Icons.Filled.Check else Icons.Outlined.Add,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(12.dp),
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text =
                             if (isDoing) {
@@ -219,7 +219,7 @@ fun SeasonalAnimeCard(
                             } else {
                                 "追番"
                             },
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isDoing) FontWeight.Bold else FontWeight.Medium,
                     )
                 }

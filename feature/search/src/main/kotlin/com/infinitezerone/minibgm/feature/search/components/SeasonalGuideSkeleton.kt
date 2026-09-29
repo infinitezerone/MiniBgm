@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
@@ -98,27 +99,34 @@ fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
 @Composable
 fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
     val skeletonState = rememberSkeletonState()
+    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val gridColumns =
+        if (isWideScreen) {
+            GridCells.Adaptive(minSize = 110.dp)
+        } else {
+            GridCells.Fixed(3)
+        }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 150.dp),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        columns = gridColumns,
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         userScrollEnabled = false,
         modifier = modifier,
     ) {
-        items(8) {
+        items(9) {
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(4.dp),
+                        .padding(2.dp),
             ) {
                 SkeletonBox(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(220.dp),
-                    shape = RoundedCornerShape(12.dp),
+                            .height(165.dp),
+                    shape = RoundedCornerShape(10.dp),
                     state = skeletonState,
                 )
                 Spacer(modifier = Modifier.height(8.dp))

@@ -310,18 +310,24 @@ fun SeasonalGuideContent(
                     }
 
                     else -> {
+                        val gridColumns =
+                            if (isWideScreen) {
+                                GridCells.Adaptive(minSize = 110.dp)
+                            } else {
+                                GridCells.Fixed(3)
+                            }
                         LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 150.dp),
+                            columns = gridColumns,
                             state = gridState,
                             contentPadding =
                                 PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
+                                    start = 12.dp,
+                                    end = 12.dp,
                                     top = 8.dp,
                                     bottom = if (isTopLevel && !isWideScreen) 96.dp else 32.dp,
                                 ),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(
