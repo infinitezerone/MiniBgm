@@ -256,10 +256,16 @@ private fun AccountSwitchChip(
     }
 }
 
+/** 数字尚未就绪时的占位符：宁可显示「—」，也不要让整条数字带凭空出现把下方顶下去 */
+private const val STAT_PLACEHOLDER = "—"
+
 /**
  * 个人页第二层：通栏数字带。
  *
  * 形态纪律（见 `docs/PROFILE_HUB_REDESIGN.md` §3）：全页只有这一排同形数字。
+ *
+ * [footprint] 可空且**本行始终渲染**：Room 首次发射有一帧延迟，若按 null 整项不渲染，
+ * 数字带会晚一步插进来，把吸顶 Tab 与内容流整体往下顶一次。占位比消失稳。
  *
  * **本带不含「在看」**：该指标已由下方吸顶 Tab 承担，而 Tab 计数来自远端 legacy 统计、
  * 本带若也放一份则来自 Room 本地聚合——两者不同源，同步滞后时会并排出现同一指标的
@@ -272,7 +278,7 @@ private fun AccountSwitchChip(
  */
 @Composable
 internal fun TrackingStatsRow(
-    footprint: TrackingFootprint,
+    footprint: TrackingFootprint?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -296,12 +302,12 @@ internal fun TrackingStatsRow(
         ) {
             TrackingStatCell(
                 label = "在看集数",
-                value = footprint.episodesWatched.toString(),
+                value = footprint?.episodesWatched?.toString() ?: STAT_PLACEHOLDER,
                 modifier = Modifier.weight(1f),
             )
             TrackingStatCell(
                 label = "本月打卡",
-                value = footprint.monthActiveCount.toString(),
+                value = footprint?.monthActiveCount?.toString() ?: STAT_PLACEHOLDER,
                 modifier = Modifier.weight(1f),
             )
         }

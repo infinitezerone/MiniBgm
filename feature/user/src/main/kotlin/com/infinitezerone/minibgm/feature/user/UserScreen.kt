@@ -103,6 +103,7 @@ fun UserScreen(
                 }
             }
         },
+        onRetryCollections = collectionsViewModel::retry,
         onSettingsClick = onSettingsClick,
         onSwitchAccount = viewModel::switchAccount,
         onLogoutAccount = viewModel::logout,
@@ -125,6 +126,7 @@ fun UserScreenContent(
     collectionsState: UserCollectionsUiState,
     onLogin: () -> Unit,
     onRefresh: () -> Unit,
+    onRetryCollections: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onSwitchAccount: (Long) -> Unit,
     onLogoutAccount: (Long) -> Unit,
@@ -246,6 +248,18 @@ fun UserScreenContent(
                 }
 
                 else -> {
+                    // 筛选只在"有列表可筛"时有意义：错误态与空态下摆着 5 个胶囊，点了什么都不会发生。
+                    // 加载中仍然显示，是为了避开"加载完才冒出来"的跳版。
+                    val filterType = collectionsState.selectedType
+                    val filterIsLoading =
+                        collectionsState.loadingTypes.contains(filterType) ||
+                            (
+                                collectionsState.isLoading &&
+                                    !collectionsState.collectionsByType.containsKey(filterType)
+                            )
+                    val hasFilterableList =
+                        collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -259,15 +273,14 @@ fun UserScreenContent(
                             )
                         }
 
-                        uiState.trackingFootprint?.let { footprint ->
-                            item(key = "tracking_stats") {
-                                TrackingStatsRow(
-                                    footprint = footprint,
-                                    onClick = {
-                                        coroutineScope.launch { listState.animateScrollToItem(tabsIndex) }
-                                    },
-                                )
-                            }
+                        // 始终占位渲染：footprint 未就绪时显示「—」，不整项消失（否则下方会跳版）
+                        item(key = "tracking_stats") {
+                            TrackingStatsRow(
+                                footprint = uiState.trackingFootprint,
+                                onClick = {
+                                    coroutineScope.launch { listState.animateScrollToItem(tabsIndex) }
+                                },
+                            )
                         }
 
                         stickyHeader(key = "collection_tabs") {
@@ -278,11 +291,13 @@ fun UserScreenContent(
                             )
                         }
 
-                        item(key = "subject_filter") {
-                            SubjectFilterRow(
-                                selectedFilter = collectionsState.selectedSubjectFilter,
-                                onSelectFilter = onSelectSubjectFilter,
-                            )
+                        if (filterIsLoading || hasFilterableList) {
+                            item(key = "subject_filter") {
+                                SubjectFilterRow(
+                                    selectedFilter = collectionsState.selectedSubjectFilter,
+                                    onSelectFilter = onSelectSubjectFilter,
+                                )
+                            }
                         }
 
                         collectionSection(
@@ -290,6 +305,7 @@ fun UserScreenContent(
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
                             onRefresh = onRefresh,
+                            onRetry = onRetryCollections,
                             onLoadMore = onLoadMore,
                         )
                     }
@@ -411,6 +427,7 @@ private fun LazyListScope.collectionSection(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
     onRefresh: () -> Unit,
+    onRetry: () -> Unit,
     onLoadMore: (CollectionType) -> Unit,
 ) {
     val type = state.selectedType
@@ -432,7 +449,7 @@ private fun LazyListScope.collectionSection(
             item(key = "collection_error") {
                 ErrorCollectionsView(
                     errorMessage = errorMessage,
-                    onRetry = onRefresh,
+                    onRetry = onRetry,
                 )
             }
         }

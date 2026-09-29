@@ -170,6 +170,17 @@ class UserCollectionsViewModel(
         loadCollectionsForType(_uiState.value.selectedType, isRefresh = true)
     }
 
+    /**
+     * 加载失败后重试当前分区。
+     *
+     * 刻意走**非 refresh** 路径。失败时该分区没有任何内容，此刻正确的反馈是骨架屏
+     * （"正在取数据"）；而 `refresh` 只置 `isRefreshing`，会让 `PullToRefreshBox` 转圈——
+     * 那个转圈表达的是"内容还在、正在更新"，与"空着且刚失败"的事实不符。
+     */
+    fun retry() {
+        loadCollectionsForType(_uiState.value.selectedType, isRefresh = false)
+    }
+
     private fun loadCollectionsForType(
         type: CollectionType,
         isRefresh: Boolean = false,

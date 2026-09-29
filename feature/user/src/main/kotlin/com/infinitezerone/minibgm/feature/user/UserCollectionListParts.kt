@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -102,20 +103,23 @@ internal fun CollectionTypeTabs(
                             )
                             // 计数降一档字号 + 浅色：读作「分类角标」而非指标，
                             // 不与上方通栏数字带的数字争夺视觉重量
-                            counts[type]?.let { count ->
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = count.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                        },
-                                    maxLines = 1,
-                                    softWrap = false,
-                                )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            // 计数未就绪时也占住位置，否则计数到达会让 5 个标签同时左右位移
+                            Box(modifier = Modifier.widthIn(min = 10.dp)) {
+                                counts[type]?.let { count ->
+                                    Text(
+                                        text = count.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color =
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                            },
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                }
                             }
                         }
                     },
@@ -143,12 +147,14 @@ internal fun SubjectFilterRow(
                 onClick = { onSelectFilter(filter) },
                 label = { Text(filter.label) },
                 border = null,
+                // 选中态刻意不用 primaryContainer 实心块：吸顶 Tab 的选中态已经是实心高亮，
+                // 两排同构会让人以为「状态」和「条目类型」是同一组筛选器。这里降为淡色底 + 主色字。
                 colors =
                     FilterChipDefaults.filterChipColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
                         labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.primary,
                     ),
             )
         }
