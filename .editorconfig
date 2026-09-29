@@ -9,6 +9,11 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 
 [*.{kt,kts}]
+# 必须显式指定，不能靠推断：不写这一行时 ktlint 会按本节的 ij_kotlin_* 属性推断成
+# intellij_idea，而 CI 推断成 ktlint_official。两者对**实验规则**的开关不同
+# （如 condition-wrapping 要求跨行条件的每个操作数各占一行），结果是本地 spotless 全绿、
+# CI 红——jgate 给假绿，且只在 tag 触发的 release 上才暴露。
+ktlint_code_style = ktlint_official
 continuation_indent_size = 4
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
