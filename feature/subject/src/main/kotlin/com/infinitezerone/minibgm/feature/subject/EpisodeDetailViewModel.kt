@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeParser
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
@@ -22,6 +23,8 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 单集详情页 UI 状态 */
 data class EpisodeDetailUiState(
@@ -78,8 +82,21 @@ class EpisodeDetailViewModel(
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
+    private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(EpisodeDetailUiState())
+    private val initialSubject = subjectRepository.getCachedSubject(subjectId)
+    private val initialEpisodes = subjectRepository.getCachedEpisodes(subjectId).orEmpty()
+    private val initialEpisode = initialEpisodes.firstOrNull { it.id == episodeId }
+
+    private val _uiState =
+        MutableStateFlow(
+            EpisodeDetailUiState(
+                isLoading = initialEpisode == null,
+                episode = initialEpisode,
+                subject = initialSubject,
+                allEpisodes = initialEpisodes,
+            ),
+        )
     val uiState: StateFlow<EpisodeDetailUiState> = _uiState.asStateFlow()
 
     private val _events = Channel<EpisodeDetailUiEvent>(Channel.BUFFERED)
@@ -197,8 +214,8 @@ class EpisodeDetailViewModel(
                     )
                 }
 
-                // 若分集本地尚未载入，先同步拉取条目分集列表
-                if (_uiState.value.episode == null) {
+                // 若分集本地尚未载入，先同步拉取条目分集列表（仅当缓存未命中或用户主动下拉刷新时触发）
+                if (_uiState.value.episode == null || isUserPullToRefresh) {
                     val epResult = subjectRepository.fetchEpisodes(subjectId)
                     if (epResult is AppResult.Success) {
                         val ep = epResult.data.firstOrNull { it.id == episodeId }
@@ -209,12 +226,19 @@ class EpisodeDetailViewModel(
                 }
 
                 // 条目详情未命中缓存时兜底拉取（来源向导需要条目名）
-                if (_uiState.value.subject == null) {
+                if (_uiState.value.subject == null || isUserPullToRefresh) {
                     subjectRepository.fetchSubjectDetail(subjectId)
                 }
 
                 // 拉取分集吐槽短评
                 val commentsResult = communityRepository.getEpisodeComments(episodeId)
+                if (commentsResult is AppResult.Success) {
+                    withContext(defaultDispatcher) {
+                        for (comment in commentsResult.data) {
+                            BgmBbCodeParser.parseBlocks(comment.content)
+                        }
+                    }
+                }
                 _uiState.update { current ->
                     when (commentsResult) {
                         is AppResult.Success ->

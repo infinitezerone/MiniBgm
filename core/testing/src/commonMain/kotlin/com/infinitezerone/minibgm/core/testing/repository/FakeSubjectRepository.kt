@@ -139,6 +139,10 @@ class FakeSubjectRepository : SubjectRepository {
 
     override fun getSubjectStream(id: Long): Flow<Subject?> = subjectsState.map { it[id] }
 
+    override fun getCachedSubject(id: Long): Subject? = subjectsState.value[id]
+
+    override fun getCachedEpisodes(subjectId: Long): List<Episode>? = episodesState.value[subjectId]
+
     override suspend fun fetchSubjectDetail(id: Long): AppResult<Subject> {
         fetchSubjectDetailCallCount++
         val result = fetchSubjectDetailResult(id)

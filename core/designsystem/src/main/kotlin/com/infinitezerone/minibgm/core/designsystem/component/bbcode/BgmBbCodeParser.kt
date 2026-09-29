@@ -94,6 +94,12 @@ sealed interface BbInlineElement {
  * 具备极高容错性，针对未闭合标签或畸形输入提供平滑降级，确保永不崩溃。
  */
 object BgmBbCodeParser {
+    private val cacheLock = Any()
+    private val blocksCache =
+        object : LinkedHashMap<String, List<BbCodeBlock>>(128, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<BbCodeBlock>>?): Boolean = size > 256
+        }
+
     private val FULL_IMG_REGEX = Regex("""\[img((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/img\]""", RegexOption.IGNORE_CASE)
     private val MASKED_IMG_REGEX =
         Regex("""\[__bgm_masked_img__((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/__bgm_masked_img__\]""", RegexOption.IGNORE_CASE)
@@ -182,13 +188,26 @@ object BgmBbCodeParser {
     }
 
     /**
-     * 将原始评论文本解析为块级语法树列表
+     * 将原始评论文本解析为块级语法树列表（内置 LRU 缓存避免多条评论或重复重组时反复正则计算）
      */
     fun parseBlocks(rawText: String): List<BbCodeBlock> {
         val trimmed = rawText.trim()
         if (trimmed.isEmpty()) return emptyList()
 
-        val preprocessed = preprocessMaskedImages(trimmed)
+        synchronized(cacheLock) {
+            blocksCache[trimmed]?.let { return it }
+        }
+
+        val parsed = doParseBlocks(trimmed)
+
+        synchronized(cacheLock) {
+            blocksCache[trimmed] = parsed
+        }
+        return parsed
+    }
+
+    private fun doParseBlocks(preprocessedText: String): List<BbCodeBlock> {
+        val preprocessed = preprocessMaskedImages(preprocessedText)
 
         val blocks = mutableListOf<BbCodeBlock>()
         var currentIndex = 0

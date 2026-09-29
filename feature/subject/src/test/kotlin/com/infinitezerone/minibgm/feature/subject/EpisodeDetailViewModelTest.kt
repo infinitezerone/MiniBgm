@@ -47,6 +47,7 @@ class EpisodeDetailViewModelTest {
             collectionRepository = collectionRepository,
             communityRepository = communityRepository,
             authRepository = authRepository,
+            defaultDispatcher = mainDispatcherRule.testDispatcher,
         )
 
     @Test
@@ -351,5 +352,34 @@ class EpisodeDetailViewModelTest {
             assertTrue(communityRepository.setLikeCalls.isEmpty())
             val event = viewModel.events.first()
             assertTrue(event is EpisodeDetailUiEvent.ShowSnackbar && event.message.contains("登录"))
+        }
+
+    @Test
+    fun initialState_withCachedRepository_doesNotTriggerNetworkFetchEpisodes() =
+        runTest {
+            val subjectRepository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(subjectId, sampleEpisodeList)
+                }
+            val collectionRepository = FakeCollectionRepository()
+            val communityRepository = FakeCommunityRepository()
+
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = collectionRepository,
+                    communityRepository = communityRepository,
+                )
+
+            val state = viewModel.uiState.value
+            assertEquals(targetEpisode, state.episode)
+            assertEquals(sampleSubject, state.subject)
+            assertFalse(state.isLoading)
+            // 验证未发生全量分集和条目网络拉取
+            assertEquals(0, subjectRepository.fetchEpisodesCallCount)
+            assertEquals(0, subjectRepository.fetchSubjectDetailCallCount)
         }
 }

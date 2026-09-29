@@ -24,9 +24,15 @@ import kotlinx.coroutines.sync.withLock
 interface SubjectRepository {
     fun getSubjectStream(id: Long): Flow<Subject?>
 
+    /** 同步获取内存中已缓存的条目详情（未命中返回 null） */
+    fun getCachedSubject(id: Long): Subject? = null
+
     suspend fun fetchSubjectDetail(id: Long): AppResult<Subject>
 
     fun getEpisodesStream(subjectId: Long): Flow<List<Episode>>
+
+    /** 同步获取内存中已缓存的分集列表（未命中返回 null） */
+    fun getCachedEpisodes(subjectId: Long): List<Episode>? = null
 
     /** 载入分集首屏（[descending] 决定从“最早”还是“最新”一端开始），重置该条目的累积缓存 */
     suspend fun loadEpisodes(
@@ -112,6 +118,10 @@ class SubjectRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("获取条目详情"))
         }
+
+    override fun getCachedSubject(id: Long): Subject? = subjectsState.value[id]
+
+    override fun getCachedEpisodes(subjectId: Long): List<Episode>? = episodesState.value[subjectId]
 
     override fun getEpisodesStream(subjectId: Long): Flow<List<Episode>> =
         episodesState

@@ -128,24 +128,27 @@ fun EpisodeDetailScreen(
         }
     val displayTitle = episode?.displayTitle ?: initialEpisodeTitle.ifBlank { episodeNumberText }
 
-    val handleLinkClick: (String) -> Unit = { url ->
-        when (val link = BgmUrlParser.parse(url)) {
-            is BgmLink.Subject -> onSubjectClick(link.subjectId)
-            is BgmLink.Episode -> onEpisodeClick(link.episodeId)
-            is BgmLink.Character -> onCharacterClick(link.characterId)
-            is BgmLink.Person -> onPersonClick(link.personId)
-            is BgmLink.Topic -> onTopicClick(link.topicId, "")
-            is BgmLink.User -> context.launchWebUrl(url)
-            is BgmLink.External -> {
-                context.launchStreamingUrl(
-                    url = url,
-                    onAppNotInstalled = { appName, webUrl ->
-                        appNotInstalledPrompt = appName to webUrl
-                    },
-                )
+    val handleLinkClick: (String) -> Unit =
+        remember(context, onSubjectClick, onEpisodeClick, onCharacterClick, onPersonClick, onTopicClick) {
+            { url ->
+                when (val link = BgmUrlParser.parse(url)) {
+                    is BgmLink.Subject -> onSubjectClick(link.subjectId)
+                    is BgmLink.Episode -> onEpisodeClick(link.episodeId)
+                    is BgmLink.Character -> onCharacterClick(link.characterId)
+                    is BgmLink.Person -> onPersonClick(link.personId)
+                    is BgmLink.Topic -> onTopicClick(link.topicId, "")
+                    is BgmLink.User -> context.launchWebUrl(url)
+                    is BgmLink.External -> {
+                        context.launchStreamingUrl(
+                            url = url,
+                            onAppNotInstalled = { appName, webUrl ->
+                                appNotInstalledPrompt = appName to webUrl
+                            },
+                        )
+                    }
+                }
             }
         }
-    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -546,6 +549,7 @@ fun EpisodeDetailScreen(
                         items(
                             items = uiState.comments,
                             key = { it.id },
+                            contentType = { "episode_comment" },
                         ) { comment ->
                             EpisodeCommentItem(
                                 comment = comment,
