@@ -67,14 +67,15 @@ class SeasonalGuideViewModel(
         if (initialSeasonMonth > 0) {
             SeasonQuarter.fromMonth(initialSeasonMonth)
         } else {
-            SeasonQuarter.fromMonth(currentDate.monthValue)
+            SeasonQuarter.fromDate(currentDate)
         }
 
     // 提供未来 1 年至过去 15 年的年份切换选项
     private val availableYearsList = ((currentDate.year + 1) downTo (currentDate.year - 15)).toList()
 
-    private val currentYear = currentDate.year
-    private val currentQuarter = SeasonQuarter.fromMonth(currentDate.monthValue)
+    // 季界在每月 21 日，12 月下旬属于**次年**冬季，所以年份与季度要一起取，不能各取各的
+    private val currentYear = SeasonQuarter.seasonYearOf(currentDate)
+    private val currentQuarter = SeasonQuarter.fromDate(currentDate)
 
     private val _uiState =
         MutableStateFlow(
@@ -163,10 +164,17 @@ class SeasonalGuideViewModel(
         loadSeasonalAnime(reloadOngoing = false)
     }
 
-    /** 切换放送形式筛选；理由同 [selectOrigin]，同样需要重新取数 */
-    fun selectForm(form: SeasonFormFilter) {
-        if (_uiState.value.selectedForm == form) return
-        _uiState.update { it.copy(selectedForm = form) }
+    /**
+     * 开关一档放送形式。理由同 [selectOrigin]，同样需要重新取数——不只是为了总数准确，
+     * 也因为「恰好只选剧场版」时服务端能吃掉一层过滤，其余组合不能，下推条件本身会变。
+     *
+     * 允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致。
+     */
+    fun toggleForm(form: SeasonFormFilter) {
+        val current = _uiState.value.selectedForms
+        val next = if (form in current) current - form else current + form
+        if (next == current) return
+        _uiState.update { it.copy(selectedForms = next) }
         loadSeasonalAnime(reloadOngoing = false)
     }
 
@@ -358,11 +366,16 @@ class SeasonalGuideViewModel(
 
     private fun buildSearchRequest(state: SeasonalGuideUiState): SearchSubjectsRequest {
         val (startDay, endDay) = state.selectedQuarter.getAirDateRange(state.selectedYear)
-        // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + TV」＝当季日本 TV 动画）。
-        // 产地「欧美」与形式「全部」/「短片 / MV」的 metaTag 为 null——服务端 meta_tags 是多值 AND、
-        // 且没有排除语法，"或"（欧美 vs 只标具体国家）与"以上皆非"（片段型）都表达不了，
-        // 这三档改由客户端兜，见 SeasonalGuideUiState.filteredSubjects。
-        val metaTags = listOfNotNull(state.selectedOrigin.metaTag, state.selectedForm.metaTag)
+        // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + 剧场版」）。
+        // 产地「欧美」的 metaTag 是 null——服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"
+        // 这种"或"表达不了，改由客户端兜。
+        // 形式里只有"恰好只选剧场版"能下推；正片（TV 或 WEB）与短片（MV 或 PV 或 …）都是"或"关系，
+        // 服务端多值又是 AND、没有排除语法，只能客户端筛。见 SeasonalGuideUiState.filteredSubjects。
+        val metaTags =
+            listOfNotNull(
+                state.selectedOrigin.metaTag,
+                SeasonFormFilter.serverMetaTagOf(state.selectedForms),
+            )
         return SearchSubjectsRequest(
             sort = "heat",
             filter =

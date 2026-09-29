@@ -77,7 +77,7 @@ class SeasonalGuideViewModelTest {
             assertEquals(2026, state.selectedYear)
             assertEquals(SeasonQuarter.WINTER, state.selectedQuarter)
             assertEquals(SeasonOriginFilter.ALL, state.selectedOrigin)
-            assertEquals(SeasonFormFilter.ALL, state.selectedForm)
+            assertEquals(SeasonFormFilter.DEFAULT, state.selectedForms)
             assertFalse(state.isLoading)
             assertFalse(state.isRefreshing)
             assertNull(state.error)
@@ -87,7 +87,8 @@ class SeasonalGuideViewModelTest {
             val request = searchRepository.lastAdvancedRequest
             assertEquals("heat", request?.sort)
             assertEquals(listOf(2), request?.filter?.type)
-            assertEquals(listOf(">=2026-01-01", "<=2026-03-31"), request?.filter?.airDate)
+            // 季界在每月 21 日（业界クール口径），冬季窗口因此跨年
+            assertEquals(listOf(">=2025-12-21", "<=2026-03-20"), request?.filter?.airDate)
             assertNull(request?.filter?.tag)
         }
 
@@ -110,7 +111,7 @@ class SeasonalGuideViewModelTest {
 
             val request = searchRepository.lastAdvancedRequest
             assertEquals("heat", request?.sort)
-            assertEquals(listOf(">=2024-07-01", "<=2024-09-30"), request?.filter?.airDate)
+            assertEquals(listOf(">=2024-06-21", "<=2024-09-20"), request?.filter?.airDate)
             assertNull(request?.filter?.tag)
         }
 
@@ -129,7 +130,7 @@ class SeasonalGuideViewModelTest {
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
             assertEquals("heat", request?.sort)
-            assertEquals(listOf(">=2025-01-01", "<=2025-03-31"), request?.filter?.airDate)
+            assertEquals(listOf(">=2024-12-21", "<=2025-03-20"), request?.filter?.airDate)
             assertNull(request?.filter?.tag)
         }
 
@@ -148,7 +149,7 @@ class SeasonalGuideViewModelTest {
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
             assertEquals("heat", request?.sort)
-            assertEquals(listOf(">=2026-10-01", "<=2026-12-31"), request?.filter?.airDate)
+            assertEquals(listOf(">=2026-09-21", "<=2026-12-20"), request?.filter?.airDate)
             assertNull(request?.filter?.tag)
         }
 
@@ -170,7 +171,7 @@ class SeasonalGuideViewModelTest {
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
             assertEquals("heat", request?.sort)
-            assertEquals(listOf(">=2025-07-01", "<=2025-09-30"), request?.filter?.airDate)
+            assertEquals(listOf(">=2025-06-21", "<=2025-09-20"), request?.filter?.airDate)
             assertNull(request?.filter?.tag)
         }
 
@@ -196,19 +197,42 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun selectForm_combinesWithOriginAsServerSideAnd() =
+    fun toggleForm_onlyMovieIsPushableToServerAndItCombinesWithOriginAsAnd() =
         runTest {
             val searchRepository = FakeSearchRepository()
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
+            // 默认只开「正片」。正片是「TV 或 WEB」，而服务端多值 meta_tags 是 AND、又没有排除语法，
+            // 表达不了"或"，所以这一档只能客户端筛，请求里不该出现 meta_tags
+            assertEquals(SeasonFormFilter.DEFAULT, viewModel.uiState.value.selectedForms)
+            assertNull(searchRepository.lastAdvancedRequest?.filter?.metaTags)
+
             viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
             advanceUntilIdle()
-            viewModel.selectForm(SeasonFormFilter.TV)
-            advanceUntilIdle()
+            assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
 
-            // 服务端多值 meta_tags 是 AND 语义，恰好就是"当季日本 TV 动画"这层意思
-            assertEquals(listOf("日本", "TV"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+            // 关掉正片 → 空集合（不筛形式），产地仍下推
+            viewModel.toggleForm(SeasonFormFilter.MAIN)
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.selectedForms
+                    .isEmpty(),
+            )
+            assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+
+            // 换成"只选剧场版"：这是形式里唯一能整体下推服务端的情况，与产地组合成 AND；
+            // 总数与分页因此都是准的，不必靠客户端补筛
+            viewModel.toggleForm(SeasonFormFilter.MOVIE)
+            advanceUntilIdle()
+            assertEquals(setOf(SeasonFormFilter.MOVIE), viewModel.uiState.value.selectedForms)
+            assertEquals(listOf("日本", "剧场版"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+
+            // 再叠上短片 → 变成「剧场版 或 短片」，服务端表达不了，形式那部分不再下推；
+            // 产地是独立的一维，仍然照常下推
+            viewModel.toggleForm(SeasonFormFilter.SHORT)
+            advanceUntilIdle()
+            assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
         }
 
     @Test
@@ -241,7 +265,7 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun defaultFormFilter_foldsShortFormClipsOutOfTheList() =
+    fun defaultFormFilter_keepsOnlyMainFeatures() =
         runTest {
             val searchRepository = FakeSearchRepository()
             searchRepository.advancedSearchResult =
@@ -250,17 +274,88 @@ class SeasonalGuideViewModelTest {
                         sampleSubject.copy(id = 1L, platform = "TV", metaTags = listOf("TV", "日本")),
                         sampleSubject.copy(id = 2L, platform = "其他", metaTags = listOf("MV", "日本")),
                         sampleSubject.copy(id = 3L, platform = "WEB", metaTags = listOf("短片", "中国")),
+                        sampleSubject.copy(id = 4L, platform = "剧场版", metaTags = listOf("剧场版", "日本")),
                     ),
                 )
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            // 「全部」形式档折叠片段型：MV / 短片不该混进新番列表
+            // 默认只开「正片」：片段型与剧场版都不该混进新番列表。
+            // 注意 id=3 的 platform 是 WEB 却带「短片」标签——片段判据不能只看 platform。
             assertEquals(
                 listOf(1L),
                 viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
+        }
+
+    @Test
+    fun formFilter_isMultiSelectSoMainAndMovieCanCoexist() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult =
+                AppResult.Success(
+                    listOf(
+                        sampleSubject.copy(id = 1L, platform = "TV"),
+                        sampleSubject.copy(id = 2L, platform = "剧场版"),
+                        sampleSubject.copy(id = 3L, platform = "其他", metaTags = listOf("MV")),
+                    ),
+                )
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+            assertEquals(
+                listOf(1L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+
+            // 加上剧场版：两档并存，这正是"大家通常都会同时选"的那个组合
+            viewModel.toggleForm(SeasonFormFilter.MOVIE)
+            advanceUntilIdle()
+            assertEquals(
+                listOf(1L, 2L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+
+            // 三档全关 = 不筛形式，连片段型也放出来
+            viewModel.toggleForm(SeasonFormFilter.MAIN)
+            viewModel.toggleForm(SeasonFormFilter.MOVIE)
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.selectedForms
+                    .isEmpty(),
+            )
+            assertEquals(
+                listOf(1L, 2L, 3L),
+                viewModel.uiState.value.filteredSubjects
+                    .map { it.id },
+            )
+        }
+
+    @Test
+    fun filterSummary_readsOutCurrentSelectionForTheCollapsedBar() =
+        runTest {
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // 收起后只剩一行摘要，它必须能把"现在筛的是什么"交代清楚
+            assertEquals("正片", viewModel.uiState.value.filterSummary)
+
+            viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
+            advanceUntilIdle()
+            assertEquals("日本 · 正片", viewModel.uiState.value.filterSummary)
+
+            viewModel.toggleForm(SeasonFormFilter.MOVIE)
+            advanceUntilIdle()
+            assertEquals("日本 · 正片+剧场版", viewModel.uiState.value.filterSummary)
+
+            // 全不选时回落为「全部」，不该出现「全部 · 全部」这种同义重复
+            viewModel.selectOrigin(SeasonOriginFilter.ALL)
+            viewModel.toggleForm(SeasonFormFilter.MAIN)
+            viewModel.toggleForm(SeasonFormFilter.MOVIE)
+            advanceUntilIdle()
+            assertEquals("全部", viewModel.uiState.value.filterSummary)
         }
 
     @Test
@@ -280,7 +375,9 @@ class SeasonalGuideViewModelTest {
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            viewModel.selectForm(SeasonFormFilter.SHORT)
+            // 形式是多选且默认开着「正片」，要"只看片段型"得先把正片关掉
+            viewModel.toggleForm(SeasonFormFilter.MAIN)
+            viewModel.toggleForm(SeasonFormFilter.SHORT)
             advanceUntilIdle()
 
             assertEquals(
@@ -288,8 +385,8 @@ class SeasonalGuideViewModelTest {
                 viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
-            // 首屏 1 次 + 「短片 / MV」档下连续取了 3 页（片段型在第 3 页才出现）
-            assertEquals(4, searchRepository.advancedSearchCallCount)
+            // 首屏 1 次 + 关掉正片 1 次 + 「短片 / MV」档下连续取了 3 页（片段型在第 3 页才出现）
+            assertEquals(5, searchRepository.advancedSearchCallCount)
             // 三页原始条目都留在 state 里：过滤不参与游标推进，所以滚到底仍是完整结果
             assertEquals(41, viewModel.uiState.value.subjects.size)
         }
@@ -317,7 +414,8 @@ class SeasonalGuideViewModelTest {
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            viewModel.selectForm(SeasonFormFilter.SHORT)
+            viewModel.toggleForm(SeasonFormFilter.MAIN)
+            viewModel.toggleForm(SeasonFormFilter.SHORT)
             advanceUntilIdle()
 
             assertEquals(
@@ -527,7 +625,7 @@ class SeasonalGuideViewModelTest {
             assertFalse(state.isLoadingOngoing)
             // 名册自带 airDate 的预筛就剔掉了本季首播那条，无需为它补一轮详情
             assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
-            assertEquals("2026-01-01T00:00:00Z" to "2026-03-31T23:59:59Z", scheduleRepository.lastAiringWindow)
+            assertEquals("2025-12-21T00:00:00Z" to "2026-03-20T23:59:59Z", scheduleRepository.lastAiringWindow)
         }
 
     @Test
@@ -749,7 +847,7 @@ class SeasonalGuideViewModelTest {
     }
 
     @Test
-    fun matchesForm_foldsShortFormAndReadsPlatformField() {
+    fun matchesForm_readsPlatformAndShortFormTagsIntoThreeBuckets() {
         val tv = Subject(id = 1, name = "x", platform = "TV", metaTags = listOf("TV"))
         val web = Subject(id = 2, name = "x", platform = "WEB", metaTags = listOf("WEB"))
         val movie = Subject(id = 3, name = "x", platform = "剧场版", metaTags = listOf("剧场版"))
@@ -757,17 +855,73 @@ class SeasonalGuideViewModelTest {
         // platform 标成 WEB，但带「短片」标签——片段判据不能只看 platform
         val shortViaTag = Subject(id = 5, name = "x", platform = "WEB", metaTags = listOf("短片"))
 
-        assertTrue(matchesForm(tv, SeasonFormFilter.TV))
-        assertTrue(matchesForm(web, SeasonFormFilter.WEB))
-        assertTrue(matchesForm(movie, SeasonFormFilter.MOVIE))
-        assertTrue(matchesForm(mv, SeasonFormFilter.SHORT))
-        assertTrue(matchesForm(shortViaTag, SeasonFormFilter.SHORT))
+        // TV 与「网络」同属「正片」：两者只是发行渠道不同（地上波 vs 配信），
+        // 真实数据里它们严格互斥（当季没有任何条目同时带这两个标签），看番的人也不会把它们分开要
+        assertEquals(SeasonFormFilter.MAIN, formBucketOf(tv))
+        assertEquals(SeasonFormFilter.MAIN, formBucketOf(web))
+        assertEquals(SeasonFormFilter.MOVIE, formBucketOf(movie))
+        assertEquals(SeasonFormFilter.SHORT, formBucketOf(mv))
+        assertEquals(SeasonFormFilter.SHORT, formBucketOf(shortViaTag))
 
-        // 「全部」折叠片段型：默认列表里不该混进 MV / 短片
-        assertTrue(matchesForm(tv, SeasonFormFilter.ALL))
-        assertFalse(matchesForm(mv, SeasonFormFilter.ALL))
-        assertFalse(matchesForm(shortViaTag, SeasonFormFilter.ALL))
+        val forms = setOf(SeasonFormFilter.MAIN, SeasonFormFilter.MOVIE)
+        assertTrue(matchesForm(tv, forms))
+        assertTrue(matchesForm(web, forms))
+        assertTrue(matchesForm(movie, forms))
+        assertFalse(matchesForm(mv, forms))
+
+        // 空集合 = 不筛形式，全放行
+        assertTrue(matchesForm(mv, emptySet()))
+        assertTrue(matchesForm(shortViaTag, emptySet()))
     }
+
+    @Test
+    fun quarterBoundary_followsIndustryCourNotCalendarMonth() {
+        // 业界按「クール」分季，季界在每月 21 日：秋番可以从 9 月下旬开播
+        // （葬送的芙莉莲 2023-09-29 是公认的 2023 秋番），夏番可以从 6 月下旬开播。
+        // 用日历月末当季界会把前者判成夏番、把后者判成春番。
+        assertEquals(SeasonQuarter.SUMMER, SeasonQuarter.fromDate(LocalDate.of(2026, 9, 20)))
+        assertEquals(SeasonQuarter.AUTUMN, SeasonQuarter.fromDate(LocalDate.of(2026, 9, 21)))
+        assertEquals(SeasonQuarter.AUTUMN, SeasonQuarter.fromDate(LocalDate.of(2026, 9, 29)))
+
+        assertEquals(SeasonQuarter.SPRING, SeasonQuarter.fromDate(LocalDate.of(2026, 6, 20)))
+        assertEquals(SeasonQuarter.SUMMER, SeasonQuarter.fromDate(LocalDate.of(2026, 6, 21)))
+        assertEquals(SeasonQuarter.SUMMER, SeasonQuarter.fromDate(LocalDate.of(2026, 6, 30)))
+
+        // 冬季窗口跨年：12 月下旬属于**次年**冬季
+        assertEquals(SeasonQuarter.AUTUMN, SeasonQuarter.fromDate(LocalDate.of(2026, 12, 20)))
+        assertEquals(SeasonQuarter.WINTER, SeasonQuarter.fromDate(LocalDate.of(2026, 12, 21)))
+        assertEquals(2026, SeasonQuarter.seasonYearOf(LocalDate.of(2026, 12, 20)))
+        assertEquals(2027, SeasonQuarter.seasonYearOf(LocalDate.of(2026, 12, 21)))
+    }
+
+    @Test
+    fun airDateRange_coversWholeYearWithoutOverlapOrGap() {
+        assertEquals("2025-12-21" to "2026-03-20", SeasonQuarter.WINTER.getAirDateRange(2026))
+        assertEquals("2026-03-21" to "2026-06-20", SeasonQuarter.SPRING.getAirDateRange(2026))
+        assertEquals("2026-06-21" to "2026-09-20", SeasonQuarter.SUMMER.getAirDateRange(2026))
+        assertEquals("2026-09-21" to "2026-12-20", SeasonQuarter.AUTUMN.getAirDateRange(2026))
+    }
+
+    @Test
+    fun currentSeason_isDerivedFromTheCourBoundaryNotTheCalendarMonth() =
+        runTest {
+            // 9/29 按业界口径已经是**秋季**（秋番自 9 月下旬开播），旧实现会算成夏季。
+            // 这直接决定进页面时默认落在哪一档。
+            val viewModel =
+                SeasonalGuideViewModel(
+                    searchRepository = FakeSearchRepository(),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(),
+                    scheduleRepository = FakeScheduleRepository(),
+                    subjectRepository = FakeSubjectRepository(),
+                    timeProvider = { LocalDate.of(2026, 9, 29) },
+                )
+            advanceUntilIdle()
+
+            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.value.selectedQuarter)
+            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.value.currentQuarter)
+            assertEquals(2026, viewModel.uiState.value.currentYear)
+        }
 
     @Test
     fun viewMode_defaultsToCompactListAndTogglesBothWays() =

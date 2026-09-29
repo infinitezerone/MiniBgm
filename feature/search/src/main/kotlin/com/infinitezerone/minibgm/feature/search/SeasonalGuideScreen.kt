@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +31,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Refresh
@@ -64,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
@@ -79,6 +84,7 @@ import com.infinitezerone.minibgm.feature.search.components.OngoingAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeRow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -161,6 +167,10 @@ fun SeasonalGuideContent(
     val listState = rememberLazyListState()
     var showSeasonPicker by remember { mutableStateOf(false) }
 
+    // 筛选栏的展开态。默认收起：产地与形式都是"设一次就不再碰"的控件，让它们常驻等于永久吃掉列表高度
+    // （原来三行 128dp，在 792dp 高的机器上占 16%）。收起后只剩一行摘要，当前筛选仍然一眼可见。
+    var filterExpanded by remember { mutableStateOf(false) }
+
     LaunchedEffect(scrollToTop, uiState.viewMode) {
         scrollToTop?.collect {
             // 只滚动当前形态的容器：另一个容器下次切回时本就停在原位，不该被顺带重置
@@ -168,6 +178,28 @@ fun SeasonalGuideContent(
                 SeasonalViewMode.LIST -> listState.animateScrollToItem(0)
                 SeasonalViewMode.POSTER -> gridState.animateScrollToItem(0)
             }
+        }
+    }
+
+    // 展开后一旦列表开始滚动就自动收起：展开态一直挂着，等于又回到"三行常驻"。
+    // 注意程序化回顶（见下一个 effect）也会点亮 isScrollInProgress，所以选中筛选时要先收起面板，
+    // 否则回顶动作会把收起的动作和点击的语义搅在一起、看不出是谁触发的。
+    LaunchedEffect(filterExpanded, uiState.viewMode) {
+        if (!filterExpanded) return@LaunchedEffect
+        val scrollable: ScrollableState =
+            when (uiState.viewMode) {
+                SeasonalViewMode.LIST -> listState
+                SeasonalViewMode.POSTER -> gridState
+            }
+        snapshotFlow { scrollable.isScrollInProgress }.first { it }
+        filterExpanded = false
+    }
+
+    // 换了产地或形式，列表整体换了一批条目，停在原滚动位置没有意义
+    LaunchedEffect(uiState.selectedOrigin, uiState.selectedForms) {
+        when (uiState.viewMode) {
+            SeasonalViewMode.LIST -> listState.scrollToItem(0)
+            SeasonalViewMode.POSTER -> gridState.scrollToItem(0)
         }
     }
 
@@ -232,8 +264,9 @@ fun SeasonalGuideContent(
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // 过滤栏分三层：档期与视图切换一行，产地（一级）一行，放送形式（二级）一行。
-                // 分行是为了让从属关系看得见——先按产地粗筛，再在产地内按形式细筛。
+                // 筛选栏常驻只有一行：档期 + 当前筛选摘要 + 视图切换。
+                // 产地与形式收进摘要里点开才展开（展开后一滚动就自动收起）——它们都是"设一次就不再碰"的控件，
+                // 让两行 chip 常驻等于永久吃掉列表高度：原来三行合计 128dp，在 792dp 高的机器上占 16%。
                 Column(
                     modifier =
                         Modifier
@@ -242,7 +275,7 @@ fun SeasonalGuideContent(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 1. 复合档期选择胶囊 [ 2026 · 4月春 ▾ ]
+                        // 1. 复合档期选择胶囊 [ 2026 · 10月秋 ▾ ]
                         Surface(
                             onClick = { showSeasonPicker = true },
                             shape = RoundedCornerShape(10.dp),
@@ -275,9 +308,55 @@ fun SeasonalGuideContent(
                             }
                         }
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                        // 2. 视图形态切换（紧凑列表 ↔ 海报网格），与搜索结果页的操作条同形态
+                        // 2. 筛选摘要：收起时以一行文字交代"现在筛的是什么"，点它才展开两级 chip。
+                        // 用 weight(1f) 吃掉中间全部剩余宽度，而不是靠内容自适应 + 另一端加 Spacer——
+                        // 那样依赖 Compose 对"带权重但 fill=false 的子项"余量再分配的实现细节，
+                        // 一旦不按预期分配，视图切换按钮就贴不到右边。摘要文字自己带省略号兜底。
+                        Surface(
+                            onClick = { filterExpanded = !filterExpanded },
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier =
+                                Modifier
+                                    .height(36.dp)
+                                    .weight(1f),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.FilterList,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = uiState.filterSummary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(
+                                    imageVector =
+                                        if (filterExpanded) {
+                                            Icons.Filled.KeyboardArrowUp
+                                        } else {
+                                            Icons.Filled.KeyboardArrowDown
+                                        },
+                                    contentDescription = if (filterExpanded) "收起筛选" else "展开筛选",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        // 3. 视图形态切换（紧凑列表 ↔ 海报网格），与搜索结果页的操作条同形态
                         IconButton(
                             onClick = viewModel::toggleViewMode,
                             modifier = Modifier.size(36.dp),
@@ -301,31 +380,44 @@ fun SeasonalGuideContent(
                         }
                     }
 
-                    // 3. 一级筛选：产地。条件下推服务端，切换需重新取数，否则总数会是"已加载的那几十条"里的子集
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        SeasonOriginFilter.entries.forEach { origin ->
-                            SeasonalGuideFilterChip(
-                                label = origin.label,
-                                selected = uiState.selectedOrigin == origin,
-                                onClick = { viewModel.selectOrigin(origin) },
-                            )
-                        }
-                    }
+                    AnimatedVisibility(visible = filterExpanded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // 一级筛选：产地（单选）。条件下推服务端，切换需重新取数，
+                            // 否则总数会是"已加载的那几十条"里的子集
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SeasonOriginFilter.entries.forEach { origin ->
+                                    SeasonalGuideFilterChip(
+                                        label = origin.label,
+                                        selected = uiState.selectedOrigin == origin,
+                                        onClick = {
+                                            filterExpanded = false
+                                            viewModel.selectOrigin(origin)
+                                        },
+                                    )
+                                }
+                            }
 
-                    // 4. 二级筛选：放送形式（在当前产地内细分）
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        SeasonFormFilter.entries.forEach { form ->
-                            SeasonalGuideFilterChip(
-                                label = form.label,
-                                selected = uiState.selectedForm == form,
-                                onClick = { viewModel.selectForm(form) },
-                            )
+                            // 二级筛选：放送形式（**可多选**，全不选 = 不筛）。
+                            // 三档按内容形态划分（正片 / 剧场版 / 短片 · MV），而不是按 platform 字段的
+                            // TV / WEB 拆——后者与一级「产地」几乎完全重合，还会组合出近乎空集。
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                SeasonFormFilter.entries.forEach { form ->
+                                    SeasonalGuideFilterChip(
+                                        label = form.label,
+                                        selected = form in uiState.selectedForms,
+                                        onClick = {
+                                            filterExpanded = false
+                                            viewModel.toggleForm(form)
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -905,13 +997,9 @@ private fun SeasonQuarterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dateSpan =
-        when (quarter) {
-            SeasonQuarter.WINTER -> "1月 ~ 3月"
-            SeasonQuarter.SPRING -> "4月 ~ 6月"
-            SeasonQuarter.SUMMER -> "7月 ~ 9月"
-            SeasonQuarter.AUTUMN -> "10月 ~ 12月"
-        }
+    // 显示真实首播窗口而不是「7月 ~ 9月」：季界在每月 21 日，业界口径下秋番可从 9 月下旬开播，
+    // 若副标写「10月 ~ 12月」，列表里冒出 9 月的日期会让人以为数据错了
+    val dateSpan = quarter.airDateLabel
 
     Surface(
         onClick = onClick,
@@ -979,7 +1067,8 @@ private fun SeasonQuarterCard(
 /**
  * 导视筛选 chip。
  *
- * 产地与形式两行共用同一形态——两行只有取值域不同，样式分叉会让人误以为层级也不同。
+ * 产地（单选）与形式（多选）两行共用同一形态——两行只有"能不能多选"的差别，
+ * 样式分叉会让人误以为层级也不同。多选的语义靠 chip 自身的选中态表达即可。
  */
 @Composable
 private fun SeasonalGuideFilterChip(
