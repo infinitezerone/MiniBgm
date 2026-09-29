@@ -54,7 +54,11 @@ class AppModuleTest : KoinTest {
                         single<CollectionRepository> { fakeCollection }
                         single<SettingsRepository> { FakeSettingsRepository() }
                         single<com.infinitezerone.minibgm.core.data.util.SyncManager> { fakeSync }
-                        single { UserViewModel(get(), get(), get(), get(), get()) }
+                        single<com.infinitezerone.minibgm.core.data.crash.CrashLogRepository> {
+                            com.infinitezerone.minibgm.core.testing.repository
+                                .FakeCrashLogRepository()
+                        }
+                        single { UserViewModel(get(), get(), get(), get(), get(), get()) }
                     },
                 )
             }

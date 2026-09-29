@@ -1,14 +1,25 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -31,7 +42,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
@@ -86,6 +101,10 @@ fun SettingsScreen(
     }
 
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+
+    // 崩溃日志按需读取：内容留在 state 里，关掉再打开不必重读磁盘
+    var showCrashLogDialog by remember { mutableStateOf(false) }
+    var crashLogText by remember { mutableStateOf("") }
 
     val notificationPermissionLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -165,6 +184,17 @@ fun SettingsScreen(
                 snackbarHostState.showSnackbar("本地缓存与临时数据已清理")
             }
         },
+        onOpenCrashLog = {
+            coroutineScope.launch {
+                val log = viewModel.loadLatestCrashLog()
+                if (log == null) {
+                    snackbarHostState.showSnackbar("暂无崩溃记录")
+                } else {
+                    crashLogText = log.content
+                    showCrashLogDialog = true
+                }
+            }
+        },
         onLogoutCurrent = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
@@ -211,6 +241,109 @@ fun SettingsScreen(
             },
         )
     }
+
+    if (showCrashLogDialog) {
+        CrashLogDialog(
+            content = crashLogText,
+            onClear = {
+                coroutineScope.launch {
+                    viewModel.clearCrashLogs()
+                    showCrashLogDialog = false
+                    snackbarHostState.showSnackbar("崩溃日志已清空")
+                }
+            },
+            onDismiss = { showCrashLogDialog = false },
+        )
+    }
+}
+
+/**
+ * 崩溃日志查看与导出对话框。
+ *
+ * 「复制」对应 GitHub Issue / Bangumi 小组发帖（粘贴最顺手），「分享」对应任意 IM 或邮箱——
+ * 两条出口都留着，只给一条会让另一类用户多绕几步。
+ *
+ * 正文用等宽字体：堆栈是靠缩进层级和行号读的，非等宽下嵌套关系糊成一片。
+ */
+@Composable
+private fun CrashLogDialog(
+    content: String,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "崩溃日志",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "贴进 Issue 或发给开发者，配合 release 页的 mapping 才能还原出崩溃位置。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(10.dp)
+                            .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    clipboardManager.setText(AnnotatedString(content))
+                    onDismiss()
+                },
+            ) {
+                Text("复制")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { shareCrashLog(context, content) }) {
+                    Text("分享")
+                }
+                TextButton(onClick = onClear) {
+                    Text("清空")
+                }
+            }
+        },
+    )
+}
+
+/** 拉起系统分享面板。日志只有几 KB，走 `EXTRA_TEXT` 就够，不必引入 FileProvider */
+private fun shareCrashLog(
+    context: Context,
+    content: String,
+) {
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "MiniBgm 崩溃报告")
+            putExtra(Intent.EXTRA_TEXT, content)
+        }
+    context.startActivity(Intent.createChooser(intent, "导出崩溃日志"))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -240,6 +373,7 @@ fun SettingsScreenContent(
     onSaveAiConfig: (AiConfig) -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
+    onOpenCrashLog: () -> Unit = {},
     onLogoutCurrent: () -> Unit,
     onLogoutAll: () -> Unit,
     snackbarHostState: SnackbarHostState,
@@ -317,6 +451,7 @@ fun SettingsScreenContent(
                     onSyncNow = onSyncNow,
                     onOpenWebUrl = onOpenWebUrl,
                     onClearCache = onClearCache,
+                    onOpenCrashLog = onOpenCrashLog,
                     onLogoutCurrentClick = { showLogoutCurrentDialog = true },
                     onLogoutAllClick = { showLogoutAllDialog = true },
                     onOpenPlaybackRules = onPlaybackRulesClick,

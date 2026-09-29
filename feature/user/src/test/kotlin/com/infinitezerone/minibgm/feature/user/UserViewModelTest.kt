@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.crash.CrashLog
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
@@ -9,6 +10,7 @@ import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfileAlt
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeCrashLogRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
@@ -38,6 +40,7 @@ class UserViewModelTest {
         collectionRepo: FakeCollectionRepository = FakeCollectionRepository(),
         settingsRepo: FakeSettingsRepository = FakeSettingsRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
+        crashLogRepo: FakeCrashLogRepository = FakeCrashLogRepository(),
     ): Triple<UserViewModel, FakeScheduleRepository, FakeSettingsRepository> {
         val viewModel =
             UserViewModel(
@@ -46,9 +49,48 @@ class UserViewModelTest {
                 collectionRepository = collectionRepo,
                 settingsRepository = settingsRepo,
                 syncManager = syncManager,
+                crashLogRepository = crashLogRepo,
             )
         return Triple(viewModel, scheduleRepo, settingsRepo)
     }
+
+    @Test
+    fun loadLatestCrashLog_passesThroughRepositoryResult() =
+        runTest {
+            val crashRepo =
+                FakeCrashLogRepository().apply {
+                    latestResult = CrashLog(occurredAtMillis = 1_700_000_000_000L, content = "boom")
+                }
+            val (viewModel, _) = createViewModel(crashLogRepo = crashRepo)
+
+            val log = viewModel.loadLatestCrashLog()
+
+            assertEquals("boom", log?.content)
+            assertEquals(1_700_000_000_000L, log?.occurredAtMillis)
+        }
+
+    @Test
+    fun loadLatestCrashLog_whenNeverCrashed_returnsNull() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            assertNull(viewModel.loadLatestCrashLog())
+        }
+
+    @Test
+    fun clearCrashLogs_delegatesToRepository() =
+        runTest {
+            val crashRepo =
+                FakeCrashLogRepository().apply {
+                    latestResult = CrashLog(occurredAtMillis = 1L, content = "boom")
+                }
+            val (viewModel, _) = createViewModel(crashLogRepo = crashRepo)
+
+            viewModel.clearCrashLogs()
+
+            assertEquals(1, crashRepo.clearCallCount)
+            assertNull(viewModel.loadLatestCrashLog())
+        }
 
     @Test
     fun initialState_isLoading() =

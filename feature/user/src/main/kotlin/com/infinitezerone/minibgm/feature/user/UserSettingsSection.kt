@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DarkMode
@@ -97,6 +98,7 @@ internal fun SettingsSection(
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
+    onOpenCrashLog: () -> Unit = {},
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
     onOpenPlaybackRules: (() -> Unit)? = null,
@@ -455,6 +457,19 @@ internal fun SettingsSection(
                     title = "清理本地缓存",
                     subtitle = "清理离线网络图片与临时缓存数据",
                     onClick = onClearCache,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                SettingsItemRow(
+                    icon = Icons.Filled.BugReport,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = "崩溃日志",
+                    subtitle = "崩溃时自动记录堆栈，可导出给开发者",
+                    onClick = onOpenCrashLog,
                 )
             }
         }

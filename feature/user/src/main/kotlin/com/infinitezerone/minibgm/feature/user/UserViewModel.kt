@@ -3,6 +3,8 @@ package com.infinitezerone.minibgm.feature.user
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.crash.CrashLog
+import com.infinitezerone.minibgm.core.data.crash.CrashLogRepository
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
@@ -81,6 +83,7 @@ class UserViewModel(
     private val collectionRepository: CollectionRepository,
     private val settingsRepository: SettingsRepository,
     private val syncManager: SyncManager,
+    private val crashLogRepository: CrashLogRepository,
 ) : ViewModel() {
     private val isManualSyncing = MutableStateFlow(false)
     private val isRefreshingFlow = MutableStateFlow(false)
@@ -331,6 +334,16 @@ class UserViewModel(
 
     /** 开始 OAuth 授权流程，生成并返回授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开，保持 ViewModel 与 Android Context 零耦合） */
     suspend fun beginLogin(): String = authRepository.beginLogin()
+
+    /**
+     * 读取最近一次崩溃日志；从未崩溃过返回 null。
+     *
+     * 按需读取而不是进页就加载：崩溃是低频事件，没必要每次打开设置页都碰一次磁盘。
+     */
+    suspend fun loadLatestCrashLog(): CrashLog? = crashLogRepository.latest()
+
+    /** 清空全部崩溃日志 */
+    suspend fun clearCrashLogs() = crashLogRepository.clear()
 
     fun switchAccount(userId: Long) {
         viewModelScope.launch {

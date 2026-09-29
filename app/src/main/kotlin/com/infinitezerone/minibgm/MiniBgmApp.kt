@@ -8,6 +8,7 @@ import co.touchlab.kermit.platformLogWriter
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
+import com.infinitezerone.minibgm.core.data.crash.CrashLogRecorder
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
@@ -41,6 +42,13 @@ class MiniBgmApp :
         // Debug 开启 Debug 级别便于联调追踪；Release 提升至 Warn 级别杜绝信息泄漏与性能损耗
         Logger.setLogWriters(platformLogWriter())
         Logger.setMinSeverity(if (BuildConfig.DEBUG) Severity.Debug else Severity.Warn)
+
+        // 崩溃记录器尽早安装：它之后的启动阶段（含 startKoin 自身）崩溃都要能留下堆栈。
+        // 刻意不经过 Koin 取——崩溃时 DI 图可能还没建好，那时就再也装不上了。
+        CrashLogRecorder.install(
+            context = this,
+            appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        )
 
         startKoin {
             // release 下仅记录错误，避免 DI 结构信息进入公共日志
