@@ -224,7 +224,9 @@ class ExploreViewModel(
                         error = if (isMore) current.error else result.message,
                     )
                 if (isMore) {
-                    userMessage.value = "加载更多失败：${result.message}"
+                    // message 已带仓库层的动作前缀（「搜索失败：…」）；再拼「加载更多失败：」会叠成两层。
+                    // 追加失败与首屏失败的区别，由"列表还在、只是弹了条 Snackbar"本身表达。
+                    userMessage.value = result.message
                 }
             }
 

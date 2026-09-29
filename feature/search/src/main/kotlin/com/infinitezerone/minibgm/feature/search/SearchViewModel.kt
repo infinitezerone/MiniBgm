@@ -236,7 +236,9 @@ class SearchViewModel(
                     }
 
                     is AppResult.Error -> {
-                        userMessage.value = "打卡失败：${syncResult.message.ifBlank { "网络异常" }}"
+                        // syncResult.message 已由仓库层带上动作前缀（如「打卡失败：网络超时，请重试」）。
+                        // 这里再拼一层就会变成「打卡失败：打卡失败：…」——只兜底，不加前缀。
+                        userMessage.value = syncResult.message.ifBlank { "打卡失败，请重试" }
                     }
 
                     is AppResult.Loading -> Unit

@@ -136,7 +136,8 @@ class CommunityRepositoryImplTest {
 
             val result = repository.getEpisodeComments(12345L)
             assertIs<AppResult.Error>(result)
-            assertEquals("Network error", result.message)
+            // 带动作前缀的归一化文案；底层英文异常原文（"Network error"）不得外泄
+            assertEquals("获取单集吐槽失败：网络异常，请稍后重试", result.message)
         }
 
     @Test
@@ -200,6 +201,7 @@ class CommunityRepositoryImplTest {
 
             val result = repository.getTopicDetail(999999L, "subject")
             assertIs<AppResult.Error>(result)
-            assertEquals("Network error", result.message)
+            // 同上：归一化文案，不泄漏底层英文
+            assertEquals("获取讨论帖详情失败：网络异常，请稍后重试", result.message)
         }
 }

@@ -229,7 +229,8 @@ class DefaultBgmAiAgentService(
         } catch (e: Exception) {
             catalogLogger.e(e) { "Exception while fetching models from $modelsUrl" }
             val friendly = friendlyAiError(config.copy(endpoint = target.endpoint, provider = target.provider), e)
-            AppResult.Error(e, friendly.ifBlank { "拉取模型列表失败：${e.message}" })
+            // 兜底不拼 e.message：那是原始英文异常文本。本模块依赖不到 :core:network 的文案工具
+            AppResult.Error(e, friendly.ifBlank { "拉取模型列表失败，请检查端点与密钥" })
         }
     }
 }
@@ -520,9 +521,12 @@ internal fun friendlyAiError(
         isNetworkOrTimeout(lowered) ->
             "无法连接到 AI 端点或请求超时：请检查网络与 Base URL 是否可达。"
         else -> {
+            // 保留 raw：这里的用户正在配置自己的 AI 端点，服务商原文才是他们能据以排查的信号，
+            // 刻意不屏蔽。但 e.toString() 要不得——它会把异常类名（java.net.…Exception:）一起带出来，
+            // 那是纯噪音，认不出模式时给一句固定文案更合适。
             extractJsonErrorMessage(raw)?.let { innerMsg ->
                 "AI 服务商返回错误：$innerMsg"
-            } ?: raw.ifBlank { e.toString() }
+            } ?: raw.ifBlank { "AI 请求失败，请检查端点地址与密钥是否正确" }
         }
     }
 }

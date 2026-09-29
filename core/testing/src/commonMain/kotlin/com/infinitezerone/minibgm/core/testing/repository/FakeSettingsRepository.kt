@@ -176,7 +176,11 @@ class FakeSettingsRepository(
         val document =
             runCatching { Json.Default.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
                 .getOrElse {
-                    return AppResult.Error(IllegalStateException("JSON 解析失败：${it.message}"))
+                    // 与 SettingsRepository 的真实文案保持一致：不带原始异常原文，只留格式提示。
+                    // 替身一旦和真实实现漂移，钉住替身文案的测试就成了假绿。
+                    return AppResult.Error(
+                        IllegalStateException("JSON 格式不合法，需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式"),
+                    )
                 }
         val validation = PlaybackPlaylistSchema.validate(document)
         if (validation.validPlaylists.isEmpty()) {

@@ -428,9 +428,10 @@ class SeasonalGuideViewModel(
                     val message = result.message
                     settle(error = message)
                     // 列表还有内容时失败属于"追加失败"，用 Snackbar 提示即可；
-                    // 列表为空则交由全屏错误态（uiState.error）呈现，不重复弹
+                    // 列表为空则交由全屏错误态（uiState.error）呈现，不重复弹。
+                    // 直接透传：message 已带仓库层的动作前缀，再拼「加载更多失败：」会叠成两层。
                     if (pagedSubjects.value.subjects.isNotEmpty()) {
-                        postEffect(UiEffect.ShowMessage("加载更多失败：$message"))
+                        postEffect(UiEffect.ShowMessage(message))
                     }
                     return
                 }

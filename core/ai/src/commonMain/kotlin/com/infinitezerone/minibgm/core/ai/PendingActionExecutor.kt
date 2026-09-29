@@ -28,7 +28,7 @@ class DefaultPendingActionExecutor(
                     is PendingAction.UpdateCollection -> {
                         if (action.subjectId <= 0) {
                             return@withContext AppResult.Error(
-                                IllegalArgumentException("Invalid subject ID: ${action.subjectId}"),
+                                IllegalArgumentException("条目 ID 无效"),
                             )
                         }
                         collectionRepository.updateCollectionStatus(
@@ -42,12 +42,12 @@ class DefaultPendingActionExecutor(
                     is PendingAction.UpdateEpisode -> {
                         if (action.subjectId <= 0) {
                             return@withContext AppResult.Error(
-                                IllegalArgumentException("Invalid subject ID: ${action.subjectId}"),
+                                IllegalArgumentException("条目 ID 无效"),
                             )
                         }
                         if (action.episodeNumber <= 0) {
                             return@withContext AppResult.Error(
-                                IllegalArgumentException("Invalid episode number: ${action.episodeNumber}"),
+                                IllegalArgumentException("集数无效"),
                             )
                         }
                         collectionRepository.updateEpisodeStatus(
@@ -60,7 +60,7 @@ class DefaultPendingActionExecutor(
                     is PendingAction.ImportPlaybackRules -> {
                         if (action.rules.isEmpty()) {
                             return@withContext AppResult.Error(
-                                IllegalArgumentException("No playback rules provided to import"),
+                                IllegalArgumentException("没有可导入的播放规则"),
                             )
                         }
                         settingsRepository?.importPlaybackRules(action.rules)
@@ -70,7 +70,9 @@ class DefaultPendingActionExecutor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                AppResult.Error(e)
+                // AppResult.Error(e) 会默认取 throwable.message，那是原始英文异常文本，会直接进提案卡。
+                // 本模块依赖不到 :core:network 的 toUserFriendlyMessage，所以在这里给一句固定文案。
+                AppResult.Error(e, "操作执行失败，请重试")
             }
         }
 }

@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.flow.first
 
 /** 单次深度解析最多尝试的页面数（WebView 会话昂贵，逐页试、命中即停） */
@@ -48,7 +49,7 @@ class WebViewResolveRepositoryImpl(
     private val captureService: WebViewCaptureService,
 ) : WebViewResolveRepository {
     override suspend fun deepResolve(subjectId: Long): AppResult<List<PlayableSource>> =
-        asAppResult(errorMessage = { it.message ?: "WebView 深度解析失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("WebView 深度解析") }) {
             val schedule = scheduleRepository.getAllSchedulesStream().first().firstOrNull { it.bgmId == subjectId }
             val pages = candidatePages(subjectId, schedule)
             var lastError: BgmNetworkException? = null

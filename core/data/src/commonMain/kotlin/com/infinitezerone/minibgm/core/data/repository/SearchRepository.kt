@@ -135,7 +135,8 @@ class SearchRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("高级搜索"))
+            // 前缀是**面向用户**的措辞，别写成「高级搜索」这种实现术语——它会原样进 Snackbar。
+            AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
         }
 
     private suspend fun resolveNsfwFilter(): Boolean? =

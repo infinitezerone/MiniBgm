@@ -575,7 +575,7 @@ class PlaybackRulesViewModelTest {
 
             assertTrue(fakeRepo.playlists.first().isEmpty())
             val event = viewModel.events.first() as PlaybackRulesUiEvent.ShowSnackbar
-            assertTrue(event.message.contains("JSON 解析失败"))
+            assertTrue(event.message.contains("JSON 格式不合法"))
         }
 
     @Test

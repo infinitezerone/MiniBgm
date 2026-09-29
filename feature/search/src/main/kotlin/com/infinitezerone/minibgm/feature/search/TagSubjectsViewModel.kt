@@ -173,8 +173,9 @@ class TagSubjectsViewModel(
                     private = false,
                 )
             if (syncResult is AppResult.Error) {
+                // message 自带仓库层的动作前缀，再拼「打卡失败：」会叠成两层——只兜底，不加前缀
                 _uiState.update {
-                    it.copy(userMessage = "打卡失败：${syncResult.message.ifBlank { "网络异常" }}")
+                    it.copy(userMessage = syncResult.message.ifBlank { "打卡失败，请重试" })
                 }
             }
         }

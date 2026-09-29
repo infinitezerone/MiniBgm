@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -134,10 +135,12 @@ class AuthRepositoryImpl(
             throw e
         } catch (e: BgmNetworkException) {
             log.e(e) { "[LOGIN:COMPLETE:FAILED] network exception: ${e.message}" }
-            AppResult.Error(e, "授权码兑换失败：${e.message}")
+            AppResult.Error(e, e.toUserFriendlyMessage("授权码兑换"))
         } catch (e: SerializationException) {
+            // 别拼 e.message：SerializationException 的原文是英文（如 "Unexpected JSON token at offset 12"），
+            // 会原样显示给用户。统一走 toUserFriendlyMessage 归一化。
             log.e(e) { "[LOGIN:COMPLETE:FAILED] serialization exception: ${e.message}" }
-            AppResult.Error(e, "兑换响应解析失败：${e.message}")
+            AppResult.Error(e, e.toUserFriendlyMessage("兑换响应解析"))
         } finally {
             _isAuthenticating.value = false
         }
@@ -185,9 +188,10 @@ class AuthRepositoryImpl(
             throw e
         } catch (e: BgmNetworkException) {
             log.e(e) { "[PROFILE:REFRESH:FAILED] ${e.message}" }
-            AppResult.Error(e, "拉取个人资料失败：${e.message}")
+            AppResult.Error(e, e.toUserFriendlyMessage("拉取个人资料"))
         } catch (e: Exception) {
+            // 兜底分支拿到的是任意异常，原文可能是英文/类名，同样不能直接拼给用户
             log.e(e) { "[PROFILE:REFRESH:ERROR] ${e.message}" }
-            AppResult.Error(e, "个人资料同步异常：${e.message}")
+            AppResult.Error(e, e.toUserFriendlyMessage("个人资料同步"))
         }
 }

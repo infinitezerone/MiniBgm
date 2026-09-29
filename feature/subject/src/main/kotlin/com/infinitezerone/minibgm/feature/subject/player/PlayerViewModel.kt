@@ -731,7 +731,9 @@ class PlayerViewModel(
                             isResolvingSource = false,
                             resolveAttempt = 0,
                             resolveAttemptTotal = 0,
-                            error = "解析失败: ${e.message ?: "未知异常"}",
+                            // 不拼 e.message：原始异常文本（英文/类名）不该进 UI，而且这里给不出可行动信息。
+                            // :feature:subject 依赖不到 :core:network 的文案工具，与上面的"试完不命中"统一口径。
+                            error = "解析失败，可尝试切换其他播放源",
                         )
                     }
                 }

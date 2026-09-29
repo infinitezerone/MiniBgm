@@ -385,10 +385,9 @@ class AssistantViewModel(
                     is AppResult.Error -> {
                         agentService.pendingActionStore?.clear()
                         agentService.playableSourcesStore?.clear()
-                        val errorMsg =
-                            result.message.ifBlank {
-                                result.throwable.message ?: "智能体执行失败"
-                            }
+                        // 兜底不取 throwable.message——那是原始异常文本（可能是英文或类名），会直接进对话流。
+                        // :feature:assistant 依赖不到 :core:network 的文案工具，认不出类型就给固定文案。
+                        val errorMsg = result.message.ifBlank { "智能体执行失败" }
                         val assistantMessage =
                             AssistantMessage(
                                 id = UUID.randomUUID().toString(),
@@ -478,7 +477,8 @@ class AssistantViewModel(
                         }
                 }
                 is AppResult.Error -> {
-                    val err = result.throwable.message ?: "执行操作失败"
+                    // 同理：优先用已归一化的 message，别把原始异常文本写进提案卡
+                    val err = result.message.ifBlank { "执行操作失败" }
                     _uiState.update { state ->
                         val updatedMessages =
                             state.messages.map { msg ->
@@ -663,7 +663,9 @@ class AssistantViewModel(
                         AssistantMessage(
                             id = UUID.randomUUID().toString(),
                             role = MessageRole.ASSISTANT,
-                            content = "WebView 深度解析失败：${result.message}",
+                            // result.message 已由 WebViewResolveRepository 带上「WebView 深度解析失败：」前缀，
+                            // 这里再拼一次就成了「…失败：…失败：…」
+                            content = result.message,
                             isError = true,
                         )
                     _uiState.update {

@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
+import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 
 /**
  * 社区数据仓库（单集吐槽、条目全站短评流、条目讨论版、讨论帖详情、表态）
@@ -57,7 +58,7 @@ class CommunityRepositoryImpl(
     private val communityService: BangumiCommunityService,
 ) : CommunityRepository {
     override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> =
-        asAppResult(errorMessage = { it.message ?: "获取单集吐槽失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取单集吐槽") }) {
             communityService.getEpisodeComments(episodeId)
         }
 
@@ -66,7 +67,7 @@ class CommunityRepositoryImpl(
         limit: Int,
         offset: Int,
     ): AppResult<SubjectCommentPage> =
-        asAppResult(errorMessage = { it.message ?: "获取条目短评失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取条目短评") }) {
             communityService.getSubjectComments(subjectId, limit, offset)
         }
 
@@ -75,7 +76,7 @@ class CommunityRepositoryImpl(
         limit: Int,
         offset: Int,
     ): AppResult<List<SubjectTopic>> =
-        asAppResult(errorMessage = { it.message ?: "获取条目讨论版失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取条目讨论版") }) {
             communityService.getSubjectTopics(subjectId, limit, offset).data
         }
 
@@ -83,7 +84,7 @@ class CommunityRepositoryImpl(
         topicId: Long,
         type: String,
     ): AppResult<TopicDetail> =
-        asAppResult(errorMessage = { it.message ?: "获取讨论帖详情失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("获取讨论帖详情") }) {
             if (type == "group") {
                 try {
                     communityService.getGroupTopicDetail(topicId)
@@ -104,7 +105,7 @@ class CommunityRepositoryImpl(
         id: Long,
         reactionValue: Int,
     ): AppResult<Unit> =
-        asAppResult(errorMessage = { it.message ?: "表态失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("表态") }) {
             communityService.setLike(target, id, reactionValue)
             Unit
         }
@@ -113,7 +114,7 @@ class CommunityRepositoryImpl(
         target: CommunityLikeTarget,
         id: Long,
     ): AppResult<Unit> =
-        asAppResult(errorMessage = { it.message ?: "取消表态失败" }) {
+        asAppResult(errorMessage = { it.toUserFriendlyMessage("取消表态") }) {
             communityService.removeLike(target, id)
             Unit
         }

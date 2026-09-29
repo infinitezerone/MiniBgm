@@ -402,8 +402,10 @@ class SettingsRepositoryImpl(
             val document =
                 runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
                     .getOrElse {
+                        // 不拼 it.message：反序列化异常的原文是英文（如 "Unexpected JSON token at offset 12"），
+                        // 对用户没有意义。这里真正有用的是"该长什么样"的格式提示，留下它、去掉原文。
                         return@withLock AppResult.Error(
-                            IllegalStateException("JSON 解析失败：${it.message ?: "格式不合法"}（需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式）"),
+                            IllegalStateException("JSON 格式不合法，需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式"),
                         )
                     }
             val validation = PlaybackPlaylistSchema.validate(document)
