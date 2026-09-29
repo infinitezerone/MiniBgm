@@ -562,6 +562,7 @@ fun SubjectDetailScreen(
                                         selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
                                         showSourcesBottomSheet = true
                                     },
+                                    onRetryEpisodes = viewModel::retryLoadEpisodes,
                                     modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                                 )
                             }

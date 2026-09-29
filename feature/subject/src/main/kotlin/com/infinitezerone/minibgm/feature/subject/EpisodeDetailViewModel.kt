@@ -51,6 +51,8 @@ data class EpisodeDetailUiState(
     val isCommentsLoading: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
+    /** 吐槽短评加载错误信息（null = 无错误）；与 [error]（全局错误）独立 */
+    val commentsError: String? = null,
     /** 当前登录用户 id（null = 未登录），用于判定吐槽表态是否为己方 */
     val currentUserId: Long? = null,
     val subject: Subject? = null,
@@ -210,6 +212,7 @@ class EpisodeDetailViewModel(
                     it.copy(
                         isRefreshing = isUserPullToRefresh,
                         isCommentsLoading = true,
+                        commentsError = null,
                         error = null,
                     )
                 }
@@ -247,18 +250,24 @@ class EpisodeDetailViewModel(
                                 isCommentsLoading = false,
                                 isRefreshing = false,
                                 isLoading = false,
+                                commentsError = null,
                             )
                         is AppResult.Error ->
                             current.copy(
                                 isCommentsLoading = false,
                                 isRefreshing = false,
                                 isLoading = false,
-                                error = if (current.comments.isEmpty()) commentsResult.message else null,
+                                commentsError = if (current.comments.isEmpty()) commentsResult.message else null,
                             )
                         is AppResult.Loading -> current
                     }
                 }
             }
+    }
+
+    /** 重新加载单集吐槽短评（在吐槽加载失败卡片中触发） */
+    fun retryLoadComments() {
+        refresh(isUserPullToRefresh = false)
     }
 
     /** 切换当前分集观看打卡状态（未登录时拦截弹窗） */

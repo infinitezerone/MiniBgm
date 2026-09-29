@@ -95,6 +95,7 @@ data class SubjectDetailUiState(
     val showCollectionSheet: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
+    val episodesError: String? = null,
     val subject: Subject? = null,
     val episodes: List<Episode> = emptyList(),
     val collection: UserCollection? = null,
@@ -221,6 +222,7 @@ class SubjectDetailViewModel(
                         collection = mergedCollection,
                         isLoading = if (subject != null || state.subject != null) false else state.isLoading,
                         isEpisodesLoading = if (episodes.isNotEmpty()) false else state.isEpisodesLoading,
+                        episodesError = if (episodes.isNotEmpty()) null else state.episodesError,
                     )
                 }
             }
@@ -271,6 +273,7 @@ class SubjectDetailViewModel(
                         isLoading = if (isUserPullToRefresh || current.subject == null) true else false,
                         isRefreshing = isUserPullToRefresh,
                         isEpisodesLoading = current.episodes.isEmpty(),
+                        episodesError = null,
                         error = null,
                     )
                 }
@@ -293,6 +296,9 @@ class SubjectDetailViewModel(
                     // 2. 分集数据（拉取完成后立即退出分集骨架态）
                     val episodesResult = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
                     episodesResult.onError { _, message ->
+                        if (_uiState.value.episodes.isEmpty()) {
+                            _uiState.update { it.copy(episodesError = message) }
+                        }
                         if (_uiState.value.subject == null) {
                             _uiState.update { it.copy(error = message) }
                         }
@@ -300,6 +306,7 @@ class SubjectDetailViewModel(
                     _uiState.update { current ->
                         current.copy(
                             isEpisodesLoading = false,
+                            episodesError = if (episodesResult is AppResult.Success) null else current.episodesError,
                         )
                     }
 
@@ -332,6 +339,24 @@ class SubjectDetailViewModel(
             }
     }
 
+    /** 重新拉取分集数据（在分集加载失败卡片中显式触发重试） */
+    fun retryLoadEpisodes() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isEpisodesLoading = true, episodesError = null) }
+            val result = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
+            result.onError { _, message ->
+                if (_uiState.value.episodes.isEmpty()) {
+                    _uiState.update { it.copy(episodesError = message, isEpisodesLoading = false) }
+                } else {
+                    _uiState.update { it.copy(isEpisodesLoading = false) }
+                }
+            }
+            if (result is AppResult.Success) {
+                _uiState.update { it.copy(episodesError = null, isEpisodesLoading = false) }
+            }
+        }
+    }
+
     /** 切换详情页二级 Tab，并自动按需加载对应数据 */
     fun selectTab(tab: SubjectDetailTab) {
         _uiState.update { it.copy(selectedTab = tab) }
@@ -350,10 +375,19 @@ class SubjectDetailViewModel(
     /** 分集排序方向：切换后按新方向重载首屏（降序从最新一话开始） */
     fun setEpisodeSortDescending(descending: Boolean) {
         if (_uiState.value.episodeSortDescending == descending) return
-        _uiState.update { it.copy(episodeSortDescending = descending, isEpisodesLoading = true) }
+        _uiState.update { it.copy(episodeSortDescending = descending, isEpisodesLoading = true, episodesError = null) }
         viewModelScope.launch {
-            subjectRepository.loadEpisodes(subjectId, descending)
-            _uiState.update { it.copy(isEpisodesLoading = false) }
+            val result = subjectRepository.loadEpisodes(subjectId, descending)
+            result.onError { _, message ->
+                if (_uiState.value.episodes.isEmpty()) {
+                    _uiState.update { it.copy(episodesError = message, isEpisodesLoading = false) }
+                } else {
+                    _uiState.update { it.copy(isEpisodesLoading = false) }
+                }
+            }
+            if (result is AppResult.Success) {
+                _uiState.update { it.copy(episodesError = null, isEpisodesLoading = false) }
+            }
         }
     }
 
