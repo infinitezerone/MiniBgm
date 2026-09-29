@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -158,9 +159,8 @@ fun SeasonalGuideContent(
 ) {
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
     val isWideScreen = adaptiveInfo.isWide
-    // 状态对象直接持有，不 collect：它是 @Stable 的 Compose State 持有者，属性各自可观察，
-    // Compose 会在每个读取点按字段追踪依赖——哪一项变了才重组读它的那一块，而不是整屏。
-    val uiState = viewModel.uiState
+    // uiState 是 combine 出来的只读投影（StateFlow），collect 成值后照常按 UiState 变化重组
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -236,7 +236,7 @@ fun SeasonalGuideContent(
                 }
             totalItems > 0 && lastVisible >= totalItems - 6
         }.collect { shouldLoadMore ->
-            val state = viewModel.uiState
+            val state = uiState
             if (shouldLoadMore && state.hasMore && !state.isLoadingMore && !state.isLoading) {
                 viewModel.loadMore()
             }
@@ -248,7 +248,7 @@ fun SeasonalGuideContent(
     // 产地「欧美」、形式「全部」/「短片 / MV」这三档是客户端过滤，可能把整页整页地筛掉、只剩几条，
     // 而内容不足一屏就滚不动，触底也就无从触发。这里在可见条目填不满两屏时主动继续取，直到填满或取尽。
     LaunchedEffect(uiState.viewMode, uiState.filteredSubjects.size, uiState.hasMore, uiState.isLoading) {
-        val state = viewModel.uiState
+        val state = uiState
         if (state.hasMore &&
             !state.isLoading &&
             !state.isLoadingMore &&

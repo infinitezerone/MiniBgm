@@ -1,10 +1,8 @@
 package com.infinitezerone.minibgm.feature.search
 
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
@@ -15,12 +13,26 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -40,18 +52,55 @@ private const val ONGOING_FETCH_CONCURRENCY = 4
 /** "YYYY-MM-DD" 的固定长度；比它短的（如仅年份、空串）无法参与日历比较 */
 private const val NORMALIZED_DATE_LENGTH = 10
 
+/** 一次查询的完整条件；四者任一变化都构成一次**新查询** */
+private data class SeasonQuery(
+    val year: Int,
+    val quarter: SeasonQuarter,
+    val origin: SeasonOriginFilter,
+    val forms: Set<SeasonFormFilter>,
+)
+
+/** 「本季首播」分页链路的投影；[pageOffset] 是顺序游标，见 [SeasonalGuideViewModel.pagedSubjects] */
+private data class PagedSubjects(
+    val subjects: List<Subject> = emptyList(),
+    val pageOffset: Int = 0,
+    val hasMore: Boolean = false,
+    val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val error: String? = null,
+)
+
+/** 「本季连载中」分组；加载失败时整组退化为空（best-effort，绝不崩主列表） */
+private data class OngoingFeed(
+    val loading: Boolean = false,
+    val subjects: List<Subject> = emptyList(),
+)
+
+/** 取页信号：`Load`＝从零取首页（进页/重试），`Refresh`＝下拉刷新，`More`＝接着游标再取 */
+private sealed interface PageSignal {
+    data object Load : PageSignal
+
+    data object Refresh : PageSignal
+
+    data object More : PageSignal
+}
+
 /**
- * 季度新番导视 ViewModel
+ * 季度新番导视 ViewModel —— **方案 B：响应式派生流**。
  *
- * 列表由两条互补来源拼成：
- * 1. **本季首播**：Bangumi 高级搜索按 `air_date` 区间过滤，即"首播日落在本季"的条目；
- * 2. **本季连载中**：长期连载番（名侦探柯南、蜡笔小新等）的首播日在很多年前，
- *    `air_date` 区间过滤永远捞不到它们，只能靠排期仓"窗口内确有播出事件"反查补回。
+ * 状态是「底层事件流的数学映射」，不是被命令式修改的容器：
+ * - 可变状态只剩**用户意图**（档期 / 产地 / 形式 / 视图形态）与两个一次性 UI 提示位；
+ * - 「本季首播」是 [seasonQuery] 经 `flatMapLatest` 换挡的分页链——查询一变，旧链整条被取消、
+ *   游标随之重置，**不需要手动管理 fetchJob / loadMoreJob 的判空与判序**；
+ * - 「本季连载中」从排期仓 `flatMapLatest` 派生，`catch` 一层即完成"失败降级为没有这一组"；
+ * - 登录态与收藏集合是仓库流，直接作为上游 `combine` 汇入——因此**不存在乐观更新与手动回滚**，
+ *   Room 流在写入后会自己重发，单一事实源。
  *
- * 状态采用 Compose 官方 "UI State production" 的 Compose State 变体：可变实现在这里私有持有，
- * 对外只暴露只读的 [SeasonalGuideUiState]。所有写入都发生在 `viewModelScope`（主线程）上——
- * snapshot 状态的就地写要求这一点，也正是它无需 `update { it.copy(…) }` 的原因。
+ * 唯一保留的顺序状态是 [pagedSubjects] 里的分页游标：第 N 页依赖第 N-1 页的 offset，
+ * 这天生是顺序过程，无法用纯投影表达；它私有于本类，对外仍只通过 [uiState] 暴露。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SeasonalGuideViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
@@ -63,166 +112,181 @@ class SeasonalGuideViewModel(
     timeProvider: () -> LocalDate = { LocalDate.now() },
 ) : ViewModel() {
     private val currentDate = timeProvider()
-    private val defaultYear = if (initialYear > 0) initialYear else currentDate.year
-    private val defaultQuarter =
-        if (initialSeasonMonth > 0) {
-            SeasonQuarter.fromMonth(initialSeasonMonth)
-        } else {
-            SeasonQuarter.fromDate(currentDate)
-        }
+    private val todayIso: String = currentDate.toString()
 
-    // 提供未来 1 年至过去 15 年的年份切换选项
-    private val availableYearsList = ((currentDate.year + 1) downTo (currentDate.year - 15)).toList()
+    // ── 输入：用户意图。这是本类仅有的可变状态 ──
+    // 四个查询条件绑成一个不可分状态：若拆成四个 MutableStateFlow 再 combine，
+    // selectSeason 的两次赋值会各触发一次换挡——"改个季"变成两次完整请求。
+    private val seasonQuery =
+        MutableStateFlow(
+            SeasonQuery(
+                year = if (initialYear > 0) initialYear else currentDate.year,
+                quarter =
+                    if (initialSeasonMonth > 0) {
+                        SeasonQuarter.fromMonth(initialSeasonMonth)
+                    } else {
+                        SeasonQuarter.fromDate(currentDate)
+                    },
+                origin = SeasonOriginFilter.ALL,
+                forms = SeasonFormFilter.DEFAULT,
+            ),
+        )
+    private val viewMode = MutableStateFlow(SeasonalViewMode.LIST)
 
-    private val _uiState =
-        MutableSeasonalGuideUiState(
-            year = defaultYear,
-            quarter = defaultQuarter,
-            // 季界在每月 21 日，12 月下旬属于**次年**冬季，所以年份与季度要一起取，不能各取各的
+    // 一次性提示位：它们本来就是"发生了事件要告诉 UI"，不是能从流里推导的投影
+    private val userMessage = MutableStateFlow<String?>(null)
+    private val loginPromptVisible = MutableStateFlow(false)
+
+    /** 取页信号。SharedFlow 而非 StateFlow：连续两次「再取一页」不该被去重掉 */
+    private val pageSignals = MutableSharedFlow<PageSignal>(extraBufferCapacity = 16)
+
+    // ── 本季首播：分页投影。游标是顺序状态（第 N 页依赖第 N-1 页的 offset），留一个私有容器；
+    //    竞态全部交给下面的 flatMapLatest：查询一变，旧链取消、游标重置。──
+    private val pagedSubjects = MutableStateFlow(PagedSubjects())
+
+    // ── 本季连载中：排期仓派生，随查询换挡，失败整组退化为空 ──
+    // Eagerly：与"进页即取数"的原语义一致，也让单测不必先订阅就能读到投影结果
+    private val ongoingFeed: StateFlow<OngoingFeed> =
+        seasonQuery
+            .flatMapLatest { query -> ongoingFeedOf(query) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, OngoingFeed())
+
+    /** 常量部分：年份/季度选项与「当季」标记，建一次不再变 */
+    private val stateTemplate =
+        SeasonalGuideUiState(
             currentYear = SeasonQuarter.seasonYearOf(currentDate),
+            // 季界在每月 21 日，12 月下旬属于**次年**冬季，年份与季度要一起取
             currentQuarter = SeasonQuarter.fromDate(currentDate),
-            availableYears = availableYearsList,
+            availableYears = ((currentDate.year + 1) downTo (currentDate.year - 15)).toList(),
+            selectedYear = seasonQuery.value.year,
+            selectedQuarter = seasonQuery.value.quarter,
         )
 
-    /** 对外只读视图；UI 直接读它的属性即可，Compose 会按字段追踪。 */
-    val uiState: SeasonalGuideUiState = _uiState
-
-    private var fetchJob: Job? = null
-    private var loadMoreJob: Job? = null
-    private var ongoingJob: Job? = null
+    /**
+     * 对外只读投影：`combine` 出来的不可变快照。
+     *
+     * UI 不持有它、不修改它——上游任何一条流变化，这里自然产出新的快照。
+     *
+     * Eagerly 而非 WhileSubscribed：投影必须在无人订阅时也保持最新（进页即取数的原语义），
+     * 否则单测读到的永远是初值；上游都是内存流与 Room 流，常驻收集的开销可忽略。
+     */
+    val uiState: StateFlow<SeasonalGuideUiState> =
+        combine(
+            combine(pagedSubjects, ongoingFeed, seasonQuery, viewMode) { pages, ongoing, query, mode ->
+                stateTemplate.copy(
+                    selectedYear = query.year,
+                    selectedQuarter = query.quarter,
+                    selectedOrigin = query.origin,
+                    selectedForms = query.forms,
+                    viewMode = mode,
+                    subjects = pages.subjects,
+                    pageOffset = pages.pageOffset,
+                    hasMore = pages.hasMore,
+                    isLoading = pages.isLoading,
+                    isRefreshing = pages.isRefreshing,
+                    isLoadingMore = pages.isLoadingMore,
+                    error = pages.error,
+                    ongoingSubjects = ongoing.subjects,
+                    isLoadingOngoing = ongoing.loading,
+                )
+            },
+            combine(
+                authRepository.isLoggedIn,
+                collectionRepository.getCollectionsByTypeStream(CollectionType.WISH),
+                collectionRepository.getCollectionsByTypeStream(CollectionType.DOING),
+            ) { loggedIn, wish, doing ->
+                stateTemplate.copy(
+                    isLoggedIn = loggedIn,
+                    wishedSubjectIds = wish.map { it.subjectId }.toSet(),
+                    doingSubjectIds = doing.map { it.subjectId }.toSet(),
+                )
+            },
+            userMessage,
+            loginPromptVisible,
+        ) { data, identity, message, prompt ->
+            data.copy(
+                isLoggedIn = identity.isLoggedIn,
+                wishedSubjectIds = identity.wishedSubjectIds,
+                doingSubjectIds = identity.doingSubjectIds,
+                userMessage = message,
+                showLoginPromptDialog = prompt,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
     init {
-        observeAuth()
-        observeCollections()
-        loadSeasonalAnime()
+        // 分页链：查询换挡即重置游标；每个信号触发一次会话（作为信号流的副作用挂起执行）。
+        // 用 onEach 顺序处理而非 collectLatest——同一查询内的连续信号应当排队，
+        // 中途取消会话会把进行中的标记位永久留在 true（上一个 try/finally 事故的教训）。
+        seasonQuery
+            .onEach { pagedSubjects.value = PagedSubjects() }
+            .flatMapLatest { query ->
+                pageSignals
+                    .onStart { emit(PageSignal.Load) }
+                    .onEach { signal -> runPagingSession(query, signal) }
+            }.launchIn(viewModelScope)
     }
 
-    private fun observeAuth() {
-        viewModelScope.launch {
-            authRepository.isLoggedIn.collect { loggedIn ->
-                _uiState.isLoggedIn = loggedIn
-            }
-        }
-    }
+    fun selectYear(year: Int) = setQuery { it.copy(year = year) }
 
-    private fun observeCollections() {
-        viewModelScope.launch {
-            collectionRepository
-                .getCollectionsByTypeStream(CollectionType.WISH)
-                .catch { }
-                .collect { wishList ->
-                    _uiState.wishedSubjectIds = wishList.map { c -> c.subjectId }.toSet()
-                }
-        }
-        viewModelScope.launch {
-            collectionRepository
-                .getCollectionsByTypeStream(CollectionType.DOING)
-                .catch { }
-                .collect { doingList ->
-                    _uiState.doingSubjectIds = doingList.map { c -> c.subjectId }.toSet()
-                }
-        }
-    }
-
-    fun selectYear(year: Int) {
-        if (_uiState.selectedYear == year) return
-        _uiState.selectedYear = year
-        loadSeasonalAnime()
-    }
-
-    fun selectQuarter(quarter: SeasonQuarter) {
-        if (_uiState.selectedQuarter == quarter) return
-        _uiState.selectedQuarter = quarter
-        loadSeasonalAnime()
-    }
+    fun selectQuarter(quarter: SeasonQuarter) = setQuery { it.copy(quarter = quarter) }
 
     fun selectSeason(
         year: Int,
         quarter: SeasonQuarter,
-    ) {
-        if (_uiState.selectedYear == year && _uiState.selectedQuarter == quarter) return
-        // 年份与季度是一组不可分的条件：分两次写会让 UI 观察到"新季度配旧年份"的中间态
-        Snapshot.withMutableSnapshot {
-            _uiState.selectedYear = year
-            _uiState.selectedQuarter = quarter
+    ) = setQuery { it.copy(year = year, quarter = quarter) }
+
+    /** 切换产地筛选；是否下推服务端由 [SeasonOriginFilter.metaTag] 决定 */
+    fun selectOrigin(origin: SeasonOriginFilter) = setQuery { it.copy(origin = origin) }
+
+    /** 开关一档放送形式。允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致 */
+    fun toggleForm(form: SeasonFormFilter) =
+        setQuery { current ->
+            current.copy(forms = if (form in current.forms) current.forms - form else current.forms + form)
         }
-        loadSeasonalAnime()
+
+    /** 一次改一个条件，且值未变时不发射——combine 的上游少一次无谓换挡 */
+    private inline fun setQuery(transform: (SeasonQuery) -> SeasonQuery) {
+        val next = transform(seasonQuery.value)
+        if (next != seasonQuery.value) seasonQuery.value = next
     }
 
-    /**
-     * 切换产地筛选。
-     *
-     * 必须重新取数：条件下推服务端后 `total` 会变，若沿用已加载的数据做客户端过滤，
-     * 会显示成"选国产只有 2 部"——因为当前只加载了 20 条。连载中分组不依赖搜索接口，
-     * 不重取，其可见性由派生属性按新条件自动收敛。
-     */
-    fun selectOrigin(origin: SeasonOriginFilter) {
-        if (_uiState.selectedOrigin == origin) return
-        _uiState.selectedOrigin = origin
-        loadSeasonalAnime(reloadOngoing = false)
-    }
-
-    /**
-     * 开关一档放送形式。理由同 [selectOrigin]，同样需要重新取数——不只是为了总数准确，
-     * 也因为「恰好只选剧场版」时服务端能吃掉一层过滤，其余组合不能，下推条件本身会变。
-     *
-     * 允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致。
-     */
-    fun toggleForm(form: SeasonFormFilter) {
-        val current = _uiState.selectedForms
-        _uiState.selectedForms = if (form in current) current - form else current + form
-        loadSeasonalAnime(reloadOngoing = false)
-    }
-
-    /** 切换海报网格／紧凑列表；纯展示偏好，不重新取数（翻页游标对两种形态是同一份数据） */
+    /** 切换海报网格／紧凑列表；纯展示偏好，不触发重新取数 */
     fun toggleViewMode() {
-        _uiState.viewMode =
-            if (_uiState.viewMode == SeasonalViewMode.LIST) {
+        viewMode.value =
+            if (viewMode.value == SeasonalViewMode.LIST) {
                 SeasonalViewMode.POSTER
             } else {
                 SeasonalViewMode.LIST
             }
     }
 
+    /**
+     * 标记 / 取消收藏。
+     *
+     * 不做乐观更新：收藏集合是仓库流（Room）经 `combine` 汇入的投影，写入后它会自己重发，
+     * UI 随之更新——手写乐观值加失败回滚等于维护第二份事实源。失败只通过提示位告知。
+     */
     fun toggleCollection(
         subjectId: Long,
         targetType: CollectionType,
     ) {
-        if (!_uiState.isLoggedIn) {
-            _uiState.showLoginPromptDialog = true
+        // 登录态是投影的一部分：直接读当前快照，不再另存一份布尔
+        if (!uiState.value.isLoggedIn) {
+            loginPromptVisible.value = true
             return
         }
-
-        val wasWished = _uiState.wishedSubjectIds.contains(subjectId)
-        val wasDoing = _uiState.doingSubjectIds.contains(subjectId)
-
-        if ((targetType == CollectionType.DOING && wasDoing) ||
-            (targetType == CollectionType.WISH && wasWished)
-        ) {
-            _uiState.userMessage = "已在您的「${targetType.label}」列表中"
-            return
-        }
-
-        viewModelScope.launch {
-            // 乐观更新：两个集合的增删与提示语必须同时生效，否则列表会先闪一下"两个都在"的中间态
-            Snapshot.withMutableSnapshot {
-                when (targetType) {
-                    CollectionType.DOING -> {
-                        _uiState.doingSubjectIds = _uiState.doingSubjectIds + subjectId
-                        _uiState.wishedSubjectIds = _uiState.wishedSubjectIds - subjectId
-                        _uiState.userMessage = "已标记为「在看」"
-                    }
-
-                    CollectionType.WISH -> {
-                        _uiState.wishedSubjectIds = _uiState.wishedSubjectIds + subjectId
-                        _uiState.doingSubjectIds = _uiState.doingSubjectIds - subjectId
-                        _uiState.userMessage = "已加入「想看」列表"
-                    }
-
-                    else -> Unit
-                }
+        // 已在目标列表就不重复写：判据读的是投影，与 UI 看到的完全一致
+        val alreadyThere =
+            when (targetType) {
+                CollectionType.DOING -> subjectId in uiState.value.doingSubjectIds
+                CollectionType.WISH -> subjectId in uiState.value.wishedSubjectIds
+                else -> false
             }
-
+        if (alreadyThere) {
+            userMessage.value = "已在您的「${targetType.label}」列表中"
+            return
+        }
+        viewModelScope.launch {
             val result =
                 withContext(NonCancellable) {
                     collectionRepository.updateCollectionStatus(
@@ -231,143 +295,136 @@ class SeasonalGuideViewModel(
                         subjectType = 2,
                     )
                 }
-
             if (result is AppResult.Error) {
-                Snapshot.withMutableSnapshot {
-                    _uiState.doingSubjectIds =
-                        if (wasDoing) {
-                            _uiState.doingSubjectIds + subjectId
-                        } else {
-                            _uiState.doingSubjectIds - subjectId
-                        }
-                    _uiState.wishedSubjectIds =
-                        if (wasWished) {
-                            _uiState.wishedSubjectIds + subjectId
-                        } else {
-                            _uiState.wishedSubjectIds - subjectId
-                        }
-                    _uiState.userMessage = result.message.ifBlank { "操作失败，请重试" }
-                }
+                userMessage.value = result.message.ifBlank { "操作失败，请重试" }
             }
         }
     }
 
     fun refresh() {
-        loadSeasonalAnime(isRefresh = true)
+        pageSignals.tryEmit(PageSignal.Refresh)
     }
 
     fun retry() {
-        loadSeasonalAnime(isRefresh = false)
+        pageSignals.tryEmit(PageSignal.Load)
     }
 
     fun loadMore() {
-        // 这道 guard 是并发控制的唯一入口：isLoadingMore 由下面置位、由任务收尾复位，
-        // 同一时刻只可能有一个翻页任务在跑，所以这里既不必要也不该再 cancel 上一个任务——
-        // 自取消会把刚置上的标志连同收尾逻辑一起丢掉（见 try/finally 处的说明）。
-        if (_uiState.isLoading || _uiState.isLoadingMore || _uiState.isRefreshing || !_uiState.hasMore) {
-            return
-        }
-
-        loadMoreJob =
-            viewModelScope.launch {
-                _uiState.isLoadingMore = true
-                // 必须在 finally 里复位：切产地/形式会 cancel 本任务，若只在正常路径复位，
-                // isLoadingMore 会永久停在 true，上面的 guard 从此恒真——表现是切完筛选后再也翻不了页。
-                val error =
-                    try {
-                        fetchPages(startOffset = _uiState.pageOffset)
-                    } finally {
-                        _uiState.isLoadingMore = false
-                    }
-                _uiState.userMessage = error?.takeIf { msg -> msg.isNotBlank() }?.let { msg -> "加载更多失败：$msg" }
-            }
-    }
-
-    /**
-     * 从 [startOffset] 起取页并写入状态，返回错误消息（成功为 null）。
-     *
-     * 会**连续取页直到本次调用确实多出可见条目**，原因是客户端还压着三层服务端表达不了的过滤：
-     * 产地「欧美」（服务端 meta_tags 精确匹配，"欧美 / 美国 / 英国…"之间的"或"表达不了）、
-     * 形式「全部」要折叠片段型、「短片 / MV」要只留片段型（都没有排除语法，多值又是 AND）。
-     * 这些过滤会整页整页地把条目滤掉——列表一旦为空就没有可滚动内容，触底加载永远不会触发，
-     * 用户会停在一片空白上。所以这里主动往后取。
-     *
-     * 判据是"可见条目数比调用前多"，不是"列表非空"：翻页时列表本来就是非空的，用后者只会取一页就收工；
-     * 若这一页整页被滤掉，可见内容与滚动范围都没变，触底加载会卡死在这里（滑到底不动、既不转圈也不加载）。
-     *
-     * [startOffset] 为 0 时首屏整批替换，否则按已加载 ID 去重后追加。
-     * 翻页游标始终按服务端返回的原始条数前进，过滤不参与——所以一路取到底得到的过滤结果是完整的。
-     */
-    private suspend fun fetchPages(startOffset: Int): String? {
-        var offset = startOffset
-        var isFirstIteration = true
-        val visibleBefore = if (startOffset == 0) 0 else _uiState.filteredSubjects.size
-        while (true) {
-            val replaceFirstPage = isFirstIteration && startOffset == 0
-            isFirstIteration = false
-
-            val result =
-                searchRepository.searchSubjectsAdvanced(
-                    request = buildSearchRequest(_uiState),
-                    limit = PAGE_SIZE,
-                    offset = offset,
-                )
-
-            when (result) {
-                is AppResult.Success -> {
-                    val page = result.data.list
-                    val loadedCount = offset + page.size
-                    // 条目、游标、是否还有下一页、错误位是一组：分次写会让 UI 看到
-                    // "游标已前进但条目还没换"的中间态，触底判定会据此算错
-                    Snapshot.withMutableSnapshot {
-                        _uiState.subjects =
-                            if (replaceFirstPage) {
-                                page
-                            } else {
-                                val existingIds = _uiState.subjects.map { s -> s.id }.toSet()
-                                _uiState.subjects + page.filter { s -> s.id !in existingIds }
-                            }
-                        _uiState.pageOffset = loadedCount
-                        _uiState.hasMore = loadedCount < result.data.total
-                        _uiState.error = null
-                    }
-                    offset = loadedCount
-
-                    // 取空、已取尽 → 收工；本次调用已经多出可见条目 → 也收工
-                    if (page.isEmpty() || !_uiState.hasMore) return null
-                    if (_uiState.filteredSubjects.size > visibleBefore) return null
-                }
-
-                is AppResult.Error -> return result.message
-                is AppResult.Loading -> return null
-            }
-        }
+        pageSignals.tryEmit(PageSignal.More)
     }
 
     fun clearUserMessage() {
-        _uiState.userMessage = null
+        userMessage.value = null
     }
 
     fun dismissLoginPrompt() {
-        _uiState.showLoginPromptDialog = false
+        loginPromptVisible.value = false
     }
 
     suspend fun beginLogin(): String {
-        _uiState.showLoginPromptDialog = false
+        loginPromptVisible.value = false
         return authRepository.beginLogin()
     }
 
-    private fun buildSearchRequest(state: SeasonalGuideUiState): SearchSubjectsRequest {
-        val (startDay, endDay) = state.selectedQuarter.getAirDateRange(state.selectedYear)
+    // ── 分页会话：从当前游标连续取页，直到"可见条目比会话开始时多"或取尽 ──
+
+    private suspend fun runPagingSession(
+        query: SeasonQuery,
+        signal: PageSignal,
+    ) {
+        val resetting = signal != PageSignal.More
+        // 判据是"可见条目数比会话开始时多"：客户端还压着服务端表达不了的过滤
+        // （产地「欧美」是"或"关系、正片与短片是"以上皆非"），会整页整页地把条目滤掉——
+        // 若只取一页就收工，可见内容与滚动范围都不变，触底加载会卡死（滑到底不动、不转圈也不加载）。
+        val visibleBefore =
+            if (resetting) {
+                0
+            } else {
+                pagedSubjects.value.subjects.count { it.isVisibleUnder(query) }
+            }
+        if (resetting) {
+            pagedSubjects.value = PagedSubjects()
+        } else {
+            val current = pagedSubjects.value
+            // 并发控制的唯一入口：已在取页/刷新、或已经取尽，就不再发请求
+            if (current.isLoading || current.isRefreshing || current.isLoadingMore || !current.hasMore) return
+        }
+
+        while (true) {
+            val current = pagedSubjects.value
+            pagedSubjects.value =
+                current.copy(
+                    isLoading = signal is PageSignal.Load,
+                    isRefreshing = signal is PageSignal.Refresh,
+                    isLoadingMore = signal is PageSignal.More,
+                    error = null,
+                )
+
+            when (val result = searchRepository.searchSubjectsAdvanced(requestOf(query), PAGE_SIZE, current.pageOffset)) {
+                is AppResult.Error -> {
+                    settle(error = result.message)
+                    return
+                }
+
+                is AppResult.Loading -> {
+                    settle()
+                    return
+                }
+
+                is AppResult.Success -> {
+                    val page = result.data.list
+                    // 服务端没有更多条目时必须在此收工：游标按 page.size 前进，空页不会推进 offset，
+                    // 若继续循环就会拿同一个 offset 无限重发（曾让单测挂死 8 分钟）
+                    if (page.isEmpty()) {
+                        // 顺手把 hasMore 关掉，让下一次 More 信号在入口就被 guard 挡住，不再空发请求
+                        pagedSubjects.value = current.copy(hasMore = false)
+                        settle()
+                        return
+                    }
+                    // 游标按服务端返回的原始条数前进，过滤不参与——一路取到底得到的过滤结果才是完整的
+                    pagedSubjects.value =
+                        current.copy(
+                            subjects =
+                                if (current.pageOffset == 0) {
+                                    page
+                                } else {
+                                    current.subjects.mergeDistinct(page)
+                                },
+                            pageOffset = current.pageOffset + page.size,
+                            hasMore = current.pageOffset + page.size < result.data.total,
+                        )
+                }
+            }
+
+            val settled = pagedSubjects.value
+            if (settled.subjects.isEmpty() || !settled.hasMore) {
+                settle()
+                return
+            }
+            if (settled.pageOffset > 0 && settled.subjects.count { it.isVisibleUnder(query) } > visibleBefore) {
+                settle()
+                return
+            }
+        }
+    }
+
+    /** 会话收尾：把进行中的标记位清掉；错误位只在失败时带出去 */
+    private fun settle(error: String? = null) {
+        val current = pagedSubjects.value
+        pagedSubjects.value =
+            current.copy(isLoading = false, isRefreshing = false, isLoadingMore = false, error = error)
+    }
+
+    private fun requestOf(query: SeasonQuery): SearchSubjectsRequest {
+        val (startDay, endDay) = query.quarter.getAirDateRange(query.year)
         // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + 剧场版」）。
-        // 产地「欧美」的 metaTag 是 null——服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"
-        // 这种"或"表达不了，改由客户端兜。
+        // 产地「欧美」不下推：服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"这种"或"表达不了。
         // 形式里只有"恰好只选剧场版"能下推；正片（TV 或 WEB）与短片（MV 或 PV 或 …）都是"或"关系，
         // 服务端多值又是 AND、没有排除语法，只能客户端筛。见 SeasonalGuideUiState.filteredSubjects。
         val metaTags =
             listOfNotNull(
-                state.selectedOrigin.metaTag,
-                SeasonFormFilter.serverMetaTagOf(state.selectedForms),
+                query.origin.metaTag,
+                SeasonFormFilter.serverMetaTagOf(query.forms),
             )
         return SearchSubjectsRequest(
             sort = "heat",
@@ -380,100 +437,30 @@ class SeasonalGuideViewModel(
         )
     }
 
-    private fun loadSeasonalAnime(
-        isRefresh: Boolean = false,
-        reloadOngoing: Boolean = true,
-    ) {
-        fetchJob?.cancel()
-        // 交接正在飞的翻页任务：它由 [loadMore] 启动，携带的是**旧筛选条件**的响应。
-        // 协程被 cancel 后在下一次挂起点抛出之前，仍可能执行到状态写入，所以新一轮取数必须先等它彻底结束
-        // （见 fetchJob 里的 join），否则旧条件的结果会混进按新条件重建的列表里。
-        val staleLoadMore = loadMoreJob
-        loadMoreJob = null
-        staleLoadMore?.cancel()
-        ongoingJob?.cancel()
-        val selectedYear = _uiState.selectedYear
-        val selectedQuarter = _uiState.selectedQuarter
-
-        // 换季/刷新时先清空连载中分组，避免上一季的条目串到本季；
-        // 仅切换产地/形式时不重取它——连载中分组不走搜索接口，其可见性由派生属性自动收敛
-        if (reloadOngoing) {
-            Snapshot.withMutableSnapshot {
-                _uiState.ongoingSubjects = emptyList()
-                _uiState.isLoadingOngoing = false
-            }
-        }
-
-        fetchJob =
-            viewModelScope.launch {
-                // 先置加载态再 join：join 是挂起点，若排在后面，这段窗口里 isLoading 还是旧值，
-                // 触底兜底可能挤进来发起一次携带陈旧游标的翻页
-                Snapshot.withMutableSnapshot {
-                    if (isRefresh) {
-                        _uiState.isRefreshing = true
-                    } else {
-                        _uiState.isLoading = true
-                    }
-                    _uiState.error = null
-                }
-
-                staleLoadMore?.join()
-
-                val error = fetchPages(startOffset = 0)
-                Snapshot.withMutableSnapshot {
-                    _uiState.isLoading = false
-                    _uiState.isRefreshing = false
-                    _uiState.error = error?.ifBlank { "获取新番导视失败" }
-                }
-
-                if (error == null && reloadOngoing) {
-                    loadOngoingSubjects(selectedYear, selectedQuarter)
-                }
-            }
-    }
-
     /**
-     * 补全「本季连载中」：窗口内确有播出事件、但首播日不在本季的条目。
+     * 「本季连载中」：窗口内确有播出事件、但首播日不在本季的条目。
      *
-     * 用 Bangumi 权威的 `date` 做最终判据（排期名册里的 airDate 可能缺失），
-     * 因此不会有条目同时出现在"本季首播"网格与"本季连载中"分组里。
+     * 用排期名册自带的 airDate 粗筛一遍、再以 Bangumi 权威 `date` 终判（名册 airDate 可能缺失），
+     * 因此不会有条目同时出现在"本季首播"列表与"本季连载中"分组里。
      * 整段 best-effort：任何失败都退化为"没有这一组"，绝不崩掉主列表。
      */
-    private fun loadOngoingSubjects(
-        year: Int,
-        quarter: SeasonQuarter,
-    ) {
-        ongoingJob?.cancel()
-        val (startDay, endDay) = quarter.getAirDateRange(year)
+    private fun ongoingFeedOf(query: SeasonQuery): Flow<OngoingFeed> {
+        val (startDay, endDay) = query.quarter.getAirDateRange(query.year)
+        // 播出事件来自滚动快照，历史季查不到任何事件；强行查询会把"没有数据"
+        // 误报成"本季没有连载番"，所以干脆不呈现这一组。
+        if (endDay < todayIso) return flowOf(OngoingFeed())
 
-        // 播出事件来自滚动快照，历史季度查不到任何事件；
-        // 强行查询会把"没有数据"误报成"本季没有连载番"，所以干脆不呈现这一组。
-        if (endDay < currentDate.toString()) return
-
-        ongoingJob =
-            viewModelScope.launch {
-                _uiState.isLoadingOngoing = true
-                val ongoing =
-                    runCatchingCancellable {
-                        scheduleRepository
-                            .getSchedulesAiringBetween(
-                                fromUtcIso = "${startDay}T00:00:00Z",
-                                toUtcIso = "${endDay}T23:59:59Z",
-                            )
-                            // 先用名册自带的 airDate 粗筛，避免为"本季首播"的条目白白补一轮详情
-                            .filter { candidate -> !isPremiereWithin(candidate.airDate, startDay, endDay) }
-                            .take(MAX_ONGOING_SUBJECTS)
-                            .fetchSubjectDetails()
-                            // 再以 Bangumi 的 date 终判：名册 airDate 缺失的条目在这里被剔除；
-                            // 若连 Bangumi 的 date 都缺失，则保留——它本季确有播出事件，宁可多显示也不漏
-                            .filter { subject -> !isPremiereWithin(subject.date, startDay, endDay) }
-                    }.getOrElse { emptyList() }
-
-                Snapshot.withMutableSnapshot {
-                    _uiState.ongoingSubjects = ongoing
-                    _uiState.isLoadingOngoing = false
-                }
-            }
+        return flow { emit(scheduleRepository.getSchedulesAiringBetween("${startDay}T00:00:00Z", "${endDay}T23:59:59Z")) }
+            .map { roster ->
+                roster
+                    .filter { candidate -> !isPremiereWithin(candidate.airDate, startDay, endDay) }
+                    .take(MAX_ONGOING_SUBJECTS)
+                    .fetchSubjectDetails()
+                    .filter { subject -> !isPremiereWithin(subject.date, startDay, endDay) }
+                    .distinctBy { it.id }
+            }.map { OngoingFeed(loading = false, subjects = it) }
+            .onStart { emit(OngoingFeed(loading = true)) }
+            .catch { emit(OngoingFeed()) }
     }
 
     /** 逐条补全条目详情；单条失败只跳过该条，不影响整组 */
@@ -501,4 +488,13 @@ class SeasonalGuideViewModel(
         if (day.length < NORMALIZED_DATE_LENGTH) return false
         return day >= startDay && day <= endDay
     }
+
+    /** 按已加载条目的 id 去重后追加一页 */
+    private fun List<Subject>.mergeDistinct(page: List<Subject>): List<Subject> {
+        val known = map { it.id }.toSet()
+        return this + page.filter { it.id !in known }
+    }
+
+    /** 条目是否落在当前筛选的可见范围内 */
+    private fun Subject.isVisibleUnder(query: SeasonQuery): Boolean = matchesOrigin(this, query.origin) && matchesForm(this, query.forms)
 }

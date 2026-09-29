@@ -73,7 +73,7 @@ class SeasonalGuideViewModelTest {
 
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(2026, state.selectedYear)
             assertEquals(SeasonQuarter.WINTER, state.selectedQuarter)
             assertEquals(SeasonOriginFilter.ALL, state.selectedOrigin)
@@ -105,7 +105,7 @@ class SeasonalGuideViewModelTest {
 
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(2024, state.selectedYear)
             assertEquals(SeasonQuarter.SUMMER, state.selectedQuarter)
 
@@ -125,7 +125,7 @@ class SeasonalGuideViewModelTest {
             viewModel.selectYear(2025)
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(2025, state.selectedYear)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
@@ -144,7 +144,7 @@ class SeasonalGuideViewModelTest {
             viewModel.selectQuarter(SeasonQuarter.AUTUMN)
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(SeasonQuarter.AUTUMN, state.selectedQuarter)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             val request = searchRepository.lastAdvancedRequest
@@ -165,7 +165,7 @@ class SeasonalGuideViewModelTest {
             viewModel.selectSeason(2025, SeasonQuarter.SUMMER)
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(2025, state.selectedYear)
             assertEquals(SeasonQuarter.SUMMER, state.selectedQuarter)
             assertEquals(2, searchRepository.advancedSearchCallCount)
@@ -190,7 +190,7 @@ class SeasonalGuideViewModelTest {
 
             // 产地必须下推服务端并重新取数：只筛"已加载的那几十条"会显示成假的小数字
             // （当季国产实际 53 部，而首屏只有 20 条）
-            assertEquals(SeasonOriginFilter.CHINA, viewModel.uiState.selectedOrigin)
+            assertEquals(SeasonOriginFilter.CHINA, viewModel.uiState.value.selectedOrigin)
             assertEquals(2, searchRepository.advancedSearchCallCount)
             assertEquals(listOf("中国"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
             assertEquals(0, searchRepository.lastAdvancedOffset)
@@ -205,7 +205,7 @@ class SeasonalGuideViewModelTest {
 
             // 默认只开「正片」。正片是「TV 或 WEB」，而服务端多值 meta_tags 是 AND、又没有排除语法，
             // 表达不了"或"，所以这一档只能客户端筛，请求里不该出现 meta_tags
-            assertEquals(SeasonFormFilter.DEFAULT, viewModel.uiState.selectedForms)
+            assertEquals(SeasonFormFilter.DEFAULT, viewModel.uiState.value.selectedForms)
             assertNull(searchRepository.lastAdvancedRequest?.filter?.metaTags)
 
             viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
@@ -216,7 +216,7 @@ class SeasonalGuideViewModelTest {
             viewModel.toggleForm(SeasonFormFilter.MAIN)
             advanceUntilIdle()
             assertTrue(
-                viewModel.uiState.selectedForms
+                viewModel.uiState.value.selectedForms
                     .isEmpty(),
             )
             assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
@@ -225,7 +225,7 @@ class SeasonalGuideViewModelTest {
             // 总数与分页因此都是准的，不必靠客户端补筛
             viewModel.toggleForm(SeasonFormFilter.MOVIE)
             advanceUntilIdle()
-            assertEquals(setOf(SeasonFormFilter.MOVIE), viewModel.uiState.selectedForms)
+            assertEquals(setOf(SeasonFormFilter.MOVIE), viewModel.uiState.value.selectedForms)
             assertEquals(listOf("日本", "剧场版"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
 
             // 再叠上短片 → 变成「剧场版 或 短片」，服务端表达不了，形式那部分不再下推；
@@ -259,7 +259,7 @@ class SeasonalGuideViewModelTest {
 
             assertEquals(
                 listOf(2L, 3L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
         }
@@ -284,7 +284,7 @@ class SeasonalGuideViewModelTest {
             // 注意 id=3 的 platform 是 WEB 却带「短片」标签——片段判据不能只看 platform。
             assertEquals(
                 listOf(1L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
         }
@@ -305,7 +305,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
             assertEquals(
                 listOf(1L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
 
@@ -314,7 +314,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
             assertEquals(
                 listOf(1L, 2L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
 
@@ -323,12 +323,12 @@ class SeasonalGuideViewModelTest {
             viewModel.toggleForm(SeasonFormFilter.MOVIE)
             advanceUntilIdle()
             assertTrue(
-                viewModel.uiState.selectedForms
+                viewModel.uiState.value.selectedForms
                     .isEmpty(),
             )
             assertEquals(
                 listOf(1L, 2L, 3L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
         }
@@ -340,22 +340,22 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             // 收起后只剩一行摘要，它必须能把"现在筛的是什么"交代清楚
-            assertEquals("正片", viewModel.uiState.filterSummary)
+            assertEquals("正片", viewModel.uiState.value.filterSummary)
 
             viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
             advanceUntilIdle()
-            assertEquals("日本 · 正片", viewModel.uiState.filterSummary)
+            assertEquals("日本 · 正片", viewModel.uiState.value.filterSummary)
 
             viewModel.toggleForm(SeasonFormFilter.MOVIE)
             advanceUntilIdle()
-            assertEquals("日本 · 正片+剧场版", viewModel.uiState.filterSummary)
+            assertEquals("日本 · 正片+剧场版", viewModel.uiState.value.filterSummary)
 
             // 全不选时回落为「全部」，不该出现「全部 · 全部」这种同义重复
             viewModel.selectOrigin(SeasonOriginFilter.ALL)
             viewModel.toggleForm(SeasonFormFilter.MAIN)
             viewModel.toggleForm(SeasonFormFilter.MOVIE)
             advanceUntilIdle()
-            assertEquals("全部", viewModel.uiState.filterSummary)
+            assertEquals("全部", viewModel.uiState.value.filterSummary)
         }
 
     @Test
@@ -382,13 +382,13 @@ class SeasonalGuideViewModelTest {
 
             assertEquals(
                 listOf(999L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
             // 首屏 1 次 + 关掉正片 1 次 + 「短片 / MV」档下连续取了 3 页（片段型在第 3 页才出现）
             assertEquals(5, searchRepository.advancedSearchCallCount)
             // 三页原始条目都留在 state 里：过滤不参与游标推进，所以滚到底仍是完整结果
-            assertEquals(41, viewModel.uiState.subjects.size)
+            assertEquals(41, viewModel.uiState.value.subjects.size)
         }
 
     @Test
@@ -420,7 +420,7 @@ class SeasonalGuideViewModelTest {
 
             assertEquals(
                 listOf(1L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
             val callsBeforeLoadMore = searchRepository.advancedSearchCallCount
@@ -431,51 +431,50 @@ class SeasonalGuideViewModelTest {
             // offset 20 / 40 两页整页被滤掉，必须一路取到 60 页才出现第 2 条 MV
             assertEquals(
                 listOf(1L, 999L),
-                viewModel.uiState.filteredSubjects
+                viewModel.uiState.value.filteredSubjects
                     .map { it.id },
             )
             assertEquals(callsBeforeLoadMore + 3, searchRepository.advancedSearchCallCount)
-            assertFalse(viewModel.uiState.isLoadingMore)
+            assertFalse(viewModel.uiState.value.isLoadingMore)
         }
 
     @Test
-    fun loadMore_cancelledByFilterSwitch_clearsFlagSoNextPageStillLoads() =
+    fun switchingFilter_midRequest_cancelsTheStaleSessionAndRebuildsFromScratch() =
         runTest {
-            // 切产地/形式会 cancel 正在飞的翻页任务。若 isLoadingMore 只在正常返回路径复位，
-            // 它会永久停在 true，loadMore 的 guard 从此恒真——表现是切完筛选后再也翻不了页。
+            // 竞态处理交给 flatMapLatest：查询一变，旧查询的分页链整条取消、游标归零。
+            // 若沿用旧游标继续翻，得到的就是"新条件下第 21~40 条"这种错位结果。
             val searchRepository = FakeSearchRepository()
             searchRepository.advancedSearchPages =
-                mapOf(
-                    0 to List(20) { sampleSubject.copy(id = it.toLong() + 1) },
-                    20 to List(20) { sampleSubject.copy(id = it.toLong() + 21) },
-                )
+                mapOf(0 to List(20) { sampleSubject.copy(id = it.toLong() + 1) })
             searchRepository.advancedSearchTotal = 100
 
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
-            assertEquals(20, viewModel.uiState.subjects.size)
+            assertEquals(20, viewModel.uiState.value.subjects.size)
 
+            // 让翻页请求停在半路
             val gate = CompletableDeferred<Unit>()
             searchRepository.advancedSearchGate = gate
             viewModel.loadMore()
-            assertTrue(viewModel.uiState.isLoadingMore)
+            assertTrue("loadMore 后应处于 isLoadingMore", viewModel.uiState.value.isLoadingMore)
 
-            // 请求还在飞的时候切产地：翻页任务被取消，旧条件的结果不能混进按新条件重建的列表
+            // 请求还在飞时换产地：旧会话被取消，新查询从 offset 0 重建
             viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
+            advanceUntilIdle()
+            assertEquals("换产地后应以新条件下推", listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
+            assertEquals("换产地必须从 offset 0 重建", 0, searchRepository.lastAdvancedOffset)
+            assertFalse("进行中标记位应复位", viewModel.uiState.value.isLoadingMore)
+
             gate.complete(Unit)
             advanceUntilIdle()
 
-            assertFalse(viewModel.uiState.isLoadingMore)
-            assertEquals(listOf("日本"), searchRepository.lastAdvancedRequest?.filter?.metaTags)
-
-            // 关键：标志复位了，翻页才进得去。若卡在 true，这次调用会被 guard 直接挡回
-            searchRepository.advancedSearchGate = null
-            val callsBeforeLoadMore = searchRepository.advancedSearchCallCount
-            viewModel.loadMore()
-            advanceUntilIdle()
-
-            assertEquals(callsBeforeLoadMore + 1, searchRepository.advancedSearchCallCount)
-            assertEquals(40, viewModel.uiState.subjects.size)
+            // 原始条目照旧留在 state 里（过滤不参与游标推进），但按新条件可见的为零
+            assertEquals("原始条目照旧留在 state", 20, viewModel.uiState.value.subjects.size)
+            // 旧会话的 offset=20 结果没有并进来：游标停在"从零重建"后的 20，而不是累加到 40。
+            // （filteredSubjects 对日本/国产不做客户端复筛——信任服务端已按 meta_tags 筛过，
+            //   而测试替身不模拟这层，所以这里断言游标而不是断言可见条目数。）
+            assertEquals("旧会话的结果不应并入新查询", 20, viewModel.uiState.value.pageOffset)
+            assertFalse(viewModel.uiState.value.isLoadingMore)
         }
 
     @Test
@@ -493,12 +492,12 @@ class SeasonalGuideViewModelTest {
             viewModel.toggleCollection(100L, CollectionType.DOING)
             advanceUntilIdle()
 
-            assertTrue(viewModel.uiState.showLoginPromptDialog)
+            assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepository.updateCollectionCallCount)
         }
 
     @Test
-    fun toggleCollection_whenLoggedIn_optimisticallyUpdatesAndPersists() =
+    fun toggleCollection_whenLoggedIn_persistsAndReflectsThroughRepositoryStream() =
         runTest {
             val collectionRepository = FakeCollectionRepository()
             val viewModel = createViewModel(collectionRepository = collectionRepository)
@@ -507,16 +506,19 @@ class SeasonalGuideViewModelTest {
             viewModel.toggleCollection(100L, CollectionType.DOING)
             advanceUntilIdle()
 
+            // 收藏集合是仓库流（Room）combine 进来的投影：写入后流自己重发，UI 随之更新。
+            // 不再手写乐观值 + 失败回滚——那等于维护第二份事实源（方案 B 的"外部源同步"）。
             assertTrue(
-                viewModel.uiState.doingSubjectIds
+                viewModel.uiState.value.doingSubjectIds
                     .contains(100L),
             )
             assertEquals(1, collectionRepository.updateCollectionCallCount)
-            assertEquals("已标记为「在看」", viewModel.uiState.userMessage)
+            // 成功不给 toast：列表里那一条的状态变化本身就是反馈
+            assertNull(viewModel.uiState.value.userMessage)
         }
 
     @Test
-    fun toggleCollection_whenError_revertsOptimisticUpdate() =
+    fun toggleCollection_whenError_surfacesTheMessageWithoutTouchingTheList() =
         runTest {
             val collectionRepository = FakeCollectionRepository()
             collectionRepository.updateCollectionResult = AppResult.Error(Exception("Network failure"), "网络异常")
@@ -527,10 +529,10 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertFalse(
-                viewModel.uiState.wishedSubjectIds
+                viewModel.uiState.value.wishedSubjectIds
                     .contains(100L),
             )
-            assertEquals("网络异常", viewModel.uiState.userMessage)
+            assertEquals("网络异常", viewModel.uiState.value.userMessage)
         }
 
     @Test
@@ -546,7 +548,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertEquals(2, searchRepository.advancedSearchCallCount)
-            assertFalse(viewModel.uiState.isRefreshing)
+            assertFalse(viewModel.uiState.value.isRefreshing)
         }
 
     @Test
@@ -562,8 +564,8 @@ class SeasonalGuideViewModelTest {
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            assertEquals(20, viewModel.uiState.subjects.size)
-            assertTrue(viewModel.uiState.hasMore)
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+            assertTrue(viewModel.uiState.value.hasMore)
             // 单页宽度必须是 20：传更大只会被服务端静默截断，导致"满页即还有"的判定永远为假
             assertEquals(20, searchRepository.lastAdvancedLimit)
             assertEquals(0, searchRepository.lastAdvancedOffset)
@@ -572,10 +574,10 @@ class SeasonalGuideViewModelTest {
             viewModel.loadMore()
             advanceUntilIdle()
 
-            assertEquals(30, viewModel.uiState.subjects.size)
+            assertEquals(30, viewModel.uiState.value.subjects.size)
             // 翻页 offset 取服务端游标而非已加载条数，去重丢弃条目后也不会错位
             assertEquals(20, searchRepository.lastAdvancedOffset)
-            assertFalse(viewModel.uiState.hasMore)
+            assertFalse(viewModel.uiState.value.hasMore)
         }
 
     @Test
@@ -587,8 +589,8 @@ class SeasonalGuideViewModelTest {
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            assertEquals(20, viewModel.uiState.subjects.size)
-            assertFalse(viewModel.uiState.hasMore)
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+            assertFalse(viewModel.uiState.value.hasMore)
         }
 
     @Test
@@ -620,7 +622,7 @@ class SeasonalGuideViewModelTest {
                 )
             advanceUntilIdle()
 
-            val state = viewModel.uiState
+            val state = viewModel.uiState.value
             assertEquals(listOf(899L), state.ongoingSubjects.map { it.id })
             assertFalse(state.isLoadingOngoing)
             // 名册自带 airDate 的预筛就剔掉了本季首播那条，无需为它补一轮详情
@@ -652,7 +654,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.ongoingSubjects
+                viewModel.uiState.value.ongoingSubjects
                     .isEmpty(),
             )
             assertEquals(1, subjectRepository.fetchSubjectDetailCallCount)
@@ -686,10 +688,10 @@ class SeasonalGuideViewModelTest {
 
             assertEquals(
                 listOf(899L),
-                viewModel.uiState.ongoingSubjects
+                viewModel.uiState.value.ongoingSubjects
                     .map { it.id },
             )
-            assertFalse(viewModel.uiState.isLoadingOngoing)
+            assertFalse(viewModel.uiState.value.isLoadingOngoing)
         }
 
     @Test
@@ -709,7 +711,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.ongoingSubjects
+                viewModel.uiState.value.ongoingSubjects
                     .isEmpty(),
             )
             assertNull(scheduleRepository.lastAiringWindow)
@@ -736,7 +738,7 @@ class SeasonalGuideViewModelTest {
                     subjectRepository = subjectRepository,
                 )
             advanceUntilIdle()
-            assertEquals(1, viewModel.uiState.ongoingSubjects.size)
+            assertEquals(1, viewModel.uiState.value.ongoingSubjects.size)
 
             // 切到历史季：上一季的连载中分组必须立刻清空，不能残留
             scheduleRepository.schedulesAiringBetween = emptyList()
@@ -744,13 +746,13 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.ongoingSubjects
+                viewModel.uiState.value.ongoingSubjects
                     .isEmpty(),
             )
         }
 
     @Test
-    fun toggleCollection_whenSwitchingFromDoingToWish_andErrorOccurs_restoresDoingState() =
+    fun toggleCollection_whenSwitchingFromDoingToWish_andErrorOccurs_leavesRepositoryStateUntouched() =
         runTest {
             val collectionRepository = FakeCollectionRepository()
             collectionRepository.sendCollection(UserCollection(subjectId = 100L, type = CollectionType.DOING.value))
@@ -759,11 +761,11 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.doingSubjectIds
+                viewModel.uiState.value.doingSubjectIds
                     .contains(100L),
             )
             assertFalse(
-                viewModel.uiState.wishedSubjectIds
+                viewModel.uiState.value.wishedSubjectIds
                     .contains(100L),
             )
 
@@ -772,18 +774,18 @@ class SeasonalGuideViewModelTest {
 
             // On error, 100L must be restored back into doingSubjectIds and removed from wishedSubjectIds
             assertTrue(
-                viewModel.uiState.doingSubjectIds
+                viewModel.uiState.value.doingSubjectIds
                     .contains(100L),
             )
             assertFalse(
-                viewModel.uiState.wishedSubjectIds
+                viewModel.uiState.value.wishedSubjectIds
                     .contains(100L),
             )
-            assertEquals("网络异常", viewModel.uiState.userMessage)
+            assertEquals("网络异常", viewModel.uiState.value.userMessage)
         }
 
     @Test
-    fun toggleCollection_whenSwitchingFromWishToDoing_andErrorOccurs_restoresWishState() =
+    fun toggleCollection_whenSwitchingFromWishToDoing_andErrorOccurs_leavesRepositoryStateUntouched() =
         runTest {
             val collectionRepository = FakeCollectionRepository()
             collectionRepository.sendCollection(UserCollection(subjectId = 200L, type = CollectionType.WISH.value))
@@ -792,11 +794,11 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.wishedSubjectIds
+                viewModel.uiState.value.wishedSubjectIds
                     .contains(200L),
             )
             assertFalse(
-                viewModel.uiState.doingSubjectIds
+                viewModel.uiState.value.doingSubjectIds
                     .contains(200L),
             )
 
@@ -805,14 +807,14 @@ class SeasonalGuideViewModelTest {
 
             // On error, 200L must be restored back into wishedSubjectIds and removed from doingSubjectIds
             assertTrue(
-                viewModel.uiState.wishedSubjectIds
+                viewModel.uiState.value.wishedSubjectIds
                     .contains(200L),
             )
             assertFalse(
-                viewModel.uiState.doingSubjectIds
+                viewModel.uiState.value.doingSubjectIds
                     .contains(200L),
             )
-            assertEquals("服务器开小差了", viewModel.uiState.userMessage)
+            assertEquals("服务器开小差了", viewModel.uiState.value.userMessage)
         }
 
     @Test
@@ -827,7 +829,7 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             assertEquals(0, collectionRepository.updateCollectionCallCount)
-            assertEquals("已在您的「在看」列表中", viewModel.uiState.userMessage)
+            assertEquals("已在您的「在看」列表中", viewModel.uiState.value.userMessage)
         }
 
     @Test
@@ -918,9 +920,9 @@ class SeasonalGuideViewModelTest {
                 )
             advanceUntilIdle()
 
-            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.selectedQuarter)
-            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.currentQuarter)
-            assertEquals(2026, viewModel.uiState.currentYear)
+            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.value.selectedQuarter)
+            assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.value.currentQuarter)
+            assertEquals(2026, viewModel.uiState.value.currentYear)
         }
 
     @Test
@@ -930,13 +932,13 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             // 默认紧凑列表：导视的首要诉求是"一季有哪些番"，行式一屏约 6-7 条且带集数／电视台／题材
-            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.viewMode)
+            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.value.viewMode)
 
             viewModel.toggleViewMode()
-            assertEquals(SeasonalViewMode.POSTER, viewModel.uiState.viewMode)
+            assertEquals(SeasonalViewMode.POSTER, viewModel.uiState.value.viewMode)
 
             viewModel.toggleViewMode()
-            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.viewMode)
+            assertEquals(SeasonalViewMode.LIST, viewModel.uiState.value.viewMode)
         }
 
     @Test
@@ -956,10 +958,10 @@ class SeasonalGuideViewModelTest {
             // 视图形态是纯展示偏好：条目、翻页游标与是否还有下一页都不应变，也不该再打一次网络
             assertEquals(
                 listOf(sampleSubject.id),
-                viewModel.uiState.subjects
+                viewModel.uiState.value.subjects
                     .map { it.id },
             )
             assertEquals(callsBeforeToggle, searchRepository.advancedSearchCallCount)
-            assertFalse(viewModel.uiState.hasMore)
+            assertFalse(viewModel.uiState.value.hasMore)
         }
 }
