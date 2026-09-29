@@ -24,6 +24,7 @@ import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotDto
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
@@ -39,6 +40,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.abs
+
+// 时间常量放在文件级而非 companion：isZombieBgmDataSchedule 是顶层纯函数（见文件末尾），
+// 它需要这几个常量，而 private companion 对外部顶层声明不可见。类内引用照常解析。
+private const val HOUR_MILLIS = 60L * 60 * 1000
+private const val DAY_MILLIS = 24L * HOUR_MILLIS
+private const val WEEK_MILLIS = 7L * DAY_MILLIS
 
 interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
@@ -551,151 +558,46 @@ class ScheduleRepositoryImpl(
 
         if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 
-        val entitiesByAnilistId =
-            currentEntities
-                .filter { it.anilistId != null }
-                .associateBy { it.anilistId!! }
-                .toMutableMap()
-        val entitiesByBgmId = currentEntities.associateBy { it.bgmId }.toMutableMap()
-        val newlyInserted = mutableListOf<AirScheduleEntity>()
-        val newEvents = mutableListOf<AirEventEntity>()
-        val mappingsToPersist = mutableListOf<AniListBgmMappingEntity>()
-        val mappingCache = loadMappingCache(weeklyItems.map { it.anilistId })
+        val state =
+            WeeklyResolutionState(
+                entitiesByAnilistId =
+                    currentEntities
+                        .filter { it.anilistId != null }
+                        .associateBy { it.anilistId!! }
+                        .toMutableMap(),
+                entitiesByBgmId = currentEntities.associateBy { it.bgmId }.toMutableMap(),
+                mappingCache = loadMappingCache(weeklyItems.map { it.anilistId }),
+            )
         val snapshotItemByAnilistId = snapshot.items.associateBy { it.anilistId }
 
         for (item in weeklyItems) {
-            val sItem = snapshotItemByAnilistId[item.anilistId]
-            val sSites = sItem?.sites?.mapNotNull { resolveSiteLink(it.site, it.id, it.url) }.orEmpty()
-            val sSitesJson = if (sSites.isNotEmpty()) json.encodeToString(sSites) else "[]"
-            val sCoverUrl = item.coverUrl.orEmpty()
-            val sTitleCn = sItem?.titleCn.orEmpty()
-            val sAirDate =
-                sItem?.airDate?.ifBlank { null }
-                    ?: if ((sItem?.startYear ?: 0) > 0 && (sItem?.startMonth ?: 0) in 1..12) {
-                        "${sItem!!.startYear}-${sItem!!.startMonth.toString().padStart(2, '0')}-01"
-                    } else {
-                        ""
-                    }
+            val ctx = weeklyItemContextOf(item, snapshotItemByAnilistId[item.anilistId])
 
-            val alreadyMapped = entitiesByAnilistId[item.anilistId]
+            // A) 该 anilistId 已绑定到正式条目：只补元数据，不重新绑定
+            val alreadyMapped = state.entitiesByAnilistId[item.anilistId]
             if (alreadyMapped != null && alreadyMapped.bgmId > 0) {
-                val mergedSites = mergeSites(alreadyMapped.sitesJson, sSitesJson)
-                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else alreadyMapped.titleCn
-                val targetCoverUrl = if (alreadyMapped.coverUrl.isBlank() && sCoverUrl.isNotBlank()) sCoverUrl else alreadyMapped.coverUrl
-                val targetAirDate =
-                    if (alreadyMapped.airDate.isBlank() &&
-                        sAirDate.isNotBlank()
-                    ) {
-                        sAirDate.substringBefore("T")
-                    } else {
-                        alreadyMapped.airDate
-                    }
-                val needsUpdate =
-                    targetCoverUrl != alreadyMapped.coverUrl ||
-                        targetTitleCn != alreadyMapped.titleCn ||
-                        targetAirDate != alreadyMapped.airDate ||
-                        mergedSites != alreadyMapped.sitesJson
-
-                if (needsUpdate) {
-                    val updated =
-                        alreadyMapped.copy(
-                            coverUrl = targetCoverUrl,
-                            titleCn = targetTitleCn,
-                            airDate = targetAirDate,
-                            sitesJson = mergedSites,
-                        )
-                    entitiesByAnilistId[item.anilistId] = updated
-                    entitiesByBgmId[updated.bgmId] = updated
-                    newlyInserted += updated
-                }
-                newEvents += item.toAirEventEntity(alreadyMapped.bgmId, nowMillis)
+                refreshAlreadyBoundEntity(ctx, alreadyMapped, state, nowMillis)
                 continue
             }
 
             // 上一轮的占位条目：本次先移除，映射成功则升级为正式条目，失败则随裁剪删除
             if (alreadyMapped != null) {
-                entitiesByAnilistId.remove(item.anilistId)
-                entitiesByBgmId.remove(alreadyMapped.bgmId)
+                state.entitiesByAnilistId.remove(item.anilistId)
+                state.entitiesByBgmId.remove(alreadyMapped.bgmId)
             }
 
-            // 0) 快照自带 bgmId（CI 侧桥接/搜索已解析）：最优路径，零额外请求
-            val snapshotMapping =
-                sItem?.bgmId?.let { bgmId ->
-                    AniListBgmMappingEntity(
-                        anilistId = item.anilistId,
-                        bgmId = bgmId,
-                        sitesJson = sSitesJson,
-                        title = item.titleNative,
-                        titleCn = sTitleCn,
-                        beginIso = sAirDate,
-                        endIso = "",
-                        monthKey = "",
-                        updatedAt = nowMillis,
-                    )
-                }
+            // B) 快照自带 bgmId（CI 侧桥接/搜索已解析）：最优路径，零额外请求；否则回落到本地历史映射缓存
+            if (bindBySnapshotMapping(ctx, state, nowMillis)) continue
 
-            // 1) 快照 bgmId 或本地历史映射缓存
-            val mapping = snapshotMapping ?: mappingCache[item.anilistId]
-            if (mapping != null) {
-                mappingCache[item.anilistId] = mapping
-                mappingsToPersist += mapping
-                val existing = entitiesByBgmId[mapping.bgmId]
-                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else existing?.titleCn?.ifBlank { mapping.titleCn }.orEmpty()
-                val targetSites = mergeSites(existing?.sitesJson.orEmpty(), sSitesJson.ifBlank { mapping.sitesJson })
-                val entity =
-                    existing?.copy(
-                        anilistId = item.anilistId,
-                        coverUrl = existing.coverUrl.ifBlank { item.coverUrl.orEmpty() },
-                        titleCn = targetTitleCn,
-                        airDate = existing.airDate.ifBlank { mapping.beginIso.substringBefore("T") },
-                        sitesJson = targetSites,
-                    ) ?: mapping.copy(titleCn = targetTitleCn, sitesJson = targetSites).toAirScheduleEntity(item, nowMillis)
-                entitiesByBgmId[entity.bgmId] = entity
-                entitiesByAnilistId[item.anilistId] = entity
-                newlyInserted += entity
-                newEvents += item.toAirEventEntity(entity.bgmId, nowMillis)
-                continue
-            }
+            // C) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
+            if (bindByLocalTitleMatch(ctx, currentEntities, state, nowMillis)) continue
 
-            // 2) 本地标题精确匹配：只考虑尚未绑定 anilistId 的条目
-            val localMatch =
-                currentEntities.firstOrNull { entity ->
-                    entity.bgmId > 0 &&
-                        entity.anilistId == null &&
-                        (titlesRoughlyEqual(entity.title, item.titleNative) || titlesRoughlyEqual(entity.titleCn, item.titleNative))
-                }
-            if (localMatch != null) {
-                val targetTitleCn = if (sTitleCn.isNotBlank()) sTitleCn else localMatch.titleCn
-                val updated =
-                    localMatch.copy(
-                        anilistId = item.anilistId,
-                        coverUrl = localMatch.coverUrl.ifBlank { item.coverUrl.orEmpty() },
-                        titleCn = targetTitleCn,
-                        airDate = localMatch.airDate.ifBlank { sAirDate.substringBefore("T") },
-                        sitesJson = mergeSites(localMatch.sitesJson, sSitesJson),
-                    )
-                entitiesByBgmId[updated.bgmId] = updated
-                entitiesByAnilistId[item.anilistId] = updated
-                newlyInserted += updated
-                mappingsToPersist += updated.toAniListBgmMapping(item.anilistId, nowMillis)
-                newEvents += item.toAirEventEntity(updated.bgmId, nowMillis)
-                continue
-            }
-
-            // 3) 均未映射：直接跳过（CI 侧未收录条目，客户端不发起实时搜索/探测，不生成占位条目）
+            // D) 均未映射：直接跳过（CI 侧未收录条目，客户端不发起实时搜索/探测，不生成占位条目）
         }
 
-        if (mappingsToPersist.isNotEmpty()) {
-            runCatching { anilistMappingDao.upsertMappings(mappingsToPersist.distinctBy { it.anilistId }) }
-        }
-        if (newlyInserted.isNotEmpty()) {
-            scheduleDao.insertSchedules(newlyInserted)
-        }
-        if (newEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(newEvents)
-        }
+        persistWeeklyResolution(state)
         return WeeklyResolution(
-            entities = entitiesByBgmId.values.toList(),
+            entities = state.entitiesByBgmId.values.toList(),
             rosterAnilistIds = weeklyItems.map { it.anilistId }.toSet(),
         )
     }
@@ -708,6 +610,194 @@ class ScheduleRepositoryImpl(
         val entities: List<AirScheduleEntity>,
         val rosterAnilistIds: Set<Long>,
     )
+
+    /**
+     * 一轮周排期解析的**可变状态**：三张索引表 + 三个待落库列表。
+     *
+     * 拎成独立对象，是为了让主流程与三条绑定策略共享同一份可变状态；否则每个策略都要接六七个参数、
+     * 还容易把顺序传错。它私有于本类，生命周期止于一次解析。
+     */
+    private class WeeklyResolutionState(
+        val entitiesByAnilistId: MutableMap<Long, AirScheduleEntity>,
+        val entitiesByBgmId: MutableMap<Long, AirScheduleEntity>,
+        val mappingCache: MutableMap<Long, AniListBgmMappingEntity>,
+        val newlyInserted: MutableList<AirScheduleEntity> = mutableListOf(),
+        val newEvents: MutableList<AirEventEntity> = mutableListOf(),
+        val mappingsToPersist: MutableList<AniListBgmMappingEntity> = mutableListOf(),
+    )
+
+    /**
+     * 单条 AniList 名单条目 + 它在快照里的对应信息（快照里可能没有这一条）。
+     *
+     * 三条绑定策略都要用到这几个字段，所以预先算好一遍，避免在每个分支里重复取。
+     */
+    private class WeeklyItemContext(
+        val item: AniListWeeklyScheduleItem,
+        val sItem: ScheduleSnapshotItemDto?,
+        val sitesJson: String,
+        val coverUrl: String,
+        val titleCn: String,
+        val airDate: String,
+    )
+
+    /** 组装 [WeeklyItemContext]；播放源序列化与首播日兜底都收在这里 */
+    private fun weeklyItemContextOf(
+        item: AniListWeeklyScheduleItem,
+        sItem: ScheduleSnapshotItemDto?,
+    ): WeeklyItemContext {
+        val sites = sItem?.sites?.mapNotNull { resolveSiteLink(it.site, it.id, it.url) }.orEmpty()
+        return WeeklyItemContext(
+            item = item,
+            sItem = sItem,
+            sitesJson = if (sites.isNotEmpty()) json.encodeToString(sites) else "[]",
+            coverUrl = item.coverUrl.orEmpty(),
+            titleCn = sItem?.titleCn.orEmpty(),
+            airDate = snapshotAirDateOf(sItem),
+        )
+    }
+
+    /** 快照条目的首播日：优先 `airDate`；缺失时用 `startYear/startMonth` 兜一个当月 1 日 */
+    private fun snapshotAirDateOf(sItem: ScheduleSnapshotItemDto?): String {
+        val explicit = sItem?.airDate?.ifBlank { null }
+        if (explicit != null) return explicit
+        val year = sItem?.startYear ?: 0
+        val month = sItem?.startMonth ?: 0
+        if (year <= 0 || month !in 1..12) return ""
+        return "$year-${month.toString().padStart(2, '0')}-01"
+    }
+
+    /**
+     * 策略 A：该 anilistId 已绑定到正式条目（`bgmId > 0`），只做元数据补全、不重新绑定。
+     *
+     * 无论是否有字段需要更新，都要补一条本话事件——事件是排期的第一手事实，与元数据是否变化无关。
+     */
+    private fun refreshAlreadyBoundEntity(
+        ctx: WeeklyItemContext,
+        existing: AirScheduleEntity,
+        state: WeeklyResolutionState,
+        nowMillis: Long,
+    ) {
+        val mergedSites = mergeSites(existing.sitesJson, ctx.sitesJson)
+        val targetTitleCn = if (ctx.titleCn.isNotBlank()) ctx.titleCn else existing.titleCn
+        val targetCoverUrl = if (existing.coverUrl.isBlank() && ctx.coverUrl.isNotBlank()) ctx.coverUrl else existing.coverUrl
+        val targetAirDate =
+            if (existing.airDate.isBlank() && ctx.airDate.isNotBlank()) {
+                ctx.airDate.substringBefore("T")
+            } else {
+                existing.airDate
+            }
+        val needsUpdate =
+            targetCoverUrl != existing.coverUrl ||
+                targetTitleCn != existing.titleCn ||
+                targetAirDate != existing.airDate ||
+                mergedSites != existing.sitesJson
+
+        if (needsUpdate) {
+            val updated =
+                existing.copy(
+                    coverUrl = targetCoverUrl,
+                    titleCn = targetTitleCn,
+                    airDate = targetAirDate,
+                    sitesJson = mergedSites,
+                )
+            state.entitiesByAnilistId[ctx.item.anilistId] = updated
+            state.entitiesByBgmId[updated.bgmId] = updated
+            state.newlyInserted += updated
+        }
+        state.newEvents += ctx.item.toAirEventEntity(existing.bgmId, nowMillis)
+    }
+
+    /**
+     * 策略 B：按快照自带 `bgmId`（CI 侧桥接/搜索已解析，零额外请求）或本地历史映射缓存绑定。
+     *
+     * @return true 表示该条目已被处理，调用方应 `continue`
+     */
+    private fun bindBySnapshotMapping(
+        ctx: WeeklyItemContext,
+        state: WeeklyResolutionState,
+        nowMillis: Long,
+    ): Boolean {
+        val snapshotMapping =
+            ctx.sItem?.bgmId?.let { bgmId ->
+                AniListBgmMappingEntity(
+                    anilistId = ctx.item.anilistId,
+                    bgmId = bgmId,
+                    sitesJson = ctx.sitesJson,
+                    title = ctx.item.titleNative,
+                    titleCn = ctx.titleCn,
+                    beginIso = ctx.airDate,
+                    endIso = "",
+                    monthKey = "",
+                    updatedAt = nowMillis,
+                )
+            }
+        val mapping = snapshotMapping ?: state.mappingCache[ctx.item.anilistId] ?: return false
+        state.mappingCache[ctx.item.anilistId] = mapping
+        state.mappingsToPersist += mapping
+        val existing = state.entitiesByBgmId[mapping.bgmId]
+        val targetTitleCn = if (ctx.titleCn.isNotBlank()) ctx.titleCn else existing?.titleCn?.ifBlank { mapping.titleCn }.orEmpty()
+        val targetSites = mergeSites(existing?.sitesJson.orEmpty(), ctx.sitesJson.ifBlank { mapping.sitesJson })
+        val entity =
+            existing?.copy(
+                anilistId = ctx.item.anilistId,
+                coverUrl = existing.coverUrl.ifBlank { ctx.item.coverUrl.orEmpty() },
+                titleCn = targetTitleCn,
+                airDate = existing.airDate.ifBlank { mapping.beginIso.substringBefore("T") },
+                sitesJson = targetSites,
+            ) ?: mapping.copy(titleCn = targetTitleCn, sitesJson = targetSites).toAirScheduleEntity(ctx.item, nowMillis)
+        state.entitiesByBgmId[entity.bgmId] = entity
+        state.entitiesByAnilistId[ctx.item.anilistId] = entity
+        state.newlyInserted += entity
+        state.newEvents += ctx.item.toAirEventEntity(entity.bgmId, nowMillis)
+        return true
+    }
+
+    /**
+     * 策略 C：本地标题精确匹配绑定。只考虑尚未绑定 `anilistId` 的条目，避免抢走别人的条目。
+     *
+     * @return true 表示该条目已被处理，调用方应 `continue`
+     */
+    private fun bindByLocalTitleMatch(
+        ctx: WeeklyItemContext,
+        currentEntities: List<AirScheduleEntity>,
+        state: WeeklyResolutionState,
+        nowMillis: Long,
+    ): Boolean {
+        val localMatch =
+            currentEntities.firstOrNull { entity ->
+                entity.bgmId > 0 &&
+                    entity.anilistId == null &&
+                    (titlesRoughlyEqual(entity.title, ctx.item.titleNative) || titlesRoughlyEqual(entity.titleCn, ctx.item.titleNative))
+            } ?: return false
+        val targetTitleCn = if (ctx.titleCn.isNotBlank()) ctx.titleCn else localMatch.titleCn
+        val updated =
+            localMatch.copy(
+                anilistId = ctx.item.anilistId,
+                coverUrl = localMatch.coverUrl.ifBlank { ctx.item.coverUrl.orEmpty() },
+                titleCn = targetTitleCn,
+                airDate = localMatch.airDate.ifBlank { ctx.airDate.substringBefore("T") },
+                sitesJson = mergeSites(localMatch.sitesJson, ctx.sitesJson),
+            )
+        state.entitiesByBgmId[updated.bgmId] = updated
+        state.entitiesByAnilistId[ctx.item.anilistId] = updated
+        state.newlyInserted += updated
+        state.mappingsToPersist += updated.toAniListBgmMapping(ctx.item.anilistId, nowMillis)
+        state.newEvents += ctx.item.toAirEventEntity(updated.bgmId, nowMillis)
+        return true
+    }
+
+    /** 把一轮解析攒下的三类变更落库；空列表不触发写库，避免无谓事务 */
+    private suspend fun persistWeeklyResolution(state: WeeklyResolutionState) {
+        if (state.mappingsToPersist.isNotEmpty()) {
+            runCatching { anilistMappingDao.upsertMappings(state.mappingsToPersist.distinctBy { it.anilistId }) }
+        }
+        if (state.newlyInserted.isNotEmpty()) {
+            scheduleDao.insertSchedules(state.newlyInserted)
+        }
+        if (state.newEvents.isNotEmpty()) {
+            airEventDao.insertAirEvents(state.newEvents)
+        }
+    }
 
     private suspend fun loadMappingCache(anilistIds: List<Long>): MutableMap<Long, AniListBgmMappingEntity> =
         runCatching { anilistMappingDao.getMappingsByAniListIds(anilistIds.distinct()) }
@@ -947,52 +1037,6 @@ class ScheduleRepositoryImpl(
         )
     }
 
-    private fun isZombieBgmDataSchedule(
-        entity: AirScheduleEntity,
-        events: List<AirEventEntity>,
-        nowMillis: Long,
-    ): Boolean {
-        if (entity.source != AirScheduleEntity.SOURCE_BGM_DATA) return false
-        val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
-        if (events.isNotEmpty()) {
-            val hasActiveOrFutureEvent =
-                events.any { event ->
-                    val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: 0L
-                    millis >= weekStartMillis
-                }
-            if (hasActiveOrFutureEvent) return false
-
-            // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为僵尸条目
-            if (entity.totalEpisodes == 1) return true
-            if (entity.totalEpisodes > 1) {
-                if (events.size >= entity.totalEpisodes) return true
-                val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
-                if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
-                    return true
-                }
-                return false
-            }
-            // totalEpisodes <= 0
-            val latestEventMillis = events.maxOfOrNull { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L } ?: 0L
-            return latestEventMillis < weekStartMillis - 14 * DAY_MILLIS
-        }
-
-        // events 为空
-        if (entity.totalEpisodes == 1) {
-            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return true
-            return beginMillis < weekStartMillis
-        }
-        if (entity.totalEpisodes > 1) {
-            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
-            if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
-                return true
-            }
-            return false
-        }
-        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return false
-        return beginMillis < weekStartMillis - 14 * DAY_MILLIS
-    }
-
     private fun AirScheduleEntity.isActiveForSchedule(nowMillis: Long): Boolean {
         val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
         val nextMillis = TimeUtils.epochMillisOfIso(nextEpisodeAtUtc)
@@ -1073,9 +1117,6 @@ class ScheduleRepositoryImpl(
     }
 
     private companion object {
-        const val HOUR_MILLIS = 60L * 60 * 1000
-        const val DAY_MILLIS = 24L * HOUR_MILLIS
-        const val WEEK_MILLIS = 7L * DAY_MILLIS
         const val ANILIST_SITE = "anilist"
         const val BILIBILI_SITE = "bilibili"
         const val EVENT_SOURCE_ANILIST = "anilist"
@@ -1149,4 +1190,61 @@ class ScheduleRepositoryImpl(
                 "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
             )
     }
+}
+
+/**
+ * 判定一条 `bgm_data` 来源的条目是否已成"僵尸"：本周及未来都不会再有任何播出事件，该从时刻表剔除。
+ * 非 `bgm_data` 来源（如 AniList 名单）一律不判，直接返回 false。
+ *
+ * 两支判据：**有事件**时看是否已播完全部集数、或总放送周期已过；**无事件**时看距最后事件／开播日
+ * 是否已过去足够久（14 天）。
+ *
+ * 刻意做成**无依赖的顶层纯函数**，而不是 [ScheduleRepositoryImpl] 的 private 成员：它只依赖传入的
+ * 实体、事件与当前时刻，抽出来才能逐分支钉住。留在类里当私有成员时行覆盖率只有 51.9%，
+ * 在 CRAP 门禁（阈值 30，CC=26）下是 DANGER。
+ */
+internal fun isZombieBgmDataSchedule(
+    entity: AirScheduleEntity,
+    events: List<AirEventEntity>,
+    nowMillis: Long,
+): Boolean {
+    if (entity.source != AirScheduleEntity.SOURCE_BGM_DATA) return false
+    val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
+    if (events.isNotEmpty()) {
+        val hasActiveOrFutureEvent =
+            events.any { event ->
+                val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: 0L
+                millis >= weekStartMillis
+            }
+        if (hasActiveOrFutureEvent) return false
+
+        // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为僵尸条目
+        if (entity.totalEpisodes == 1) return true
+        if (entity.totalEpisodes > 1) {
+            if (events.size >= entity.totalEpisodes) return true
+            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
+            if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
+                return true
+            }
+            return false
+        }
+        // totalEpisodes <= 0
+        val latestEventMillis = events.maxOfOrNull { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L } ?: 0L
+        return latestEventMillis < weekStartMillis - 14 * DAY_MILLIS
+    }
+
+    // events 为空
+    if (entity.totalEpisodes == 1) {
+        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return true
+        return beginMillis < weekStartMillis
+    }
+    if (entity.totalEpisodes > 1) {
+        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
+        if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
+            return true
+        }
+        return false
+    }
+    val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return false
+    return beginMillis < weekStartMillis - 14 * DAY_MILLIS
 }

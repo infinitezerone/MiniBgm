@@ -2520,4 +2520,102 @@ class ScheduleRepositoryImplTest {
         kind = AirEventKind.ACTUAL,
         source = "anilist",
     )
+
+    /**
+     * `isZombieBgmDataSchedule` 是无依赖的纯谓词，所以能在这里逐分支钉住。
+     *
+     * 它分支密度很高（CC=26），而 CRAP 门禁只认覆盖率：留在类里当 private 成员时行覆盖率只有
+     * 51.9%、CRAP=101.5，是 DANGER。抽成顶层 internal 后由这条表驱动测试补齐覆盖。
+     * 每个用例都对着一个具体的判据分支，新增分支时这里应该同步加一行。
+     */
+    @Test
+    fun isZombieBgmDataSchedule_coversEveryBranch() {
+        val now = assertNotNull(TimeUtils.epochMillisOfIso("2026-09-29T12:00:00Z"))
+        val weekStart = TimeUtils.cstWeekStartEpochMillis(now)
+        val week = 7 * DAY_MILLIS
+        val past = weekStart - 30 * DAY_MILLIS
+        val recent = weekStart - 3 * DAY_MILLIS
+        val future = weekStart + 2 * DAY_MILLIS
+        val stale = weekStart - 20 * DAY_MILLIS
+
+        fun iso(millis: Long) = TimeUtils.isoUtcFromEpochMillis(millis)
+
+        fun entity(
+            totalEpisodes: Int = 0,
+            beginIso: String = "",
+            source: String = AirScheduleEntity.SOURCE_BGM_DATA,
+        ) = AirScheduleEntity(
+            bgmId = 1L,
+            title = "t",
+            titleCn = "t",
+            coverUrl = "",
+            ratingScore = 0.0,
+            airDate = beginIso,
+            weekday = 1,
+            timeCst = "",
+            timeJst = "",
+            sitesJson = "[]",
+            totalEpisodes = totalEpisodes,
+            source = source,
+        )
+
+        fun event(airAtUtc: String) =
+            AirEventEntity(
+                subjectId = 1L,
+                episode = 1,
+                airAtUtc = airAtUtc,
+                kind = AirEventKind.ACTUAL,
+                source = "anilist",
+            )
+
+        data class Case(
+            val name: String,
+            val expected: Boolean,
+            val entity: AirScheduleEntity,
+            val events: List<AirEventEntity>,
+        )
+
+        val cases =
+            listOf(
+                // 非 bgm_data 来源一律不判——喂一个"否则会判 true"的输入，证明是 source 短路挡住的
+                Case(
+                    "official 来源不判",
+                    false,
+                    entity(1, iso(past), AirScheduleEntity.SOURCE_OFFICIAL),
+                    emptyList(),
+                ),
+                Case("有本周/未来事件 → 不是僵尸", false, entity(1, iso(past)), listOf(event(iso(future)))),
+                // 事件时刻解析不出来时按 0 处理，不该被当成"未来事件"
+                Case("事件时刻无法解析按 0 处理", true, entity(1, iso(past)), listOf(event("not-a-date"))),
+                Case("事件非空 + 单集 → 已播完", true, entity(1, iso(past)), listOf(event(iso(past)))),
+                Case(
+                    "事件数已达总集数",
+                    true,
+                    entity(3, iso(past)),
+                    listOf(event(iso(past)), event(iso(past)), event(iso(past))),
+                ),
+                Case("未播完但放送周期已结束", true, entity(12, iso(weekStart - 20 * week)), listOf(event(iso(past)))),
+                Case("未播完且放送周期未结束", false, entity(12, iso(weekStart - 2 * week)), listOf(event(iso(past)))),
+                Case("未播完且开播时刻未知", false, entity(12, ""), listOf(event(iso(past)))),
+                Case("总集数未知 + 最后事件很旧", true, entity(0, iso(past)), listOf(event(iso(stale)))),
+                Case("总集数未知 + 最后事件不算旧", false, entity(0, iso(past)), listOf(event(iso(recent)))),
+                Case("无事件 + 单集 + 开播未知", true, entity(1, ""), emptyList()),
+                Case("无事件 + 单集 + 已开播", true, entity(1, iso(past)), emptyList()),
+                Case("无事件 + 单集 + 尚未开播", false, entity(1, iso(future)), emptyList()),
+                Case("无事件 + 多集 + 周期已过", true, entity(12, iso(weekStart - 20 * week)), emptyList()),
+                Case("无事件 + 多集 + 周期未过", false, entity(12, iso(weekStart - 2 * week)), emptyList()),
+                Case("无事件 + 多集 + 开播未知", false, entity(12, ""), emptyList()),
+                Case("无事件 + 集数未知 + 开播未知", false, entity(0, ""), emptyList()),
+                Case("无事件 + 集数未知 + 开播很久以前", true, entity(0, iso(stale)), emptyList()),
+                Case("无事件 + 集数未知 + 开播较近", false, entity(0, iso(recent)), emptyList()),
+            )
+
+        cases.forEach { case ->
+            assertEquals(
+                case.expected,
+                isZombieBgmDataSchedule(case.entity, case.events, now),
+                "用例「${case.name}」",
+            )
+        }
+    }
 }
