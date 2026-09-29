@@ -80,8 +80,13 @@ enum class RelationCategory(
             val type = relation.type
 
             // 1. 原声音乐：类型为 3 或含音乐相关关键词
-            if (type == 3 || rel in MUSIC_KEYWORDS || rel.contains("曲") || rel.contains("歌") ||
-                rel.contains("原声") || rel.contains("广播") || rel.contains("OST", ignoreCase = true)
+            if (type == 3 ||
+                rel in MUSIC_KEYWORDS ||
+                rel.contains("曲") ||
+                rel.contains("歌") ||
+                rel.contains("原声") ||
+                rel.contains("广播") ||
+                rel.contains("OST", ignoreCase = true)
             ) {
                 return MUSIC
             }
