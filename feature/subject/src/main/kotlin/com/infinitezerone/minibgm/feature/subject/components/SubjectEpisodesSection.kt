@@ -100,131 +100,155 @@ fun EpisodesSectionHeader(
             SubjectType.ANIME, SubjectType.REAL -> "已看 $watchedEpisodes / 全 $totalEpisodes 话"
         }
 
-    Row(
+    // 动作 chips 与"标题/进度/视图控制"分两行：全塞一行时元素最多到 5 个，
+    // 363dp 的屏放不下，进度标签会被挤成省略号。
+    val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
+    val hasActionChips =
+        (nextUpEpisodeSort != null && onJumpToNextUp != null) ||
+            (isEpisodeLike && (onPlayNext != null || onOpenSources != null))
+
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f, fill = false),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = headerTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            if (totalEpisodes > 0) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
                 Text(
-                    text = progressLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = headerTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                 )
-            }
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (nextUpEpisodeSort != null && onJumpToNextUp != null) {
-                Surface(
-                    onClick = onJumpToNextUp,
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MyLocation,
-                            contentDescription = null,
-                            modifier = Modifier.size(13.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                }
-            }
-            if (onPlayNext != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
-                Surface(
-                    onClick = onPlayNext,
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "播放下一集",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                }
-            }
-            if (onOpenSources != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
-                Surface(
-                    onClick = onOpenSources,
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CloudQueue,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "播放源",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-
-            if (onToggleSort != null) {
-                IconButton(onClick = onToggleSort) {
-                    Icon(
-                        imageVector = Icons.Filled.SwapVert,
-                        contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
-                        tint = if (episodeSortDescending) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                if (totalEpisodes > 0) {
+                    Text(
+                        text = progressLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (onToggleSort != null) {
+                    IconButton(onClick = onToggleSort) {
+                        Icon(
+                            imageVector = Icons.Filled.SwapVert,
+                            contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
+                            tint =
+                                if (episodeSortDescending) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                }
 
-            IconButton(onClick = onToggleView) {
-                Icon(
-                    imageVector = if (isGridView) Icons.Filled.FormatListNumbered else Icons.Filled.GridView,
-                    contentDescription = if (isGridView) "切换为列表视图" else "切换为网格视图",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                IconButton(onClick = onToggleView) {
+                    Icon(
+                        imageVector = if (isGridView) Icons.Filled.FormatListNumbered else Icons.Filled.GridView,
+                        contentDescription = if (isGridView) "切换为列表视图" else "切换为网格视图",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+
+        if (hasActionChips) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (nextUpEpisodeSort != null && onJumpToNextUp != null) {
+                    Surface(
+                        onClick = onJumpToNextUp,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.MyLocation,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
+                }
+                if (onPlayNext != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
+                    Surface(
+                        onClick = onPlayNext,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "播放下一集",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
+                if (onOpenSources != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
+                    Surface(
+                        onClick = onOpenSources,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CloudQueue,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "播放源",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
