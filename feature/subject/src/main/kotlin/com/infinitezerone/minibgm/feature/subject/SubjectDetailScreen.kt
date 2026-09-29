@@ -515,6 +515,15 @@ fun SubjectDetailScreen(
                                             }
                                         }
                                     },
+                                    onUpdateCollectionStatus = { type ->
+                                        viewModel.updateCollectionStatus(type)
+                                        if (type == CollectionType.DOING && uiState.isLoggedIn) {
+                                            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                                            if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                                                showAiringReminderPrompt = true
+                                            }
+                                        }
+                                    },
                                     onToggleEpisodeWatched = onToggleEpisodeWatched,
                                     onSelectEpisodeForDetail = onSelectEpisodeForDetail,
                                     onSubjectClick = onSubjectClick,

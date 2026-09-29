@@ -21,13 +21,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,58 +57,288 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
+import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 
-/** 关联作品区域 */
+/** 关联条目分类枚举（对齐 Bangumi 官网分类规则） */
+enum class RelationCategory(
+    val label: String,
+) {
+    MAIN_STORY("正传/续作"),
+    ORIGINAL("改编原著"),
+    MUSIC("原声音乐"),
+    SPINOFF("衍生/特典"),
+    GAME("游戏"),
+    OTHER("其他"),
+    ;
+
+    companion object {
+        fun classify(relation: SubjectRelation): RelationCategory {
+            val rel = relation.relation.trim()
+            val type = relation.type
+
+            // 1. 原声音乐：类型为 3 或含音乐相关关键词
+            if (type == 3 || rel in MUSIC_KEYWORDS || rel.contains("曲") || rel.contains("歌") ||
+                rel.contains("原声") || rel.contains("广播") || rel.contains("OST", ignoreCase = true)
+            ) {
+                return MUSIC
+            }
+            // 2. 改编原著：关键词或书籍类型
+            if (rel in ORIGINAL_KEYWORDS || (type == 1 && (rel in BOOK_KEYWORDS || rel.contains("漫画") || rel.contains("小说")))) {
+                return ORIGINAL
+            }
+            // 3. 游戏：类型为 4 或关键词
+            if (type == 4 || rel.contains("游戏")) {
+                return GAME
+            }
+            // 4. 正传/续作：前传、续集、主线、相同世界观等
+            if (rel in MAIN_STORY_KEYWORDS) {
+                return MAIN_STORY
+            }
+            // 5. 衍生/特典：番外、特典、OVA、剧场版、短片等
+            if (rel in SPINOFF_KEYWORDS) {
+                return SPINOFF
+            }
+            return OTHER
+        }
+
+        private val MUSIC_KEYWORDS = setOf("片头曲", "片尾曲", "原声集", "角色歌", "插入歌", "印象曲", "广播剧", "主题歌", "OST")
+        private val ORIGINAL_KEYWORDS = setOf("原著", "前传原著", "续集原著", "原作")
+        private val BOOK_KEYWORDS = setOf("漫画", "小说", "书籍", "画集")
+        private val MAIN_STORY_KEYWORDS = setOf("前传", "续集", "全集", "主线故事", "相同世界观", "不同世界观", "总集篇", "正篇")
+        private val SPINOFF_KEYWORDS = setOf("番外篇", "侧线故事", "短片", "衍生", "特典", "OVA", "剧场版", "其他外传")
+    }
+}
+
+/** 关联作品区域：支持按正传/续作、原声音乐、改编原著等细粒度分类过滤，支持横滑与海报墙视图切换 */
 @Composable
 fun RelationsSection(
     relations: List<SubjectRelation>,
     onSubjectClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (relations.isEmpty()) return
+
+    val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var isGridView by rememberSaveable { mutableStateOf(false) }
+
+    // 统计各分类实际包含的作品数量
+    val categoryCounts =
+        remember(uniqueRelations) {
+            uniqueRelations.groupingBy { RelationCategory.classify(it) }.eachCount()
+        }
+    // 只展示当前条目实际存在的分类（按预设顺序）
+    val availableCategories =
+        remember(categoryCounts) {
+            RelationCategory.entries.filter { (categoryCounts[it] ?: 0) > 0 }
+        }
+
+    val filteredRelations =
+        remember(uniqueRelations, selectedCategory) {
+            if (selectedCategory == null) {
+                uniqueRelations
+            } else {
+                uniqueRelations.filter { RelationCategory.classify(it).name == selectedCategory }
+            }
+        }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = "关联作品",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 0.dp),
+        // 1. 标题与视图切换按钮
+        Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(items = uniqueRelations, key = { "${it.id}_${it.relation}" }) { relation ->
-                RelationCard(
-                    relation = relation,
-                    onClick = { onSubjectClick(relation.id) },
-                )
+            val titleText =
+                if (selectedCategory != null) {
+                    val catLabel = RelationCategory.valueOf(selectedCategory!!).label
+                    "关联作品 · $catLabel (${filteredRelations.size})"
+                } else {
+                    "关联作品 (${uniqueRelations.size})"
+                }
+
+            Text(
+                text = titleText,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+
+            if (uniqueRelations.size > 4) {
+                Surface(
+                    onClick = { isGridView = !isGridView },
+                    shape = RoundedCornerShape(16.dp),
+                    color =
+                        if (isGridView) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (isGridView) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint =
+                                if (isGridView) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                        Text(
+                            text = if (isGridView) "横滑模式" else "海报墙 (${uniqueRelations.size})",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                if (isGridView) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. 细粒度分类过滤 Chips（仅在分类数 >= 2 或条目总数 > 3 时展示）
+        if (availableCategories.size >= 2 || uniqueRelations.size > 3) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                item(key = "rel_cat_all") {
+                    FilterChip(
+                        selected = selectedCategory == null,
+                        onClick = { selectedCategory = null },
+                        label = {
+                            Text(
+                                text = "全部 (${uniqueRelations.size})",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
+                        border = null,
+                        colors =
+                            FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ),
+                    )
+                }
+                items(items = availableCategories, key = { it.name }) { category ->
+                    val count = categoryCounts[category] ?: 0
+                    val isSelected = selectedCategory == category.name
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            selectedCategory = if (isSelected) null else category.name
+                        },
+                        label = {
+                            Text(
+                                text = "${category.label} ($count)",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
+                        border = null,
+                        colors =
+                            FilterChipDefaults.filterChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ),
+                    )
+                }
+            }
+        }
+
+        // 3. 内容区：横滑模式 vs 3 列海报墙
+        if (!isGridView) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(items = filteredRelations, key = { "${it.id}_${it.relation}" }) { relation ->
+                    RelationCard(
+                        relation = relation,
+                        onClick = { onSubjectClick(relation.id) },
+                        modifier = Modifier.width(115.dp),
+                    )
+                }
+            }
+        } else {
+            val chunked = remember(filteredRelations) { filteredRelations.chunked(3) }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                chunked.forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        rowItems.forEach { item ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                RelationCard(
+                                    relation = item,
+                                    onClick = { onSubjectClick(item.id) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                        repeat(3 - rowItems.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-/** 关联作品卡片 */
+/** 关联作品卡片：语义化徽章颜色分类（主线蓝/原著金/音乐紫）与金星评分 */
 @Composable
 private fun RelationCard(
     relation: SubjectRelation,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val category = remember(relation) { RelationCategory.classify(relation) }
+    val (badgeContainerColor, badgeContentColor) =
+        when (category) {
+            RelationCategory.MAIN_STORY -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+            RelationCategory.ORIGINAL -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
+            RelationCategory.MUSIC -> MaterialTheme.colorScheme.secondary to MaterialTheme.colorScheme.onSecondary
+            RelationCategory.GAME -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+            RelationCategory.SPINOFF -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+            else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
     Card(
         onClick = onClick,
-        modifier = modifier.width(120.dp),
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
+        Column(modifier = Modifier.padding(7.dp)) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 CoverImage(
                     url = relation.images?.bestImage.orEmpty(),
@@ -116,14 +350,14 @@ private fun RelationCard(
                 if (relation.relation.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                        color = badgeContainerColor.copy(alpha = 0.92f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
                         Text(
                             text = relation.relation,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = badgeContentColor,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
@@ -144,19 +378,19 @@ private fun RelationCard(
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = RatingGold,
                         modifier = Modifier.size(12.dp),
                     )
                     Text(
                         text = relation.score.toString(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = RatingGold,
                     )
                 }
             }

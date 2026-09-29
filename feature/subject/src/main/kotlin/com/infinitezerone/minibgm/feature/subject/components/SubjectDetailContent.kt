@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
+import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -91,6 +92,7 @@ internal fun SubjectDetailContent(
     onLoadMoreEpisodes: () -> Unit,
     onOpenCollectionSheet: () -> Unit,
     onToggleWatching: () -> Unit,
+    onUpdateCollectionStatus: ((CollectionType) -> Unit)? = null,
     onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
     onSelectEpisodeForDetail: (Episode) -> Unit,
     onSubjectClick: (Long) -> Unit,
@@ -199,6 +201,7 @@ internal fun SubjectDetailContent(
                     subjectType = subjectType,
                     onOpenSheet = onOpenCollectionSheet,
                     onToggleWatching = onToggleWatching,
+                    onUpdateCollectionStatus = onUpdateCollectionStatus,
                     onIncrementWatched = onIncrementWatched,
                     onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
                     nextEpSort = nextUpEpisode?.sort,

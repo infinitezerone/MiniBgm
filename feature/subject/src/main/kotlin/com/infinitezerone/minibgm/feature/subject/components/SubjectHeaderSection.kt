@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -35,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -274,7 +277,7 @@ fun SubjectHeaderCard(
     }
 }
 
-/** 个人追番/阅读/收听/游玩状态与进度卡片 */
+/** 个人追番/阅读/收听/游玩状态与进度卡片（含 Stitch 外露 5 状态胶囊排，支持 1-tap 直达切换） */
 @Composable
 fun SubjectPersonalProgressCard(
     collection: UserCollection?,
@@ -283,12 +286,25 @@ fun SubjectPersonalProgressCard(
     onOpenSheet: () -> Unit,
     onToggleWatching: () -> Unit,
     modifier: Modifier = Modifier,
+    onUpdateCollectionStatus: ((CollectionType) -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
     nextEpSort: Float? = null,
 ) {
     val currentEp = collection?.epStatus ?: 0
     val progress = if (totalEpisodes > 0) (currentEp.toFloat() / totalEpisodes).coerceIn(0f, 1f) else 0f
+    val currentType = collection?.let { CollectionType.fromValue(it.type) }
+
+    val statusTypes =
+        remember {
+            listOf(
+                CollectionType.WISH,
+                CollectionType.DOING,
+                CollectionType.COLLECT,
+                CollectionType.ON_HOLD,
+                CollectionType.DROPPED,
+            )
+        }
 
     val cardTitle =
         when (subjectType) {
@@ -297,88 +313,6 @@ fun SubjectPersonalProgressCard(
             SubjectType.GAME -> "我的游玩与评测"
             SubjectType.ANIME, SubjectType.REAL -> "我的追番与进度"
         }
-
-    val actionVerb =
-        when (subjectType) {
-            SubjectType.BOOK -> "追读"
-            SubjectType.MUSIC -> "收听"
-            SubjectType.GAME -> "在玩"
-            SubjectType.ANIME, SubjectType.REAL -> "追番"
-        }
-
-    if (collection == null) {
-        Card(
-            onClick = onToggleWatching,
-            modifier = modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Bookmark,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                    Column {
-                        Text(
-                            text = "未加入$actionVerb",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "点击一键加入，实时同步开播时刻与进度",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-
-                FilledTonalButton(
-                    onClick = onToggleWatching,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = actionVerb,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-        return
-    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -395,6 +329,7 @@ fun SubjectPersonalProgressCard(
                     .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            // 1. 顶部状态栏：图标、标题、评分星级、编辑管理按钮
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -403,32 +338,20 @@ fun SubjectPersonalProgressCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Bookmark,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (collection != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
                     Text(
-                        text = cardTitle,
+                        text = if (collection != null) cardTitle else "标记收藏状态",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                     )
-                    val verb = CollectionType.fromValue(collection.type).getVerb(subjectType)
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Text(
-                            text = verb,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        )
-                    }
-                    if (collection.rate > 0) {
+                    if (collection != null && collection.rate > 0) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = RatingGold.copy(alpha = 0.15f),
@@ -462,8 +385,76 @@ fun SubjectPersonalProgressCard(
                 }
             }
 
-            if (subjectType == SubjectType.GAME) {
-                val statusVerb = CollectionType.fromValue(collection.type).getVerb(subjectType)
+            // 2. Stitch 外露 5 状态胶囊排：想看 / 在看 / 看过 / 搁置 / 抛弃
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                statusTypes.forEach { type ->
+                    val isSelected = currentType == type
+                    val verb = type.getVerb(subjectType)
+                    Surface(
+                        onClick = {
+                            if (isSelected) {
+                                onOpenSheet()
+                            } else {
+                                onUpdateCollectionStatus?.invoke(type) ?: onToggleWatching()
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            },
+                        modifier = Modifier.weight(1f).height(36.dp),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 2.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                }
+                                Text(
+                                    text = verb,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. 进度条与快捷打卡区
+            if (collection == null) {
+                Text(
+                    text = "点击上方状态一键加入收藏，实时同步排期与打卡进度",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            } else if (subjectType == SubjectType.GAME) {
+                val statusVerb = currentType?.getVerb(subjectType) ?: ""
                 Text(
                     text = "游玩状态：$statusVerb",
                     style = MaterialTheme.typography.bodySmall,
@@ -513,7 +504,11 @@ fun SubjectPersonalProgressCard(
                 }
             }
 
-            if (onIncrementWatched != null && (totalEpisodes <= 0 || currentEp < totalEpisodes) && subjectType != SubjectType.GAME) {
+            if (collection != null &&
+                onIncrementWatched != null &&
+                (totalEpisodes <= 0 || currentEp < totalEpisodes) &&
+                subjectType != SubjectType.GAME
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -559,7 +554,7 @@ fun SubjectPersonalProgressCard(
                 }
             }
 
-            if (collection.comment.isNotBlank()) {
+            if (collection != null && collection.comment.isNotBlank()) {
                 Text(
                     text = "「${collection.comment}」",
                     style = MaterialTheme.typography.bodySmall,
