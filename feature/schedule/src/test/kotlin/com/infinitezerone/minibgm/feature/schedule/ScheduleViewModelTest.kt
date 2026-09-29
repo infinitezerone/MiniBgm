@@ -25,13 +25,30 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ScheduleViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private val today = ScheduleViewModel.currentCstDate().dayOfWeek.value
+    /**
+     * 钉死的"现在"。
+     *
+     * 排期判定全是窗口比较（≤45 分钟 IMMINENT / >45 分钟 TODAY_UPCOMING / 已过则 TODAY_AIRED），
+     * 用真实时钟会让同一份数据在一天中的不同时刻得出不同结论——本文件曾因此在 CI 上按小时
+     * 随机失败（本地 CST 通过、CI 的 UTC 挂掉）。固定为 CST 上午 08:00：所有 `timeCst`
+     * （18:00 / 20:00）都还在今天之内，结论与运行时刻、运行时区都无关。
+     */
+    private val fixedNow: Instant = Instant.parse("2026-03-10T00:00:00Z")
+
+    private val cstZone: ZoneId = ZoneId.of("Asia/Shanghai")
+
+    private fun cstDate(): LocalDate = fixedNow.atZone(cstZone).toLocalDate()
+
+    private val today = cstDate().dayOfWeek.value
 
     private fun createViewModel(
         repository: FakeScheduleRepository = FakeScheduleRepository(),
@@ -46,6 +63,7 @@ class ScheduleViewModelTest {
             settingsRepository = settingsRepository,
             authRepository = authRepository,
             subjectRepository = subjectRepository,
+            clock = { fixedNow.toEpochMilli() },
         )
 
     @Test
@@ -383,7 +401,7 @@ class ScheduleViewModelTest {
                 com.infinitezerone.minibgm.core.testing.repository
                     .FakeSettingsRepository()
 
-            val now = java.time.Instant.now()
+            val now = fixedNow
             val anime =
                 AirSchedule(
                     bgmId = 999L,
@@ -586,7 +604,7 @@ class ScheduleViewModelTest {
                 )
             repository.sendSchedules(weekday = today, schedules = listOf(anime))
 
-            val currentToday = ScheduleViewModel.currentLocalDate()
+            val currentToday = cstDate()
             val yesterdayDateStr = currentToday.minusDays(1).toString()
             val yesterdayEvent =
                 com.infinitezerone.minibgm.core.model.AirScheduleEvent(

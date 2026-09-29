@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -218,9 +219,26 @@ class ScheduleViewModel(
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
     private val subjectRepository: SubjectRepository,
+    /**
+     * 时钟注入点，默认取系统时间。
+     *
+     * 排期判定全是"距离现在多久"的窗口比较（≤45 分钟 IMMINENT、>45 分钟 TODAY_UPCOMING、
+     * 已过则 TODAY_AIRED），直接调 `System.currentTimeMillis()` 会让同一份数据在一天中的
+     * 不同时刻得出不同结论——测试因此变成"只有某个时段才通过"的时间炸弹。注入后测试可钉死时间。
+     */
+    private val clock: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
+    /**
+     * 今天。**按 CST 取，不用 `LocalDate.now()`**。
+     *
+     * `LocalDate.now()` 走 JVM 默认时区，而排期时间本身在 CST 坐标系里算（`CST_ZONE_ID`）：
+     * CI 跑在 UTC，本地在 CST(+8)，跨日那几小时两边会差一天，同一份排期一边算"今天"、
+     * 一边算"明天"，判定随之分叉。日期与时间必须同源。
+     */
+    private fun today(): LocalDate = Instant.ofEpochMilli(clock()).atZone(CST_ZONE_ID).toLocalDate()
+
     private val selectedPageIndex = MutableStateFlow(TODAY_PAGE_INDEX)
-    private val selectedWeekday = MutableStateFlow(currentLocalDate().dayOfWeek.value)
+    private val selectedWeekday = MutableStateFlow(today().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
     private val errorMessage = MutableStateFlow<String?>(null)
@@ -239,7 +257,7 @@ class ScheduleViewModel(
             scheduleRepository.getAllSchedulesStream(),
             scheduleRepository.getAllAirEventsStream(),
         ) { allSchedules, allAirEvents ->
-            val currentToday = currentLocalDate()
+            val currentToday = today()
             val dateItems = calculateDateItems(currentToday)
             val todayWeekday = currentToday.dayOfWeek.value
             val currentWeekRange = (-todayWeekday + 1)..(7 - todayWeekday)
@@ -391,7 +409,7 @@ class ScheduleViewModel(
             extra,
             ->
             val (delayMinutes, dismissed, showLogin, loggedIn) = extra
-            val currentToday = currentLocalDate()
+            val currentToday = today()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
             val selectedWeekday = currentDateItems.getOrNull(pageIndex)?.weekday ?: currentWeekday
@@ -399,7 +417,7 @@ class ScheduleViewModel(
             var computedNextUpAction: NextUpAction? = null
             if (!dismissed) {
                 val todayRaw = daySchedules[TODAY_PAGE_INDEX] ?: weeklySchedules[currentWeekday].orEmpty()
-                val nowEpoch = System.currentTimeMillis()
+                val nowEpoch = clock()
 
                 var bestImminent: NextUpAction? = null
                 var bestAired: NextUpAction? = null
@@ -525,7 +543,7 @@ class ScheduleViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue =
                 run {
-                    val initialToday = currentLocalDate()
+                    val initialToday = today()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
                         isLoading = false,
@@ -584,14 +602,14 @@ class ScheduleViewModel(
 
     fun selectPage(pageIndex: Int) {
         selectedPageIndex.value = pageIndex.coerceIn(0, TOTAL_SCHEDULE_DAYS - 1)
-        val dateItem = calculateDateItems(currentLocalDate()).getOrNull(pageIndex)
+        val dateItem = calculateDateItems(today()).getOrNull(pageIndex)
         if (dateItem != null) {
             selectedWeekday.value = dateItem.weekday
         }
     }
 
     fun selectWeekday(weekday: Int) {
-        val currentToday = currentLocalDate()
+        val currentToday = today()
         val dateItems = calculateDateItems(currentToday)
         val currentWeekday = currentToday.dayOfWeek.value
         val currentWeekRange = (-currentWeekday + 1)..(7 - currentWeekday)
