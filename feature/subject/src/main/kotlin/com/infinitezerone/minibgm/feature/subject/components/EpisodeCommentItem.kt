@@ -4,14 +4,11 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -33,15 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
@@ -110,8 +99,7 @@ fun EpisodeCommentItem(
             ExpandableCommentContent(
                 content = comment.content,
                 onUrlClick = onUrlClick,
-                maxCollapsedHeight = 160.dp,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                collapsedMaxLines = 5,
             )
 
             // 点赞反应：已表态类型高亮，点击 toggle 己方表态
@@ -210,8 +198,7 @@ fun EpisodeCommentItem(
                                 ExpandableCommentContent(
                                     content = reply.content,
                                     onUrlClick = onUrlClick,
-                                    maxCollapsedHeight = 120.dp,
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    collapsedMaxLines = 3,
                                 )
                             }
                         }
@@ -224,20 +211,18 @@ fun EpisodeCommentItem(
 
 /**
  * 可折叠评论正文组件：
- * 当 BBCode 渲染出的富文本高度超过 [maxCollapsedHeight] 时自动折叠并呈现渐变遮罩与“展开全文 / 收起”切换，
- * 使用 [Modifier.layout] 保证子组件自然测量高度不受硬截断影响，防止折叠状态误判与闪烁。
+ * 基于 Compose 原生 [maxLines] 与 [onTextLayout]（hasVisualOverflow）实现行级折叠，
+ * 首帧直接按折叠目标行数排版，彻底根除物理高度裁剪造成的半截文字切割与列表滑动首帧回弹抖动。
  */
 @Composable
 private fun ExpandableCommentContent(
     content: String,
     onUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    maxCollapsedHeight: Dp = 160.dp,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    collapsedMaxLines: Int = 5,
 ) {
     var isExpanded by rememberSaveable(content) { mutableStateOf(false) }
-    var isOverflowing by remember(content) { mutableStateOf(false) }
-    val density = LocalDensity.current
+    var canExpand by remember(content) { mutableStateOf(false) }
 
     Column(
         modifier =
@@ -245,85 +230,51 @@ private fun ExpandableCommentContent(
                 .fillMaxWidth()
                 .animateContentSize(),
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (!isExpanded && isOverflowing) {
-                            Modifier.heightIn(max = maxCollapsedHeight)
-                        } else {
-                            Modifier
-                        },
-                    ).clipToBounds(),
-        ) {
-            BgmBbCodeContent(
-                content = content,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                onUrlClick = onUrlClick,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .layout { measurable, constraints ->
-                            val placeable =
-                                measurable.measure(
-                                    constraints.copy(maxHeight = Constraints.Infinity),
-                                )
-                            layout(placeable.width, placeable.height) {
-                                placeable.placeRelative(0, 0)
-                            }
-                        }.onSizeChanged { size ->
-                            val heightDp = with(density) { size.height.toDp() }
-                            isOverflowing = heightDp > maxCollapsedHeight
-                        },
-            )
+        BgmBbCodeContent(
+            content = content,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = if (isExpanded) Int.MAX_VALUE else collapsedMaxLines,
+            onOverflowChanged = { overflow ->
+                if (overflow) canExpand = true
+            },
+            onUrlClick = onUrlClick,
+        )
 
-            // 折叠状态下底部渐变渐隐遮罩
-            if (!isExpanded && isOverflowing) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors =
-                                        listOf(
-                                            Color.Transparent,
-                                            containerColor.copy(alpha = 0.85f),
-                                            containerColor,
-                                        ),
-                                ),
-                            ).clickable { isExpanded = true },
-                )
-            }
-        }
-
-        if (isOverflowing) {
+        if (canExpand) {
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { isExpanded = !isExpanded }
-                        .padding(top = 4.dp, bottom = 2.dp),
-                horizontalArrangement = Arrangement.Center,
+                        .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = if (isExpanded) "收起" else "展开全文",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Icon(
-                    imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp),
-                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    modifier = Modifier.clickable { isExpanded = !isExpanded },
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = if (isExpanded) "收起" else "展开全文",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Icon(
+                            imageVector =
+                                if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
             }
         }
     }

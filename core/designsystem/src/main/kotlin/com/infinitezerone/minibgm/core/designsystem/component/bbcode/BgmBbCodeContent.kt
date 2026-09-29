@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -74,7 +76,8 @@ import com.infinitezerone.minibgm.core.common.BgmUrlParser
  * - [b] 粗体、[s] 删除线、[i] 斜体、[u] 下划线、[url] 超链接
  * - (bgmXX) 行内娘表情贴图（无缝排版与官方 GIF 加载，防遮挡与垂直居中）
  * - (musume_XX) / (blake_XX) 专属大表情贴图（自动成组网格展示，防文字挤压遮挡）
- * - [img] 独立安全限高与宽高比自适应图片渲染
+ * - [img] 独立安全限高与宽高比自适应图片渲染（含图床连接受限友好提示）
+ * - [maxLines] 与 [onOverflowChanged] 行级折叠支持，彻底消除首帧跳变与半截文字切割
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -83,23 +86,35 @@ fun BgmBbCodeContent(
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodySmall,
     color: Color = MaterialTheme.colorScheme.onSurface,
+    maxLines: Int = Int.MAX_VALUE,
+    onOverflowChanged: ((Boolean) -> Unit)? = null,
     onUrlClick: ((String) -> Unit)? = null,
 ) {
     val blocks = remember(content) { BgmBbCodeParser.parseBlocks(content) }
 
     if (blocks.isEmpty()) return
 
+    val isCollapsed = maxLines != Int.MAX_VALUE
+    val hasMultipleBlocks = blocks.size > 2
+    if (isCollapsed && hasMultipleBlocks) {
+        onOverflowChanged?.invoke(true)
+    }
+
+    val visibleBlocks = if (isCollapsed && hasMultipleBlocks) blocks.take(2) else blocks
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        blocks.forEach { block ->
+        visibleBlocks.forEach { block ->
             when (block) {
                 is BbCodeBlock.Quote -> {
                     BgmBbCodeQuote(
                         quote = block,
                         style = style,
                         color = color,
+                        maxLines = if (isCollapsed) minOf(maxLines, 3) else Int.MAX_VALUE,
+                        onOverflowChanged = onOverflowChanged,
                         onUrlClick = onUrlClick,
                     )
                 }
@@ -114,6 +129,8 @@ fun BgmBbCodeContent(
                         paragraph = block,
                         style = style,
                         color = color,
+                        maxLines = maxLines,
+                        onOverflowChanged = onOverflowChanged,
                         onUrlClick = onUrlClick,
                     )
                 }
@@ -132,6 +149,8 @@ private fun BgmBbCodeQuote(
     color: Color,
     onUrlClick: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    onOverflowChanged: ((Boolean) -> Unit)? = null,
 ) {
     val barColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
     Surface(
@@ -170,6 +189,8 @@ private fun BgmBbCodeQuote(
                     paragraph = remember(quote.content) { BgmBbCodeParser.parseParagraph(quote.content) },
                     style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
                     color = color.copy(alpha = 0.85f),
+                    maxLines = maxLines,
+                    onOverflowChanged = onOverflowChanged,
                     onUrlClick = onUrlClick,
                 )
             } else {
@@ -180,6 +201,8 @@ private fun BgmBbCodeQuote(
                                 quote = block,
                                 style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
                                 color = color.copy(alpha = 0.85f),
+                                maxLines = maxLines,
+                                onOverflowChanged = onOverflowChanged,
                                 onUrlClick = onUrlClick,
                             )
                         is BbCodeBlock.Image -> BgmBbCodeImage(image = block, onUrlClick = onUrlClick)
@@ -188,6 +211,8 @@ private fun BgmBbCodeQuote(
                                 paragraph = block,
                                 style = style.copy(fontSize = (style.fontSize.value * 0.9f).sp),
                                 color = color.copy(alpha = 0.85f),
+                                maxLines = maxLines,
+                                onOverflowChanged = onOverflowChanged,
                                 onUrlClick = onUrlClick,
                             )
                     }
@@ -198,7 +223,7 @@ private fun BgmBbCodeQuote(
 }
 
 /**
- * 图片卡片渲染（支持 X/Twitter 风格的黑幕/隐藏图片遮罩与显示切换）
+ * 图片卡片渲染（支持 X/Twitter 风格的黑幕/隐藏图片遮罩与显示切换，以及第三方图床加载受限容错）
  */
 @Composable
 private fun BgmBbCodeImage(
@@ -207,6 +232,7 @@ private fun BgmBbCodeImage(
     modifier: Modifier = Modifier,
 ) {
     var isRevealed by rememberSaveable(image.url) { mutableStateOf(!image.isMasked) }
+    var isLoadFailed by remember(image.url) { mutableStateOf(false) }
     val aspectRatio = image.aspectRatio
     val imageModifier =
         Modifier
@@ -250,12 +276,54 @@ private fun BgmBbCodeImage(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            AsyncImage(
-                model = image.url,
-                contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
-                contentScale = ContentScale.Fit,
-                modifier = imageModifier,
-            )
+            if (isLoadFailed && isRevealed) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    onClick = { onUrlClick?.invoke(image.url) },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(110.dp),
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrokenImage,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "图片加载失败（可能需代理）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "轻触在浏览器中尝试打开",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            } else {
+                AsyncImage(
+                    model = image.url,
+                    contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
+                    contentScale = ContentScale.Fit,
+                    onError = { isLoadFailed = true },
+                    onSuccess = { isLoadFailed = false },
+                    modifier = imageModifier,
+                )
+            }
 
             // X 风格遮罩：未显示时覆盖深色磨砂遮罩与居中警告提示
             if (!isRevealed) {
@@ -355,6 +423,8 @@ private fun BgmBbCodeParagraph(
     color: Color,
     onUrlClick: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE,
+    onOverflowChanged: ((Boolean) -> Unit)? = null,
 ) {
     val revealedMasks = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -555,6 +625,13 @@ private fun BgmBbCodeParagraph(
         inlineContent = inlineContent,
         style = textStyle,
         color = color,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.hasVisualOverflow) {
+                onOverflowChanged?.invoke(true)
+            }
+        },
         modifier = modifier,
     )
 }
