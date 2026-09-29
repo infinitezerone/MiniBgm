@@ -34,10 +34,6 @@
 - [x] 📱 **桌面小组件** — 覆盖全尺寸域的状态分区看板与焦点卡片，点击直达时间表
 - [x] ☁️ **后台同步** — 收藏与追番进度自动保持最新，仅在数据有变化时才拉取，省流量也省电
 
-> 📌 想要了解未来追番、找番、社区与智能化的演进规划？请查看 **[🗺️ 演进路线图 (ROADMAP.md)](ROADMAP.md)**；针对现有交互痛点与反人类逻辑的专项治理，请参阅 **[🩺 体验排雷与交互治理计划 (UX_REMEDIATION.md)](UX_REMEDIATION.md)**。
-
-> 🤖 **AI 追番助手属于实验能力，正式发布包未包含**：它只在 `-Pminibgm.tier=preview` 的构建中开启（需自行填写模型服务地址与密钥）。能力边界与演进方向见 ROADMAP 第 5 节「现代系统级智能」，这里不重复宣称。
-
 ## 📥 获取应用
 
 前往 [Releases](https://github.com/infinitezerone/MiniBgm/releases/latest) 下载最新 APK，直接安装即可（需要 **Android 12 或更高版本**）。
@@ -46,9 +42,7 @@
 
 ## 🤝 参与贡献
 
-遇到 Bug 或有功能建议，欢迎[提交 Issue](https://github.com/infinitezerone/MiniBgm/issues)，或在 [Bangumi 开发小组](https://bangumi.tv/group/dev)的发布帖中讨论。
-
-反馈崩溃时，应用内「**设置 → 崩溃日志**」可以一键导出堆栈——正式包经过混淆，堆栈里只有 `a.b.c`，附上这份日志（配合 release 页的 `mapping.txt.gz`）才能还原出崩溃位置。
+遇到 Bug 或有功能建议，欢迎[提交 Issue](https://github.com/infinitezerone/MiniBgm/issues)，或在 [Bangumi 开发小组](https://bangumi.tv/group/dev)的发布帖中讨论；反馈崩溃时可在应用内「设置 → 崩溃日志」导出堆栈。
 
 也想动手改代码的话，克隆仓库后构建调试版 APK：
 
@@ -56,17 +50,17 @@
 git clone https://github.com/infinitezerone/MiniBgm.git
 cd MiniBgm
 ./gradlew :app:assembleDebug
-# 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
 
-技术栈为 Kotlin Multiplatform + Jetpack Compose + Material 3；模块划分和技术选型以仓库源码为准（`settings.gradle.kts`），架构红线与验证流程记录在 **[AGENTS.md](AGENTS.md)**，本文件不重复维护这些细节。
+技术栈为 Kotlin Multiplatform + Jetpack Compose + Material 3；架构红线与验证流程见 **[AGENTS.md](AGENTS.md)**。
 
 ## 📄 声明
 
-本项目为个人学习用途的开源作品，仅使用 Bangumi 开放 API；账号数据仅存于本机，使用本软件产生的任何问题由使用者自行承担。
+本项目为个人学习用途的开源作品，仅使用 Bangumi 与 AniList 的公开 API；账号数据仅存于本机，使用本软件产生的任何问题由使用者自行承担。
 
 ## 🙏 致谢
 
 - [Bangumi 番组计划](https://bgm.tv) 与其开放的 API
-- [bangumi-data](https://github.com/bangumi-data/bangumi-data) 提供的放送数据
+- [AniList](https://anilist.co) 提供的放送排期数据
+- [bangumi-data](https://github.com/bangumi-data/bangumi-data) 提供的条目元数据与平台映射
 - Google [*Now in Android*](https://github.com/android/nowinandroid) 的架构示范
