@@ -13,7 +13,9 @@ import kotlin.test.fail
  * 2. 单一数据源：UI 层（:feature:*）严禁 import :core:network / :core:database / :core:datastore 源码包
  *    （依赖声明同样由配置期依赖图断言把关；import 级扫描保留，作为 :core:data 未来意外改用 api 泄漏的渐变报警器）
  * 3. 纯模型层：:core:model 为纯 Kotlin，严禁引入任何 android.* / androidx.* / UI 框架依赖
- * 4. MVI 单向流：所有 ViewModel 严禁对外暴露 MutableStateFlow，必须暴露不可变 StateFlow
+ * 4. MVI 单向流：所有 ViewModel 严禁对外暴露可变状态（MutableStateFlow）。只允许两种对外形态：
+ *    只读 StateFlow（`asStateFlow()`），或 Compose State 持有者的只读类型
+ *    （`@Stable interface XxxUiState` + ViewModel 私有的可变实现，见 SeasonalGuideUiState）
  * 5. 凭据隔离：UserPreferences 绝不包含任何 token / 凭据字段（Token 必须走 AndroidKeyStore）
  * 6. 传输与存储框架隔离：feature 源码严禁 import io.ktor.* 或 androidx.room.*
  * 7. 主题一致性：feature 源码严禁硬编码 Color(0x...)，必须使用 :core:designsystem 主题 token
@@ -163,7 +165,8 @@ class ArchitectureRulesTest {
 
         if (violations.isNotEmpty()) {
             fail(
-                "违反 MVI 单向数据流规范（ViewModel 只能对外暴露只读 StateFlow，禁止暴露 MutableStateFlow）：\n" +
+                "违反 MVI 单向数据流规范（ViewModel 只能对外暴露只读状态：StateFlow.asStateFlow()，" +
+                    "或 Compose State 持有者的只读类型；禁止暴露 MutableStateFlow）：\n" +
                     violations.joinToString("\n"),
             )
         }

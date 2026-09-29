@@ -1,6 +1,11 @@
 package com.infinitezerone.minibgm.feature.search
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.infinitezerone.minibgm.core.model.Subject
 import java.time.LocalDate
 import java.util.Locale
@@ -223,41 +228,60 @@ fun matchesForm(
 ): Boolean = forms.isEmpty() || formBucketOf(subject) in forms
 
 /**
- * 季度新番导视 UI 状态模型
+ * 季度新番导视 UI 状态——**只读视图**。
+ *
+ * 采用 Compose 官方 "UI State production" 文档里的 **Compose State** 变体：
+ * 可变实现 [MutableSeasonalGuideUiState] 私有在 ViewModel 内部，对外只暴露这个只读类型。
+ *
+ * 相比「一个不可变 data class + `MutableStateFlow.update { it.copy(…) }`」，这套写法的差别是：
+ * - 每个字段各自是一个 `mutableStateOf`，**读它的 composable 按字段细粒度重组**，
+ *   而不是整个 UiState 任何一处变化都让整屏重组；
+ * - 不再有整对象的 `copy()`，也不需要 `update`——多字段要一起改时用
+ *   `Snapshot.withMutableSnapshot` 保证原子性，那正是 `update` 原先承担的角色；
+ * - 派生值用 `derivedStateOf` 缓存，只在依赖变化时重算（而不是每次读都重算一遍）。
+ *
+ * 标注 [Stable] 而非 `@Immutable`：实例本身恒定，变的是它内部被观察的属性。
  */
-@Immutable
-data class SeasonalGuideUiState(
-    val selectedYear: Int = 2026,
-    val selectedQuarter: SeasonQuarter = SeasonQuarter.WINTER,
-    val currentYear: Int = 2026,
-    val currentQuarter: SeasonQuarter = SeasonQuarter.WINTER,
-    val selectedOrigin: SeasonOriginFilter = SeasonOriginFilter.ALL,
+@Stable
+interface SeasonalGuideUiState {
+    val selectedYear: Int
+    val selectedQuarter: SeasonQuarter
+    val currentYear: Int
+    val currentQuarter: SeasonQuarter
+    val availableYears: List<Int>
+
+    val selectedOrigin: SeasonOriginFilter
+
     /** 二级筛选可多选；**空集合 = 不筛形式**（显示全部） */
-    val selectedForms: Set<SeasonFormFilter> = SeasonFormFilter.DEFAULT,
+    val selectedForms: Set<SeasonFormFilter>
+
     /** 视图形态；纯展示偏好，切换不需要重新取数 */
-    val viewMode: SeasonalViewMode = SeasonalViewMode.LIST,
-    val availableYears: List<Int> = emptyList(),
+    val viewMode: SeasonalViewMode
+
     /** 本季首播：Bangumi `air_date` 区间过滤的结果 */
-    val subjects: List<Subject> = emptyList(),
+    val subjects: List<Subject>
+
     /**
      * 本季连载中：首播日不在本季、但本季确有播出事件的长期连载番。
      * 仅当季/未来季有数据（播出事件来自滚动快照），历史季恒为空。
      */
-    val ongoingSubjects: List<Subject> = emptyList(),
-    val wishedSubjectIds: Set<Long> = emptySet(),
-    val doingSubjectIds: Set<Long> = emptySet(),
-    val isLoading: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val isLoadingMore: Boolean = false,
-    val isLoadingOngoing: Boolean = false,
+    val ongoingSubjects: List<Subject>
+
+    val wishedSubjectIds: Set<Long>
+    val doingSubjectIds: Set<Long>
+    val isLoading: Boolean
+    val isRefreshing: Boolean
+    val isLoadingMore: Boolean
+    val isLoadingOngoing: Boolean
+
     /** 服务端游标：下一页的 offset。不能用 subjects.size 代替——去重会丢弃重复条目导致错位 */
-    val pageOffset: Int = 0,
-    val hasMore: Boolean = false,
-    val error: String? = null,
-    val userMessage: String? = null,
-    val isLoggedIn: Boolean = false,
-    val showLoginPromptDialog: Boolean = false,
-) {
+    val pageOffset: Int
+    val hasMore: Boolean
+    val error: String?
+    val userMessage: String?
+    val isLoggedIn: Boolean
+    val showLoginPromptDialog: Boolean
+
     /**
      * 首播列表的可见条目。
      *
@@ -268,15 +292,9 @@ data class SeasonalGuideUiState(
      * 过滤不改变翻页游标——游标始终按服务端返回的原始条数前进，所以一路加载到底得到的就是完整结果。
      */
     val filteredSubjects: List<Subject>
-        get() =
-            subjects.filter { subject ->
-                val originMatches = !selectedOrigin.needsClientFilter || matchesOrigin(subject, selectedOrigin)
-                originMatches && matchesForm(subject, selectedForms)
-            }
 
     /** 「本季连载中」来自本地排期仓，不经搜索接口，故两层筛选都要在客户端补上 */
     val filteredOngoingSubjects: List<Subject>
-        get() = ongoingSubjects.filter { matchesOrigin(it, selectedOrigin) && matchesForm(it, selectedForms) }
 
     /**
      * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 正片」「正片+剧场版」「全部」。
@@ -284,11 +302,57 @@ data class SeasonalGuideUiState(
      * 产地为「全部」时不显示它，避免出现「全部 · 全部」这种同义重复；两者都无约束时回落为「全部」。
      */
     val filterSummary: String
-        get() {
-            val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
-            val formsLabel = selectedForms.sorted().joinToString("+") { it.label }.ifEmpty { null }
-            return listOfNotNull(originLabel, formsLabel)
-                .joinToString(" · ")
-                .ifEmpty { SeasonOriginFilter.ALL.label }
+}
+
+/**
+ * [SeasonalGuideUiState] 的可变实现——**仅限 ViewModel 内部持有**。
+ *
+ * 所有写操作都必须发生在主线程（snapshot 的常规约束），ViewModels 的协程都在 `viewModelScope`
+ * 上，天然满足。需要多字段同时生效时用 `Snapshot.withMutableSnapshot { }` 包起来。
+ */
+internal class MutableSeasonalGuideUiState(
+    year: Int,
+    quarter: SeasonQuarter,
+    override val currentYear: Int,
+    override val currentQuarter: SeasonQuarter,
+    override val availableYears: List<Int>,
+) : SeasonalGuideUiState {
+    override var selectedYear by mutableIntStateOf(year)
+    override var selectedQuarter by mutableStateOf(quarter)
+    override var selectedOrigin by mutableStateOf(SeasonOriginFilter.ALL)
+    override var selectedForms by mutableStateOf(SeasonFormFilter.DEFAULT)
+    override var viewMode by mutableStateOf(SeasonalViewMode.LIST)
+    override var subjects by mutableStateOf(emptyList<Subject>())
+    override var ongoingSubjects by mutableStateOf(emptyList<Subject>())
+    override var wishedSubjectIds by mutableStateOf(emptySet<Long>())
+    override var doingSubjectIds by mutableStateOf(emptySet<Long>())
+    override var isLoading by mutableStateOf(false)
+    override var isRefreshing by mutableStateOf(false)
+    override var isLoadingMore by mutableStateOf(false)
+    override var isLoadingOngoing by mutableStateOf(false)
+    override var pageOffset by mutableIntStateOf(0)
+    override var hasMore by mutableStateOf(false)
+    override var error by mutableStateOf<String?>(null)
+    override var userMessage by mutableStateOf<String?>(null)
+    override var isLoggedIn by mutableStateOf(false)
+    override var showLoginPromptDialog by mutableStateOf(false)
+
+    override val filteredSubjects: List<Subject> by derivedStateOf {
+        subjects.filter { subject ->
+            val originMatches = !selectedOrigin.needsClientFilter || matchesOrigin(subject, selectedOrigin)
+            originMatches && matchesForm(subject, selectedForms)
         }
+    }
+
+    override val filteredOngoingSubjects: List<Subject> by derivedStateOf {
+        ongoingSubjects.filter { matchesOrigin(it, selectedOrigin) && matchesForm(it, selectedForms) }
+    }
+
+    override val filterSummary: String by derivedStateOf {
+        val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
+        val formsLabel = selectedForms.sorted().joinToString("+") { it.label }.ifEmpty { null }
+        listOfNotNull(originLabel, formsLabel)
+            .joinToString(" · ")
+            .ifEmpty { SeasonOriginFilter.ALL.label }
+    }
 }
