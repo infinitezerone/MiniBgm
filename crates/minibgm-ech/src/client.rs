@@ -15,20 +15,22 @@ const CLOUDFLARE_ECH_CONFIG_B64: &str =
     "AEX+DQBBNAAgACBEVvV6qv+2EGSHksMVtzMtBb0W4uDonEFEC5F+QK8lNAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
 
 // Bangumi Cloudflare 官方 Anycast 节点候选列表（用于在本地 DNS 被污染时免代理直连）
+// 172.67.73.67 与 104.26.9.23 在国内宽带与移动网络下延迟极低 (~180ms) 且稳定连通；104.26.8.23 作为末位兜底
 const BGM_CANDIDATE_IPS: &[&str] = &[
-    "104.26.8.23:443",
-    "104.26.9.23:443",
     "172.67.73.67:443",
+    "104.26.9.23:443",
+    "104.26.8.23:443",
 ];
 
 // AniList Cloudflare Anycast 节点（用于在本地 DNS 污染时直连封面图 CDN）
 const ANILIST_CANDIDATE_IPS: &[&str] = &[
+    "172.67.71.232:443",
     "104.26.14.71:443",
     "104.26.15.71:443",
-    "172.67.71.232:443",
 ];
 
 static LAST_SUCCESS_BGM_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
+static LAST_SUCCESS_ANILIST_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 pub struct HttpResponse {
     pub status_code: u16,
@@ -131,8 +133,12 @@ impl EchHttpClient {
             // 域名直接解析作为补充（有未污染 DNS 或全局代理时走最优路径）
             addrs_to_try.push(format!("{}:{}", host, port));
         } else if host.ends_with("anilist.co") {
-            for ip in ANILIST_CANDIDATE_IPS {
-                addrs_to_try.push(ip.to_string());
+            let last_idx = LAST_SUCCESS_ANILIST_IP_INDEX.load(Ordering::Relaxed) % ANILIST_CANDIDATE_IPS.len();
+            addrs_to_try.push(ANILIST_CANDIDATE_IPS[last_idx].to_string());
+            for (i, ip) in ANILIST_CANDIDATE_IPS.iter().enumerate() {
+                if i != last_idx {
+                    addrs_to_try.push(ip.to_string());
+                }
             }
             addrs_to_try.push(format!("{}:{}", host, port));
         } else {
@@ -148,7 +154,7 @@ impl EchHttpClient {
 
         let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
 
-        for (attempt_idx, addr_str) in addrs_to_try.iter().enumerate() {
+        for addr_str in addrs_to_try.iter() {
             let resolved_addrs: Vec<_> = match addr_str.to_socket_addrs() {
                 Ok(iter) => iter.collect(),
                 Err(e) => {
@@ -158,8 +164,8 @@ impl EchHttpClient {
             };
 
             for sock_addr in resolved_addrs {
-                // 单个 IP 握手超时设为 2s，故障快速换下一个候选 IP，避免在 WiFi 丢包下僵死
-                let connect_timeout = Duration::from_millis(2000.min(timeout_ms));
+                // 单个 IP 握手超时设为 1200ms（正常 RTT ~200ms），故障迅速换下一个候选 IP
+                let connect_timeout = Duration::from_millis(1200.min(timeout_ms));
                 let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
                     Ok(s) => s,
                     Err(e) => {
@@ -253,9 +259,15 @@ impl EchHttpClient {
 
                 // 解析 HTTP 响应
                 if let Some(resp) = parse_http_response(&raw_response, ech_accepted) {
-                    // 记录成功命中节点索引
-                    if is_bgm_domain && attempt_idx < BGM_CANDIDATE_IPS.len() {
-                        LAST_SUCCESS_BGM_IP_INDEX.store(attempt_idx, Ordering::Relaxed);
+                    // 记录成功命中节点真实索引（避免索引错位导致不断切回故障 IP）
+                    if is_bgm_domain {
+                        if let Some(pos) = BGM_CANDIDATE_IPS.iter().position(|&ip| ip == addr_str) {
+                            LAST_SUCCESS_BGM_IP_INDEX.store(pos, Ordering::Relaxed);
+                        }
+                    } else if host.ends_with("anilist.co") {
+                        if let Some(pos) = ANILIST_CANDIDATE_IPS.iter().position(|&ip| ip == addr_str) {
+                            LAST_SUCCESS_ANILIST_IP_INDEX.store(pos, Ordering::Relaxed);
+                        }
                     }
                     return Ok(resp);
                 }
