@@ -1,16 +1,18 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use base64::Engine;
 use rustls::client::{EchConfig, EchMode, EchStatus};
+use rustls::internal::msgs::codec::Codec;
+use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::pki_types::{EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, RootCertStore, StreamOwned};
 use url::Url;
 
 // Cloudflare 全局通用的 ECH 配置（Base64，对应 Outer SNI: cloudflare-ech.com）
 const CLOUDFLARE_ECH_CONFIG_B64: &str =
-    "AEX+DQBBNAAgACBEVvV6qv+2EGSHksMVtzMtBb0W4uDonEFEC5F+QK8lNAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
+    "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
 
 pub struct HttpResponse {
     pub status_code: u16,
@@ -21,8 +23,55 @@ pub struct HttpResponse {
 }
 
 pub struct EchHttpClient {
-    tls_config_with_ech: Arc<ClientConfig>,
+    root_store: RootCertStore,
+    tls_config_with_ech: RwLock<Arc<ClientConfig>>,
     tls_config_standard: Arc<ClientConfig>,
+}
+
+/// 根据给定的 ECH Config List 字节流构建带 ECH 的 ClientConfig
+fn build_ech_client_config(
+    ech_config_list: EchConfigListBytes,
+    root_store: &RootCertStore,
+) -> Result<ClientConfig, Box<dyn std::error::Error + Send + Sync>> {
+    let ech_config = EchConfig::new(
+        ech_config_list,
+        rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
+    )
+    .map_err(|e| format!("Init EchConfig failed: {:?}", e))?;
+
+    let ech_mode = EchMode::from(ech_config);
+
+    let config_ech = ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_ech(ech_mode)
+    .map_err(|e| format!("Configure with_ech failed: {:?}", e))?
+    .with_root_certificates(root_store.clone())
+    .with_no_client_auth();
+
+    Ok(config_ech)
+}
+
+/// 从错误链路中递归提取服务端返回的 ECH 拒绝对话与重试配置 (retry_configs)
+fn extract_retry_configs(
+    err: &(dyn std::error::Error + 'static),
+) -> Option<Option<Vec<EchConfigPayload>>> {
+    if let Some(rustls_err) = err.downcast_ref::<rustls::Error>() {
+        if let rustls::Error::PeerIncompatible(rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(rc)) = rustls_err {
+            return Some(rc.clone());
+        }
+    }
+    if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
+        if let Some(rustls_err) = io_err.get_ref().and_then(|e| e.downcast_ref::<rustls::Error>()) {
+            if let rustls::Error::PeerIncompatible(rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(rc)) = rustls_err {
+                return Some(rc.clone());
+            }
+        }
+    }
+    if let Some(src) = err.source() {
+        return extract_retry_configs(src);
+    }
+    None
 }
 
 impl EchHttpClient {
@@ -31,42 +80,50 @@ impl EchHttpClient {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        // 1. 初始化 ECH 配置 (RFC 8744 / Cloudflare ECH)
+        // 1. 初始化默认 ECH 配置 (RFC 8744 / Cloudflare ECH 当前 active 密钥)
         let ech_bytes = base64::engine::general_purpose::STANDARD
             .decode(CLOUDFLARE_ECH_CONFIG_B64)
             .map_err(|e| format!("Base64 decode ECH config failed: {}", e))?;
         let ech_config_list = EchConfigListBytes::from(ech_bytes);
+        let config_ech = build_ech_client_config(ech_config_list, &root_store)?;
 
-        let ech_config = EchConfig::new(
-            ech_config_list,
-            rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
-        )
-        .map_err(|e| format!("Init EchConfig failed: {:?}", e))?;
-
-        let ech_mode = EchMode::from(ech_config);
-
-        // 2. 带 ECH 的 TLS 1.3 配置
-        let config_ech = ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
-        ))
-        .with_ech(ech_mode)
-        .map_err(|e| format!("Configure with_ech failed: {:?}", e))?
-        .with_root_certificates(root_store.clone())
-        .with_no_client_auth();
-
-        // 3. 常规 TLS 配置
+        // 2. 常规 TLS 配置 (用于降级或无 ECH 请求)
         let config_std = ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
         ))
         .with_safe_default_protocol_versions()
         .map_err(|e| format!("Configure safe protocol versions failed: {:?}", e))?
-        .with_root_certificates(root_store)
+        .with_root_certificates(root_store.clone())
         .with_no_client_auth();
 
         Ok(Self {
-            tls_config_with_ech: Arc::new(config_ech),
+            root_store,
+            tls_config_with_ech: RwLock::new(Arc::new(config_ech)),
             tls_config_standard: Arc::new(config_std),
         })
+    }
+
+    /// 从服务端下发的 retry_configs 动态重新构建并热更新 ECH ClientConfig
+    pub fn update_ech_config(&self, retry_configs: &[EchConfigPayload]) -> bool {
+        let mut bytes = Vec::new();
+        retry_configs.to_vec().encode(&mut bytes);
+        let ech_config_list = EchConfigListBytes::from(bytes);
+
+        match build_ech_client_config(ech_config_list, &self.root_store) {
+            Ok(new_config) => {
+                let mut lock = match self.tls_config_with_ech.write() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                *lock = Arc::new(new_config);
+                log::info!("ECH configuration dynamically updated from server retry_configs");
+                true
+            }
+            Err(e) => {
+                log::warn!("Failed to update ECH configuration from retry_configs: {}", e);
+                false
+            }
+        }
     }
 
     /// 通用 HTTP/1.1 请求（支持可选目标地址列表与 ECH 协商）
@@ -85,19 +142,7 @@ impl EchHttpClient {
             .host_str()
             .ok_or_else(|| "URL has no host".to_string())?;
         let port = parsed_url.port_or_known_default().unwrap_or(443);
-        let path = if parsed_url.query().is_some() {
-            format!(
-                "{}?{}",
-                parsed_url.path(),
-                parsed_url.query().unwrap_or("")
-            )
-        } else {
-            parsed_url.path().to_string()
-        };
 
-        let timeout = Duration::from_millis(timeout_ms.max(3000));
-
-        // 收集待尝试的目标地址（若外部传入了候选目标地址列表则优先依次尝试；否则走标准 DNS 解析）
         let mut addrs_to_try: Vec<String> = Vec::new();
         if let Some(targets) = target_addrs {
             for target in targets {
@@ -111,96 +156,189 @@ impl EchHttpClient {
             addrs_to_try.push(format!("{}:{}", host, port));
         }
 
-        let inner_sni: ServerName<'static> = host.to_string().try_into()?;
-        let tls_config = if enable_ech {
-            self.tls_config_with_ech.clone()
-        } else {
-            self.tls_config_standard.clone()
+        if !enable_ech {
+            return try_fetch_with_config(
+                self.tls_config_standard.clone(),
+                &parsed_url,
+                method,
+                headers,
+                body,
+                timeout_ms,
+                &addrs_to_try,
+            );
+        }
+
+        // 尝试 ECH 请求；若服务端轮换了 ECH 密钥 (ServerRejectedEncryptedClientHello)，自动自愈重试
+        let current_ech_config = {
+            let guard = match self.tls_config_with_ech.read() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            guard.clone()
         };
 
-        let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+        match try_fetch_with_config(
+            current_ech_config,
+            &parsed_url,
+            method,
+            headers,
+            body,
+            timeout_ms,
+            &addrs_to_try,
+        ) {
+            Ok(resp) => Ok(resp),
+            Err(e) => {
+                if let Some(opt_retry_configs) = extract_retry_configs(&*e) {
+                    if let Some(retry_configs) = opt_retry_configs {
+                        log::warn!(
+                            "Server rejected ECH with retry_configs; self-healing ECH config and retrying..."
+                        );
+                        if self.update_ech_config(&retry_configs) {
+                            let updated_ech_config = {
+                                let guard = match self.tls_config_with_ech.read() {
+                                    Ok(g) => g,
+                                    Err(p) => p.into_inner(),
+                                };
+                                guard.clone()
+                            };
+                            return try_fetch_with_config(
+                                updated_ech_config,
+                                &parsed_url,
+                                method,
+                                headers,
+                                body,
+                                timeout_ms,
+                                &addrs_to_try,
+                            );
+                        }
+                    } else {
+                        log::warn!("Server rejected ECH without retry_configs; falling back to standard TLS...");
+                        return try_fetch_with_config(
+                            self.tls_config_standard.clone(),
+                            &parsed_url,
+                            method,
+                            headers,
+                            body,
+                            timeout_ms,
+                            &addrs_to_try,
+                        );
+                    }
+                }
+                Err(e)
+            }
+        }
+    }
+}
 
-        for addr_str in addrs_to_try.iter() {
-            let resolved_addrs: Vec<_> = match addr_str.to_socket_addrs() {
-                Ok(iter) => iter.collect(),
+/// 执行单次带指定 ClientConfig 的 HTTP/1.1 请求尝试
+fn try_fetch_with_config(
+    tls_config: Arc<ClientConfig>,
+    parsed_url: &Url,
+    method: &str,
+    headers: &[(String, String)],
+    body: Option<&[u8]>,
+    timeout_ms: u64,
+    addrs_to_try: &[String],
+) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| "URL has no host".to_string())?;
+    let path = if parsed_url.query().is_some() {
+        format!(
+            "{}?{}",
+            parsed_url.path(),
+            parsed_url.query().unwrap_or("")
+        )
+    } else {
+        parsed_url.path().to_string()
+    };
+
+    let timeout = Duration::from_millis(timeout_ms.max(3000));
+    let inner_sni: ServerName<'static> = host.to_string().try_into()?;
+    let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+
+    for addr_str in addrs_to_try {
+        let resolved_addrs: Vec<_> = match addr_str.to_socket_addrs() {
+            Ok(iter) => iter.collect(),
+            Err(e) => {
+                last_error = Some(Box::new(e));
+                continue;
+            }
+        };
+
+        for sock_addr in resolved_addrs {
+            let connect_timeout = Duration::from_millis(1200.min(timeout_ms));
+            let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
+                Ok(s) => s,
                 Err(e) => {
                     last_error = Some(Box::new(e));
                     continue;
                 }
             };
 
-            for sock_addr in resolved_addrs {
-                let connect_timeout = Duration::from_millis(1200.min(timeout_ms));
-                let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        last_error = Some(Box::new(e));
-                        continue;
-                    }
-                };
+            let _ = sock.set_nodelay(true);
+            let _ = sock.set_read_timeout(Some(timeout));
+            let _ = sock.set_write_timeout(Some(timeout));
 
-                let _ = sock.set_nodelay(true);
-                let _ = sock.set_read_timeout(Some(timeout));
-                let _ = sock.set_write_timeout(Some(timeout));
-
-                let conn = match rustls::ClientConnection::new(tls_config.clone(), inner_sni.clone()) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        last_error = Some(Box::new(e));
-                        continue;
-                    }
-                };
-
-                let mut tls = StreamOwned::new(conn, sock);
-
-                // 构建标准 HTTP/1.1 请求报文
-                let mut req_bytes = Vec::with_capacity(512);
-                let _ = write!(req_bytes, "{} {} HTTP/1.1\r\n", method.to_uppercase(), path);
-                let _ = write!(req_bytes, "Host: {}\r\n", host);
-                let _ = write!(req_bytes, "Connection: close\r\n");
-
-                let mut has_content_length = false;
-                for (k, v) in headers {
-                    if k.eq_ignore_ascii_case("content-length") {
-                        has_content_length = true;
-                    }
-                    let _ = write!(req_bytes, "{}: {}\r\n", k, v);
-                }
-
-                if let Some(b) = body {
-                    if !has_content_length {
-                        let _ = write!(req_bytes, "Content-Length: {}\r\n", b.len());
-                    }
-                } else if !has_content_length && (method.eq_ignore_ascii_case("POST") || method.eq_ignore_ascii_case("PUT")) {
-                    let _ = write!(req_bytes, "Content-Length: 0\r\n");
-                }
-
-                let _ = write!(req_bytes, "\r\n");
-                if let Some(b) = body {
-                    req_bytes.extend_from_slice(b);
-                }
-
-                if let Err(e) = tls.write_all(&req_bytes) {
+            let conn = match rustls::ClientConnection::new(tls_config.clone(), inner_sni.clone()) {
+                Ok(c) => c,
+                Err(e) => {
                     last_error = Some(Box::new(e));
                     continue;
                 }
-                let _ = tls.flush();
+            };
 
-                let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
+            let mut tls = StreamOwned::new(conn, sock);
 
-                // 使用 httparse 与流式状态机接收并解析 HTTP 响应
-                match read_http_response(&mut tls, ech_accepted, Some(addr_str.clone())) {
-                    Ok(resp) => return Ok(resp),
-                    Err(e) => {
-                        last_error = Some(Box::new(e));
-                        continue;
-                    }
+            // 构建标准 HTTP/1.1 请求报文
+            let mut req_bytes = Vec::with_capacity(512);
+            let _ = write!(req_bytes, "{} {} HTTP/1.1\r\n", method.to_uppercase(), path);
+            let _ = write!(req_bytes, "Host: {}\r\n", host);
+            let _ = write!(req_bytes, "Connection: close\r\n");
+
+            let mut has_content_length = false;
+            for (k, v) in headers {
+                if k.eq_ignore_ascii_case("content-length") {
+                    has_content_length = true;
+                }
+                let _ = write!(req_bytes, "{}: {}\r\n", k, v);
+            }
+
+            if let Some(b) = body {
+                if !has_content_length {
+                    let _ = write!(req_bytes, "Content-Length: {}\r\n", b.len());
+                }
+            } else if !has_content_length
+                && (method.eq_ignore_ascii_case("POST") || method.eq_ignore_ascii_case("PUT"))
+            {
+                let _ = write!(req_bytes, "Content-Length: 0\r\n");
+            }
+
+            let _ = write!(req_bytes, "\r\n");
+            if let Some(b) = body {
+                req_bytes.extend_from_slice(b);
+            }
+
+            if let Err(e) = tls.write_all(&req_bytes) {
+                last_error = Some(Box::new(e));
+                continue;
+            }
+            let _ = tls.flush();
+
+            let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
+
+            // 使用 httparse 与流式状态机接收并解析 HTTP 响应
+            match read_http_response(&mut tls, ech_accepted, Some(addr_str.clone())) {
+                Ok(resp) => return Ok(resp),
+                Err(e) => {
+                    last_error = Some(Box::new(e));
+                    continue;
                 }
             }
         }
-
-        Err(last_error.unwrap_or_else(|| "All candidate connections failed".into()))
     }
+
+    Err(last_error.unwrap_or_else(|| "All candidate connections failed".into()))
 }
 
 /// 基于官方 httparse 的流式 HTTP/1.1 响应接收与解析
@@ -457,5 +595,39 @@ mod tests {
         let resp = read_http_response(&mut cursor, false, None).unwrap();
         assert_eq!(resp.status_code, 204);
         assert!(resp.body.is_empty());
+    }
+
+    #[test]
+    fn test_extract_retry_configs_and_update() {
+        use rustls::internal::msgs::codec::Reader;
+
+        // 验证非 ECH 错误返回 None
+        let normal_err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        assert!(extract_retry_configs(&normal_err).is_none());
+
+        // 验证被拒绝但未提供 retry_configs 时返回 Some(None)
+        let rejected_none = rustls::Error::PeerIncompatible(
+            rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(None),
+        );
+        let io_rejected_none = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_none);
+        assert_eq!(extract_retry_configs(&io_rejected_none), Some(None));
+
+        // 从 Base64 模拟构建一份有效的 EchConfigPayload 列表
+        let raw_ech_bytes = base64::engine::general_purpose::STANDARD
+            .decode(CLOUDFLARE_ECH_CONFIG_B64)
+            .unwrap();
+        let payload_list = Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
+
+        // 验证包含 retry_configs 时正确提取并能动态热更新
+        let rejected_with_configs = rustls::Error::PeerIncompatible(
+            rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(Some(payload_list.clone())),
+        );
+        let io_rejected_configs = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_with_configs);
+        let extracted = extract_retry_configs(&io_rejected_configs);
+        assert_eq!(extracted, Some(Some(payload_list.clone())));
+
+        // 验证 EchHttpClient 动态更新逻辑
+        let client = EchHttpClient::new().unwrap();
+        assert!(client.update_ech_config(&payload_list));
     }
 }
