@@ -59,7 +59,6 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         let url: String = env.get_string(&j_url)?.into();
         let method: String = env.get_string(&j_method)?.into();
 
-        // 提取 Headers
         let keys_len = env.get_array_length(&j_header_keys)?;
         let mut headers = Vec::with_capacity(keys_len as usize);
         for i in 0..keys_len {
@@ -70,7 +69,6 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
             headers.push((key, val));
         }
 
-        // 提取 Body
         let body = if !j_body.is_null() {
             let body_vec = env.convert_byte_array(&j_body)?;
             Some(body_vec)
@@ -78,7 +76,6 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
             None
         };
 
-        // 提取可选目标地址列表（用于抗 DNS 污染直连或测试）
         let target_addrs = if !j_target_addrs.is_null() {
             let addrs_len = env.get_array_length(&j_target_addrs)?;
             let mut list = Vec::with_capacity(addrs_len as usize);
@@ -127,10 +124,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
             )
             .map_err(|e| e.to_string())?;
 
-        // 构造返回给 Java 的 EchNativeResponse 对象
         let resp_class = env.find_class("com/infinitezerone/minibgm/core/network/ech/EchNativeResponse")?;
 
-        // 转换 headerKeys 和 headerValues
         let string_class = env.find_class("java/lang/String")?;
         let resp_keys_arr = env.new_object_array(resp.headers.len() as i32, &string_class, JString::default())?;
         let resp_vals_arr = env.new_object_array(resp.headers.len() as i32, &string_class, JString::default())?;
@@ -142,10 +137,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
             env.set_object_array_element(&resp_vals_arr, idx as i32, v_jstr)?;
         }
 
-        // 转换 body
         let body_arr = env.byte_array_from_slice(&resp.body)?;
 
-        // 构造对象: EchNativeResponse(statusCode, headerKeys, headerValues, body, echAccepted, errorMessage, connectedAddr, updatedEchConfig)
         let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
         let null_err_msg = JString::default();
         let conn_addr_jstr = match &resp.connected_addr {

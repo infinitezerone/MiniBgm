@@ -4,18 +4,12 @@ import com.infinitezerone.minibgm.core.common.bgmLogger
 import java.io.File
 
 /**
- * 负责客户端 ECH 配置的运行时内存管理与本地持久化
- *
- * 实现了机制与配置的完全解耦：
- * 1. 底层 Rust 引擎保持纯粹与零硬编码；
- * 2. 默认种子密钥作为上层配置存在，用于初次冷启动；
- * 3. 当底层通过 TLS retry_configs 动态协商出自愈的新公钥时，实时落盘持久化；
- * 4. 之后无论是热启动还是杀死进程冷启动，均优先使用已落盘的最新密钥。
+ * 客户端 ECH 配置的内存缓存与本地持久化存储。
  */
 object EchConfigStore {
     private val logger = bgmLogger("Bgm/EchConfigStore")
 
-    // Cloudflare 全局通用的当前活跃 ECH 配置种子（仅作为上层默认配置，不在底层 .so 硬编码）
+    // 默认 Cloudflare ECH 配置种子
     const val DEFAULT_CLOUDFLARE_ECH_CONFIG =
         "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA="
 

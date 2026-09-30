@@ -25,7 +25,7 @@ pub struct EchHttpClient {
     tls_config_standard: Arc<ClientConfig>,
 }
 
-/// 根据给定的 ECH Config List 字节流构建带 ECH 的 ClientConfig
+/// 根据 ECH Config List 字节流构建 ClientConfig
 fn build_ech_client_config(
     ech_config_list: EchConfigListBytes,
     root_store: &RootCertStore,
@@ -49,7 +49,7 @@ fn build_ech_client_config(
     Ok(config_ech)
 }
 
-/// 从错误链路中递归提取服务端返回的 ECH 拒绝对话与重试配置 (retry_configs)
+/// 提取服务端返回的 ECH retry_configs
 fn extract_retry_configs(
     err: &(dyn std::error::Error + 'static),
 ) -> Option<Option<Vec<EchConfigPayload>>> {
@@ -72,17 +72,12 @@ fn extract_retry_configs(
 }
 
 impl EchHttpClient {
-    /// 构造通用 ECH HTTP 客户端
-    ///
-    /// 保持引擎纯洁性：不再硬编码特定站点或厂商的 Base64 密钥。
-    /// 若传入 `initial_ech_config_b64` 则立即构建初始 ECH 配置，否则保持未配置状态，
-    /// 后续可经由 `fetch()` 调用或服务端 `retry_configs` 自愈时动态注入。
+    /// 构造 ECH HTTP 客户端
     pub fn new(initial_ech_config_b64: Option<&str>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let root_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        // 1. 初始化 ECH 配置 (若外部提供有效 Base64 字符串)
         let initial_config_ech = if let Some(b64) = initial_ech_config_b64 {
             if let Ok(ech_bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
                 let ech_config_list = EchConfigListBytes::from(ech_bytes);
@@ -94,7 +89,6 @@ impl EchHttpClient {
             None
         };
 
-        // 2. 常规 TLS 配置 (用于降级或无 ECH 请求)
         let config_std = ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
         ))
@@ -110,8 +104,7 @@ impl EchHttpClient {
         })
     }
 
-    /// 从服务端下发的 retry_configs 动态重新构建并热更新 ECH ClientConfig
-    /// 返回更新后的 ECHConfigList 的 Base64 编码字符串，供调用方（上层平台）持久化存储
+    /// 使用服务端下发的 retry_configs 更新 ECH 配置并返回 Base64 字符串
     pub fn update_ech_from_retry_configs(&self, retry_configs: &[EchConfigPayload]) -> Option<String> {
         let mut bytes = Vec::new();
         retry_configs.to_vec().encode(&mut bytes);
@@ -132,7 +125,7 @@ impl EchHttpClient {
         }
     }
 
-    /// 由调用方主动动态设置或刷新 ECH Base64 配置
+    /// 更新 ECH Base64 配置
     pub fn set_ech_config_b64(&self, b64: &str) -> bool {
         let ech_bytes = match base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
             Ok(b) => b,
@@ -155,7 +148,7 @@ impl EchHttpClient {
         }
     }
 
-    /// 通用 HTTP/1.1 请求（支持可选目标地址列表、动态 ECH 注入与服务端密钥轮换自愈）
+    /// 发起 HTTP/1.1 请求
     pub fn fetch(
         &self,
         url_str: &str,
@@ -198,7 +191,6 @@ impl EchHttpClient {
             );
         }
 
-        // 若传入了动态 ECH 配置且本地尚未就绪，尝试动态构建
         if let Some(cfg_b64) = dynamic_ech_config {
             let needs_update = {
                 let lock = self.tls_config_with_ech.read().unwrap_or_else(|p| p.into_inner());
@@ -209,7 +201,6 @@ impl EchHttpClient {
             }
         }
 
-        // 尝试 ECH 请求；若服务端轮换了 ECH 密钥 (ServerRejectedEncryptedClientHello)，自动自愈重试
         let current_ech_config = {
             let guard = self.tls_config_with_ech.read().unwrap_or_else(|p| p.into_inner());
             guard.clone()
@@ -285,7 +276,7 @@ impl EchHttpClient {
     }
 }
 
-/// 执行单次带指定 ClientConfig 的 HTTP/1.1 请求尝试
+/// 执行单次 HTTP 请求
 fn try_fetch_with_config(
     tls_config: Arc<ClientConfig>,
     parsed_url: &Url,
@@ -385,7 +376,6 @@ fn try_fetch_with_config(
 
             let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
 
-            // 使用 httparse 与流式状态机接收并解析 HTTP 响应
             match read_http_response(&mut tls, method, ech_accepted, Some(addr_str.clone())) {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
@@ -399,7 +389,7 @@ fn try_fetch_with_config(
     Err(last_error.unwrap_or_else(|| "All candidate connections failed".into()))
 }
 
-/// 基于官方 httparse 的流式 HTTP/1.1 响应接收与解析
+/// 接收并解析 HTTP 响应
 fn read_http_response<R: Read>(
     stream: &mut R,
     method: &str,
@@ -409,7 +399,6 @@ fn read_http_response<R: Read>(
     let mut buffer = Vec::with_capacity(8192);
     let mut chunk = [0u8; 4096];
 
-    // Phase 1: 流式读取直至 Headers 完整结束
     let header_len = loop {
         let n = stream.read(&mut chunk)?;
         if n == 0 {
@@ -442,7 +431,6 @@ fn read_http_response<R: Read>(
         }
     };
 
-    // Phase 2: 使用 httparse 提取状态码和 Headers
     let mut headers = [httparse::EMPTY_HEADER; 64];
     let mut resp = httparse::Response::new(&mut headers);
     let _ = resp.parse(&buffer);
@@ -463,10 +451,9 @@ fn read_http_response<R: Read>(
         out_headers.push((name, value));
     }
 
-    // Phase 3: 流式获取 Body（精准截断，杜绝阻塞挂起与 O(N^2) 重复扫描）
     let initial_body = &buffer[header_len..];
 
-    // RFC 9112 Section 6.3: HEAD 请求或 1xx, 204, 304 规范无 Body
+    // RFC 9112 Section 6.3: HEAD 请求或 1xx, 204, 304 无 Body
     if method.eq_ignore_ascii_case("HEAD")
         || (100..200).contains(&status_code)
         || status_code == 204
@@ -487,7 +474,6 @@ fn read_http_response<R: Read>(
     } else if let Some(expected_len) = content_length {
         read_content_length_body(initial_body, stream, expected_len)?
     } else {
-        // Connection: close 读到 EOF
         let mut body = initial_body.to_vec();
         stream.read_to_end(&mut body)?;
         body
@@ -503,7 +489,7 @@ fn read_http_response<R: Read>(
     })
 }
 
-/// 读取并截取指定 Content-Length 的响应体
+/// 读取 Content-Length 指定长度的响应体
 fn read_content_length_body<R: Read>(
     initial: &[u8],
     stream: &mut R,
@@ -528,7 +514,7 @@ fn read_content_length_body<R: Read>(
     Ok(body)
 }
 
-/// 读取并解码 chunked 传输格式的响应体
+/// 读取并解码 chunked 响应体
 fn read_chunked_body<R: Read>(
     initial: &[u8],
     stream: &mut R,
@@ -635,25 +621,21 @@ mod tests {
     fn test_extract_retry_configs_and_update() {
         use rustls::internal::msgs::codec::Reader;
 
-        // 验证非 ECH 错误返回 None
         let normal_err = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
         assert!(extract_retry_configs(&normal_err).is_none());
 
-        // 验证被拒绝但未提供 retry_configs 时返回 Some(None)
         let rejected_none = rustls::Error::PeerIncompatible(
             rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(None),
         );
         let io_rejected_none = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_none);
         assert_eq!(extract_retry_configs(&io_rejected_none), Some(None));
 
-        // 模拟构建一份有效的 EchConfigPayload 列表（仅用作测试载荷）
         let test_ech_b64 = "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
         let raw_ech_bytes = base64::engine::general_purpose::STANDARD
             .decode(test_ech_b64)
             .unwrap();
         let payload_list = Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
 
-        // 验证包含 retry_configs 时正确提取并能动态热更新
         let rejected_with_configs = rustls::Error::PeerIncompatible(
             rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(Some(payload_list.clone())),
         );
@@ -661,7 +643,6 @@ mod tests {
         let extracted = extract_retry_configs(&io_rejected_configs);
         assert_eq!(extracted, Some(Some(payload_list.clone())));
 
-        // 验证 EchHttpClient 动态更新与热替换逻辑
         let client = EchHttpClient::new(None).unwrap();
         let updated_b64 = client.update_ech_from_retry_configs(&payload_list);
         assert!(updated_b64.is_some());

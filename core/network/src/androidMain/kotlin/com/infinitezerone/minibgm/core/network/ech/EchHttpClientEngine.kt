@@ -24,10 +24,7 @@ class EchEngineConfig : HttpClientEngineConfig() {
 }
 
 /**
- * 基于 Rust ECH 原生协议栈的 Ktor 客户端引擎
- *
- * 专门用于穿透对 Cloudflare 节点（api.bgm.tv / bgm.tv）的 SNI 审查阻断与 DNS 污染。
- * 若原生库不可用或网络异常，抛出异常供上层捕获或重试。
+ * 基于 Rust ECH 协议栈的 Ktor 客户端引擎。
  */
 @OptIn(InternalAPI::class)
 class EchHttpClientEngine(
