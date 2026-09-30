@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 if (-not $env:ANDROID_NDK_HOME) {
     $ndkBase = "D:\program\AndroidDev\sdk\ndk"
     if (Test-Path $ndkBase) {
-        $latestNdk = Get-ChildItem $ndkBase | Sort-Object Name -Descending | Select-Object -First 1
+        $latestNdk = Get-ChildItem $ndkBase | Where-Object { Test-Path "$($_.FullName)\source.properties" } | Sort-Object Name -Descending | Select-Object -First 1
         if ($latestNdk) {
             $env:ANDROID_NDK_HOME = $latestNdk.FullName
         }

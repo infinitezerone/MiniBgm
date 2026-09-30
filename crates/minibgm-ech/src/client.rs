@@ -14,16 +14,21 @@ use url::Url;
 const CLOUDFLARE_ECH_CONFIG_B64: &str =
     "AEX+DQBBNAAgACBEVvV6qv+2EGSHksMVtzMtBb0W4uDonEFEC5F+QK8lNAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
 
-// Cloudflare 官方 Anycast 节点候选列表（用于在本地 DNS 被污染时免代理直连）
-const DEFAULT_CANDIDATE_IPS: &[&str] = &[
+// Bangumi Cloudflare 官方 Anycast 节点候选列表（用于在本地 DNS 被污染时免代理直连）
+const BGM_CANDIDATE_IPS: &[&str] = &[
     "104.26.8.23:443",
     "104.26.9.23:443",
     "172.67.73.67:443",
-    "104.18.10.118:443",
-    "104.18.11.118:443",
 ];
 
-static LAST_SUCCESS_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
+// AniList Cloudflare Anycast 节点（用于在本地 DNS 污染时直连封面图 CDN）
+const ANILIST_CANDIDATE_IPS: &[&str] = &[
+    "104.26.14.71:443",
+    "104.26.15.71:443",
+    "172.67.71.232:443",
+];
+
+static LAST_SUCCESS_BGM_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 pub struct HttpResponse {
     pub status_code: u16,
@@ -111,18 +116,25 @@ impl EchHttpClient {
 
         let timeout = Duration::from_millis(timeout_ms.max(5000));
 
-        // 整理连接目标地址：若是 bgm 域名，优先尝试候选 Anycast IP，同时包含域名直接解析出的 IP
+        // 整理连接目标地址
         let mut addrs_to_try: Vec<String> = Vec::new();
         if is_bgm_domain {
-            let last_idx = LAST_SUCCESS_IP_INDEX.load(Ordering::Relaxed) % DEFAULT_CANDIDATE_IPS.len();
+            let last_idx = LAST_SUCCESS_BGM_IP_INDEX.load(Ordering::Relaxed) % BGM_CANDIDATE_IPS.len();
             // 先尝试上次成功的 IP
-            addrs_to_try.push(DEFAULT_CANDIDATE_IPS[last_idx].to_string());
+            addrs_to_try.push(BGM_CANDIDATE_IPS[last_idx].to_string());
             // 依次塞入其他预置 Anycast IP
-            for (i, ip) in DEFAULT_CANDIDATE_IPS.iter().enumerate() {
+            for (i, ip) in BGM_CANDIDATE_IPS.iter().enumerate() {
                 if i != last_idx {
                     addrs_to_try.push(ip.to_string());
                 }
             }
+            // 域名直接解析作为补充（有未污染 DNS 或全局代理时走最优路径）
+            addrs_to_try.push(format!("{}:{}", host, port));
+        } else if host.ends_with("anilist.co") {
+            for ip in ANILIST_CANDIDATE_IPS {
+                addrs_to_try.push(ip.to_string());
+            }
+            addrs_to_try.push(format!("{}:{}", host, port));
         } else {
             addrs_to_try.push(format!("{}:{}", host, port));
         }
@@ -146,7 +158,9 @@ impl EchHttpClient {
             };
 
             for sock_addr in resolved_addrs {
-                let sock = match TcpStream::connect_timeout(&sock_addr, Duration::from_millis(4000.min(timeout_ms))) {
+                // 单个 IP 握手超时设为 2s，故障快速换下一个候选 IP，避免在 WiFi 丢包下僵死
+                let connect_timeout = Duration::from_millis(2000.min(timeout_ms));
+                let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
                     Ok(s) => s,
                     Err(e) => {
                         last_error = Some(Box::new(e));
@@ -203,14 +217,27 @@ impl EchHttpClient {
 
                 let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
 
-                // 读取响应数据
+                // 读取响应数据：一旦达到完整响应帧（Content-Length 足够或 Chunked 闭合）即刻返回，不再傻等 TCP 关闭
                 let mut raw_response = Vec::new();
                 let mut buf = [0u8; 8192];
                 loop {
                     match tls.read(&mut buf) {
                         Ok(0) => break,
-                        Ok(n) => raw_response.extend_from_slice(&buf[..n]),
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                        Ok(n) => {
+                            raw_response.extend_from_slice(&buf[..n]);
+                            if is_http_response_complete(&raw_response) {
+                                break;
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                            if is_http_response_complete(&raw_response) {
+                                break;
+                            }
+                            if raw_response.is_empty() {
+                                last_error = Some(Box::new(e));
+                            }
+                            break;
+                        }
                         Err(e) => {
                             if raw_response.is_empty() {
                                 last_error = Some(Box::new(e));
@@ -227,8 +254,8 @@ impl EchHttpClient {
                 // 解析 HTTP 响应
                 if let Some(resp) = parse_http_response(&raw_response, ech_accepted) {
                     // 记录成功命中节点索引
-                    if is_bgm_domain && attempt_idx < DEFAULT_CANDIDATE_IPS.len() {
-                        LAST_SUCCESS_IP_INDEX.store(attempt_idx, Ordering::Relaxed);
+                    if is_bgm_domain && attempt_idx < BGM_CANDIDATE_IPS.len() {
+                        LAST_SUCCESS_BGM_IP_INDEX.store(attempt_idx, Ordering::Relaxed);
                     }
                     return Ok(resp);
                 }
@@ -311,4 +338,113 @@ fn decode_chunked(mut input: &[u8]) -> Vec<u8> {
         break;
     }
     output
+}
+
+/// 检查 HTTP 响应报文是否已完整接收，避免连接持续等待服务端主动关闭导致阻塞数秒
+fn is_http_response_complete(raw: &[u8]) -> bool {
+    let header_end = match raw.windows(4).position(|w| w == b"\r\n\r\n") {
+        Some(pos) => pos + 4,
+        None => return false,
+    };
+
+    let header_bytes = &raw[..header_end];
+    let body_bytes = &raw[header_end..];
+    let header_str = String::from_utf8_lossy(header_bytes);
+
+    // 检查状态码：1xx / 204 / 304 没有 Body
+    if let Some(first_line) = header_str.lines().next() {
+        if let Some(status_str) = first_line.split_whitespace().nth(1) {
+            if let Ok(status) = status_str.parse::<u16>() {
+                if (100..200).contains(&status) || status == 204 || status == 304 {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 检查 Content-Length
+    for line in header_str.lines() {
+        if let Some((k, v)) = line.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("content-length") {
+                if let Ok(expected_len) = v.trim().parse::<usize>() {
+                    return body_bytes.len() >= expected_len;
+                }
+            }
+        }
+    }
+
+    // 检查 Transfer-Encoding: chunked
+    let is_chunked = header_str.lines().any(|line| {
+        if let Some((k, v)) = line.split_once(':') {
+            k.trim().eq_ignore_ascii_case("transfer-encoding")
+                && v.to_ascii_lowercase().contains("chunked")
+        } else {
+            false
+        }
+    });
+
+    if is_chunked {
+        return is_chunked_complete(body_bytes);
+    }
+
+    false
+}
+
+/// 检查 chunked 编码流是否已经到达终结块 (0\r\n\r\n)
+fn is_chunked_complete(mut input: &[u8]) -> bool {
+    while !input.is_empty() {
+        if let Some(crlf_pos) = input.windows(2).position(|w| w == b"\r\n") {
+            let size_str = match std::str::from_utf8(&input[..crlf_pos]) {
+                Ok(s) => s.trim().split(';').next().unwrap_or("").trim(),
+                Err(_) => return false,
+            };
+            if let Ok(chunk_size) = usize::from_str_radix(size_str, 16) {
+                if chunk_size == 0 {
+                    let rem = &input[crlf_pos + 2..];
+                    return rem.starts_with(b"\r\n") || rem.windows(4).any(|w| w == b"\r\n\r\n");
+                }
+                let data_end = crlf_pos + 2 + chunk_size;
+                if data_end + 2 <= input.len() {
+                    input = &input[data_end + 2..];
+                    continue;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_content_length_complete() {
+        let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+        assert!(is_http_response_complete(resp));
+
+        let partial = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhel";
+        assert!(!is_http_response_complete(partial));
+    }
+
+    #[test]
+    fn test_chunked_complete() {
+        let resp = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
+        assert!(is_http_response_complete(resp));
+
+        let partial = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n";
+        assert!(!is_http_response_complete(partial));
+    }
+
+    #[test]
+    fn test_no_content_complete() {
+        let resp = b"HTTP/1.1 204 No Content\r\n\r\n";
+        assert!(is_http_response_complete(resp));
+    }
 }
