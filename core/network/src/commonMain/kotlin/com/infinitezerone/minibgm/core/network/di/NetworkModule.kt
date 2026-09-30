@@ -14,8 +14,8 @@ import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.PageFetchServiceImpl
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotServiceImpl
+import com.infinitezerone.minibgm.core.network.createPlatformHttpClientEngine
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.engine.cio.CIO
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -31,7 +31,7 @@ fun networkModule(
 ): Module =
     module {
         single { BgmAuthConfig() }
-        single<HttpClientEngine> { engine ?: CIO.create() }
+        single<HttpClientEngine> { engine ?: createPlatformHttpClientEngine() }
 
         // 未鉴权独立 client（无 Auth 插件），专供访问无需 Bearer Token 的外部静态 CDN 资源与 Worker 兑换/刷新
         single(named("unauthenticated")) {

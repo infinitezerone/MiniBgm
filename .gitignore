@@ -20,3 +20,9 @@ keystore.properties
 
 # ZCode 会话数据（plans / workflow-drafts 等）不入库；命令门禁配置已随 0229b7d1 退役，不再单开放行
 .zcode/
+
+# Rust 构建产物不入库
+target/
+**/target/
+**/jniLibs/
+

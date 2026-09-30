@@ -1,0 +1,23 @@
+[package]
+name = "minibgm-ech"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
+webpki-roots = "0.26"
+base64 = "0.22"
+jni = "0.21"
+url = "2.5"
+log = "0.4"
+android_logger = "0.14"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
