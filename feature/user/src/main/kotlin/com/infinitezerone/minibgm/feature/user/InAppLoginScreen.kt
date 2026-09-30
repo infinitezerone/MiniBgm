@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user
 
 import android.webkit.WebView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.SnackbarHost
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,9 +42,18 @@ internal fun InAppLoginScreen(
     var session by remember { mutableStateOf<InAppWebSession?>(null) }
     var isStarting by remember { mutableStateOf(true) }
     var isPageLoading by remember { mutableStateOf(true) }
+    var progress by remember { mutableIntStateOf(0) }
+    var pageTitle by remember { mutableStateOf("登录 Bangumi") }
     var isExchanging by remember { mutableStateOf(false) }
     var isSucceeded by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+
+    fun handleClose() {
+        if (!isExchanging && !isSucceeded) {
+            viewModel.stopSession()
+            onBack()
+        }
+    }
 
     fun openInBrowser() {
         scope.launch {
@@ -50,6 +61,10 @@ internal fun InAppLoginScreen(
             viewModel.stopSession()
             onOpenInBrowser(url)
         }
+    }
+
+    BackHandler(enabled = !isExchanging && !isSucceeded) {
+        handleClose()
     }
 
     DisposableEffect(Unit) {
@@ -78,13 +93,11 @@ internal fun InAppLoginScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         InAppWebScaffold(
-            title = "登录 Bangumi",
-            subtitle = "无需跳转浏览器",
+            title = pageTitle,
+            subtitle = "bgm.tv • ECH 安全登录",
+            progress = progress,
             isBusy = isStarting || isPageLoading || isExchanging,
-            onClose = {
-                viewModel.stopSession()
-                onBack()
-            },
+            onClose = ::handleClose,
             onOpenInBrowser = ::openInBrowser,
             onReload = { webView?.reload() },
             closeEnabled = !isExchanging && !isSucceeded,
@@ -95,7 +108,21 @@ internal fun InAppLoginScreen(
                     InAppWebView(
                         url = active.url,
                         modifier = Modifier.fillMaxSize(),
-                        onPageLoadingChanged = { isPageLoading = it },
+                        onPageLoadingChanged = { loading ->
+                            isPageLoading = loading
+                            if (!loading) progress = 100
+                        },
+                        onProgressChanged = { newProgress ->
+                            progress = newProgress
+                            if (newProgress >= 100) {
+                                isPageLoading = false
+                            }
+                        },
+                        onTitleReceived = { newTitle ->
+                            if (newTitle.isNotBlank() && !newTitle.contains("http", ignoreCase = true)) {
+                                pageTitle = newTitle
+                            }
+                        },
                         onWebViewCreated = { webView = it },
                         onInterceptor = { uri ->
                             if (uri.scheme == "minibgm") {
@@ -126,6 +153,12 @@ internal fun InAppLoginScreen(
                         onClose = onBack,
                     )
                 }
+
+                InAppWebLoadingPlaceholder(
+                    visible = (isStarting || isPageLoading) && !isExchanging && !isSucceeded,
+                    title = if (isStarting) "正在建立 ECH 安全连接…" else "正在加载登录页面…",
+                    subtitle = "bgm.tv • 无需跳转外部浏览器",
+                )
 
                 if (isExchanging) {
                     InAppWebBusyOverlay(text = "正在登录…")

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -33,8 +34,13 @@ internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
 /**
  * 加载经环回代理渲染的页面（代理侧走原生 ECH 通道）。
  *
+ * @param onPageLoadingChanged 页面开始/结束加载状态回调
+ * @param onProgressChanged 网页加载进度百分比（0..100）
+ * @param onTitleReceived 提取到的网页真实标题
+ * @param onUrlChanged 网页发生内部跳转时的实际地址更新
+ * @param onCanGoBackChanged 网页历史记录是否支持后退
  * @param onInterceptor 命中自定义 scheme（如 `minibgm://` 登录回调）时返回 true 表示已消费
- * @param onWebViewCreated 暴露 WebView 实例，供调用方在离开页面时 destroy
+ * @param onWebViewCreated 暴露 WebView 实例，供调用方在离开页面时 destroy 或手动触发刷新/后退
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -42,6 +48,10 @@ internal fun InAppWebView(
     url: String,
     modifier: Modifier = Modifier,
     onPageLoadingChanged: (Boolean) -> Unit = {},
+    onProgressChanged: (Int) -> Unit = {},
+    onTitleReceived: (String) -> Unit = {},
+    onUrlChanged: (String) -> Unit = {},
+    onCanGoBackChanged: (Boolean) -> Unit = {},
     onInterceptor: ((Uri) -> Boolean)? = null,
     onWebViewCreated: (WebView) -> Unit = {},
 ) {
@@ -56,11 +66,29 @@ internal fun InAppWebView(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    databaseEnabled = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
                     userAgentString = INAPP_WEB_USER_AGENT
                 }
+                webChromeClient =
+                    object : WebChromeClient() {
+                        override fun onProgressChanged(
+                            view: WebView?,
+                            newProgress: Int,
+                        ) {
+                            onProgressChanged(newProgress)
+                        }
+
+                        override fun onReceivedTitle(
+                            view: WebView?,
+                            title: String?,
+                        ) {
+                            super.onReceivedTitle(view, title)
+                            if (!title.isNullOrBlank()) {
+                                onTitleReceived(title)
+                            }
+                        }
+                    }
                 webViewClient =
                     object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
@@ -77,6 +105,8 @@ internal fun InAppWebView(
                             favicon: Bitmap?,
                         ) {
                             onPageLoadingChanged(true)
+                            url?.let(onUrlChanged)
+                            onCanGoBackChanged(view?.canGoBack() == true)
                         }
 
                         override fun onPageFinished(
@@ -84,6 +114,18 @@ internal fun InAppWebView(
                             url: String?,
                         ) {
                             onPageLoadingChanged(false)
+                            url?.let(onUrlChanged)
+                            onCanGoBackChanged(view?.canGoBack() == true)
+                        }
+
+                        override fun doUpdateVisitedHistory(
+                            view: WebView?,
+                            url: String?,
+                            isReload: Boolean,
+                        ) {
+                            super.doUpdateVisitedHistory(view, url, isReload)
+                            url?.let(onUrlChanged)
+                            onCanGoBackChanged(view?.canGoBack() == true)
                         }
                     }
                 onWebViewCreated(this)
