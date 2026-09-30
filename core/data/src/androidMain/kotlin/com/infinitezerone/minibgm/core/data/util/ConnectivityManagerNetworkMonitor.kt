@@ -5,10 +5,12 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
 
 class ConnectivityManagerNetworkMonitor(
     private val context: Context,
@@ -23,29 +25,24 @@ class ConnectivityManagerNetworkMonitor(
                 return@callbackFlow
             }
 
-            fun isConnected(): Boolean {
-                val activeNetwork = connectivityManager.activeNetwork ?: return false
-                val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-                return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            }
-
-            channel.trySend(isConnected())
-
+            /**
+             * 对标 Now in Android 最佳实践：
+             * 回调对满足 [NetworkRequest] 的任意网络触发。
+             * 维护活跃且具备互联网能力的网络集合，仅当集合彻底为空时才触发离线，
+             * 避免网络切换（如 WiFi ↔ 流量握手）或次级通道变更导致的虚假断网。
+             */
             val callback =
                 object : ConnectivityManager.NetworkCallback() {
+                    private val networks = mutableSetOf<Network>()
+
                     override fun onAvailable(network: Network) {
-                        channel.trySend(isConnected())
+                        networks += network
+                        channel.trySend(true)
                     }
 
                     override fun onLost(network: Network) {
-                        channel.trySend(isConnected())
-                    }
-
-                    override fun onCapabilitiesChanged(
-                        network: Network,
-                        networkCapabilities: NetworkCapabilities,
-                    ) {
-                        channel.trySend(isConnected())
+                        networks -= network
+                        channel.trySend(networks.isNotEmpty())
                     }
                 }
 
@@ -56,8 +53,15 @@ class ConnectivityManagerNetworkMonitor(
                     .build()
             connectivityManager.registerNetworkCallback(request, callback)
 
+            channel.trySend(connectivityManager.isCurrentlyConnected())
+
             awaitClose {
                 connectivityManager.unregisterNetworkCallback(callback)
             }
-        }.conflate()
+        }.flowOn(Dispatchers.IO).conflate()
+
+    private fun ConnectivityManager.isCurrentlyConnected(): Boolean =
+        activeNetwork
+            ?.let(::getNetworkCapabilities)
+            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: false
 }

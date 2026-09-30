@@ -67,18 +67,31 @@ fun BgmApp(
 
     LaunchedEffect(isOnline) {
         if (!isOnline) {
-            wasOffline = true
-            snackbarHostState.showSnackbar(
-                message = "网络连接已断开，正在浏览本地离线数据",
-                duration = SnackbarDuration.Indefinite,
-            )
-        } else if (wasOffline) {
-            wasOffline = false
-            snackbarHostState.currentSnackbarData?.dismiss()
-            snackbarHostState.showSnackbar(
-                message = "网络已恢复连接",
-                duration = SnackbarDuration.Short,
-            )
+            // 防抖 1500ms：网络切换（如 WiFi ↔ 流量握手）瞬断不惊扰用户
+            kotlinx.coroutines.delay(1500)
+            if (!isOnline) {
+                wasOffline = true
+                snackbarHostState.showSnackbar(
+                    message = "网络连接已断开，正在浏览本地离线数据",
+                    duration = SnackbarDuration.Indefinite,
+                )
+            }
+        } else {
+            // 只要恢复联网，立即消除常驻断网提示
+            if (snackbarHostState.currentSnackbarData
+                    ?.visuals
+                    ?.message
+                    ?.contains("网络连接已断开") == true
+            ) {
+                snackbarHostState.currentSnackbarData?.dismiss()
+            }
+            if (wasOffline) {
+                wasOffline = false
+                snackbarHostState.showSnackbar(
+                    message = "网络已恢复连接",
+                    duration = SnackbarDuration.Short,
+                )
+            }
         }
     }
 
