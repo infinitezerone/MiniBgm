@@ -2,8 +2,10 @@ package com.infinitezerone.minibgm.core.network.ech
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.engine.HttpClientEngineBase
+import io.ktor.client.engine.HttpClientEngineCapability
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.callContext
+import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.Headers
@@ -32,6 +34,8 @@ class EchHttpClientEngine(
     override val config: EchEngineConfig = EchEngineConfig(),
 ) : HttpClientEngineBase("EchHttpClientEngine") {
     private val logger = bgmLogger("Bgm/EchEngine")
+
+    override val supportedCapabilities: Set<HttpClientEngineCapability<*>> = setOf(HttpTimeoutCapability)
 
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
         val callContext = callContext()
