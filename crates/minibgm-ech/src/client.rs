@@ -525,86 +525,54 @@ fn read_chunked_body<R: Read>(
     initial: &[u8],
     stream: &mut R,
 ) -> Result<Vec<u8>, std::io::Error> {
-    let mut raw_chunked = initial.to_vec();
-    let mut chunk = [0u8; 8192];
+    let mut buffer = initial.to_vec();
+    let mut body = Vec::new();
+    let mut chunk_buf = [0u8; 8192];
 
-    while !is_chunked_complete(&raw_chunked) {
-        let n = stream.read(&mut chunk)?;
-        if n == 0 {
-            break;
-        }
-        raw_chunked.extend_from_slice(&chunk[..n]);
-    }
-
-    decode_chunked(&raw_chunked)
-}
-
-/// 还原 chunked 格式的 HTTP 响应体
-fn decode_chunked(mut input: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-    let mut output = Vec::new();
-    while !input.is_empty() {
-        let crlf_pos = match input.windows(2).position(|w| w == b"\r\n") {
-            Some(pos) => pos,
-            None => break,
-        };
-        let size_str = match std::str::from_utf8(&input[..crlf_pos]) {
-            Ok(s) => s.trim().split(';').next().unwrap_or("").trim(),
-            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-        };
-        let chunk_size = match usize::from_str_radix(size_str, 16) {
-            Ok(sz) => sz,
-            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-        };
-        if chunk_size == 0 {
-            break;
-        }
-        let data_start = crlf_pos + 2;
-        let data_end = data_start + chunk_size;
-        if data_end > input.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "Chunked payload truncated prematurely",
-            ));
-        }
-        output.extend_from_slice(&input[data_start..data_end]);
-        let next_start = data_end + 2;
-        if next_start <= input.len() {
-            input = &input[next_start..];
-        } else {
-            input = &input[data_end..];
-        }
-    }
-    Ok(output)
-}
-
-/// 检查 chunked 编码流是否已包含终结块 (0\r\n\r\n)
-fn is_chunked_complete(mut input: &[u8]) -> bool {
-    while !input.is_empty() {
-        if let Some(crlf_pos) = input.windows(2).position(|w| w == b"\r\n") {
-            let size_str = match std::str::from_utf8(&input[..crlf_pos]) {
-                Ok(s) => s.trim().split(';').next().unwrap_or("").trim(),
-                Err(_) => return false,
-            };
-            if let Ok(chunk_size) = usize::from_str_radix(size_str, 16) {
+    loop {
+        match httparse::parse_chunk_size(&buffer) {
+            Ok(httparse::Status::Complete((data_start, chunk_size))) => {
+                let chunk_size = chunk_size as usize;
                 if chunk_size == 0 {
-                    let rem = &input[crlf_pos + 2..];
-                    return rem.starts_with(b"\r\n") || rem.windows(4).any(|w| w == b"\r\n\r\n");
+                    break;
                 }
-                let data_end = crlf_pos + 2 + chunk_size;
-                if data_end + 2 <= input.len() {
-                    input = &input[data_end + 2..];
-                    continue;
-                } else {
-                    return false;
+                let data_end = data_start + chunk_size;
+                let next_chunk_start = data_end + 2; // 包含 chunk 尾部的 \r\n
+
+                while buffer.len() < next_chunk_start {
+                    let n = stream.read(&mut chunk_buf)?;
+                    if n == 0 {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::UnexpectedEof,
+                            "Chunk data prematurely truncated",
+                        ));
+                    }
+                    buffer.extend_from_slice(&chunk_buf[..n]);
                 }
-            } else {
-                return false;
+
+                body.extend_from_slice(&buffer[data_start..data_end]);
+                buffer.drain(..next_chunk_start);
             }
-        } else {
-            return false;
+            Ok(httparse::Status::Partial) => {
+                let n = stream.read(&mut chunk_buf)?;
+                if n == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "Incomplete chunk header before EOF",
+                    ));
+                }
+                buffer.extend_from_slice(&chunk_buf[..n]);
+            }
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid HTTP chunked format: {:?}", e),
+                ));
+            }
         }
     }
-    false
+
+    Ok(body)
 }
 
 #[cfg(test)]
@@ -619,19 +587,11 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_chunked() {
-        let raw = b"5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
-        let body = decode_chunked(raw).unwrap();
+    fn test_read_chunked_body() {
+        let raw = b"6\r\n world\r\n0\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(raw);
+        let body = read_chunked_body(b"5\r\nhello\r\n", &mut cursor).unwrap();
         assert_eq!(body, b"hello world");
-    }
-
-    #[test]
-    fn test_chunked_complete() {
-        let complete = b"5\r\nhello\r\n0\r\n\r\n";
-        assert!(is_chunked_complete(complete));
-
-        let partial = b"5\r\nhello\r\n";
-        assert!(!is_chunked_complete(partial));
     }
 
     #[test]
