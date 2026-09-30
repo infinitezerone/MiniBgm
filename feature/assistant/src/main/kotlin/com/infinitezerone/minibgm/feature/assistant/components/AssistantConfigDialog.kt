@@ -206,7 +206,7 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             defaultModel = "llama-3.3-70b-versatile",
             provider = AiConfig.PROVIDER_CUSTOM,
             isApiKeyRequired = true,
-            tip = "LPU 硬件加速，极低延迟秒级响应（需海外代理，不支持大陆/香港 IP）",
+            tip = "不向中国大陆及香港地区提供服务",
             popularModels = listOf("llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b"),
         ),
         ProviderPreset(
@@ -217,7 +217,7 @@ internal val PROVIDER_PRESETS: List<ProviderPreset> =
             defaultModel = "gpt-4o-mini",
             provider = AiConfig.PROVIDER_CUSTOM,
             isApiKeyRequired = true,
-            tip = "兼容任何支持 OpenAI 规范的标准第三方反代或自建网关",
+            tip = "可填自建网关或第三方中转服务",
             popularModels = emptyList(),
         ),
     )
@@ -577,13 +577,7 @@ fun AssistantConfigDialog(
                     val summary =
                         when {
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "鉴权失败 (HTTP 401)"
-                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
-                                if ("groq" in normalized.lowercase()) {
-                                    "访问受限 (HTTP 403：Groq 限制大陆/香港 IP)"
-                                } else {
-                                    "访问受限 (HTTP 403)"
-                                }
-                            }
+                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> "访问受限 (HTTP 403)"
                             "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "连接超时 / 无法访问"
                             else -> "连通失败"
                         }
@@ -592,12 +586,12 @@ fun AssistantConfigDialog(
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "API Key 无效、已过期或无权访问该模型，请检查密钥"
                             "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
                                 if ("groq" in normalized.lowercase()) {
-                                    "Groq 官方在 Cloudflare 边缘阻断了中国大陆及香港 IP 请求。请在设备上开启科学上网/VPN 并切换至美区/日区/新加坡等支持节点，或使用第三方中转代理。"
+                                    "Groq 不向中国大陆及香港地区提供服务，可改用 DeepSeek、智谱 GLM、阿里百炼等国内服务商。"
                                 } else {
                                     "端点拒绝访问（HTTP 403），请检查账号权限或 IP 地域限制"
                                 }
                             }
-                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "请检查网络代理环境或服务地址是否拼写正确"
+                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "请检查网络连接与接口地址是否正确"
                             rawMsg.isNotBlank() -> rawMsg
                             else -> "请确认端点与网络可用性后重试"
                         }

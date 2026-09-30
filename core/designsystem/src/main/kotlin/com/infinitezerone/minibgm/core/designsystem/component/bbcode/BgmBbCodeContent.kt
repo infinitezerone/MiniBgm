@@ -299,7 +299,7 @@ private fun BgmBbCodeImage(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "图片加载失败（可能需代理）",
+                            text = "图片加载失败",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,

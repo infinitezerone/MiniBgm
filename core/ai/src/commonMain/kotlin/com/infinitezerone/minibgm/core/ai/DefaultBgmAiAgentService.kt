@@ -574,7 +574,7 @@ internal fun formatRateLimitError(
 
 internal fun formatForbiddenError(config: AiConfig): String =
     if (config.endpoint.contains("groq.com", ignoreCase = true)) {
-        "端点拒绝了访问（HTTP 403）：Groq 对中国大陆 IP 存在访问地域限制，请配置代理访问，或切换至 DeepSeek、智谱 GLM、阿里百炼等国内直连服务商。"
+        "端点拒绝了访问（HTTP 403）：Groq 不向中国大陆及香港地区提供服务，可改用 DeepSeek、智谱 GLM、阿里百炼等国内服务商。"
     } else {
         "端点拒绝了访问（HTTP 403）：请确认密钥对该模型拥有调用权限。"
     }
