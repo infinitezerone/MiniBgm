@@ -358,11 +358,6 @@ class ExploreViewModel(
         }
     }
 
-    suspend fun beginLogin(): String {
-        loginPromptVisible.value = false
-        return authRepository.beginLogin()
-    }
-
     fun dismissLoginPrompt() {
         loginPromptVisible.value = false
     }

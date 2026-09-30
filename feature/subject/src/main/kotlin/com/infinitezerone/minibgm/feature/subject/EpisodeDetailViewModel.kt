@@ -423,12 +423,6 @@ class EpisodeDetailViewModel(
         }
     }
 
-    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL */
-    suspend fun beginLogin(): String {
-        _uiState.update { it.copy(showLoginPromptDialog = false) }
-        return authRepository.beginLogin()
-    }
-
     fun dismissLoginPrompt() {
         _uiState.update { it.copy(showLoginPromptDialog = false) }
     }

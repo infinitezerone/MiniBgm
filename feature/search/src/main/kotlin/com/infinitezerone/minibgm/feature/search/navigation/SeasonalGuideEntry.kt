@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.feature.search.SeasonalGuideScreen
 fun EntryProviderScope<NavKey>.seasonalGuideEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: () -> Unit,
+    onLoginRequest: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SeasonalGuideRoute>(metadata = metadata) { route ->
@@ -20,6 +21,7 @@ fun EntryProviderScope<NavKey>.seasonalGuideEntry(
             initialSeasonMonth = route.initialSeasonMonth,
             onSubjectClick = onSubjectClick,
             onBackClick = onBackClick,
+            onLoginRequest = onLoginRequest,
         )
     }
 }

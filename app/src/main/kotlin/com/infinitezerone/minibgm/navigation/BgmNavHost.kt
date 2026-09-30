@@ -12,12 +12,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
+import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
+import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
@@ -27,6 +30,7 @@ import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.assistant.navigation.assistantEntry
 import com.infinitezerone.minibgm.feature.schedule.navigation.scheduleEntry
 import com.infinitezerone.minibgm.feature.search.navigation.exploreEntry
@@ -38,6 +42,8 @@ import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.playerEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
+import com.infinitezerone.minibgm.feature.user.navigation.inAppLoginEntry
+import com.infinitezerone.minibgm.feature.user.navigation.inAppWebEntry
 import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
@@ -61,6 +67,16 @@ fun BgmNavHost(
     val directive = rememberBgmPaneDirective()
     val isSplitMode = directive.isSplitLayout
     val listDetailStrategy = rememberBgmListDetailStrategy(directive = directive)
+
+    val context = LocalContext.current
+    // 登录与 bgm 网页统一走应用内接管页：环回代理 + 原生 ECH 通道，
+    // Custom Tabs 用的是系统网络栈，用不了 ECH（强阻断网络下打不开）
+    val openLogin: () -> Unit = { navState.navigateTo(InAppLoginRoute) }
+    val openTokenPage: (String) -> Unit = { url ->
+        navState.navigateTo(InAppWebRoute(url = url, title = "访问令牌"))
+    }
+    val openInAppWebInBrowser: (String) -> Unit = { url -> context.launchWebUrl(url) }
+    val openLoginInBrowser: (String) -> Unit = { url -> context.launchWebUrl(url, isAuth = true) }
 
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
         if (navState.currentKey is SearchRoute) {
@@ -102,6 +118,7 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
+                                onLoginRequest = openLogin,
                                 scrollToTop = scheduleScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
@@ -123,6 +140,7 @@ fun BgmNavHost(
                             exploreEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
+                                onLoginRequest = openLogin,
                                 scrollToTop = exploreScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
@@ -130,20 +148,35 @@ fun BgmNavHost(
                             seasonalGuideEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onBackClick = { navState.goBack() },
+                                onLoginRequest = openLogin,
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
                             searchEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onBackClick = { navState.goBack() },
+                                onLoginRequest = openLogin,
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
                             userEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSettingsClick = { navState.navigateTo(SettingsRoute) },
+                                onLoginRequest = openLogin,
+                                onOpenTokenPage = openTokenPage,
                                 scrollToTop = userScrollToTop,
                                 metadata = bgmTopLevelTransitionMetadata,
+                            )
+
+                            // 登录接管页与 bgm 网页浏览页：全屏场景（不参与分栏策略）
+                            inAppLoginEntry(
+                                onBackClick = { navState.goBack() },
+                                onOpenInBrowser = openLoginInBrowser,
+                            )
+
+                            inAppWebEntry(
+                                onBackClick = { navState.goBack() },
+                                onOpenInBrowser = openInAppWebInBrowser,
                             )
 
                             settingsEntry(
@@ -168,6 +201,7 @@ fun BgmNavHost(
 
                             subjectEntry(
                                 onBackClick = { navState.goBack() },
+                                onLoginRequest = openLogin,
                                 onSubjectClick = { subjectId ->
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
@@ -201,6 +235,7 @@ fun BgmNavHost(
 
                             linkedSubjectEntry(
                                 onBackClick = { navState.goBack() },
+                                onLoginRequest = openLogin,
                                 onSubjectClick = { subjectId ->
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },
@@ -242,6 +277,7 @@ fun BgmNavHost(
 
                             episodeDetailEntry(
                                 onBackClick = { navState.goBack() },
+                                onLoginRequest = openLogin,
                                 onSubjectClick = { subjectId ->
                                     navState.navigateTo(LinkedSubjectRoute(subjectId))
                                 },

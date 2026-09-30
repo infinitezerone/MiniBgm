@@ -18,6 +18,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
     onManageRules: (() -> Unit)? = null,
     onSourceSearch: ((String) -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SubjectDetailRoute>(metadata = metadata) { route ->
@@ -35,6 +36,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
             onTopicClick = onTopicClick,
             onManageRules = onManageRules,
             onSourceSearch = onSourceSearch,
+            onLoginRequest = onLoginRequest,
         )
     }
 }
@@ -49,6 +51,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
     onManageRules: (() -> Unit)? = null,
     onSourceSearch: ((String) -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<LinkedSubjectRoute>(metadata = metadata) { route ->
@@ -66,6 +69,7 @@ fun EntryProviderScope<NavKey>.linkedSubjectEntry(
             onTopicClick = onTopicClick,
             onManageRules = onManageRules,
             onSourceSearch = onSourceSearch,
+            onLoginRequest = onLoginRequest,
         )
     }
 }

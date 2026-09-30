@@ -508,9 +508,9 @@ fun SettingsScreenContent(
                 Text(
                     text =
                         if (currentProfile != null) {
-                            "确定要退出当前账号「${currentProfile.displayName}」(@${currentProfile.username}) 吗？"
+                            "退出「${currentProfile.displayName}」(@${currentProfile.username})？退出后需重新登录。"
                         } else {
-                            "确定要退出当前登录账号吗？"
+                            "退出当前账号？退出后需重新登录。"
                         },
                 )
             },
@@ -550,7 +550,7 @@ fun SettingsScreenContent(
             title = { Text(text = "退出所有账号") },
             text = {
                 Text(
-                    text = "确定要退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号吗？所有已保存的授权凭据都将被清除。",
+                    text = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
                 )
             },
             confirmButton = {

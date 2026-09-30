@@ -381,11 +381,6 @@ class SeasonalGuideViewModel(
         loginPromptVisible.value = false
     }
 
-    suspend fun beginLogin(): String {
-        loginPromptVisible.value = false
-        return authRepository.beginLogin()
-    }
-
     // ── 分页会话：从当前游标连续取页，直到"可见条目比会话开始时多"或取尽 ──
 
     private suspend fun runPagingSession(

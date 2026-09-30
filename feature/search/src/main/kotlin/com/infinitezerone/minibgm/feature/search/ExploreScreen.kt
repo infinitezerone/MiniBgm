@@ -35,11 +35,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,7 +45,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.ActiveFilterPillRow
 import com.infinitezerone.minibgm.feature.search.components.ExploreEmptyState
 import com.infinitezerone.minibgm.feature.search.components.ExploreErrorState
@@ -56,7 +53,6 @@ import com.infinitezerone.minibgm.feature.search.components.ExploreSkeletonLoadi
 import com.infinitezerone.minibgm.feature.search.components.MoodFilterRow
 import com.infinitezerone.minibgm.feature.search.components.WaterfallGridList
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -71,6 +67,7 @@ fun ExploreScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
+    onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     exploreViewModel: ExploreViewModel = koinViewModel(),
     seasonalGuideViewModel: SeasonalGuideViewModel = koinViewModel(),
@@ -80,7 +77,6 @@ fun ExploreScreen(
 
     val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
     var showFilterBottomSheet by remember { mutableStateOf(false) }
     val filterSheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val exploreGridState = rememberLazyStaggeredGridState()
@@ -202,6 +198,7 @@ fun ExploreScreen(
                         onSubjectClick = onSubjectClick,
                         modifier = Modifier.fillMaxSize(),
                         viewModel = seasonalGuideViewModel,
+                        onLoginRequest = onLoginRequest,
                         scrollToTop = if (selectedTabIndex == 0) scrollToTop else null,
                         isTopLevel = true,
                     )
@@ -310,7 +307,6 @@ fun ExploreScreen(
 
         // 未登录引导弹窗
         if (exploreUiState.showLoginPromptDialog) {
-            val context = LocalContext.current
             AlertDialog(
                 onDismissRequest = exploreViewModel::dismissLoginPrompt,
                 icon = {
@@ -337,11 +333,10 @@ fun ExploreScreen(
                 },
                 confirmButton = {
                     Button(
+                        // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
                         onClick = {
-                            coroutineScope.launch {
-                                val authUrl = exploreViewModel.beginLogin()
-                                context.launchWebUrl(authUrl, isAuth = true)
-                            }
+                            exploreViewModel.dismissLoginPrompt()
+                            onLoginRequest()
                         },
                     ) {
                         Text("立即登录")

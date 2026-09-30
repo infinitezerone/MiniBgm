@@ -784,12 +784,6 @@ class ScheduleViewModel(
         }
     }
 
-    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开） */
-    suspend fun beginLogin(): String {
-        showLoginPromptDialog.value = false
-        return authRepository.beginLogin()
-    }
-
     fun dismissLoginPrompt() {
         showLoginPromptDialog.value = false
     }

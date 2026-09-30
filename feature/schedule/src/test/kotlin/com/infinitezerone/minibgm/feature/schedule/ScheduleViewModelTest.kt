@@ -551,12 +551,12 @@ class ScheduleViewModelTest {
 
             viewModel.markEpisodeWatched(101L, 1)
 
-            val state = viewModel.uiState.first { it.showLoginPromptDialog }
-            assertTrue(state.showLoginPromptDialog)
+            val url = viewModel.uiState.first { it.showLoginPromptDialog }
+            assertTrue(url.showLoginPromptDialog)
             assertEquals(0, collectionRepository.updateEpisodeCallCount)
 
-            val url = viewModel.beginLogin()
-            assertTrue(url.isNotBlank())
+            // 登录由独立路由接管（应用内 WebView + ECH 通道），ViewModel 只负责收起提示
+            viewModel.dismissLoginPrompt()
             val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
             assertFalse(dismissedState.showLoginPromptDialog)
         }

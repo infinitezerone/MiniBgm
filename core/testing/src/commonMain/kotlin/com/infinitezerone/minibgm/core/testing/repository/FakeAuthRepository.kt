@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
+import com.infinitezerone.minibgm.core.model.InAppWebSession
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,16 +70,31 @@ class FakeAuthRepository(
 
     var beginInAppLoginCallCount: Int = 0
         private set
-    var stopInAppLoginCallCount: Int = 0
+    var beginInAppBrowseCallCount: Int = 0
+        private set
+    var stopInAppWebCallCount: Int = 0
         private set
 
-    override suspend fun beginInAppLogin(): String {
+    /** 应用内会话默认值；置 null 可模拟「环回代理不可用」的降级路径。 */
+    var inAppWebSession: InAppWebSession? =
+        InAppWebSession(
+            url = "http://127.0.0.1:1/oauth/authorize?client_id=test",
+            cookieName = "minibgm_inapp_web",
+            cookieValue = "test_token",
+        )
+
+    override suspend fun beginInAppLogin(): InAppWebSession? {
         beginInAppLoginCallCount++
-        return mockAuthorizeUrl
+        return inAppWebSession
     }
 
-    override suspend fun stopInAppLogin() {
-        stopInAppLoginCallCount++
+    override suspend fun beginInAppBrowse(url: String): InAppWebSession? {
+        beginInAppBrowseCallCount++
+        return inAppWebSession?.copy(url = url)
+    }
+
+    override fun stopInAppWeb() {
+        stopInAppWebCallCount++
     }
 
     override suspend fun completeLogin(

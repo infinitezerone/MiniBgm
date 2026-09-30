@@ -95,6 +95,7 @@ fun SubjectDetailScreen(
     onPersonClick: ((Long) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     onSourceSearch: ((String) -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     viewModel: SubjectDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId) }),
 ) {
     val context = LocalContext.current
@@ -589,10 +590,9 @@ fun SubjectDetailScreen(
         showLoginPromptDialog = uiState.showLoginPromptDialog,
         onDismissLoginPrompt = viewModel::dismissLoginPrompt,
         onLoginClick = {
-            coroutineScope.launch {
-                val authorizeUrl = viewModel.beginLogin()
-                context.launchWebUrl(authorizeUrl, isAuth = true)
-            }
+            // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
+            viewModel.dismissLoginPrompt()
+            onLoginRequest()
         },
         showCollectionSheet = uiState.showCollectionSheet,
         currentCollection = uiState.collection,

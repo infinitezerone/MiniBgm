@@ -80,6 +80,7 @@ fun ScheduleScreen(
     onAssistantClick: (() -> Unit)? = null,
     onSourceSearch: (String) -> Unit = {},
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
@@ -408,11 +409,10 @@ fun ScheduleScreen(
             },
             confirmButton = {
                 Button(
+                    // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
                     onClick = {
-                        coroutineScope.launch {
-                            val authorizeUrl = viewModel.beginLogin()
-                            context.launchWebUrl(authorizeUrl, isAuth = true)
-                        }
+                        viewModel.dismissLoginPrompt()
+                        onLoginRequest()
                     },
                 ) {
                     Text("立即登录")

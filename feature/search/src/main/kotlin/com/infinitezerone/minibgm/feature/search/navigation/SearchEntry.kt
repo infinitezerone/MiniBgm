@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.feature.search.SearchScreen
 fun EntryProviderScope<NavKey>.searchEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onBackClick: (() -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SearchRoute>(metadata = metadata) { route ->
@@ -17,6 +18,7 @@ fun EntryProviderScope<NavKey>.searchEntry(
             initialQuery = route.initialQuery,
             onSubjectClick = onSubjectClick,
             onBackClick = onBackClick,
+            onLoginRequest = onLoginRequest,
         )
     }
 }

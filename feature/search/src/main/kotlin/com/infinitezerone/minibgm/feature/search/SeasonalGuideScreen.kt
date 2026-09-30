@@ -39,12 +39,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -52,7 +50,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.SeasonPickerBottomSheet
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeRow
@@ -63,7 +60,6 @@ import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeleto
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeletonList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -80,6 +76,7 @@ fun SeasonalGuideScreen(
     modifier: Modifier = Modifier,
     initialYear: Int = 0,
     initialSeasonMonth: Int = 0,
+    onLoginRequest: () -> Unit = {},
     viewModel: SeasonalGuideViewModel =
         koinViewModel(
             parameters = { parametersOf(initialYear, initialSeasonMonth) },
@@ -114,6 +111,7 @@ fun SeasonalGuideScreen(
             onSubjectClick = onSubjectClick,
             modifier = Modifier.padding(innerPadding),
             viewModel = viewModel,
+            onLoginRequest = onLoginRequest,
         )
     }
 }
@@ -128,6 +126,7 @@ fun SeasonalGuideContent(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SeasonalGuideViewModel = koinViewModel(),
+    onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     isTopLevel: Boolean = false,
 ) {
@@ -135,8 +134,6 @@ fun SeasonalGuideContent(
     val isWideScreen = adaptiveInfo.isWide
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     var showSeasonPicker by remember { mutableStateOf(false) }
@@ -393,11 +390,10 @@ fun SeasonalGuideContent(
                 },
                 confirmButton = {
                     Button(
+                        // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
                         onClick = {
-                            coroutineScope.launch {
-                                val authUrl = viewModel.beginLogin()
-                                context.launchWebUrl(authUrl, isAuth = true)
-                            }
+                            viewModel.dismissLoginPrompt()
+                            onLoginRequest()
                         },
                     ) {
                         Text("立即登录")

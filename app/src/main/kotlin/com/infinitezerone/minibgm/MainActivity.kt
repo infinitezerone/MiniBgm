@@ -20,7 +20,6 @@ import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -85,16 +84,10 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(EXTRA_SUBJECT_ID)
         }
         if (intent.getBooleanExtra(EXTRA_TRIGGER_LOGIN, false)) {
+            // 小组件「去登录」只负责把用户带进应用（BgmApp 会切到「我的」并直接打开登录接管页）：
+            // 登录页在应用内 WebView 中经环回代理走 ECH，不再从这里拉起系统浏览器
             openUser = true
             intent.removeExtra(EXTRA_TRIGGER_LOGIN)
-            lifecycleScope.launch {
-                runCatching {
-                    val authorizeUrl = authRepository.beginLogin()
-                    launchWebUrl(authorizeUrl, isAuth = true)
-                }.onFailure {
-                    snackbarHostState.showSnackbar("启动登录失败，请重试")
-                }
-            }
         }
     }
 

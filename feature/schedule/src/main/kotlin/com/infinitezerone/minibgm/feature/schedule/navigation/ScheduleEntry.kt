@@ -15,6 +15,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
     onAssistantClick: (() -> Unit)? = null,
     onSourceSearch: (String) -> Unit = {},
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -25,6 +26,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
             onAssistantClick = onAssistantClick,
             onSourceSearch = onSourceSearch,
             onPlayClick = onPlayClick,
+            onLoginRequest = onLoginRequest,
             scrollToTop = scrollToTop,
         )
     }

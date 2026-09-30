@@ -124,6 +124,26 @@ data class TopicDetailRoute(
 data object SettingsRoute : SubFeatureRoute
 
 /**
+ * 应用内登录接管页路由：经本地环回代理把 Bangumi 授权页渲染在内置 WebView 中，
+ * 从而复用原生 ECH 通道，无需跳转系统浏览器（Custom Tabs 用不了 ECH）。
+ *
+ * 声明为 [DetailChainRoute] 而非 [SubFeatureRoute]：登录是从任意页面临时压栈的全屏接管
+ * （与 [PlayerRoute] 同类），退出后回到触发它的页面；若按二级页语义入栈，会把当前详情层清掉。
+ */
+@Serializable
+data object InAppLoginRoute : DetailChainRoute
+
+/**
+ * 应用内网页浏览路由：把 bgm 系域名（bgm.tv / next.bgm.tv 等）的页面同样经环回代理渲染，
+ * 复用 ECH 通道。当前用于「访问令牌」页面；内容页（话题/条目/wiki）浏览见后续阶段。
+ */
+@Serializable
+data class InAppWebRoute(
+    val url: String,
+    val title: String = "",
+) : DetailChainRoute
+
+/**
  * 应用内视频播放交互界面路由（基于 Media3 ExoPlayer 渲染）。
  * [requestHeaders] 为用户自备列表条目的必要请求头（如 Referer/Cookie），随媒体请求发送。
  * [queue] 为本次播放的分集队列（自备片单/找源清单按序给出）：非空时播放器支持

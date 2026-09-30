@@ -391,18 +391,6 @@ class UserViewModelTest {
         }
 
     @Test
-    fun beginLogin_delegatesToAuthRepository() =
-        runTest {
-            val authRepo = FakeAuthRepository(initialLoggedIn = false)
-            val (viewModel, _) = createViewModel(authRepo = authRepo)
-
-            val url = viewModel.beginLogin()
-
-            assertTrue(url.contains("bgm.tv/oauth/authorize"))
-            assertEquals(1, authRepo.beginLoginCallCount)
-        }
-
-    @Test
     fun loginWithPersonalAccessToken_delegatesToAuthRepositoryAndInvokesCallback() =
         runTest {
             val authRepo = FakeAuthRepository(initialLoggedIn = false)
@@ -415,46 +403,6 @@ class UserViewModelTest {
             advanceUntilIdle()
 
             assertEquals(1, authRepo.loginWithPersonalAccessTokenCallCount)
-            assertTrue(callbackSuccess)
-        }
-
-    @Test
-    fun beginInAppLogin_delegatesToAuthRepository() =
-        runTest {
-            val authRepo = FakeAuthRepository(initialLoggedIn = false)
-            val (viewModel, _) = createViewModel(authRepo = authRepo)
-
-            val url = viewModel.beginInAppLogin()
-
-            assertTrue(url.contains("bgm.tv/oauth/authorize"))
-            assertEquals(1, authRepo.beginInAppLoginCallCount)
-        }
-
-    @Test
-    fun stopInAppLogin_delegatesToAuthRepository() =
-        runTest {
-            val authRepo = FakeAuthRepository(initialLoggedIn = false)
-            val (viewModel, _) = createViewModel(authRepo = authRepo)
-
-            viewModel.stopInAppLogin()
-            advanceUntilIdle()
-
-            assertEquals(1, authRepo.stopInAppLoginCallCount)
-        }
-
-    @Test
-    fun completeLogin_delegatesToAuthRepositoryAndInvokesCallback() =
-        runTest {
-            val authRepo = FakeAuthRepository(initialLoggedIn = false)
-            val (viewModel, _) = createViewModel(authRepo = authRepo)
-            var callbackSuccess = false
-
-            viewModel.completeLogin("code", "state") { success, _ ->
-                callbackSuccess = success
-            }
-            advanceUntilIdle()
-
-            assertEquals(1, authRepo.completeLoginCallCount)
             assertTrue(callbackSuccess)
         }
 

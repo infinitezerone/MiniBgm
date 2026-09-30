@@ -36,7 +36,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
@@ -49,7 +48,6 @@ import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -63,12 +61,13 @@ import org.koin.androidx.compose.koinViewModel
 fun UserScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onLoginRequest: () -> Unit = {},
+    onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
     collectionsViewModel: UserCollectionsViewModel = koinViewModel(),
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val collectionsState by collectionsViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -79,59 +78,15 @@ fun UserScreen(
         collectionsViewModel.setInitialType(CollectionType.DOING)
     }
 
-    var inAppLoginUrl by androidx.compose.runtime.saveable
-        .rememberSaveable { mutableStateOf<String?>(null) }
-    var isExchangingToken by androidx.compose.runtime.saveable
-        .rememberSaveable { mutableStateOf(false) }
-
-    if (inAppLoginUrl != null) {
-        InAppOAuthLoginDialog(
-            authorizeUrl = inAppLoginUrl!!,
-            onDismiss = {
-                viewModel.stopInAppLogin()
-                inAppLoginUrl = null
-                isExchangingToken = false
-            },
-            onAuthCallback = { code, state ->
-                isExchangingToken = true
-                viewModel.completeLogin(code, state) { success, error ->
-                    isExchangingToken = false
-                    if (success) {
-                        inAppLoginUrl = null
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar("登录成功")
-                        }
-                    } else {
-                        coroutineScope.launch {
-                            snackbarHostState.showSnackbar(error ?: "登录失败，请重试")
-                        }
-                    }
-                }
-            },
-            onOpenExternalBrowser = {
-                coroutineScope.launch {
-                    val fallbackUrl = viewModel.beginLogin()
-                    context.launchWebUrl(fallbackUrl, isAuth = true)
-                    viewModel.stopInAppLogin()
-                    inAppLoginUrl = null
-                }
-            },
-            isExchangingToken = isExchangingToken,
-        )
-    }
-
     UserScreenContent(
         uiState = uiState,
         collectionsState = collectionsState,
-        onLogin = {
-            coroutineScope.launch {
-                val authorizeUrl = viewModel.beginInAppLogin()
-                inAppLoginUrl = authorizeUrl
-            }
-        },
+        // 登录接管页是独立路由（见 InAppLoginRoute）：本页只负责发起，不再自持 WebView 弹窗
+        onLogin = onLoginRequest,
         onLoginWithToken = { token, onResult ->
             viewModel.loginWithPersonalAccessToken(token, onResult)
         },
+        onOpenTokenPage = onOpenTokenPage,
         onRefresh = {
             // 下拉刷新同时覆盖两个数据块：个人资料/收藏计数（头部与 Tab 计数）与当前分区的收藏列表
             collectionsViewModel.refresh()
@@ -139,10 +94,10 @@ fun UserScreen(
                 coroutineScope.launch {
                     if (success) {
                         snackbarHostState.showSnackbar(
-                            if (uiState.isLoggedIn) "个人中心已刷新" else "已刷新（登录后可同步个人云端数据）",
+                            if (uiState.isLoggedIn) "个人中心已刷新" else "已刷新（登录后可同步个人数据）",
                         )
                     } else {
-                        snackbarHostState.showSnackbar("刷新失败，请检查网络设置")
+                        snackbarHostState.showSnackbar("刷新失败，请检查网络")
                     }
                 }
             }
@@ -170,6 +125,7 @@ fun UserScreenContent(
     collectionsState: UserCollectionsUiState,
     onLogin: () -> Unit,
     onLoginWithToken: (String, (Boolean, String?) -> Unit) -> Unit = { _, _ -> },
+    onOpenTokenPage: (String) -> Unit = {},
     onRefresh: () -> Unit,
     onRetryCollections: () -> Unit = {},
     onSettingsClick: () -> Unit,
@@ -288,6 +244,7 @@ fun UserScreenContent(
                     UnauthenticatedLandingView(
                         onLogin = onLogin,
                         onLoginWithToken = onLoginWithToken,
+                        onOpenTokenPage = onOpenTokenPage,
                         isAuthenticating = uiState.isAuthenticating,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -395,7 +352,7 @@ fun UserScreenContent(
             title = { Text(text = "退出账号") },
             text = {
                 Text(
-                    text = "确定要退出账号「${profile.displayName}」(@${profile.username}) 吗？退出后本地保存的该账号凭据将被清除。",
+                    text = "退出「${profile.displayName}」(@${profile.username})？退出后需重新登录。",
                 )
             },
             confirmButton = {
@@ -434,7 +391,7 @@ fun UserScreenContent(
             title = { Text(text = "退出所有账号") },
             text = {
                 Text(
-                    text = "确定要退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号吗？所有已保存的授权凭据都将被清除。",
+                    text = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
                 )
             },
             confirmButton = {

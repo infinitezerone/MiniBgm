@@ -37,6 +37,7 @@ import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
+import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
@@ -118,10 +119,11 @@ fun BgmApp(
         }
     }
 
-    // 小组件点击去登录直达"我的"Tab：消费标记后切到用户中心
+    // 小组件点击去登录直达"我的"Tab，并直接打开登录接管页（应用内 WebView + ECH 通道）
     LaunchedEffect(openUser) {
         if (openUser) {
             navState.navigateTo(UserRoute)
+            navState.navigateTo(InAppLoginRoute)
             onUserNavigated()
         }
     }

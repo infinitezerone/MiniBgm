@@ -15,14 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.search.components.SearchCategoryTabs
 import com.infinitezerone.minibgm.feature.search.components.SearchErrorState
 import com.infinitezerone.minibgm.feature.search.components.SearchIdleView
@@ -31,7 +28,6 @@ import com.infinitezerone.minibgm.feature.search.components.SearchNoResultsState
 import com.infinitezerone.minibgm.feature.search.components.SearchResultsList
 import com.infinitezerone.minibgm.feature.search.components.SearchSkeletonLoading
 import com.infinitezerone.minibgm.feature.search.components.SearchTopHeader
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -50,13 +46,12 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     initialQuery: String = "",
     onBackClick: (() -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     viewModel: SearchViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val keyboardController = LocalSoftwareKeyboardController.current
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let { msg ->
@@ -179,11 +174,10 @@ fun SearchScreen(
     if (uiState.showLoginPromptDialog) {
         SearchLoginDialog(
             onDismiss = viewModel::dismissLoginPrompt,
+            // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
             onConfirmLogin = {
-                coroutineScope.launch {
-                    val authorizeUrl = viewModel.beginLogin()
-                    context.launchWebUrl(authorizeUrl, isAuth = true)
-                }
+                viewModel.dismissLoginPrompt()
+                onLoginRequest()
             },
         )
     }

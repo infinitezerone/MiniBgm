@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
+import com.infinitezerone.minibgm.core.model.InAppWebSession
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
@@ -25,6 +26,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 
+/** 应用内网页浏览允许的 bgm 系域名（含子域）。 */
+private val BGM_WEB_HOSTS = listOf("bgm.tv", "bangumi.tv", "chii.in")
+
 interface AuthRepository {
     val activeUserId: Flow<Long?>
 
@@ -43,11 +47,27 @@ interface AuthRepository {
         state: String?,
     ): AppResult<Unit>
 
-    /** 开始应用内内嵌登录流程，启动本地 ECH 代理并返回指向本地代理的授权 URL */
-    suspend fun beginInAppLogin(): String
+    /**
+     * 开始应用内内嵌登录：启动本地环回代理（走原生 ECH 通道），
+     * 返回内置 WebView 应加载的会话（含必须先行写入的会话 Cookie）。
+     * 代理不可用时返回 null，调用方应回退到系统浏览器。
+     */
+    suspend fun beginInAppLogin(): InAppWebSession?
 
-    /** 停止本地 ECH 登录代理（用户取消或离开登录弹窗时调用） */
-    suspend fun stopInAppLogin()
+    /**
+     * 开始应用内浏览：把 bgm 系域名页面同样交给内置 WebView（复用 ECH 通道）。
+     *
+     * @return 非 bgm 域名或代理不可用时返回 null
+     */
+    suspend fun beginInAppBrowse(url: String): InAppWebSession?
+
+    /**
+     * 结束应用内网页会话（登录完成/取消、浏览页退出时调用）。
+     *
+     * 非 suspend 且幂等：调用方可能已被取消（页面销毁、ViewModel 清理），
+     * 这里不能再依赖协程作用域。
+     */
+    fun stopInAppWeb()
 
     /**
      * 个人访问令牌（Personal Access Token）登录入口：
@@ -114,24 +134,70 @@ class AuthRepositoryImpl(
         return authConfig.buildAuthorizeUrl(state = BgmPkce.challenge(verifier))
     }
 
-    override suspend fun beginInAppLogin(): String {
+    override suspend fun beginInAppLogin(): InAppWebSession? {
         log.i { "[LOGIN:IN_APP:BEGIN] starting in-app oauth proxy" }
         val verifier = BgmPkce.generateVerifier()
         userPreferences.setPendingOAuthVerifier(verifier)
         val state = BgmPkce.challenge(verifier)
-        val port = oAuthProxyService?.start()
-        return if (port != null) {
-            val proxyBaseUrl = "http://127.0.0.1:$port/oauth/authorize"
-            authConfig.buildAuthorizeUrl(state = state, baseUrl = proxyBaseUrl)
-        } else {
-            authConfig.buildAuthorizeUrl(state = state)
+        // 授权地址先生成上游形态，再由代理映射为环回地址：host 与 path 的解析只留在代理侧
+        return startInAppWebSession(authConfig.buildAuthorizeUrl(state = state))
+    }
+
+    override suspend fun beginInAppBrowse(url: String): InAppWebSession? {
+        log.i { "[IN_APP_WEB:BEGIN] starting in-app browse session" }
+        return startInAppWebSession(url)
+    }
+
+    override fun stopInAppWeb() {
+        log.i { "[IN_APP_WEB:STOP] stopping loopback proxy" }
+        oAuthProxyService?.stop()
+    }
+
+    /**
+     * 启动环回代理并把上游地址映射为 WebView 可加载的会话。
+     *
+     * 失败一律收摊（停代理 + 返回 null），避免留下一个「启动了但没人用」的监听端口。
+     */
+    private fun startInAppWebSession(upstreamUrl: String): InAppWebSession? {
+        val proxy = oAuthProxyService ?: return null
+        val host = hostOf(upstreamUrl) ?: return null
+        if (!isBgmWebHost(host)) return null
+        return try {
+            proxy.start(host)
+            val cookie = proxy.sessionCookie()
+            val loopback = proxy.toLoopbackUrl(upstreamUrl)
+            if (cookie == null || loopback == null) {
+                proxy.stop()
+                null
+            } else {
+                InAppWebSession(
+                    url = loopback,
+                    cookieName = cookie.first,
+                    cookieValue = cookie.second,
+                )
+            }
+        } catch (e: Exception) {
+            log.w { "[IN_APP_WEB:FAILED] proxy unavailable: ${e.message}" }
+            proxy.stop()
+            null
         }
     }
 
-    override suspend fun stopInAppLogin() {
-        log.i { "[LOGIN:IN_APP:STOP] stopping in-app oauth proxy" }
-        oAuthProxyService?.stop()
-    }
+    /** 取 URL 的 host（commonMain 无 java.net，按 scheme 分隔符手取即可）。 */
+    private fun hostOf(url: String): String? =
+        url
+            .substringAfter("://", "")
+            .substringBefore('/')
+            .substringBefore('?')
+            .substringBefore('#')
+            .takeIf { it.isNotBlank() }
+
+    /**
+     * bgm 系域名白名单：应用内浏览路由只服务这些域，
+     * 避免任意第三方站点被接进本机环回代理（也避免误把外部站点当 bgm 页面处理）。
+     */
+    private fun isBgmWebHost(host: String): Boolean =
+        BGM_WEB_HOSTS.any { base -> host.equals(base, ignoreCase = true) || host.endsWith(".$base", ignoreCase = true) }
 
     override suspend fun completeLogin(
         code: String?,

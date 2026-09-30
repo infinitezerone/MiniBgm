@@ -247,12 +247,6 @@ class SearchViewModel(
         }
     }
 
-    /** 开始 OAuth 授权流程，隐藏提示弹窗并生成授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开，保持 ViewModel 与 Android Context 零耦合） */
-    suspend fun beginLogin(): String {
-        loginPromptVisible.value = false
-        return authRepository.beginLogin()
-    }
-
     fun dismissLoginPrompt() {
         loginPromptVisible.value = false
     }

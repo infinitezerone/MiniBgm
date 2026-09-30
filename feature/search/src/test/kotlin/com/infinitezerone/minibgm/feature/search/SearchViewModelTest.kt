@@ -467,7 +467,7 @@ class SearchViewModelTest {
         }
 
     @Test
-    fun beginLogin_dismissesPromptAndReturnsUrl() =
+    fun dismissLoginPrompt_clearsPrompt() =
         runTest {
             val authRepo = FakeAuthRepository(initialLoggedIn = false)
             val viewModel = createViewModel(authRepo = authRepo)
@@ -476,11 +476,10 @@ class SearchViewModelTest {
             viewModel.toggleCollection(sampleSubject, CollectionType.DOING)
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
 
-            val url = viewModel.beginLogin()
+            // 登录由独立路由接管（应用内 WebView + ECH 通道），ViewModel 只负责收起提示
+            viewModel.dismissLoginPrompt()
 
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
-            assertTrue(url.contains("bgm.tv/oauth/authorize"))
-            assertEquals(1, authRepo.beginLoginCallCount)
         }
 
     @Test

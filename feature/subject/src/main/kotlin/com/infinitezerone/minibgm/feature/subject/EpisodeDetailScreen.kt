@@ -72,7 +72,6 @@ import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -97,6 +96,7 @@ fun EpisodeDetailScreen(
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
     onSourceSearch: ((String) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
+    onLoginRequest: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: EpisodeDetailViewModel =
         koinViewModel(
@@ -706,11 +706,10 @@ fun EpisodeDetailScreen(
             },
             confirmButton = {
                 Button(
+                    // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
                     onClick = {
-                        coroutineScope.launch {
-                            val authorizeUrl = viewModel.beginLogin()
-                            context.launchWebUrl(authorizeUrl, isAuth = true)
-                        }
+                        viewModel.dismissLoginPrompt()
+                        onLoginRequest()
                     },
                 ) {
                     Text("立即登录")

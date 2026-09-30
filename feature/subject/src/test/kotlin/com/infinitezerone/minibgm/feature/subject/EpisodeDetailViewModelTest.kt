@@ -245,8 +245,8 @@ class EpisodeDetailViewModelTest {
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepository.markEpisodesWatchedUpToCallCount)
 
-            val url = viewModel.beginLogin()
-            assertTrue(url.isNotBlank())
+            // 登录由独立路由接管（应用内 WebView + ECH 通道），ViewModel 只负责收起提示
+            viewModel.dismissLoginPrompt()
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
         }
 

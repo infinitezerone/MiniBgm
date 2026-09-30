@@ -332,39 +332,6 @@ class UserViewModel(
         }
     }
 
-    /** 开始 OAuth 授权流程，生成并返回授权 URL（由 UI 层通过系统浏览器/Custom Tabs 打开，保持 ViewModel 与 Android Context 零耦合） */
-    suspend fun beginLogin(): String = authRepository.beginLogin()
-
-    /** 开始应用内内嵌登录流程，启动本地 ECH 代理并返回授权 URL */
-    suspend fun beginInAppLogin(): String = authRepository.beginInAppLogin()
-
-    /** 停止本地 ECH 登录代理 */
-    fun stopInAppLogin() {
-        viewModelScope.launch {
-            authRepository.stopInAppLogin()
-        }
-    }
-
-    /** 兑换授权码完成登录 */
-    fun completeLogin(
-        code: String?,
-        state: String?,
-        onResult: (success: Boolean, errorMessage: String?) -> Unit,
-    ) {
-        viewModelScope.launch {
-            when (val result = authRepository.completeLogin(code, state)) {
-                is AppResult.Success -> {
-                    refresh()
-                    onResult(true, null)
-                }
-                is AppResult.Error -> {
-                    onResult(false, result.message)
-                }
-                AppResult.Loading -> Unit
-            }
-        }
-    }
-
     /**
      * 使用个人访问令牌（Personal Access Token）直接登录。
      * 免去外部浏览器 OAuth 交互与域名阻断困扰，直连拉取个人资料并激活会话。
