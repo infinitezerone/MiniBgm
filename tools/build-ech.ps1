@@ -1,28 +1,12 @@
-# PowerShell 一键编译 Rust ECH 动态库
+# libminibgm_ech.so 的唯一真源是 Gradle 任务 :core:network:buildEchNative
+# （NDK 解析、ABI 集合、产物指纹校验都在那里，见 EchNativePlugin）。
+# 本脚本只作为"不记得任务名"的便捷入口，避免出现第二份 ABI/NDK 实现。
 $ErrorActionPreference = "Stop"
 
-if (-not $env:ANDROID_NDK_HOME) {
-    $ndk29 = "D:\program\AndroidDev\sdk\ndk\29.0.13846066"
-    if (Test-Path "$ndk29\source.properties") {
-        $env:ANDROID_NDK_HOME = $ndk29
-    } else {
-        $ndkBase = "D:\program\AndroidDev\sdk\ndk"
-        if (Test-Path $ndkBase) {
-            $latestNdk = Get-ChildItem $ndkBase | Where-Object { Test-Path "$($_.FullName)\toolchains" } | Sort-Object Name -Descending | Select-Object -First 1
-            if ($latestNdk) {
-                $env:ANDROID_NDK_HOME = $latestNdk.FullName
-            }
-        }
-    }
+Push-Location (Join-Path $PSScriptRoot "..")
+try {
+    & .\gradlew.bat :core:network:buildEchNative @args
+    exit $LASTEXITCODE
+} finally {
+    Pop-Location
 }
-
-if (-not $env:ANDROID_NDK_HOME -or -not (Test-Path $env:ANDROID_NDK_HOME)) {
-    Write-Error "❌ 未找到有效 ANDROID_NDK_HOME，请配置 NDK 路径"
-    exit 1
-}
-
-Write-Host "🦀 使用 NDK: $env:ANDROID_NDK_HOME 编译 libminibgm_ech.so ..." -ForegroundColor Cyan
-
-cargo ndk -t arm64-v8a -t x86_64 --platform 31 -o core/network/src/androidMain/jniLibs build --release -p minibgm-ech
-
-Write-Host "✅ libminibgm_ech.so 编译并同步至 core/network/src/androidMain/jniLibs 完成！" -ForegroundColor Green

@@ -20,8 +20,10 @@ import io.ktor.utils.io.readAvailable
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
@@ -46,6 +48,10 @@ class EchHttpClientEngine(
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
         val callContext = callContext()
         val requestTime = GMTDate()
+        // 一个请求预算覆盖"连接 + ECH 握手 + 响应头 + 响应体"全程。响应体是分块拉取的，
+        // 必须逐块扣减剩余预算：本引擎声明了 HttpTimeoutCapability，Ktor 不会再用
+        // socketTimeoutMillis 兜底，服务端在响应头之后卡住就会让请求永久悬挂。
+        val deadlineNanos = System.nanoTime() + config.timeoutMillis * NANOS_PER_MILLI
 
         return withContext(dispatcher) {
             val urlString = data.url.toString()
@@ -98,7 +104,7 @@ class EchHttpClientEngine(
                         headerKeys = headerKeysList.toTypedArray(),
                         headerValues = headerValuesList.toTypedArray(),
                         body = bodyBytes,
-                        timeoutMs = config.timeoutMillis,
+                        timeoutMs = remainingMillis(deadlineNanos),
                         targetAddrs = targetAddrs,
                         enableEch = enableEch,
                         requireEch = config.requireEch && enableEch,
@@ -136,7 +142,25 @@ class EchHttpClientEngine(
             CoroutineScope(callContext).launch(Dispatchers.IO) {
                 try {
                     while (true) {
-                        val chunk = EchNativeClient.nativeReadBodyChunkCancellable(nativeCall.requestId)
+                        val remaining = remainingMillis(deadlineNanos)
+                        if (remaining <= 0L) {
+                            throw IOException(
+                                "ECH response body exceeded the ${config.timeoutMillis} ms request budget",
+                            )
+                        }
+                        val chunk =
+                            try {
+                                withTimeout(remaining) {
+                                    EchNativeClient.nativeReadBodyChunkCancellable(nativeCall.requestId)
+                                }
+                            } catch (timeout: TimeoutCancellationException) {
+                                // 必须翻译成 IOException：TimeoutCancellationException 属于取消语义，
+                                // 上层会把它当作"调用方主动取消"而不是"读超时"，两者的重试含义完全不同。
+                                throw IOException(
+                                    "ECH response body read timed out after ${config.timeoutMillis} ms",
+                                    timeout,
+                                )
+                            }
                         if (chunk == null || chunk.isEmpty()) break
                         responseBodyChannel.writeFully(chunk, 0, chunk.size)
                     }
@@ -157,5 +181,12 @@ class EchHttpClientEngine(
                 callContext = callContext,
             )
         }
+    }
+
+    /** 剩余预算（毫秒，向下取整且不小于 0）。 */
+    private fun remainingMillis(deadlineNanos: Long): Long = ((deadlineNanos - System.nanoTime()) / NANOS_PER_MILLI).coerceAtLeast(0L)
+
+    private companion object {
+        const val NANOS_PER_MILLI = 1_000_000L
     }
 }

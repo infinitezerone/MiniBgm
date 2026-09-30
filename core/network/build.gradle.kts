@@ -3,6 +3,8 @@ import com.infinitezerone.minibgm.kmpAndroidLibrary
 plugins {
     alias(libs.plugins.minibgm.kmp.library)
     alias(libs.plugins.kotlin.serialization)
+    // Rust ECH 协议栈（crates/minibgm-ech）的编译与产物校验，挂在 jniLibs 合并任务之前
+    alias(libs.plugins.minibgm.ech.native)
 }
 
 kmpAndroidLibrary {

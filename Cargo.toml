@@ -3,3 +3,15 @@ members = [
     "crates/minibgm-ech",
 ]
 resolver = "2"
+
+# 发布 profile 必须写在 workspace 根：写在成员 crate 里 cargo 会直接忽略
+# （"profiles for the non root package will be ignored"），此前 lto / codegen-units /
+# strip / panic 全部没有生效，.so 一直是默认 release 配置。
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+# 保持 unwind：异步任务里的 panic 只应让该次请求失败（槽位由 nativeStart 的回收逻辑收回），
+# 而不是让整个 App 进程 abort。JNI 边界本身无法 unwind，那里的 panic 仍会终止进程。
+panic = "unwind"
+strip = true

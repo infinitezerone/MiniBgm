@@ -61,6 +61,43 @@ jobs:
           EOF
           echo "keystore restored"
 
+      # Rust ECH 原生库是 assemble 的硬前置（.so 不入库）：发布链路必须自带工具链，
+      # 并把与 CI 相同的 Rust 门禁再跑一遍——tag 可指向历史提交，不能靠"CI 当时绿过"
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Install Android NDK
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || echo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager")"
+          # 固定版本优先；失败则回退镜像自带 NDK（buildEchNative 会自动选取最高版本）
+          if ! yes | "$SDKMANAGER" --install "ndk;27.2.12479018" > /dev/null 2>&1; then
+            echo "::warning::NDK 27.2.12479018 安装失败，回退使用镜像自带 NDK"
+          fi
+          ls -1 "${ANDROID_HOME}/ndk"
+
+      - name: Verify Rust native stack
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked -p minibgm-ech --all-targets -- -D warnings
+          cargo test --locked -p minibgm-ech
+
       # 发布前必须通过与 CI 完全一致的静态门禁：tag 可指向任意历史提交，
       # 若不在发布前重新验证，等于绕过 CI 直接发版（同 job 内串行执行，共享 daemon）
       - name: Verify (spotless + tests + CRAP)

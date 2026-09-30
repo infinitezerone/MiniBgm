@@ -10,6 +10,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 object AdaptiveDnsResolver {
     private val logger = bgmLogger("Bgm/DnsResolver")
 
+    /** ECH 外层 public_name：其地址与目标域无关，因此不会随目标域一起被封。 */
+    private const val ECH_PUBLIC_NAME = "cloudflare-ech.com"
+
     // Bangumi Anycast 节点池
     private val bgmAnycastPool =
         CopyOnWriteArrayList(
@@ -108,6 +111,26 @@ object AdaptiveDnsResolver {
 
         val resultList = ArrayList<String>()
 
+        // ECH 合规里外层 SNI 是 ECH 配置的 public_name，连它的 IP 即可（CF 按解密后的外层内容路由）。
+        // 实测（2026-09，移动网络）：bgm.tv 的域名与 anycast IP 在 TCP 层被黑洞，
+        // 而 cloudflare-ech.com 完全可达——此时唯一能用的入口就是 public_name 的地址，故排在最前。
+        if (isEchEligible(host)) {
+            val publicNameIps =
+                runCatching { InetAddress.getAllByName(ECH_PUBLIC_NAME).mapNotNull { it.hostAddress } }
+                    .getOrNull()
+                    .orEmpty()
+                    .filterNot { isPoisonedIp(ECH_PUBLIC_NAME, it) }
+            for (ip in publicNameIps) {
+                val addr = formatAddress(ip, port)
+                if (!resultList.contains(addr)) {
+                    resultList.add(addr)
+                }
+            }
+            if (publicNameIps.isNotEmpty()) {
+                logger.d { "Host $host prefers ECH public_name addresses: $publicNameIps" }
+            }
+        }
+
         try {
             val systemIps = InetAddress.getAllByName(host)
             val cleanIps = systemIps.mapNotNull { it.hostAddress }.filter { !isPoisonedIp(host, it) }
@@ -115,7 +138,10 @@ object AdaptiveDnsResolver {
             if (cleanIps.isNotEmpty()) {
                 logger.d { "Host $host resolved clean system IPs: $cleanIps" }
                 for (ip in cleanIps) {
-                    resultList.add(formatAddress(ip, port))
+                    val addr = formatAddress(ip, port)
+                    if (!resultList.contains(addr)) {
+                        resultList.add(addr)
+                    }
                 }
             } else {
                 logger.w { "Host $host system DNS was poisoned! IPs: ${systemIps.map { it.hostAddress }}" }

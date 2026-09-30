@@ -25,6 +25,11 @@ const MAX_REQUEST_HEADERS: usize = 128;
 const MAX_HEADER_VALUE_SIZE: usize = 16 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const ECH_CONFIG_TTL: Duration = Duration::from_secs(60 * 60);
+/// 单个流式事件等待 Kotlin 读取循环取走的时限。
+///
+/// 读取循环可能因为协程取消/异常而永远不来取数据，而 Receiver 由请求状态持有（不会随协程
+/// 取消而消失）：没有这个上限，任务会永久阻塞在 send 上，占住连接与请求槽（64 槽用尽即全局失效）。
+const CONSUMER_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct EchConfigEntry {
     config: Arc<ClientConfig>,
@@ -32,21 +37,65 @@ struct EchConfigEntry {
     updated_at: Instant,
 }
 
+/// 单次尝试（一个候选地址 + 一套 TLS 配置）的失败结果。
+///
+/// `request_possibly_sent` 记录"请求是否已经交给 hyper 发出"。一旦为真，上层就不允许
+/// 换协议配置、换候选地址重发：调用方存在非幂等写（收藏 POST/PATCH、Worker 换票 POST），
+/// 重复发送等于重复落库。内层用它守住"换地址"，外层用它守住"ECH 降级到明文 TLS"。
+#[derive(Debug)]
+struct AttemptError {
+    source: Box<dyn std::error::Error + Send + Sync>,
+    request_possibly_sent: bool,
+}
+
+impl AttemptError {
+    /// 连接/握手/构包阶段失败：请求从未发出，允许上层换配置重试。
+    fn before_request(source: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
+        Self {
+            source: source.into(),
+            request_possibly_sent: false,
+        }
+    }
+
+    /// 请求已经交给 hyper 之后的失败：禁止任何自动重发。
+    fn after_request(source: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Self {
+        Self {
+            source: source.into(),
+            request_possibly_sent: true,
+        }
+    }
+}
+
+impl std::fmt::Display for AttemptError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.source)
+    }
+}
+
+impl std::error::Error for AttemptError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&*self.source)
+    }
+}
+
 /// 提取服务端返回的 ECH retry_configs
 fn extract_retry_configs(
     err: &(dyn std::error::Error + 'static),
 ) -> Option<Option<Vec<EchConfigPayload>>> {
-    if let Some(rustls_err) = err.downcast_ref::<rustls::Error>() {
-        if let rustls::Error::PeerIncompatible(rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(rc)) = rustls_err {
-            return Some(rc.clone());
-        }
+    if let Some(rustls::Error::PeerIncompatible(
+        rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(retry_configs),
+    )) = err.downcast_ref::<rustls::Error>()
+    {
+        return Some(retry_configs.clone());
     }
-    if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
-        if let Some(rustls_err) = io_err.get_ref().and_then(|e| e.downcast_ref::<rustls::Error>()) {
-            if let rustls::Error::PeerIncompatible(rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(rc)) = rustls_err {
-                return Some(rc.clone());
-            }
-        }
+    if let Some(rustls::Error::PeerIncompatible(
+        rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(retry_configs),
+    )) = err.downcast_ref::<std::io::Error>().and_then(|io_err| {
+        io_err
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+    }) {
+        return Some(retry_configs.clone());
     }
     if let Some(src) = err.source() {
         return extract_retry_configs(src);
@@ -199,7 +248,9 @@ impl EchHttpClient {
                         updated_at: Instant::now(),
                     },
                 );
-                log::info!("ECH configuration dynamically updated for {host} from server retry_configs");
+                log::info!(
+                    "ECH configuration dynamically updated for {host} from server retry_configs"
+                );
                 Some(b64)
             }
             Err(e) => {
@@ -210,6 +261,10 @@ impl EchHttpClient {
     }
 
     /// 发起 HTTP/1.1 请求
+    ///
+    /// 参数清单与 JNI 层 nativeStart 的签名一一对应（见 lib.rs）；拆成结构体只是把同一份
+    /// 契约换个位置，故显式放行 clippy 的参数个数检查。
+    #[allow(clippy::too_many_arguments)]
     pub async fn fetch(
         &self,
         url_str: &str,
@@ -275,7 +330,8 @@ impl EchHttpClient {
                 stream.clone(),
                 None,
             )
-            .await;
+            .await
+            .map_err(Into::into);
         }
 
         if let Some(cfg_b64) = dynamic_ech_config {
@@ -324,7 +380,8 @@ impl EchHttpClient {
                     stream.clone(),
                     None,
                 )
-                .await;
+                .await
+                .map_err(Into::into);
             }
         };
 
@@ -342,42 +399,65 @@ impl EchHttpClient {
         .await
         {
             Ok(resp) => Ok(resp),
-            Err(e) => {
-                if let Some(opt_retry_configs) = extract_retry_configs(&*e) {
-                    if let Some(retry_configs) = opt_retry_configs {
-                        log::warn!(
-                            "Server rejected ECH for {host} with retry_configs; self-healing ECH config and retrying..."
-                        );
-                        if let Some(new_ech_b64) = self.update_ech_from_retry_configs(host, &retry_configs) {
-                            let updated_cfg = {
-                                let guard = self.tls_configs_with_ech.read().unwrap_or_else(|p| p.into_inner());
-                                guard.get(host).map(|entry| entry.config.clone())
-                            };
-                            if let Some(updated_cfg) = updated_cfg {
-                                return try_fetch_with_config(
-                                    updated_cfg,
-                                    &parsed_url,
-                                    method,
-                                    headers,
-                                    body,
-                                    timeout_ms,
-                                    &addrs_to_try,
-                                    stream,
-                                    Some(new_ech_b64),
-                                )
-                                .await;
-                            }
+            Err(error) => {
+                // 请求可能已经到达服务端（读响应超时、连接中途断开、收 body 失败）：
+                // 此时任何"换配置重发"都会让收藏写入、Worker 换票这类非幂等请求重复落库。
+                if error.request_possibly_sent {
+                    log::warn!(
+                        "ECH attempt for {host} failed after the request was sent; refusing to resend: {error}"
+                    );
+                    return Err(if require_ech {
+                        format!("ECH request failed and require_ech is enabled: {error}")
+                    } else {
+                        format!(
+                            "request failed after being sent; refusing to retry over standard TLS to avoid duplicating a non-idempotent request: {error}"
+                        )
+                    }
+                    .into());
+                }
+
+                // retry_configs 只可能出现在"ECH 被服务端拒绝"的握手里，也就是请求必然尚未发出；
+                // 上面的守卫已保证这一点，这里再做一次显式确认式重试。
+                if let Some(Some(retry_configs)) = extract_retry_configs(&error) {
+                    log::warn!(
+                        "Server rejected ECH for {host} with retry_configs; self-healing ECH config and retrying..."
+                    );
+                    if let Some(new_ech_b64) =
+                        self.update_ech_from_retry_configs(host, &retry_configs)
+                    {
+                        let updated_cfg = {
+                            let guard = self
+                                .tls_configs_with_ech
+                                .read()
+                                .unwrap_or_else(|p| p.into_inner());
+                            guard.get(host).map(|entry| entry.config.clone())
+                        };
+                        if let Some(updated_cfg) = updated_cfg {
+                            return try_fetch_with_config(
+                                updated_cfg,
+                                &parsed_url,
+                                method,
+                                headers,
+                                body,
+                                timeout_ms,
+                                &addrs_to_try,
+                                stream,
+                                Some(new_ech_b64),
+                            )
+                            .await
+                            .map_err(Into::into);
                         }
                     }
                 }
 
                 if require_ech {
-                    return Err(format!(
-                        "ECH request failed and require_ech is enabled: {e}"
-                    )
-                    .into());
+                    return Err(
+                        format!("ECH request failed and require_ech is enabled: {error}").into(),
+                    );
                 }
-                log::warn!("ECH handshake failed for {host}; falling back to standard TLS: {e}");
+                log::warn!(
+                    "ECH handshake failed for {host}; falling back to standard TLS: {error}"
+                );
                 try_fetch_with_config(
                     self.tls_config_standard.clone(),
                     &parsed_url,
@@ -390,12 +470,16 @@ impl EchHttpClient {
                     None,
                 )
                 .await
+                .map_err(Into::into)
             }
         }
     }
 }
 
 /// Execute one request through hyper over an ECH-capable TLS stream.
+///
+/// 参数清单与 JNI 契约一致，理由同 [`EchHttpClient::fetch`]。
+#[allow(clippy::too_many_arguments)]
 async fn try_fetch_with_config(
     tls_config: Arc<ClientConfig>,
     parsed_url: &Url,
@@ -406,7 +490,7 @@ async fn try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
-) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<HttpResponse, AttemptError> {
     async_try_fetch_with_config(
         tls_config,
         parsed_url,
@@ -421,6 +505,7 @@ async fn try_fetch_with_config(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn async_try_fetch_with_config(
     tls_config: Arc<ClientConfig>,
     parsed_url: &Url,
@@ -431,8 +516,10 @@ async fn async_try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
-) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
-    let host = parsed_url.host_str().ok_or("URL has no host")?;
+) -> Result<HttpResponse, AttemptError> {
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| AttemptError::before_request("URL has no host".to_owned()))?;
     let authority_host = if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]")
     } else {
@@ -447,20 +534,30 @@ async fn async_try_fetch_with_config(
         None => parsed_url.path().to_owned(),
     };
     let uri: Uri = if request_target.is_empty() {
-        "/".parse()?
+        "/".parse()
+            .map_err(|error: hyper::http::uri::InvalidUri| AttemptError::before_request(error))?
     } else {
-        request_target.parse()?
+        request_target
+            .parse()
+            .map_err(|error: hyper::http::uri::InvalidUri| AttemptError::before_request(error))?
     };
-    let method: Method = method.parse()?;
+    let method: Method = method
+        .parse()
+        .map_err(|error: hyper::http::method::InvalidMethod| AttemptError::before_request(error))?;
     let request_timeout = Duration::from_millis(timeout_ms.max(3000));
     let deadline = tokio::time::Instant::now() + request_timeout;
-    let server_name: ServerName<'static> = host.to_owned().try_into()?;
+    let server_name: ServerName<'static> = host
+        .to_owned()
+        .try_into()
+        .map_err(AttemptError::before_request)?;
     let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
 
     for addr_str in addrs_to_try {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            return Err("request timed out while resolving candidate addresses".into());
+            return Err(AttemptError::before_request(
+                "request timed out while resolving candidate addresses".to_owned(),
+            ));
         }
         let resolved_addrs: Vec<SocketAddr> =
             match timeout(remaining, tokio::net::lookup_host(addr_str.as_str())).await {
@@ -469,17 +566,18 @@ async fn async_try_fetch_with_config(
                     last_error = Some(Box::new(error));
                     continue;
                 }
-                Err(error) => return Err(Box::new(error)),
+                Err(error) => return Err(AttemptError::before_request(error)),
             };
 
         for socket_addr in resolved_addrs {
-            // Once the request has been handed to hyper, retrying another address can
-            // duplicate a non-idempotent POST/PUT. Only connection and TLS failures
-            // are safe to try on the next candidate.
+            // 一旦请求已交给 hyper，换候选地址重发就可能重复非幂等 POST/PUT：
+            // 只有连接与 TLS 握手阶段的失败才允许换下一个候选。
             let mut request_started = false;
             let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
             if remaining.is_zero() {
-                return Err("request timed out before connecting to candidate address".into());
+                return Err(AttemptError::before_request(
+                    "request timed out before connecting to candidate address".to_owned(),
+                ));
             }
             let result = timeout(remaining, async {
                 let connector = TlsConnector::from(tls_config.clone());
@@ -501,7 +599,8 @@ async fn async_try_fetch_with_config(
 
                 let mut request = Request::builder().method(method.clone()).uri(uri.clone());
                 for (name, value) in headers {
-                    if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("connection") {
+                    if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("connection")
+                    {
                         continue;
                     }
                     request = request.header(name, value);
@@ -529,10 +628,7 @@ async fn async_try_fetch_with_config(
                     updated_ech_config: updated_ech_config.clone(),
                 };
                 if let Some(stream) = &stream {
-                    stream
-                        .send(StreamEvent::Response(response))
-                        .await
-                        .map_err(|_| "response consumer was cancelled")?;
+                    send_event(stream, StreamEvent::Response(response)).await?;
                     let mut response_body = hyper_response.into_body();
                     let mut total = 0usize;
                     while let Some(frame) = response_body.frame().await {
@@ -541,12 +637,14 @@ async fn async_try_fetch_with_config(
                                 if let Ok(data) = frame.into_data() {
                                     total = total.saturating_add(data.len());
                                     if total > MAX_RESPONSE_BODY_SIZE {
-                                        let _ = stream
-                                            .send(StreamEvent::Error(format!(
+                                        let _ = send_event(
+                                            stream,
+                                            StreamEvent::Error(format!(
                                                 "HTTP response exceeds {} bytes",
                                                 MAX_RESPONSE_BODY_SIZE
-                                             )))
-                                            .await;
+                                            )),
+                                        )
+                                        .await;
                                         return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
                                             HttpResponse {
                                                 status_code,
@@ -559,18 +657,14 @@ async fn async_try_fetch_with_config(
                                         );
                                     }
                                     for chunk in data.chunks(64 * 1024) {
-                                        if stream
-                                            .send(StreamEvent::Data(chunk.to_vec()))
-                                            .await
-                                            .is_err()
-                                        {
-                                            return Err("response consumer was cancelled".into());
-                                        }
+                                        send_event(stream, StreamEvent::Data(chunk.to_vec()))
+                                            .await?;
                                     }
                                 }
                             }
                             Err(error) => {
-                                let _ = stream.send(StreamEvent::Error(error.to_string())).await;
+                                let _ =
+                                    send_event(stream, StreamEvent::Error(error.to_string())).await;
                                 return Ok(HttpResponse {
                                     status_code,
                                     headers: Vec::new(),
@@ -582,7 +676,7 @@ async fn async_try_fetch_with_config(
                             }
                         }
                     }
-                    let _ = stream.send(StreamEvent::End).await;
+                    let _ = send_event(stream, StreamEvent::End).await;
                     Ok(HttpResponse {
                         status_code,
                         headers: Vec::new(),
@@ -601,22 +695,40 @@ async fn async_try_fetch_with_config(
             match result {
                 Ok(Ok(response)) => return Ok(response),
                 Ok(Err(error)) => {
+                    if request_started {
+                        // 请求已经发出：把这个事实原样上抛，禁止上层换配置/换地址重发
+                        return Err(AttemptError::after_request(error));
+                    }
                     last_error = Some(error);
-                    if request_started {
-                        return Err(last_error.expect("request error was just recorded"));
-                    }
                 }
-                Err(error) => {
-                    last_error = Some(Box::new(error));
+                Err(elapsed) => {
                     if request_started {
-                        return Err(last_error.expect("request timeout was just recorded"));
+                        return Err(AttemptError::after_request(elapsed));
                     }
+                    last_error = Some(Box::new(elapsed));
                 }
             }
         }
     }
 
-    Err(last_error.unwrap_or_else(|| "All candidate connections failed".into()))
+    Err(AttemptError::before_request(last_error.unwrap_or_else(
+        || "All candidate connections failed".into(),
+    )))
+}
+
+/// 向 Kotlin 读取循环投递一个流式事件（带消费者停滞保护，见 [CONSUMER_STALL_TIMEOUT]）。
+async fn send_event(
+    stream: &tokio::sync::mpsc::Sender<StreamEvent>,
+    event: StreamEvent,
+) -> Result<(), String> {
+    match timeout(CONSUMER_STALL_TIMEOUT, stream.send(event)).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(_)) => Err("response consumer was cancelled".to_owned()),
+        Err(_) => Err(format!(
+            "response consumer stalled for more than {}s; aborting request",
+            CONSUMER_STALL_TIMEOUT.as_secs()
+        )),
+    }
 }
 
 async fn collect_response_body(
@@ -736,18 +848,63 @@ mod tests {
         let raw_ech_bytes = base64::engine::general_purpose::STANDARD
             .decode(test_ech_b64)
             .unwrap();
-        let payload_list = Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
+        let payload_list =
+            Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
 
         let rejected_with_configs = rustls::Error::PeerIncompatible(
-            rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(Some(payload_list.clone())),
+            rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(Some(
+                payload_list.clone(),
+            )),
         );
-        let io_rejected_configs = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_with_configs);
+        let io_rejected_configs =
+            std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_with_configs);
         let extracted = extract_retry_configs(&io_rejected_configs);
         assert_eq!(extracted, Some(Some(payload_list.clone())));
 
         let client = EchHttpClient::new().unwrap();
         let updated_b64 = client.update_ech_from_retry_configs("api.bgm.tv", &payload_list);
         assert!(updated_b64.is_some());
-        assert!(client.tls_configs_with_ech.read().unwrap().contains_key("api.bgm.tv"));
+        assert!(client
+            .tls_configs_with_ech
+            .read()
+            .unwrap()
+            .contains_key("api.bgm.tv"));
+    }
+
+    /// 自愈重试依赖"能从错误链里挖出 retry_configs"。
+    /// 引入 AttemptError 包装层后这条链路最容易被悄悄打断，故显式锁住。
+    #[test]
+    fn test_retry_configs_survive_attempt_error_wrapper() {
+        use rustls::internal::msgs::codec::Reader;
+
+        let test_ech_b64 = "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
+        let raw_ech_bytes = base64::engine::general_purpose::STANDARD
+            .decode(test_ech_b64)
+            .unwrap();
+        let payload_list =
+            Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
+
+        let rejected = rustls::Error::PeerIncompatible(
+            rustls::PeerIncompatible::ServerRejectedEncryptedClientHello(Some(
+                payload_list.clone(),
+            )),
+        );
+        let inner = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected);
+        let wrapped = AttemptError::before_request(inner);
+        assert!(!wrapped.request_possibly_sent);
+        assert_eq!(extract_retry_configs(&wrapped), Some(Some(payload_list)));
+        // source() 必须继续暴露内层：否则既挖不到 retry_configs，也丢失可诊断信息
+        assert!(std::error::Error::source(&wrapped).is_some());
+    }
+
+    /// 请求发出后的失败必须被标记成"不可重发"，这是非幂等请求不被重复发送的唯一依据。
+    #[test]
+    fn test_attempt_error_flags_request_sent() {
+        let sent = AttemptError::after_request("connection reset".to_owned());
+        assert!(sent.request_possibly_sent);
+        assert!(sent.to_string().contains("connection reset"));
+
+        let not_sent = AttemptError::before_request("dns failure".to_owned());
+        assert!(!not_sent.request_possibly_sent);
     }
 }

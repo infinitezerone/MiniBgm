@@ -131,4 +131,5 @@ minibgm-android-library-compose = { id = "minibgm.android.library.compose" }
 minibgm-android-feature = { id = "minibgm.android.feature" }
 minibgm-crap-check = { id = "minibgm.crap.check" }
 minibgm-module-boundary = { id = "minibgm.module.boundary" }
+minibgm-ech-native = { id = "minibgm.ech.native" }
 

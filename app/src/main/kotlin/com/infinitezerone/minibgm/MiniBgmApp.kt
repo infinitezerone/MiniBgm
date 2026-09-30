@@ -51,7 +51,8 @@ class MiniBgmApp :
         )
 
         // 初始化 ECH 运行时配置与磁盘缓存
-        com.infinitezerone.minibgm.core.network.ech.EchConfigStore.init(filesDir)
+        com.infinitezerone.minibgm.core.network.ech.EchConfigStore
+            .init(filesDir)
 
         startKoin {
             // release 下仅记录错误，避免 DI 结构信息进入公共日志

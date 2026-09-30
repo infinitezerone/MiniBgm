@@ -73,7 +73,19 @@ object EchNativeClient {
                 requireEch,
                 echConfig,
             )
-        if (requestId == 0L) throw IllegalStateException("Failed to start native ECH request")
+        if (requestId <= 0L) {
+            // nativeStart 用负数区分失败原因：一律抛同一句话会把"为什么起不来"丢掉，排障只能靠猜
+            throw IllegalStateException(
+                when (requestId) {
+                    0L -> "Failed to start native ECH request"
+                    -1L -> "Native ECH request rejected: invalid argument"
+                    -2L -> "Native ECH client initialization failed"
+                    -3L -> "Native ECH runtime unavailable"
+                    -4L -> "Native ECH request limit reached (too many in-flight requests)"
+                    else -> "Native ECH request failed with code $requestId"
+                },
+            )
+        }
 
         val response =
             suspendCancellableCoroutine<EchNativeResponse> { continuation ->

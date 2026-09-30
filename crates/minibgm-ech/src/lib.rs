@@ -7,6 +7,7 @@ use jni::JNIEnv;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
 
@@ -16,9 +17,21 @@ static NEXT_REQUEST_ID: AtomicI64 = AtomicI64::new(1);
 static REQUESTS: OnceLock<Mutex<HashMap<jlong, Arc<RequestState>>>> = OnceLock::new();
 const MAX_ACTIVE_REQUESTS: usize = 64;
 
+/// 已结束但始终没人取走的请求：任务早已退出（连接随之释放），只是 Kotlin 侧从未调用
+/// nativeAwait / nativeReadBodyChunk 来移除条目。超过这个年龄才回收，避免把"即将被读取的
+/// 结果"误删（正常流程里 nativeStart 与 nativeAwait 之间只有微秒级间隔）。
+const REQUEST_REAP_AGE: Duration = Duration::from_secs(120);
+
+/// nativeStart 返回值契约：正数为请求 id，负数表示失败原因，Kotlin 侧据此报出可诊断的错误。
+const START_ERROR_GENERIC: jlong = -1;
+const START_ERROR_CLIENT_INIT: jlong = -2;
+const START_ERROR_RUNTIME: jlong = -3;
+const START_ERROR_TOO_MANY_REQUESTS: jlong = -4;
+
 struct RequestState {
     events: Mutex<tokio::sync::mpsc::Receiver<StreamEvent>>,
     task: Mutex<Option<JoinHandle<()>>>,
+    created_at: Instant,
 }
 
 impl RequestState {
@@ -26,12 +39,26 @@ impl RequestState {
         Self {
             events: Mutex::new(events),
             task: Mutex::new(None),
+            created_at: Instant::now(),
         }
     }
 }
 
 fn requests() -> &'static Mutex<HashMap<jlong, Arc<RequestState>>> {
     REQUESTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 回收"任务已结束且无人认领"的槽位，保证 64 槽上限不会因为泄漏而永久失效。
+fn reap_finished_requests(active: &mut HashMap<jlong, Arc<RequestState>>) {
+    active.retain(|_, state| {
+        let finished = state
+            .task
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .is_some_and(|task| task.is_finished());
+        !(finished && state.created_at.elapsed() > REQUEST_REAP_AGE)
+    });
 }
 
 fn runtime() -> Result<&'static Runtime, String> {
@@ -198,21 +225,21 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         Ok(args) => args,
         Err(error) => {
             log::warn!("nativeStart argument error: {error}");
-            return 0;
+            return START_ERROR_GENERIC;
         }
     };
     let client = match get_client() {
         Ok(client) => client,
         Err(error) => {
             log::error!("nativeStart initialization error: {error}");
-            return 0;
+            return START_ERROR_CLIENT_INIT;
         }
     };
     let runtime = match runtime() {
         Ok(runtime) => runtime,
         Err(error) => {
             log::error!("nativeStart runtime error: {error}");
-            return 0;
+            return START_ERROR_RUNTIME;
         }
     };
 
@@ -223,9 +250,10 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         let mut active = requests()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        reap_finished_requests(&mut active);
         if active.len() >= MAX_ACTIVE_REQUESTS {
             log::warn!("nativeStart rejected: active request limit reached");
-            return 0;
+            return START_ERROR_TOO_MANY_REQUESTS;
         }
         active.insert(id, state.clone());
     }

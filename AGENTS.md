@@ -26,6 +26,7 @@ bash tools/jgate    # spotlessApply → 架构红线 → 触及模块测试（�
 - **素材体积门（jgate 第 1 步）**：改动涉及的图片单张 > 200 KB 或合计 > 1 MB 直接拦下。原因是截图会**不可逆**地撑大仓库历史——git 保留每一版，一张 `screencap` 原始输出（1272×2772 PNG，280 KB～1 MB）只能靠改写历史清掉，而同样内容的 800px WebP 约 95 KB。截图一律压成 800px 宽的 WebP 再提交（README 表格里约 380px 显示宽度，2 倍图够用；转完删原图）。**不要指望 git pre-commit 钩子**——jj 不运行钩子。
 - 模块依赖边变化后跑 `./gradlew graphUpdate` 重建各 README 依赖图。
 - Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 独立 job 只拦新增；修复代码后基线残留无害，勿手工编辑基线。
+- **Rust ECH 原生库（`:core:network` + `crates/minibgm-ech`）**：`libminibgm_ech.so` 是构建产物（落在 `:core:network/build/ech-native/jniLibs`，**不再写进 `src/`**——那会撞上 `core/testing` 架构红线测试的 `core/*/src/**` 输入声明），由 `:core:network:buildEchNative` 在 jniLibs 合并前编译。因此任何 Android 打包都需要 Rust 工具链（rustup + `cargo install cargo-ndk` + NDK）；NDK 解析顺序为 `-Pminibgm.ech.ndkDir` → `ANDROID_NDK_HOME/ANDROID_NDK_ROOT` → `ANDROID_HOME/local.properties(sdk.dir)` 下最高版本。已有产物时可用 `-Pminibgm.ech.skipBuild=true` 跳过编译，但产物必须与 Rust 源码指纹一致，否则失败。**缺库一律硬失败**——静默回退 CIO 等于 ECH 在发布产物里不存在（v0.3 之前的老问题）。Rust 侧门禁：`cargo fmt --check` / `cargo clippy -D warnings` / `cargo test`（CI 独立 job + release 前的 Verify）。
 
 ## 硬红线
 

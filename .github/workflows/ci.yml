@@ -43,6 +43,37 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Rust ECH 原生库（crates/minibgm-ech）已是 assemble 的硬前置：.so 不入库，
+      # 工具链缺失时 buildEchNative 会直接失败——这正是要的语义（此前是 APK 静默缺库）
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Install Android NDK
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || echo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager")"
+          # 固定版本优先；失败则回退镜像自带 NDK（buildEchNative 会自动选取最高版本）
+          if ! yes | "$SDKMANAGER" --install "ndk;27.2.12479018" > /dev/null 2>&1; then
+            echo "::warning::NDK 27.2.12479018 安装失败，回退使用镜像自带 NDK"
+          fi
+          ls -1 "${ANDROID_HOME}/ndk"
+
       # 单次调用合并检查：共享同一次配置阶段与 daemon
       # （此前拆成多次 ./gradlew 调用，每次都付一遍配置开销）
       # AGP 9 迁移后：KMP 模块测试任务为 testAndroid，全量套件是 allTests（test 仅剩 app/designsystem 空壳）；
@@ -52,6 +83,40 @@ jobs:
       # 否则 proguard 缺 keep 规则等问题只在打 tag 时第一次暴露（CI 上无 keystore，回退 debug 签名）
       - name: Spotless + Tests + CRAP Check + Assemble
         run: ./gradlew spotlessCheck allTests testDebugUnitTest crapCheck assembleDebug assembleRelease --stacktrace
+
+  # Rust 原生栈的独立门禁：此前 crates/ 完全不在 CI 视野内（既不编译也不跑测试），
+  # 而 ECH 自愈重试、非幂等重发守卫这类最容易坏的逻辑恰好只存在于这里。
+  rust:
+    name: Rust Native (fmt + clippy + test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --locked -p minibgm-ech --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --locked -p minibgm-ech
 
   # Android Lint 增量门禁：存量问题封存在各模块 lint-baseline.xml，只拦新增（error 级失败）。
   # 独立 job 并行于 Build & Test，避免拖长主链；Gradle 缓存吃掉重复成本。
