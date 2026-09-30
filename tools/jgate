@@ -193,12 +193,12 @@ if [ -n "$paths" ]; then
   if [ -n "$asset_bad" ]; then
     echo "[jgate] ❌ 以下素材单张超过 ${asset_limit_kb} KB，先压缩再提交：" >&2
     printf '%s' "$asset_bad" >&2
-    echo "[jgate]    转换：bash tools/optimize-screenshots" >&2
+    echo "[jgate]    修法：压成 800px 宽的 WebP（README 表格里约 380px 显示宽度，2 倍图够用）" >&2
     exit 1
   fi
   if [ "$asset_total_kb" -gt "$asset_total_limit_kb" ]; then
     echo "[jgate] ❌ 本次改动涉及的素材合计 ${asset_total_kb} KB，超过 ${asset_total_limit_kb} KB 上限" >&2
-    echo "[jgate]    转换：bash tools/optimize-screenshots" >&2
+    echo "[jgate]    修法：压成 800px 宽的 WebP（README 表格里约 380px 显示宽度，2 倍图够用）" >&2
     exit 1
   fi
   echo "[jgate]   ↳ 素材合计 ${asset_total_kb} KB（单张上限 ${asset_limit_kb} KB）"
