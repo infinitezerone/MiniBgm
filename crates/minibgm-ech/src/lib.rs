@@ -6,13 +6,31 @@ use jni::objects::{JByteArray, JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong, jobject};
 use jni::JNIEnv;
 
-static CLIENT: OnceLock<EchHttpClient> = OnceLock::new();
+static CLIENT: OnceLock<Result<EchHttpClient, String>> = OnceLock::new();
+
+#[cfg(target_os = "android")]
+fn init_logging() {
+    static LOG_INIT: std::sync::Once = std::sync::Once::new();
+    LOG_INIT.call_once(|| {
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_tag("Bgm/EchNative")
+                .with_max_level(log::LevelFilter::Debug),
+        );
+    });
+}
+
+#[cfg(not(target_os = "android"))]
+fn init_logging() {}
 
 fn get_client() -> Result<&'static EchHttpClient, String> {
-    CLIENT.get_or_init(|| {
-        EchHttpClient::new().expect("Failed to initialize EchHttpClient")
+    let res = CLIENT.get_or_init(|| {
+        EchHttpClient::new().map_err(|e| format!("EchHttpClient initialization failed: {}", e))
     });
-    CLIENT.get().ok_or_else(|| "EchHttpClient not initialized".to_string())
+    match res {
+        Ok(c) => Ok(c),
+        Err(e) => Err(e.clone()),
+    }
 }
 
 #[no_mangle]
@@ -28,6 +46,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
     j_target_addrs: JObjectArray,
     j_enable_ech: jboolean,
 ) -> jobject {
+    init_logging();
+
     let result = (|| -> Result<jobject, Box<dyn std::error::Error>> {
         let url: String = env.get_string(&j_url)?.into();
         let method: String = env.get_string(&j_method)?.into();
@@ -132,7 +152,12 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
     match result {
         Ok(obj) => obj,
         Err(e) => {
-            // 失败时构造带 errorMessage 的错误响应
+            log::warn!("nativeFetch encountered error: {}", e);
+            // 确保 JVM 异常状态已重置，避免因悬挂异常调用 find_class 导致进程崩溃
+            if env.exception_check().unwrap_or(false) {
+                let _ = env.exception_clear();
+            }
+
             if let Ok(resp_class) = env.find_class("com/infinitezerone/minibgm/core/network/ech/EchNativeResponse") {
                 let err_str = env.new_string(e.to_string()).unwrap_or_default();
                 let string_class = env.find_class("java/lang/String").unwrap();

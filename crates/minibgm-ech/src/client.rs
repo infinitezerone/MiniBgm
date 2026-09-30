@@ -8,8 +8,7 @@ use rustls::pki_types::{EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, RootCertStore, StreamOwned};
 use url::Url;
 
-// Cloudflare 全局通用的 ECH 配置（Base64）
-// Outer SNI 统一为 cloudflare-ech.com
+// Cloudflare 全局通用的 ECH 配置（Base64，对应 Outer SNI: cloudflare-ech.com）
 const CLOUDFLARE_ECH_CONFIG_B64: &str =
     "AEX+DQBBNAAgACBEVvV6qv+2EGSHksMVtzMtBb0W4uDonEFEC5F+QK8lNAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
 
@@ -131,7 +130,6 @@ impl EchHttpClient {
             };
 
             for sock_addr in resolved_addrs {
-                // 单个 IP 握手超时设为 1200ms，故障快速切到下一候选地址
                 let connect_timeout = Duration::from_millis(1200.min(timeout_ms));
                 let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
                     Ok(s) => s,
@@ -155,29 +153,29 @@ impl EchHttpClient {
 
                 let mut tls = StreamOwned::new(conn, sock);
 
-                // 构建 HTTP 请求报文
-                let mut req_bytes = Vec::new();
-                req_bytes.extend_from_slice(format!("{} {} HTTP/1.1\r\n", method.to_uppercase(), path).as_bytes());
-                req_bytes.extend_from_slice(format!("Host: {}\r\n", host).as_bytes());
-                req_bytes.extend_from_slice(b"Connection: close\r\n");
+                // 构建标准 HTTP/1.1 请求报文
+                let mut req_bytes = Vec::with_capacity(512);
+                let _ = write!(req_bytes, "{} {} HTTP/1.1\r\n", method.to_uppercase(), path);
+                let _ = write!(req_bytes, "Host: {}\r\n", host);
+                let _ = write!(req_bytes, "Connection: close\r\n");
 
                 let mut has_content_length = false;
                 for (k, v) in headers {
                     if k.eq_ignore_ascii_case("content-length") {
                         has_content_length = true;
                     }
-                    req_bytes.extend_from_slice(format!("{}: {}\r\n", k, v).as_bytes());
+                    let _ = write!(req_bytes, "{}: {}\r\n", k, v);
                 }
 
                 if let Some(b) = body {
                     if !has_content_length {
-                        req_bytes.extend_from_slice(format!("Content-Length: {}\r\n", b.len()).as_bytes());
+                        let _ = write!(req_bytes, "Content-Length: {}\r\n", b.len());
                     }
                 } else if !has_content_length && (method.eq_ignore_ascii_case("POST") || method.eq_ignore_ascii_case("PUT")) {
-                    req_bytes.extend_from_slice(b"Content-Length: 0\r\n");
+                    let _ = write!(req_bytes, "Content-Length: 0\r\n");
                 }
 
-                req_bytes.extend_from_slice(b"\r\n");
+                let _ = write!(req_bytes, "\r\n");
                 if let Some(b) = body {
                     req_bytes.extend_from_slice(b);
                 }
@@ -190,43 +188,13 @@ impl EchHttpClient {
 
                 let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
 
-                // 读取响应数据：达到完整响应帧即刻返回
-                let mut raw_response = Vec::new();
-                let mut buf = [0u8; 8192];
-                loop {
-                    match tls.read(&mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            raw_response.extend_from_slice(&buf[..n]);
-                            if is_http_response_complete(&raw_response) {
-                                break;
-                            }
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-                            if is_http_response_complete(&raw_response) {
-                                break;
-                            }
-                            if raw_response.is_empty() {
-                                last_error = Some(Box::new(e));
-                            }
-                            break;
-                        }
-                        Err(e) => {
-                            if raw_response.is_empty() {
-                                last_error = Some(Box::new(e));
-                            }
-                            break;
-                        }
+                // 使用 httparse 与流式状态机接收并解析 HTTP 响应
+                match read_http_response(&mut tls, ech_accepted, Some(addr_str.clone())) {
+                    Ok(resp) => return Ok(resp),
+                    Err(e) => {
+                        last_error = Some(Box::new(e));
+                        continue;
                     }
-                }
-
-                if raw_response.is_empty() {
-                    continue;
-                }
-
-                // 解析 HTTP 响应
-                if let Some(resp) = parse_http_response(&raw_response, ech_accepted, Some(addr_str.clone())) {
-                    return Ok(resp);
                 }
             }
         }
@@ -235,132 +203,186 @@ impl EchHttpClient {
     }
 }
 
-/// 极简鲁棒的 HTTP/1.1 响应解析（支持 Chunked 还原与 Header 提取）
-fn parse_http_response(raw: &[u8], ech_accepted: bool, connected_addr: Option<String>) -> Option<HttpResponse> {
-    let header_end = raw.windows(4).position(|w| w == b"\r\n\r\n")?;
-    let header_bytes = &raw[..header_end];
-    let body_bytes = &raw[header_end + 4..];
+/// 基于官方 httparse 的流式 HTTP/1.1 响应接收与解析
+fn read_http_response<R: Read>(
+    stream: &mut R,
+    ech_accepted: bool,
+    connected_addr: Option<String>,
+) -> Result<HttpResponse, std::io::Error> {
+    let mut buffer = Vec::with_capacity(8192);
+    let mut chunk = [0u8; 4096];
 
-    let header_str = String::from_utf8_lossy(header_bytes);
-    let mut lines = header_str.lines();
+    // Phase 1: 流式读取直至 Headers 完整结束
+    let header_len = loop {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Connection closed before HTTP headers were fully received",
+            ));
+        }
+        buffer.extend_from_slice(&chunk[..n]);
 
-    // 状态行：HTTP/1.1 200 OK
-    let status_line = lines.next()?;
-    let mut status_parts = status_line.split_whitespace();
-    let _proto = status_parts.next()?;
-    let status_code: u16 = status_parts.next()?.parse().ok()?;
+        let mut headers = [httparse::EMPTY_HEADER; 64];
+        let mut resp = httparse::Response::new(&mut headers);
+        match resp.parse(&buffer) {
+            Ok(httparse::Status::Complete(len)) => break len,
+            Ok(httparse::Status::Partial) => {
+                if buffer.len() > 65536 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "HTTP headers exceed max allowed size (64KB)",
+                    ));
+                }
+                continue;
+            }
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to parse HTTP headers: {}", e),
+                ));
+            }
+        }
+    };
 
-    let mut headers = Vec::new();
+    // Phase 2: 使用 httparse 提取状态码和 Headers
+    let mut headers = [httparse::EMPTY_HEADER; 64];
+    let mut resp = httparse::Response::new(&mut headers);
+    let _ = resp.parse(&buffer);
+
+    let status_code = resp.code.unwrap_or(200);
+    let mut out_headers = Vec::with_capacity(resp.headers.len());
+    let mut content_length: Option<usize> = None;
     let mut is_chunked = false;
 
-    for line in lines {
-        if let Some((k, v)) = line.split_once(':') {
-            let key = k.trim().to_string();
-            let value = v.trim().to_string();
-            if key.eq_ignore_ascii_case("transfer-encoding") && value.to_ascii_lowercase().contains("chunked") {
-                is_chunked = true;
-            }
-            headers.push((key, value));
+    for h in resp.headers {
+        let name = h.name.to_string();
+        let value = String::from_utf8_lossy(h.value).trim().to_string();
+        if name.eq_ignore_ascii_case("content-length") {
+            content_length = value.parse::<usize>().ok();
+        } else if name.eq_ignore_ascii_case("transfer-encoding") && value.to_ascii_lowercase().contains("chunked") {
+            is_chunked = true;
         }
+        out_headers.push((name, value));
+    }
+
+    // Phase 3: 流式获取 Body（精准截断，杜绝阻塞挂起与 O(N^2) 重复扫描）
+    let initial_body = &buffer[header_len..];
+
+    // 1xx, 204, 304 规范无 Body
+    if (100..200).contains(&status_code) || status_code == 204 || status_code == 304 {
+        return Ok(HttpResponse {
+            status_code,
+            headers: out_headers,
+            body: Vec::new(),
+            ech_accepted,
+            connected_addr,
+        });
     }
 
     let final_body = if is_chunked {
-        decode_chunked(body_bytes)
+        read_chunked_body(initial_body, stream)?
+    } else if let Some(expected_len) = content_length {
+        read_content_length_body(initial_body, stream, expected_len)?
     } else {
-        body_bytes.to_vec()
+        // Connection: close 读到 EOF
+        let mut body = initial_body.to_vec();
+        stream.read_to_end(&mut body)?;
+        body
     };
 
-    Some(HttpResponse {
+    Ok(HttpResponse {
         status_code,
-        headers,
+        headers: out_headers,
         body: final_body,
         ech_accepted,
         connected_addr,
     })
 }
 
+/// 读取并截取指定 Content-Length 的响应体
+fn read_content_length_body<R: Read>(
+    initial: &[u8],
+    stream: &mut R,
+    expected_len: usize,
+) -> Result<Vec<u8>, std::io::Error> {
+    let mut body = Vec::with_capacity(expected_len);
+    if initial.len() >= expected_len {
+        body.extend_from_slice(&initial[..expected_len]);
+        return Ok(body);
+    }
+    body.extend_from_slice(initial);
+    let mut chunk = [0u8; 8192];
+    while body.len() < expected_len {
+        let remaining = expected_len - body.len();
+        let to_read = remaining.min(chunk.len());
+        let n = stream.read(&mut chunk[..to_read])?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
+    }
+    Ok(body)
+}
+
+/// 读取并解码 chunked 传输格式的响应体
+fn read_chunked_body<R: Read>(
+    initial: &[u8],
+    stream: &mut R,
+) -> Result<Vec<u8>, std::io::Error> {
+    let mut raw_chunked = initial.to_vec();
+    let mut chunk = [0u8; 8192];
+
+    while !is_chunked_complete(&raw_chunked) {
+        let n = stream.read(&mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        raw_chunked.extend_from_slice(&chunk[..n]);
+    }
+
+    decode_chunked(&raw_chunked)
+}
+
 /// 还原 chunked 格式的 HTTP 响应体
-fn decode_chunked(mut input: &[u8]) -> Vec<u8> {
+fn decode_chunked(mut input: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     let mut output = Vec::new();
     while !input.is_empty() {
-        if let Some(crlf_pos) = input.windows(2).position(|w| w == b"\r\n") {
-            let size_str = String::from_utf8_lossy(&input[..crlf_pos]);
-            let size_str = size_str.trim().split(';').next().unwrap_or("").trim();
-            if let Ok(chunk_size) = usize::from_str_radix(size_str, 16) {
-                if chunk_size == 0 {
-                    break;
-                }
-                let data_start = crlf_pos + 2;
-                let data_end = data_start + chunk_size;
-                if data_end <= input.len() {
-                    output.extend_from_slice(&input[data_start..data_end]);
-                    input = if data_end + 2 <= input.len() {
-                        &input[data_end + 2..]
-                    } else {
-                        &input[data_end..]
-                    };
-                    continue;
-                }
-            }
+        let crlf_pos = match input.windows(2).position(|w| w == b"\r\n") {
+            Some(pos) => pos,
+            None => break,
+        };
+        let size_str = match std::str::from_utf8(&input[..crlf_pos]) {
+            Ok(s) => s.trim().split(';').next().unwrap_or("").trim(),
+            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+        };
+        let chunk_size = match usize::from_str_radix(size_str, 16) {
+            Ok(sz) => sz,
+            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+        };
+        if chunk_size == 0 {
+            break;
         }
-        // 如果格式不规范，直接将剩余内容作为 body 兜底输出
-        output.extend_from_slice(input);
-        break;
-    }
-    output
-}
-
-/// 检查 HTTP 响应报文是否已完整接收，避免连接持续等待服务端主动关闭导致阻塞数秒
-fn is_http_response_complete(raw: &[u8]) -> bool {
-    let header_end = match raw.windows(4).position(|w| w == b"\r\n\r\n") {
-        Some(pos) => pos + 4,
-        None => return false,
-    };
-
-    let header_bytes = &raw[..header_end];
-    let body_bytes = &raw[header_end..];
-    let header_str = String::from_utf8_lossy(header_bytes);
-
-    // 检查状态码：1xx / 204 / 304 没有 Body
-    if let Some(first_line) = header_str.lines().next() {
-        if let Some(status_str) = first_line.split_whitespace().nth(1) {
-            if let Ok(status) = status_str.parse::<u16>() {
-                if (100..200).contains(&status) || status == 204 || status == 304 {
-                    return true;
-                }
-            }
+        let data_start = crlf_pos + 2;
+        let data_end = data_start + chunk_size;
+        if data_end > input.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Chunked payload truncated prematurely",
+            ));
         }
-    }
-
-    // 检查 Content-Length
-    for line in header_str.lines() {
-        if let Some((k, v)) = line.split_once(':') {
-            if k.trim().eq_ignore_ascii_case("content-length") {
-                if let Ok(expected_len) = v.trim().parse::<usize>() {
-                    return body_bytes.len() >= expected_len;
-                }
-            }
-        }
-    }
-
-    // 检查 Transfer-Encoding: chunked
-    let is_chunked = header_str.lines().any(|line| {
-        if let Some((k, v)) = line.split_once(':') {
-            k.trim().eq_ignore_ascii_case("transfer-encoding")
-                && v.to_ascii_lowercase().contains("chunked")
+        output.extend_from_slice(&input[data_start..data_end]);
+        let next_start = data_end + 2;
+        if next_start <= input.len() {
+            input = &input[next_start..];
         } else {
-            false
+            input = &input[data_end..];
         }
-    });
-
-    if is_chunked {
-        return is_chunked_complete(body_bytes);
     }
-
-    false
+    Ok(output)
 }
 
-/// 检查 chunked 编码流是否已经到达终结块 (0\r\n\r\n)
+/// 检查 chunked 编码流是否已包含终结块 (0\r\n\r\n)
 fn is_chunked_complete(mut input: &[u8]) -> bool {
     while !input.is_empty() {
         if let Some(crlf_pos) = input.windows(2).position(|w| w == b"\r\n") {
@@ -395,26 +417,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_content_length_complete() {
-        let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
-        assert!(is_http_response_complete(resp));
+    fn test_content_length_body() {
+        let mut stream = std::io::Cursor::new(b"hello world");
+        let body = read_content_length_body(b"hel", &mut stream, 11).unwrap();
+        assert_eq!(body, b"helhello wo");
+    }
 
-        let partial = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhel";
-        assert!(!is_http_response_complete(partial));
+    #[test]
+    fn test_decode_chunked() {
+        let raw = b"5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n";
+        let body = decode_chunked(raw).unwrap();
+        assert_eq!(body, b"hello world");
     }
 
     #[test]
     fn test_chunked_complete() {
-        let resp = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n";
-        assert!(is_http_response_complete(resp));
+        let complete = b"5\r\nhello\r\n0\r\n\r\n";
+        assert!(is_chunked_complete(complete));
 
-        let partial = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n";
-        assert!(!is_http_response_complete(partial));
+        let partial = b"5\r\nhello\r\n";
+        assert!(!is_chunked_complete(partial));
     }
 
     #[test]
-    fn test_no_content_complete() {
-        let resp = b"HTTP/1.1 204 No Content\r\n\r\n";
-        assert!(is_http_response_complete(resp));
+    fn test_read_http_response_with_httparse() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 13\r\n\r\n{\"key\":\"val\"}";
+        let mut cursor = std::io::Cursor::new(raw);
+        let resp = read_http_response(&mut cursor, true, Some("127.0.0.1:443".into())).unwrap();
+        assert_eq!(resp.status_code, 200);
+        assert_eq!(resp.body, b"{\"key\":\"val\"}");
+        assert!(resp.ech_accepted);
+        assert_eq!(resp.connected_addr, Some("127.0.0.1:443".into()));
+    }
+
+    #[test]
+    fn test_read_no_content() {
+        let raw = b"HTTP/1.1 204 No Content\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(raw);
+        let resp = read_http_response(&mut cursor, false, None).unwrap();
+        assert_eq!(resp.status_code, 204);
+        assert!(resp.body.is_empty());
     }
 }
