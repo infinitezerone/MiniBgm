@@ -42,6 +42,11 @@ fun networkModule(
             )
         }
 
+        single<com.infinitezerone.minibgm.core.network.oauth.OAuthProxyService> {
+            com.infinitezerone.minibgm.core.network.oauth
+                .createOAuthProxyService(client = get(named("unauthenticated")))
+        }
+
         single {
             BgmTokenService(client = get(named("unauthenticated")), config = get())
         }

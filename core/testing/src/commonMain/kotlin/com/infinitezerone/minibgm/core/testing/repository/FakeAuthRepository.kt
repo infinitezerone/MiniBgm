@@ -67,6 +67,20 @@ class FakeAuthRepository(
         return mockAuthorizeUrl
     }
 
+    var beginInAppLoginCallCount: Int = 0
+        private set
+    var stopInAppLoginCallCount: Int = 0
+        private set
+
+    override suspend fun beginInAppLogin(): String {
+        beginInAppLoginCallCount++
+        return mockAuthorizeUrl
+    }
+
+    override suspend fun stopInAppLogin() {
+        stopInAppLoginCallCount++
+    }
+
     override suspend fun completeLogin(
         code: String?,
         state: String?,

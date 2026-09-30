@@ -111,6 +111,7 @@ val dataModule =
                 authConfig = get<BgmAuthConfig>(),
                 apiService = get<BangumiApiService>(),
                 userDataCleaner = get<UserDataCleaner>(),
+                oAuthProxyService = getOrNull(),
             )
         }
         single<com.infinitezerone.minibgm.core.data.repository.AssistantRepository> {

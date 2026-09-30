@@ -43,6 +43,12 @@ interface AuthRepository {
         state: String?,
     ): AppResult<Unit>
 
+    /** 开始应用内内嵌登录流程，启动本地 ECH 代理并返回指向本地代理的授权 URL */
+    suspend fun beginInAppLogin(): String
+
+    /** 停止本地 ECH 登录代理（用户取消或离开登录弹窗时调用） */
+    suspend fun stopInAppLogin()
+
     /**
      * 个人访问令牌（Personal Access Token）登录入口：
      * 校验 token 有效性 → 获取用户资料 → 加密落盘 → 激活会话
@@ -72,6 +78,7 @@ class AuthRepositoryImpl(
     private val authConfig: BgmAuthConfig,
     private val apiService: BangumiApiService,
     private val userDataCleaner: UserDataCleaner,
+    private val oAuthProxyService: com.infinitezerone.minibgm.core.network.oauth.OAuthProxyService? = null,
 ) : AuthRepository {
     private val log = bgmLogger("Bgm/Auth")
     private val _isAuthenticating = MutableStateFlow(false)
@@ -105,6 +112,25 @@ class AuthRepositoryImpl(
         val verifier = BgmPkce.generateVerifier()
         userPreferences.setPendingOAuthVerifier(verifier)
         return authConfig.buildAuthorizeUrl(state = BgmPkce.challenge(verifier))
+    }
+
+    override suspend fun beginInAppLogin(): String {
+        log.i { "[LOGIN:IN_APP:BEGIN] starting in-app oauth proxy" }
+        val verifier = BgmPkce.generateVerifier()
+        userPreferences.setPendingOAuthVerifier(verifier)
+        val state = BgmPkce.challenge(verifier)
+        val port = oAuthProxyService?.start()
+        return if (port != null) {
+            val proxyBaseUrl = "http://127.0.0.1:$port/oauth/authorize"
+            authConfig.buildAuthorizeUrl(state = state, baseUrl = proxyBaseUrl)
+        } else {
+            authConfig.buildAuthorizeUrl(state = state)
+        }
+    }
+
+    override suspend fun stopInAppLogin() {
+        log.i { "[LOGIN:IN_APP:STOP] stopping in-app oauth proxy" }
+        oAuthProxyService?.stop()
     }
 
     override suspend fun completeLogin(
@@ -149,6 +175,7 @@ class AuthRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("兑换响应解析"))
         } finally {
             _isAuthenticating.value = false
+            oAuthProxyService?.stop()
         }
     }
 

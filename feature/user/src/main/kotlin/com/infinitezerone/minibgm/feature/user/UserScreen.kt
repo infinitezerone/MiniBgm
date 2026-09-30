@@ -79,13 +79,54 @@ fun UserScreen(
         collectionsViewModel.setInitialType(CollectionType.DOING)
     }
 
+    var inAppLoginUrl by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableStateOf<String?>(null) }
+    var isExchangingToken by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableStateOf(false) }
+
+    if (inAppLoginUrl != null) {
+        InAppOAuthLoginDialog(
+            authorizeUrl = inAppLoginUrl!!,
+            onDismiss = {
+                viewModel.stopInAppLogin()
+                inAppLoginUrl = null
+                isExchangingToken = false
+            },
+            onAuthCallback = { code, state ->
+                isExchangingToken = true
+                viewModel.completeLogin(code, state) { success, error ->
+                    isExchangingToken = false
+                    if (success) {
+                        inAppLoginUrl = null
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("登录成功")
+                        }
+                    } else {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(error ?: "登录失败，请重试")
+                        }
+                    }
+                }
+            },
+            onOpenExternalBrowser = {
+                coroutineScope.launch {
+                    val fallbackUrl = viewModel.beginLogin()
+                    context.launchWebUrl(fallbackUrl, isAuth = true)
+                    viewModel.stopInAppLogin()
+                    inAppLoginUrl = null
+                }
+            },
+            isExchangingToken = isExchangingToken,
+        )
+    }
+
     UserScreenContent(
         uiState = uiState,
         collectionsState = collectionsState,
         onLogin = {
             coroutineScope.launch {
-                val authorizeUrl = viewModel.beginLogin()
-                context.launchWebUrl(authorizeUrl, isAuth = true)
+                val authorizeUrl = viewModel.beginInAppLogin()
+                inAppLoginUrl = authorizeUrl
             }
         },
         onLoginWithToken = { token, onResult ->

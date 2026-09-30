@@ -25,8 +25,9 @@ data class BgmAuthConfig(
     fun buildAuthorizeUrl(
         state: String,
         responseType: String = "code",
+        baseUrl: String = AUTHORIZE_ENDPOINT,
     ): String =
-        URLBuilder(AUTHORIZE_ENDPOINT)
+        URLBuilder(baseUrl)
             .apply {
                 parameters.append("client_id", clientId)
                 parameters.append("response_type", responseType)
