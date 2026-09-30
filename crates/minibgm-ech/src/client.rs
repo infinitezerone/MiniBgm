@@ -10,21 +10,18 @@ use rustls::pki_types::{EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, RootCertStore, StreamOwned};
 use url::Url;
 
-// Cloudflare 全局通用的 ECH 配置（Base64，对应 Outer SNI: cloudflare-ech.com）
-const CLOUDFLARE_ECH_CONFIG_B64: &str =
-    "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
-
 pub struct HttpResponse {
     pub status_code: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
     pub ech_accepted: bool,
     pub connected_addr: Option<String>,
+    pub updated_ech_config: Option<String>,
 }
 
 pub struct EchHttpClient {
     root_store: RootCertStore,
-    tls_config_with_ech: RwLock<Arc<ClientConfig>>,
+    tls_config_with_ech: RwLock<Option<Arc<ClientConfig>>>,
     tls_config_standard: Arc<ClientConfig>,
 }
 
@@ -75,17 +72,27 @@ fn extract_retry_configs(
 }
 
 impl EchHttpClient {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    /// 构造通用 ECH HTTP 客户端
+    ///
+    /// 保持引擎纯洁性：不再硬编码特定站点或厂商的 Base64 密钥。
+    /// 若传入 `initial_ech_config_b64` 则立即构建初始 ECH 配置，否则保持未配置状态，
+    /// 后续可经由 `fetch()` 调用或服务端 `retry_configs` 自愈时动态注入。
+    pub fn new(initial_ech_config_b64: Option<&str>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let root_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        // 1. 初始化默认 ECH 配置 (RFC 8744 / Cloudflare ECH 当前 active 密钥)
-        let ech_bytes = base64::engine::general_purpose::STANDARD
-            .decode(CLOUDFLARE_ECH_CONFIG_B64)
-            .map_err(|e| format!("Base64 decode ECH config failed: {}", e))?;
-        let ech_config_list = EchConfigListBytes::from(ech_bytes);
-        let config_ech = build_ech_client_config(ech_config_list, &root_store)?;
+        // 1. 初始化 ECH 配置 (若外部提供有效 Base64 字符串)
+        let initial_config_ech = if let Some(b64) = initial_ech_config_b64 {
+            if let Ok(ech_bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                let ech_config_list = EchConfigListBytes::from(ech_bytes);
+                build_ech_client_config(ech_config_list, &root_store).ok().map(Arc::new)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // 2. 常规 TLS 配置 (用于降级或无 ECH 请求)
         let config_std = ClientConfig::builder_with_provider(Arc::new(
@@ -98,35 +105,57 @@ impl EchHttpClient {
 
         Ok(Self {
             root_store,
-            tls_config_with_ech: RwLock::new(Arc::new(config_ech)),
+            tls_config_with_ech: RwLock::new(initial_config_ech),
             tls_config_standard: Arc::new(config_std),
         })
     }
 
     /// 从服务端下发的 retry_configs 动态重新构建并热更新 ECH ClientConfig
-    pub fn update_ech_config(&self, retry_configs: &[EchConfigPayload]) -> bool {
+    /// 返回更新后的 ECHConfigList 的 Base64 编码字符串，供调用方（上层平台）持久化存储
+    pub fn update_ech_from_retry_configs(&self, retry_configs: &[EchConfigPayload]) -> Option<String> {
         let mut bytes = Vec::new();
         retry_configs.to_vec().encode(&mut bytes);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
         let ech_config_list = EchConfigListBytes::from(bytes);
 
         match build_ech_client_config(ech_config_list, &self.root_store) {
             Ok(new_config) => {
-                let mut lock = match self.tls_config_with_ech.write() {
-                    Ok(guard) => guard,
-                    Err(poisoned) => poisoned.into_inner(),
-                };
-                *lock = Arc::new(new_config);
+                let mut lock = self.tls_config_with_ech.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+                *lock = Some(Arc::new(new_config));
                 log::info!("ECH configuration dynamically updated from server retry_configs");
-                true
+                Some(b64)
             }
             Err(e) => {
                 log::warn!("Failed to update ECH configuration from retry_configs: {}", e);
+                None
+            }
+        }
+    }
+
+    /// 由调用方主动动态设置或刷新 ECH Base64 配置
+    pub fn set_ech_config_b64(&self, b64: &str) -> bool {
+        let ech_bytes = match base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+            Ok(b) => b,
+            Err(e) => {
+                log::warn!("Invalid Base64 ECH config: {}", e);
+                return false;
+            }
+        };
+        let ech_config_list = EchConfigListBytes::from(ech_bytes);
+        match build_ech_client_config(ech_config_list, &self.root_store) {
+            Ok(new_config) => {
+                let mut lock = self.tls_config_with_ech.write().unwrap_or_else(|p| p.into_inner());
+                *lock = Some(Arc::new(new_config));
+                true
+            }
+            Err(e) => {
+                log::warn!("Failed to build ClientConfig from ECH config: {}", e);
                 false
             }
         }
     }
 
-    /// 通用 HTTP/1.1 请求（支持可选目标地址列表与 ECH 协商）
+    /// 通用 HTTP/1.1 请求（支持可选目标地址列表、动态 ECH 注入与服务端密钥轮换自愈）
     pub fn fetch(
         &self,
         url_str: &str,
@@ -136,6 +165,7 @@ impl EchHttpClient {
         timeout_ms: u64,
         target_addrs: Option<&[String]>,
         enable_ech: bool,
+        dynamic_ech_config: Option<&str>,
     ) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
         let parsed_url = Url::parse(url_str)?;
         let host = parsed_url
@@ -168,17 +198,41 @@ impl EchHttpClient {
             );
         }
 
+        // 若传入了动态 ECH 配置且本地尚未就绪，尝试动态构建
+        if let Some(cfg_b64) = dynamic_ech_config {
+            let needs_update = {
+                let lock = self.tls_config_with_ech.read().unwrap_or_else(|p| p.into_inner());
+                lock.is_none()
+            };
+            if needs_update {
+                self.set_ech_config_b64(cfg_b64);
+            }
+        }
+
         // 尝试 ECH 请求；若服务端轮换了 ECH 密钥 (ServerRejectedEncryptedClientHello)，自动自愈重试
         let current_ech_config = {
-            let guard = match self.tls_config_with_ech.read() {
-                Ok(g) => g,
-                Err(p) => p.into_inner(),
-            };
+            let guard = self.tls_config_with_ech.read().unwrap_or_else(|p| p.into_inner());
             guard.clone()
         };
 
+        let ech_config_to_use = match current_ech_config {
+            Some(cfg) => cfg,
+            None => {
+                log::warn!("ECH requested but no ECH config available, falling back to standard TLS");
+                return try_fetch_with_config(
+                    self.tls_config_standard.clone(),
+                    &parsed_url,
+                    method,
+                    headers,
+                    body,
+                    timeout_ms,
+                    &addrs_to_try,
+                );
+            }
+        };
+
         match try_fetch_with_config(
-            current_ech_config,
+            ech_config_to_use,
             &parsed_url,
             method,
             headers,
@@ -193,23 +247,24 @@ impl EchHttpClient {
                         log::warn!(
                             "Server rejected ECH with retry_configs; self-healing ECH config and retrying..."
                         );
-                        if self.update_ech_config(&retry_configs) {
+                        if let Some(new_ech_b64) = self.update_ech_from_retry_configs(&retry_configs) {
                             let updated_ech_config = {
-                                let guard = match self.tls_config_with_ech.read() {
-                                    Ok(g) => g,
-                                    Err(p) => p.into_inner(),
-                                };
+                                let guard = self.tls_config_with_ech.read().unwrap_or_else(|p| p.into_inner());
                                 guard.clone()
                             };
-                            return try_fetch_with_config(
-                                updated_ech_config,
-                                &parsed_url,
-                                method,
-                                headers,
-                                body,
-                                timeout_ms,
-                                &addrs_to_try,
-                            );
+                            if let Some(updated_cfg) = updated_ech_config {
+                                let mut retry_resp = try_fetch_with_config(
+                                    updated_cfg,
+                                    &parsed_url,
+                                    method,
+                                    headers,
+                                    body,
+                                    timeout_ms,
+                                    &addrs_to_try,
+                                )?;
+                                retry_resp.updated_ech_config = Some(new_ech_b64);
+                                return Ok(retry_resp);
+                            }
                         }
                     } else {
                         log::warn!("Server rejected ECH without retry_configs; falling back to standard TLS...");
@@ -415,6 +470,7 @@ fn read_http_response<R: Read>(
             body: Vec::new(),
             ech_accepted,
             connected_addr,
+            updated_ech_config: None,
         });
     }
 
@@ -435,6 +491,7 @@ fn read_http_response<R: Read>(
         body: final_body,
         ech_accepted,
         connected_addr,
+        updated_ech_config: None,
     })
 }
 
@@ -612,9 +669,10 @@ mod tests {
         let io_rejected_none = std::io::Error::new(std::io::ErrorKind::InvalidData, rejected_none);
         assert_eq!(extract_retry_configs(&io_rejected_none), Some(None));
 
-        // 从 Base64 模拟构建一份有效的 EchConfigPayload 列表
+        // 模拟构建一份有效的 EchConfigPayload 列表（仅用作测试载荷）
+        let test_ech_b64 = "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
         let raw_ech_bytes = base64::engine::general_purpose::STANDARD
-            .decode(CLOUDFLARE_ECH_CONFIG_B64)
+            .decode(test_ech_b64)
             .unwrap();
         let payload_list = Vec::<EchConfigPayload>::read(&mut Reader::init(&raw_ech_bytes)).unwrap();
 
@@ -626,8 +684,9 @@ mod tests {
         let extracted = extract_retry_configs(&io_rejected_configs);
         assert_eq!(extracted, Some(Some(payload_list.clone())));
 
-        // 验证 EchHttpClient 动态更新逻辑
-        let client = EchHttpClient::new().unwrap();
-        assert!(client.update_ech_config(&payload_list));
+        // 验证 EchHttpClient 动态更新与热替换逻辑
+        let client = EchHttpClient::new(None).unwrap();
+        let updated_b64 = client.update_ech_from_retry_configs(&payload_list);
+        assert!(updated_b64.is_some());
     }
 }

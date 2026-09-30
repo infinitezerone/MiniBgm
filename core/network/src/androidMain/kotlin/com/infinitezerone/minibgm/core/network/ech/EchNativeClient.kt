@@ -13,6 +13,7 @@ class EchNativeResponse(
     val echAccepted: Boolean,
     val errorMessage: String?,
     val connectedAddr: String?,
+    val updatedEchConfig: String?,
 )
 
 /**
@@ -43,5 +44,6 @@ object EchNativeClient {
         timeoutMs: Long,
         targetAddrs: Array<String>?,
         enableEch: Boolean,
+        echConfig: String?,
     ): EchNativeResponse
 }

@@ -71,6 +71,7 @@ class EchHttpClientEngine(
             val port = data.url.port
             val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val enableEch = AdaptiveDnsResolver.isEchEligible(host)
+            val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null
 
             val nativeResp =
                 try {
@@ -83,6 +84,7 @@ class EchHttpClientEngine(
                         timeoutMs = config.timeoutMillis,
                         targetAddrs = targetAddrs,
                         enableEch = enableEch,
+                        echConfig = echConfig,
                     )
                 } catch (t: Throwable) {
                     logger.e(t) { "EchNativeClient.nativeFetch crashed for $urlString" }
@@ -92,6 +94,10 @@ class EchHttpClientEngine(
             if (nativeResp.errorMessage != null && nativeResp.errorMessage.isNotBlank()) {
                 logger.w { "ECH native fetch failed: ${nativeResp.errorMessage} ($urlString)" }
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
+            }
+
+            if (!nativeResp.updatedEchConfig.isNullOrBlank()) {
+                EchConfigStore.updateConfig(nativeResp.updatedEchConfig)
             }
 
             if (!nativeResp.connectedAddr.isNullOrBlank()) {

@@ -23,12 +23,18 @@ fn init_logging() {
 #[cfg(not(target_os = "android"))]
 fn init_logging() {}
 
-fn get_client() -> Result<&'static EchHttpClient, String> {
+fn get_client(initial_ech_config: Option<&str>) -> Result<&'static EchHttpClient, String> {
     let res = CLIENT.get_or_init(|| {
-        EchHttpClient::new().map_err(|e| format!("EchHttpClient initialization failed: {}", e))
+        EchHttpClient::new(initial_ech_config)
+            .map_err(|e| format!("EchHttpClient initialization failed: {}", e))
     });
     match res {
-        Ok(c) => Ok(c),
+        Ok(c) => {
+            if let Some(cfg) = initial_ech_config {
+                c.set_ech_config_b64(cfg);
+            }
+            Ok(c)
+        }
         Err(e) => Err(e.clone()),
     }
 }
@@ -45,6 +51,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
     j_timeout_ms: jlong,
     j_target_addrs: JObjectArray,
     j_enable_ech: jboolean,
+    j_ech_config: JString,
 ) -> jobject {
     init_logging();
 
@@ -94,7 +101,19 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
 
         let enable_ech = j_enable_ech != 0;
 
-        let client = get_client().map_err(|e| e.to_string())?;
+        let initial_ech_config: Option<String> = if !j_ech_config.is_null() {
+            let s: String = env.get_string(&j_ech_config)?.into();
+            let trimmed = s.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        } else {
+            None
+        };
+
+        let client = get_client(initial_ech_config.as_deref()).map_err(|e| e.to_string())?;
         let resp = client
             .fetch(
                 &url,
@@ -104,6 +123,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 j_timeout_ms as u64,
                 target_addrs.as_deref(),
                 enable_ech,
+                initial_ech_config.as_deref(),
             )
             .map_err(|e| e.to_string())?;
 
@@ -125,11 +145,15 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         // 转换 body
         let body_arr = env.byte_array_from_slice(&resp.body)?;
 
-        // 构造对象: EchNativeResponse(statusCode, headerKeys, headerValues, body, echAccepted, errorMessage, connectedAddr)
-        let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;)V";
+        // 构造对象: EchNativeResponse(statusCode, headerKeys, headerValues, body, echAccepted, errorMessage, connectedAddr, updatedEchConfig)
+        let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
         let null_err_msg = JString::default();
         let conn_addr_jstr = match &resp.connected_addr {
             Some(a) => env.new_string(a)?,
+            None => JString::default(),
+        };
+        let updated_ech_jstr = match &resp.updated_ech_config {
+            Some(c) => env.new_string(c)?,
             None => JString::default(),
         };
         let obj = env.new_object(
@@ -143,6 +167,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 (resp.ech_accepted as jboolean).into(),
                 (&null_err_msg).into(),
                 (&conn_addr_jstr).into(),
+                (&updated_ech_jstr).into(),
             ],
         )?;
 
@@ -153,7 +178,6 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         Ok(obj) => obj,
         Err(e) => {
             log::warn!("nativeFetch encountered error: {}", e);
-            // 确保 JVM 异常状态已重置，避免因悬挂异常调用 find_class 导致进程崩溃
             if env.exception_check().unwrap_or(false) {
                 let _ = env.exception_clear();
             }
@@ -165,8 +189,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 let empty_vals = env.new_object_array(0, &string_class, JString::default()).unwrap();
                 let empty_body = env.byte_array_from_slice(&[]).unwrap();
                 let null_conn_addr = JString::default();
+                let null_updated_ech = JString::default();
 
-                let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;)V";
+                let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
                 if let Ok(err_obj) = env.new_object(
                     resp_class,
                     ctor_sig,
@@ -178,6 +203,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                         (false as jboolean).into(),
                         (&err_str).into(),
                         (&null_conn_addr).into(),
+                        (&null_updated_ech).into(),
                     ],
                 ) {
                     return err_obj.into_raw();
