@@ -40,5 +40,7 @@ object EchNativeClient {
         headerValues: Array<String>,
         body: ByteArray?,
         timeoutMs: Long,
+        targetAddrs: Array<String>?,
+        enableEch: Boolean,
     ): EchNativeResponse
 }

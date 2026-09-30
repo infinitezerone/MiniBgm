@@ -67,6 +67,11 @@ class EchHttpClientEngine(
                 throw IOException("libminibgm_ech.so is not available on this device")
             }
 
+            val host = data.url.host
+            val port = data.url.port
+            val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
+            val enableEch = AdaptiveDnsResolver.isEchEligible(host)
+
             val nativeResp =
                 try {
                     EchNativeClient.nativeFetch(
@@ -76,6 +81,8 @@ class EchHttpClientEngine(
                         headerValues = headerValuesList.toTypedArray(),
                         body = bodyBytes,
                         timeoutMs = config.timeoutMillis,
+                        targetAddrs = targetAddrs,
+                        enableEch = enableEch,
                     )
                 } catch (t: Throwable) {
                     logger.e(t) { "EchNativeClient.nativeFetch crashed for $urlString" }

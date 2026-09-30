@@ -25,6 +25,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
     j_header_values: JObjectArray,
     j_body: JByteArray,
     j_timeout_ms: jlong,
+    j_target_addrs: JObjectArray,
+    j_enable_ech: jboolean,
 ) -> jobject {
     let result = (|| -> Result<jobject, Box<dyn std::error::Error>> {
         let url: String = env.get_string(&j_url)?.into();
@@ -49,6 +51,29 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
             None
         };
 
+        // 提取可选目标地址列表（用于抗 DNS 污染直连或测试）
+        let target_addrs = if !j_target_addrs.is_null() {
+            let addrs_len = env.get_array_length(&j_target_addrs)?;
+            let mut list = Vec::with_capacity(addrs_len as usize);
+            for i in 0..addrs_len {
+                let elem: JString = env.get_object_array_element(&j_target_addrs, i)?.into();
+                let s: String = env.get_string(&elem)?.into();
+                let trimmed = s.trim().to_string();
+                if !trimmed.is_empty() {
+                    list.push(trimmed);
+                }
+            }
+            if list.is_empty() {
+                None
+            } else {
+                Some(list)
+            }
+        } else {
+            None
+        };
+
+        let enable_ech = j_enable_ech != 0;
+
         let client = get_client().map_err(|e| e.to_string())?;
         let resp = client
             .fetch(
@@ -57,6 +82,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 &headers,
                 body.as_deref(),
                 j_timeout_ms as u64,
+                target_addrs.as_deref(),
+                enable_ech,
             )
             .map_err(|e| e.to_string())?;
 

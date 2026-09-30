@@ -2,11 +2,16 @@
 $ErrorActionPreference = "Stop"
 
 if (-not $env:ANDROID_NDK_HOME) {
-    $ndkBase = "D:\program\AndroidDev\sdk\ndk"
-    if (Test-Path $ndkBase) {
-        $latestNdk = Get-ChildItem $ndkBase | Where-Object { Test-Path "$($_.FullName)\source.properties" } | Sort-Object Name -Descending | Select-Object -First 1
-        if ($latestNdk) {
-            $env:ANDROID_NDK_HOME = $latestNdk.FullName
+    $ndk29 = "D:\program\AndroidDev\sdk\ndk\29.0.13846066"
+    if (Test-Path "$ndk29\source.properties") {
+        $env:ANDROID_NDK_HOME = $ndk29
+    } else {
+        $ndkBase = "D:\program\AndroidDev\sdk\ndk"
+        if (Test-Path $ndkBase) {
+            $latestNdk = Get-ChildItem $ndkBase | Where-Object { Test-Path "$($_.FullName)\toolchains" } | Sort-Object Name -Descending | Select-Object -First 1
+            if ($latestNdk) {
+                $env:ANDROID_NDK_HOME = $latestNdk.FullName
+            }
         }
     }
 }

@@ -1,6 +1,5 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use base64::Engine;
@@ -13,24 +12,6 @@ use url::Url;
 // Outer SNI 统一为 cloudflare-ech.com
 const CLOUDFLARE_ECH_CONFIG_B64: &str =
     "AEX+DQBBNAAgACBEVvV6qv+2EGSHksMVtzMtBb0W4uDonEFEC5F+QK8lNAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
-
-// Bangumi Cloudflare 官方 Anycast 节点候选列表（用于在本地 DNS 被污染时免代理直连）
-// 172.67.73.67 与 104.26.9.23 在国内宽带与移动网络下延迟极低 (~180ms) 且稳定连通；104.26.8.23 作为末位兜底
-const BGM_CANDIDATE_IPS: &[&str] = &[
-    "172.67.73.67:443",
-    "104.26.9.23:443",
-    "104.26.8.23:443",
-];
-
-// AniList Cloudflare Anycast 节点（用于在本地 DNS 污染时直连封面图 CDN）
-const ANILIST_CANDIDATE_IPS: &[&str] = &[
-    "172.67.71.232:443",
-    "104.26.14.71:443",
-    "104.26.15.71:443",
-];
-
-static LAST_SUCCESS_BGM_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
-static LAST_SUCCESS_ANILIST_IP_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 pub struct HttpResponse {
     pub status_code: u16,
@@ -50,7 +31,7 @@ impl EchHttpClient {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        // 1. 尝试初始化 ECH 配置
+        // 1. 初始化 ECH 配置 (RFC 8744 / Cloudflare ECH)
         let ech_bytes = base64::engine::general_purpose::STANDARD
             .decode(CLOUDFLARE_ECH_CONFIG_B64)
             .map_err(|e| format!("Base64 decode ECH config failed: {}", e))?;
@@ -73,7 +54,7 @@ impl EchHttpClient {
         .with_root_certificates(root_store.clone())
         .with_no_client_auth();
 
-        // 3. 常规 TLS 配置（用于非 Cloudflare 域名或无需 ECH 的请求）
+        // 3. 常规 TLS 配置
         let config_std = ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
         ))
@@ -88,6 +69,7 @@ impl EchHttpClient {
         })
     }
 
+    /// 通用 HTTP/1.1 请求（支持可选目标地址列表与 ECH 协商）
     pub fn fetch(
         &self,
         url_str: &str,
@@ -95,6 +77,8 @@ impl EchHttpClient {
         headers: &[(String, String)],
         body: Option<&[u8]>,
         timeout_ms: u64,
+        target_addrs: Option<&[String]>,
+        enable_ech: bool,
     ) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
         let parsed_url = Url::parse(url_str)?;
         let host = parsed_url
@@ -111,42 +95,24 @@ impl EchHttpClient {
             parsed_url.path().to_string()
         };
 
-        // 判断是否为 Bangumi / Cloudflare 托管站点（开启 ECH）
-        let is_bgm_domain = host.ends_with("bgm.tv")
-            || host.ends_with("bangumi.tv")
-            || host.ends_with("chii.in");
+        let timeout = Duration::from_millis(timeout_ms.max(3000));
 
-        let timeout = Duration::from_millis(timeout_ms.max(5000));
-
-        // 整理连接目标地址
+        // 收集待尝试的目标地址（若外部传入了候选目标地址列表则优先依次尝试；否则走标准 DNS 解析）
         let mut addrs_to_try: Vec<String> = Vec::new();
-        if is_bgm_domain {
-            let last_idx = LAST_SUCCESS_BGM_IP_INDEX.load(Ordering::Relaxed) % BGM_CANDIDATE_IPS.len();
-            // 先尝试上次成功的 IP
-            addrs_to_try.push(BGM_CANDIDATE_IPS[last_idx].to_string());
-            // 依次塞入其他预置 Anycast IP
-            for (i, ip) in BGM_CANDIDATE_IPS.iter().enumerate() {
-                if i != last_idx {
-                    addrs_to_try.push(ip.to_string());
+        if let Some(targets) = target_addrs {
+            for target in targets {
+                let trimmed = target.trim();
+                if !trimmed.is_empty() {
+                    addrs_to_try.push(trimmed.to_string());
                 }
             }
-            // 域名直接解析作为补充（有未污染 DNS 或全局代理时走最优路径）
-            addrs_to_try.push(format!("{}:{}", host, port));
-        } else if host.ends_with("anilist.co") {
-            let last_idx = LAST_SUCCESS_ANILIST_IP_INDEX.load(Ordering::Relaxed) % ANILIST_CANDIDATE_IPS.len();
-            addrs_to_try.push(ANILIST_CANDIDATE_IPS[last_idx].to_string());
-            for (i, ip) in ANILIST_CANDIDATE_IPS.iter().enumerate() {
-                if i != last_idx {
-                    addrs_to_try.push(ip.to_string());
-                }
-            }
-            addrs_to_try.push(format!("{}:{}", host, port));
-        } else {
+        }
+        if addrs_to_try.is_empty() {
             addrs_to_try.push(format!("{}:{}", host, port));
         }
 
         let inner_sni: ServerName<'static> = host.to_string().try_into()?;
-        let tls_config = if is_bgm_domain {
+        let tls_config = if enable_ech {
             self.tls_config_with_ech.clone()
         } else {
             self.tls_config_standard.clone()
@@ -164,7 +130,7 @@ impl EchHttpClient {
             };
 
             for sock_addr in resolved_addrs {
-                // 单个 IP 握手超时设为 1200ms（正常 RTT ~200ms），故障迅速换下一个候选 IP
+                // 单个 IP 握手超时设为 1200ms，故障快速切到下一候选地址
                 let connect_timeout = Duration::from_millis(1200.min(timeout_ms));
                 let sock = match TcpStream::connect_timeout(&sock_addr, connect_timeout) {
                     Ok(s) => s,
@@ -223,7 +189,7 @@ impl EchHttpClient {
 
                 let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
 
-                // 读取响应数据：一旦达到完整响应帧（Content-Length 足够或 Chunked 闭合）即刻返回，不再傻等 TCP 关闭
+                // 读取响应数据：达到完整响应帧即刻返回
                 let mut raw_response = Vec::new();
                 let mut buf = [0u8; 8192];
                 loop {
@@ -259,16 +225,6 @@ impl EchHttpClient {
 
                 // 解析 HTTP 响应
                 if let Some(resp) = parse_http_response(&raw_response, ech_accepted) {
-                    // 记录成功命中节点真实索引（避免索引错位导致不断切回故障 IP）
-                    if is_bgm_domain {
-                        if let Some(pos) = BGM_CANDIDATE_IPS.iter().position(|&ip| ip == addr_str) {
-                            LAST_SUCCESS_BGM_IP_INDEX.store(pos, Ordering::Relaxed);
-                        }
-                    } else if host.ends_with("anilist.co") {
-                        if let Some(pos) = ANILIST_CANDIDATE_IPS.iter().position(|&ip| ip == addr_str) {
-                            LAST_SUCCESS_ANILIST_IP_INDEX.store(pos, Ordering::Relaxed);
-                        }
-                    }
                     return Ok(resp);
                 }
             }
