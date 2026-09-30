@@ -12,6 +12,7 @@ class EchNativeResponse(
     val body: ByteArray,
     val echAccepted: Boolean,
     val errorMessage: String?,
+    val connectedAddr: String?,
 )
 
 /**

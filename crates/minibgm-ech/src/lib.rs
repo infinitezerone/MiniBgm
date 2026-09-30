@@ -105,9 +105,13 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         // 转换 body
         let body_arr = env.byte_array_from_slice(&resp.body)?;
 
-        // 构造对象: EchNativeResponse(statusCode, headerKeys, headerValues, body, echAccepted, errorMessage)
-        let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;)V";
+        // 构造对象: EchNativeResponse(statusCode, headerKeys, headerValues, body, echAccepted, errorMessage, connectedAddr)
+        let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;)V";
         let null_err_msg = JString::default();
+        let conn_addr_jstr = match &resp.connected_addr {
+            Some(a) => env.new_string(a)?,
+            None => JString::default(),
+        };
         let obj = env.new_object(
             resp_class,
             ctor_sig,
@@ -118,6 +122,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 (&body_arr).into(),
                 (resp.ech_accepted as jboolean).into(),
                 (&null_err_msg).into(),
+                (&conn_addr_jstr).into(),
             ],
         )?;
 
@@ -134,8 +139,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                 let empty_keys = env.new_object_array(0, &string_class, JString::default()).unwrap();
                 let empty_vals = env.new_object_array(0, &string_class, JString::default()).unwrap();
                 let empty_body = env.byte_array_from_slice(&[]).unwrap();
+                let null_conn_addr = JString::default();
 
-                let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;)V";
+                let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;)V";
                 if let Ok(err_obj) = env.new_object(
                     resp_class,
                     ctor_sig,
@@ -146,6 +152,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
                         (&empty_body).into(),
                         (false as jboolean).into(),
                         (&err_str).into(),
+                        (&null_conn_addr).into(),
                     ],
                 ) {
                     return err_obj.into_raw();

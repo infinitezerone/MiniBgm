@@ -94,6 +94,10 @@ class EchHttpClientEngine(
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
             }
 
+            if (!nativeResp.connectedAddr.isNullOrBlank()) {
+                AdaptiveDnsResolver.recordSuccess(host, nativeResp.connectedAddr)
+            }
+
             val responseHeadersBuilder = HeadersBuilder()
             for (i in nativeResp.headerKeys.indices) {
                 val k = nativeResp.headerKeys[i]

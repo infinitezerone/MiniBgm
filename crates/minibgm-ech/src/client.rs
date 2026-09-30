@@ -18,6 +18,7 @@ pub struct HttpResponse {
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
     pub ech_accepted: bool,
+    pub connected_addr: Option<String>,
 }
 
 pub struct EchHttpClient {
@@ -224,7 +225,7 @@ impl EchHttpClient {
                 }
 
                 // 解析 HTTP 响应
-                if let Some(resp) = parse_http_response(&raw_response, ech_accepted) {
+                if let Some(resp) = parse_http_response(&raw_response, ech_accepted, Some(addr_str.clone())) {
                     return Ok(resp);
                 }
             }
@@ -235,7 +236,7 @@ impl EchHttpClient {
 }
 
 /// 极简鲁棒的 HTTP/1.1 响应解析（支持 Chunked 还原与 Header 提取）
-fn parse_http_response(raw: &[u8], ech_accepted: bool) -> Option<HttpResponse> {
+fn parse_http_response(raw: &[u8], ech_accepted: bool, connected_addr: Option<String>) -> Option<HttpResponse> {
     let header_end = raw.windows(4).position(|w| w == b"\r\n\r\n")?;
     let header_bytes = &raw[..header_end];
     let body_bytes = &raw[header_end + 4..];
@@ -274,6 +275,7 @@ fn parse_http_response(raw: &[u8], ech_accepted: bool) -> Option<HttpResponse> {
         headers,
         body: final_body,
         ech_accepted,
+        connected_addr,
     })
 }
 
