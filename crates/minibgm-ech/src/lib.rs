@@ -1,12 +1,59 @@
 mod client;
 
-use std::sync::OnceLock;
-use client::EchHttpClient;
+use client::{EchHttpClient, HttpResponse, StreamEvent};
 use jni::objects::{JByteArray, JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong, jobject};
 use jni::JNIEnv;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use tokio::runtime::{Builder, Runtime};
+use tokio::task::JoinHandle;
 
 static CLIENT: OnceLock<Result<EchHttpClient, String>> = OnceLock::new();
+static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
+static NEXT_REQUEST_ID: AtomicI64 = AtomicI64::new(1);
+static REQUESTS: OnceLock<Mutex<HashMap<jlong, Arc<RequestState>>>> = OnceLock::new();
+const MAX_ACTIVE_REQUESTS: usize = 64;
+
+struct RequestState {
+    events: Mutex<tokio::sync::mpsc::Receiver<StreamEvent>>,
+    task: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl RequestState {
+    fn new(events: tokio::sync::mpsc::Receiver<StreamEvent>) -> Self {
+        Self {
+            events: Mutex::new(events),
+            task: Mutex::new(None),
+        }
+    }
+}
+
+fn requests() -> &'static Mutex<HashMap<jlong, Arc<RequestState>>> {
+    REQUESTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn runtime() -> Result<&'static Runtime, String> {
+    match RUNTIME.get_or_init(|| {
+        Builder::new_multi_thread()
+            .enable_io()
+            .enable_time()
+            .worker_threads(2)
+            .build()
+            .map_err(|error| error.to_string())
+    }) {
+        Ok(runtime) => Ok(runtime),
+        Err(error) => Err(error.clone()),
+    }
+}
+
+fn get_client() -> Result<&'static EchHttpClient, String> {
+    match CLIENT.get_or_init(|| EchHttpClient::new().map_err(|error| error.to_string())) {
+        Ok(client) => Ok(client),
+        Err(error) => Err(error.clone()),
+    }
+}
 
 #[cfg(target_os = "android")]
 fn init_logging() {
@@ -23,24 +70,83 @@ fn init_logging() {
 #[cfg(not(target_os = "android"))]
 fn init_logging() {}
 
-fn get_client(initial_ech_config: Option<&str>) -> Result<&'static EchHttpClient, String> {
-    let res = CLIENT.get_or_init(|| {
-        EchHttpClient::new(initial_ech_config)
-            .map_err(|e| format!("EchHttpClient initialization failed: {}", e))
-    });
-    match res {
-        Ok(c) => {
-            if let Some(cfg) = initial_ech_config {
-                c.set_ech_config_b64(cfg);
-            }
-            Ok(c)
-        }
-        Err(e) => Err(e.clone()),
+fn read_string_array(
+    env: &mut JNIEnv,
+    array: &JObjectArray,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let len = env.get_array_length(array)?;
+    let mut values = Vec::with_capacity(len as usize);
+    for index in 0..len {
+        let value: JString = env.get_object_array_element(array, index)?.into();
+        values.push(env.get_string(&value)?.into());
     }
+    Ok(values)
+}
+
+fn make_response(
+    env: &mut JNIEnv,
+    response: Result<HttpResponse, String>,
+) -> Result<jobject, Box<dyn std::error::Error>> {
+    let (status, headers, body, ech_accepted, error, connected_addr, updated_config) =
+        match response {
+            Ok(response) => (
+                response.status_code,
+                response.headers,
+                response.body,
+                response.ech_accepted,
+                None,
+                response.connected_addr,
+                response.updated_ech_config,
+            ),
+            Err(error) => (0, Vec::new(), Vec::new(), false, Some(error), None, None),
+        };
+
+    let response_class =
+        env.find_class("com/infinitezerone/minibgm/core/network/ech/EchNativeResponse")?;
+    let string_class = env.find_class("java/lang/String")?;
+    let keys = env.new_object_array(headers.len() as i32, &string_class, JString::default())?;
+    let values = env.new_object_array(headers.len() as i32, &string_class, JString::default())?;
+    for (index, (key, value)) in headers.iter().enumerate() {
+        let key = env.new_string(key)?;
+        let value = env.new_string(value)?;
+        env.set_object_array_element(&keys, index as i32, key)?;
+        env.set_object_array_element(&values, index as i32, value)?;
+    }
+
+    let body = env.byte_array_from_slice(&body)?;
+    let error = match error {
+        Some(error) => env.new_string(error)?,
+        None => JString::default(),
+    };
+    let connected_addr = match connected_addr {
+        Some(addr) => env.new_string(addr)?,
+        None => JString::default(),
+    };
+    let updated_config = match updated_config {
+        Some(config) => env.new_string(config)?,
+        None => JString::default(),
+    };
+
+    let signature = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
+    let object = env.new_object(
+        response_class,
+        signature,
+        &[
+            (status as jint).into(),
+            (&keys).into(),
+            (&values).into(),
+            (&body).into(),
+            (ech_accepted as jboolean).into(),
+            (&error).into(),
+            (&connected_addr).into(),
+            (&updated_config).into(),
+        ],
+    )?;
+    Ok(object.into_raw())
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeFetch(
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeStart(
     mut env: JNIEnv,
     _class: JClass,
     j_url: JString,
@@ -51,158 +157,218 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
     j_timeout_ms: jlong,
     j_target_addrs: JObjectArray,
     j_enable_ech: jboolean,
+    j_require_ech: jboolean,
     j_ech_config: JString,
-) -> jobject {
+) -> jlong {
     init_logging();
 
-    let result = (|| -> Result<jobject, Box<dyn std::error::Error>> {
+    let parsed = (|| -> Result<_, Box<dyn std::error::Error>> {
         let url: String = env.get_string(&j_url)?.into();
         let method: String = env.get_string(&j_method)?.into();
-
-        let keys_len = env.get_array_length(&j_header_keys)?;
-        let mut headers = Vec::with_capacity(keys_len as usize);
-        for i in 0..keys_len {
-            let key_obj: JString = env.get_object_array_element(&j_header_keys, i)?.into();
-            let val_obj: JString = env.get_object_array_element(&j_header_values, i)?.into();
-            let key: String = env.get_string(&key_obj)?.into();
-            let val: String = env.get_string(&val_obj)?.into();
-            headers.push((key, val));
+        let header_keys = read_string_array(&mut env, &j_header_keys)?;
+        let header_values = read_string_array(&mut env, &j_header_values)?;
+        if header_keys.len() != header_values.len() {
+            return Err("header key/value array lengths differ".into());
         }
-
-        let body = if !j_body.is_null() {
-            let body_vec = env.convert_byte_array(&j_body)?;
-            Some(body_vec)
-        } else {
+        let headers = header_keys
+            .into_iter()
+            .zip(header_values)
+            .collect::<Vec<_>>();
+        let body = if j_body.is_null() {
             None
-        };
-
-        let target_addrs = if !j_target_addrs.is_null() {
-            let addrs_len = env.get_array_length(&j_target_addrs)?;
-            let mut list = Vec::with_capacity(addrs_len as usize);
-            for i in 0..addrs_len {
-                let elem: JString = env.get_object_array_element(&j_target_addrs, i)?.into();
-                let s: String = env.get_string(&elem)?.into();
-                let trimmed = s.trim().to_string();
-                if !trimmed.is_empty() {
-                    list.push(trimmed);
-                }
-            }
-            if list.is_empty() {
-                None
-            } else {
-                Some(list)
-            }
         } else {
-            None
+            Some(env.convert_byte_array(&j_body)?)
         };
-
-        let enable_ech = j_enable_ech != 0;
-
-        let initial_ech_config: Option<String> = if !j_ech_config.is_null() {
-            let s: String = env.get_string(&j_ech_config)?.into();
-            let trimmed = s.trim().to_string();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
-            }
+        let target_addrs = if j_target_addrs.is_null() {
+            None
         } else {
-            None
+            Some(read_string_array(&mut env, &j_target_addrs)?)
         };
+        let ech_config = if j_ech_config.is_null() {
+            None
+        } else {
+            let config: String = env.get_string(&j_ech_config)?.into();
+            let config = config.trim().to_owned();
+            (!config.is_empty()).then_some(config)
+        };
+        Ok((url, method, headers, body, target_addrs, ech_config))
+    })();
 
-        let client = get_client(initial_ech_config.as_deref()).map_err(|e| e.to_string())?;
-        let resp = client
+    let (url, method, headers, body, target_addrs, ech_config) = match parsed {
+        Ok(args) => args,
+        Err(error) => {
+            log::warn!("nativeStart argument error: {error}");
+            return 0;
+        }
+    };
+    let client = match get_client() {
+        Ok(client) => client,
+        Err(error) => {
+            log::error!("nativeStart initialization error: {error}");
+            return 0;
+        }
+    };
+    let runtime = match runtime() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            log::error!("nativeStart runtime error: {error}");
+            return 0;
+        }
+    };
+
+    let id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed) as jlong;
+    let (event_tx, event_rx) = tokio::sync::mpsc::channel(4);
+    let state = Arc::new(RequestState::new(event_rx));
+    {
+        let mut active = requests()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if active.len() >= MAX_ACTIVE_REQUESTS {
+            log::warn!("nativeStart rejected: active request limit reached");
+            return 0;
+        }
+        active.insert(id, state.clone());
+    }
+    let task = runtime.spawn(async move {
+        let result = client
             .fetch(
                 &url,
                 &method,
                 &headers,
                 body.as_deref(),
-                j_timeout_ms as u64,
+                j_timeout_ms.max(0) as u64,
                 target_addrs.as_deref(),
-                enable_ech,
-                initial_ech_config.as_deref(),
+                j_enable_ech != 0,
+                j_require_ech != 0,
+                ech_config.as_deref(),
+                Some(event_tx.clone()),
             )
-            .map_err(|e| e.to_string())?;
-
-        let resp_class = env.find_class("com/infinitezerone/minibgm/core/network/ech/EchNativeResponse")?;
-
-        let string_class = env.find_class("java/lang/String")?;
-        let resp_keys_arr = env.new_object_array(resp.headers.len() as i32, &string_class, JString::default())?;
-        let resp_vals_arr = env.new_object_array(resp.headers.len() as i32, &string_class, JString::default())?;
-
-        for (idx, (k, v)) in resp.headers.iter().enumerate() {
-            let k_jstr = env.new_string(k)?;
-            let v_jstr = env.new_string(v)?;
-            env.set_object_array_element(&resp_keys_arr, idx as i32, k_jstr)?;
-            env.set_object_array_element(&resp_vals_arr, idx as i32, v_jstr)?;
+            .await
+            .map_err(|error| error.to_string());
+        if let Err(error) = result {
+            let _ = event_tx.send(StreamEvent::Error(error)).await;
         }
+    });
+    *state
+        .task
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(task);
+    id
+}
 
-        let body_arr = env.byte_array_from_slice(&resp.body)?;
-
-        let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
-        let null_err_msg = JString::default();
-        let conn_addr_jstr = match &resp.connected_addr {
-            Some(a) => env.new_string(a)?,
-            None => JString::default(),
-        };
-        let updated_ech_jstr = match &resp.updated_ech_config {
-            Some(c) => env.new_string(c)?,
-            None => JString::default(),
-        };
-        let obj = env.new_object(
-            resp_class,
-            ctor_sig,
-            &[
-                (resp.status_code as jint).into(),
-                (&resp_keys_arr).into(),
-                (&resp_vals_arr).into(),
-                (&body_arr).into(),
-                (resp.ech_accepted as jboolean).into(),
-                (&null_err_msg).into(),
-                (&conn_addr_jstr).into(),
-                (&updated_ech_jstr).into(),
-            ],
-        )?;
-
-        Ok(obj.into_raw())
-    })();
-
-    match result {
-        Ok(obj) => obj,
-        Err(e) => {
-            log::warn!("nativeFetch encountered error: {}", e);
-            if env.exception_check().unwrap_or(false) {
-                let _ = env.exception_clear();
-            }
-
-            if let Ok(resp_class) = env.find_class("com/infinitezerone/minibgm/core/network/ech/EchNativeResponse") {
-                let err_str = env.new_string(e.to_string()).unwrap_or_default();
-                let string_class = env.find_class("java/lang/String").unwrap();
-                let empty_keys = env.new_object_array(0, &string_class, JString::default()).unwrap();
-                let empty_vals = env.new_object_array(0, &string_class, JString::default()).unwrap();
-                let empty_body = env.byte_array_from_slice(&[]).unwrap();
-                let null_conn_addr = JString::default();
-                let null_updated_ech = JString::default();
-
-                let ctor_sig = "(I[Ljava/lang/String;[Ljava/lang/String;[BZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V";
-                if let Ok(err_obj) = env.new_object(
-                    resp_class,
-                    ctor_sig,
-                    &[
-                        (0 as jint).into(),
-                        (&empty_keys).into(),
-                        (&empty_vals).into(),
-                        (&empty_body).into(),
-                        (false as jboolean).into(),
-                        (&err_str).into(),
-                        (&null_conn_addr).into(),
-                        (&null_updated_ech).into(),
-                    ],
-                ) {
-                    return err_obj.into_raw();
-                }
-            }
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeAwait(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_id: jlong,
+) -> jobject {
+    let state = requests()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&request_id)
+        .cloned();
+    let Some(state) = state else {
+        return std::ptr::null_mut();
+    };
+    let event = state
+        .events
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .blocking_recv();
+    let response = match event {
+        Some(StreamEvent::Response(response)) => Ok(response),
+        Some(StreamEvent::Error(error)) => {
+            requests()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&request_id);
+            Err(error)
+        }
+        Some(StreamEvent::End) | Some(StreamEvent::Data(_)) | None => {
+            requests()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&request_id);
+            Err("native response stream ended before response headers".to_owned())
+        }
+    };
+    match make_response(&mut env, response) {
+        Ok(object) => object,
+        Err(error) => {
+            log::error!("nativeAwait response conversion failed: {error}");
             std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeReadBodyChunk(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_id: jlong,
+) -> jobject {
+    let state = requests()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&request_id)
+        .cloned();
+    let Some(state) = state else {
+        return std::ptr::null_mut();
+    };
+    let event = state
+        .events
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .blocking_recv();
+    match event {
+        Some(StreamEvent::Data(bytes)) => env
+            .byte_array_from_slice(&bytes)
+            .map_or(std::ptr::null_mut(), |array| array.into_raw()),
+        Some(StreamEvent::End) => {
+            requests()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&request_id);
+            env.byte_array_from_slice(&[])
+                .map_or(std::ptr::null_mut(), |array| array.into_raw())
+        }
+        Some(StreamEvent::Error(error)) => {
+            requests()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&request_id);
+            let _ = env.throw_new("java/io/IOException", error);
+            std::ptr::null_mut()
+        }
+        Some(StreamEvent::Response(_)) | None => {
+            requests()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&request_id);
+            let _ = env.throw_new("java/io/IOException", "response stream ended unexpectedly");
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeCancel(
+    _env: JNIEnv,
+    _class: JClass,
+    request_id: jlong,
+) {
+    let state = requests()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request_id);
+    if let Some(state) = state {
+        if let Some(task) = state
+            .task
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+        {
+            task.abort();
         }
     }
 }

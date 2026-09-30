@@ -8,11 +8,16 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
+tokio = { version = "1", features = ["net", "rt-multi-thread", "time"] }
+tokio-rustls = "0.26"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
 webpki-roots = "0.26"
 base64 = "0.22"
 jni = "0.21"
 url = "2.5"
-httparse = "1.9"
 log = "0.4"
 android_logger = "0.14"
 

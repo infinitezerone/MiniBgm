@@ -31,13 +31,30 @@ object AdaptiveDnsResolver {
         )
 
     /** 判断域名是否支持 ECH 握手 */
+    private fun isDomainOrSubdomain(
+        host: String,
+        domain: String,
+    ): Boolean = host.equals(domain, ignoreCase = true) || host.endsWith(".$domain", ignoreCase = true)
+
     fun isEchEligible(host: String): Boolean =
-        host.endsWith("bgm.tv", ignoreCase = true) ||
-            host.endsWith("bangumi.tv", ignoreCase = true) ||
-            host.endsWith("chii.in", ignoreCase = true)
+        isDomainOrSubdomain(host, "bgm.tv") ||
+            isDomainOrSubdomain(host, "bangumi.tv") ||
+            isDomainOrSubdomain(host, "chii.in")
 
     /** 判断域名是否由 Cloudflare 提供服务 */
-    fun isCloudflareHosted(host: String): Boolean = isEchEligible(host) || host.endsWith("anilist.co", ignoreCase = true)
+    fun isCloudflareHosted(host: String): Boolean = isEchEligible(host) || isDomainOrSubdomain(host, "anilist.co")
+
+    private fun formatAddress(
+        ip: String,
+        port: Int,
+    ): String = if (ip.contains(':')) "[$ip]:$port" else "$ip:$port"
+
+    private fun pureIp(address: String): String =
+        if (address.startsWith('[')) {
+            address.substringBefore(']').removePrefix("[")
+        } else {
+            address.substringBeforeLast(':')
+        }
 
     /** 校验 IP 是否属于 Cloudflare Anycast 广播网段 */
     fun isCloudflareIp(ip: String): Boolean {
@@ -98,7 +115,7 @@ object AdaptiveDnsResolver {
             if (cleanIps.isNotEmpty()) {
                 logger.d { "Host $host resolved clean system IPs: $cleanIps" }
                 for (ip in cleanIps) {
-                    resultList.add("$ip:$port")
+                    resultList.add(formatAddress(ip, port))
                 }
             } else {
                 logger.w { "Host $host system DNS was poisoned! IPs: ${systemIps.map { it.hostAddress }}" }
@@ -115,7 +132,7 @@ object AdaptiveDnsResolver {
             }
 
         for (ip in pool) {
-            val addr = "$ip:$port"
+            val addr = formatAddress(ip, port)
             if (!resultList.contains(addr)) {
                 resultList.add(addr)
             }
@@ -129,9 +146,9 @@ object AdaptiveDnsResolver {
         host: String,
         addr: String,
     ) {
-        val pureIp = addr.substringBefore(':')
+        val pureIp = pureIp(addr)
         val pool =
-            if (host.endsWith("anilist.co", ignoreCase = true)) {
+            if (isDomainOrSubdomain(host, "anilist.co")) {
                 anilistAnycastPool
             } else {
                 bgmAnycastPool
@@ -152,9 +169,9 @@ object AdaptiveDnsResolver {
         host: String,
         addr: String,
     ) {
-        val pureIp = addr.substringBefore(':')
+        val pureIp = pureIp(addr)
         val pool =
-            if (host.endsWith("anilist.co", ignoreCase = true)) {
+            if (isDomainOrSubdomain(host, "anilist.co")) {
                 anilistAnycastPool
             } else {
                 bgmAnycastPool

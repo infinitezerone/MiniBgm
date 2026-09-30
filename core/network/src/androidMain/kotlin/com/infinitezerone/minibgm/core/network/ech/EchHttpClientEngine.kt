@@ -14,13 +14,22 @@ import io.ktor.http.HttpProtocolVersion
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.util.date.GMTDate
-import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.InternalAPI
+import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.writeFully
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 class EchEngineConfig : HttpClientEngineConfig() {
     var timeoutMillis: Long = 15000
+
+    /** Require ECH for eligible hosts instead of silently exposing the SNI on fallback. */
+    var requireEch: Boolean = false
 }
 
 /**
@@ -57,7 +66,18 @@ class EchHttpClientEngine(
                 when (val body = data.body) {
                     is OutgoingContent.ByteArrayContent -> body.bytes()
                     is OutgoingContent.NoContent -> null
-                    else -> null
+                    is OutgoingContent.ReadChannelContent -> {
+                        val channel = body.readFrom()
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val count = channel.readAvailable(buffer, 0, buffer.size)
+                            if (count < 0) break
+                            if (count > 0) output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    }
+                    else -> throw IOException("ECH engine does not support streaming request body: ${body::class.qualifiedName}")
                 }
 
             if (!EchNativeClient.isAvailable()) {
@@ -68,11 +88,11 @@ class EchHttpClientEngine(
             val port = data.url.port
             val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val enableEch = AdaptiveDnsResolver.isEchEligible(host)
-            val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null
+            val echConfig = if (enableEch) EchConfigStore.getActiveConfig(host) else null
 
-            val nativeResp =
+            val nativeCall =
                 try {
-                    EchNativeClient.nativeFetch(
+                    EchNativeClient.nativeFetchCancellable(
                         url = urlString,
                         method = methodString,
                         headerKeys = headerKeysList.toTypedArray(),
@@ -81,6 +101,7 @@ class EchHttpClientEngine(
                         timeoutMs = config.timeoutMillis,
                         targetAddrs = targetAddrs,
                         enableEch = enableEch,
+                        requireEch = config.requireEch && enableEch,
                         echConfig = echConfig,
                     )
                 } catch (t: Throwable) {
@@ -88,13 +109,14 @@ class EchHttpClientEngine(
                     throw IOException("ECH native fetch failed: ${t.message}", t)
                 }
 
+            val nativeResp = nativeCall.response
             if (nativeResp.errorMessage != null && nativeResp.errorMessage.isNotBlank()) {
                 logger.w { "ECH native fetch failed: ${nativeResp.errorMessage} ($urlString)" }
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
             }
 
             if (!nativeResp.updatedEchConfig.isNullOrBlank()) {
-                EchConfigStore.updateConfig(nativeResp.updatedEchConfig)
+                EchConfigStore.updateConfig(host, nativeResp.updatedEchConfig)
             }
 
             if (!nativeResp.connectedAddr.isNullOrBlank()) {
@@ -110,7 +132,21 @@ class EchHttpClientEngine(
             val responseHeaders: Headers = responseHeadersBuilder.build()
 
             val statusCode = HttpStatusCode.fromValue(nativeResp.statusCode)
-            val responseBodyChannel = ByteReadChannel(nativeResp.body)
+            val responseBodyChannel = ByteChannel(autoFlush = true)
+            CoroutineScope(callContext).launch(Dispatchers.IO) {
+                try {
+                    while (true) {
+                        val chunk = EchNativeClient.nativeReadBodyChunkCancellable(nativeCall.requestId)
+                        if (chunk == null || chunk.isEmpty()) break
+                        responseBodyChannel.writeFully(chunk, 0, chunk.size)
+                    }
+                    responseBodyChannel.close()
+                } catch (error: Throwable) {
+                    responseBodyChannel.cancel(error)
+                } finally {
+                    EchNativeClient.nativeCancel(nativeCall.requestId)
+                }
+            }
 
             HttpResponseData(
                 statusCode = statusCode,
