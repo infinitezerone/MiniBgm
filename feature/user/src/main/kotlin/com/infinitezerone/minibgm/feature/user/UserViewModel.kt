@@ -336,6 +336,28 @@ class UserViewModel(
     suspend fun beginLogin(): String = authRepository.beginLogin()
 
     /**
+     * 使用个人访问令牌（Personal Access Token）直接登录。
+     * 免去外部浏览器 OAuth 交互与域名阻断困扰，直连拉取个人资料并激活会话。
+     */
+    fun loginWithPersonalAccessToken(
+        token: String,
+        onResult: (success: Boolean, errorMessage: String?) -> Unit,
+    ) {
+        viewModelScope.launch {
+            when (val result = authRepository.loginWithPersonalAccessToken(token)) {
+                is AppResult.Success -> {
+                    refresh()
+                    onResult(true, null)
+                }
+                is AppResult.Error -> {
+                    onResult(false, result.message)
+                }
+                AppResult.Loading -> Unit
+            }
+        }
+    }
+
+    /**
      * 读取最近一次崩溃日志；从未崩溃过返回 null。
      *
      * 按需读取而不是进页就加载：崩溃是低频事件，没必要每次打开设置页都碰一次磁盘。

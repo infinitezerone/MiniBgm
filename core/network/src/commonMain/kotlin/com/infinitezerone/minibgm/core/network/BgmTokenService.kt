@@ -1,11 +1,17 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.model.UserProfile
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -41,6 +47,30 @@ class BgmTokenService(
     private val client: HttpClient,
     private val config: BgmAuthConfig,
 ) {
+    /**
+     * 使用给定的 Access Token 校验有效性并直接拉取当前用户信息。
+     * 走未鉴权 client 显式注入该 token 的 Bearer 认证头，不依赖与污染现有登录态。
+     */
+    suspend fun verifyToken(accessToken: String): UserProfile {
+        val response =
+            client.get("https://api.bgm.tv/v0/me") {
+                header(HttpHeaders.Authorization, "Bearer $accessToken")
+            }
+        if (!response.status.isSuccess()) {
+            when (response.status) {
+                HttpStatusCode.Unauthorized -> throw BgmNetworkException.Unauthorized()
+                HttpStatusCode.Forbidden -> throw BgmNetworkException.Forbidden()
+                HttpStatusCode.TooManyRequests -> throw BgmNetworkException.RateLimited()
+                else -> throw BgmNetworkException.ServerError(response.status.value)
+            }
+        }
+        val profile = response.body<UserProfile>()
+        if (profile.id <= 0) {
+            throw BgmNetworkException.Unauthorized("未能获取有效用户身份")
+        }
+        return profile
+    }
+
     /** state/verifier 供 Worker 做 PKCE 等价校验（见 [BgmPkce]）；Worker 校验通过才代为兑换 */
     suspend fun exchangeCode(
         code: String,

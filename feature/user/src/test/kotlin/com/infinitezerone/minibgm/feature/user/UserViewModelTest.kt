@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -399,6 +400,22 @@ class UserViewModelTest {
 
             assertTrue(url.contains("bgm.tv/oauth/authorize"))
             assertEquals(1, authRepo.beginLoginCallCount)
+        }
+
+    @Test
+    fun loginWithPersonalAccessToken_delegatesToAuthRepositoryAndInvokesCallback() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val (viewModel, _) = createViewModel(authRepo = authRepo)
+            var callbackSuccess = false
+
+            viewModel.loginWithPersonalAccessToken("valid_token") { success, _ ->
+                callbackSuccess = success
+            }
+            advanceUntilIdle()
+
+            assertEquals(1, authRepo.loginWithPersonalAccessTokenCallCount)
+            assertTrue(callbackSuccess)
         }
 
     @Test

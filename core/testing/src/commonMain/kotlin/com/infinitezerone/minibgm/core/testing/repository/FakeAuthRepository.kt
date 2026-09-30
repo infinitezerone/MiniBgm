@@ -32,6 +32,8 @@ class FakeAuthRepository(
         private set
     var completeLoginCallCount: Int = 0
         private set
+    var loginWithPersonalAccessTokenCallCount: Int = 0
+        private set
     var logoutCallCount: Int = 0
         private set
     var logoutAllCallCount: Int = 0
@@ -41,6 +43,7 @@ class FakeAuthRepository(
 
     var mockAuthorizeUrl: String = "https://bgm.tv/oauth/authorize?client_id=test&state=test_state"
     var completeLoginResult: AppResult<Unit> = AppResult.Success(Unit)
+    var loginWithPersonalAccessTokenResult: AppResult<Unit> = AppResult.Success(Unit)
 
     fun setLoggedIn(loggedIn: Boolean) {
         _isLoggedIn.value = loggedIn
@@ -75,6 +78,19 @@ class FakeAuthRepository(
                 _isLoggedIn.value = true
             }
             completeLoginResult
+        } finally {
+            _isAuthenticating.value = false
+        }
+    }
+
+    override suspend fun loginWithPersonalAccessToken(token: String): AppResult<Unit> {
+        loginWithPersonalAccessTokenCallCount++
+        _isAuthenticating.value = true
+        return try {
+            if (loginWithPersonalAccessTokenResult is AppResult.Success) {
+                _isLoggedIn.value = true
+            }
+            loginWithPersonalAccessTokenResult
         } finally {
             _isAuthenticating.value = false
         }

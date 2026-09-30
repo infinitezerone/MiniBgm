@@ -88,6 +88,9 @@ fun UserScreen(
                 context.launchWebUrl(authorizeUrl, isAuth = true)
             }
         },
+        onLoginWithToken = { token, onResult ->
+            viewModel.loginWithPersonalAccessToken(token, onResult)
+        },
         onRefresh = {
             // 下拉刷新同时覆盖两个数据块：个人资料/收藏计数（头部与 Tab 计数）与当前分区的收藏列表
             collectionsViewModel.refresh()
@@ -125,6 +128,7 @@ fun UserScreenContent(
     uiState: UserUiState,
     collectionsState: UserCollectionsUiState,
     onLogin: () -> Unit,
+    onLoginWithToken: (String, (Boolean, String?) -> Unit) -> Unit = { _, _ -> },
     onRefresh: () -> Unit,
     onRetryCollections: () -> Unit = {},
     onSettingsClick: () -> Unit,
@@ -242,6 +246,7 @@ fun UserScreenContent(
                     // 未登录状态：全屏沉浸式登录引导区，干净聚焦无冗余
                     UnauthenticatedLandingView(
                         onLogin = onLogin,
+                        onLoginWithToken = onLoginWithToken,
                         isAuthenticating = uiState.isAuthenticating,
                         modifier = Modifier.fillMaxSize(),
                     )

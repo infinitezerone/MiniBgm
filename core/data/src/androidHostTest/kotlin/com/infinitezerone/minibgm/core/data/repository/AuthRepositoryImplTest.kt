@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import io.ktor.client.HttpClient
@@ -113,18 +114,19 @@ class AuthRepositoryImplTest {
         val service =
             BgmTokenService(
                 client =
-                    HttpClient(
-                        MockEngine { request ->
-                            requestCount++
-                            lastMethod = request.method
-                            lastUrl = request.url.toString()
-                            lastForm = (request.body as? FormDataContent)?.formData
-                            respond(
-                                content = body,
-                                status = status,
-                                headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
-                            )
-                        },
+                    BgmHttpClient.createBaseClient(
+                        engine =
+                            MockEngine { request ->
+                                requestCount++
+                                lastMethod = request.method
+                                lastUrl = request.url.toString()
+                                lastForm = (request.body as? FormDataContent)?.formData
+                                respond(
+                                    content = body,
+                                    status = status,
+                                    headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                                )
+                            },
                     ),
                 config = BgmAuthConfig(),
             )
@@ -451,5 +453,55 @@ class AuthRepositoryImplTest {
 
             assertIs<AppResult.Success<*>>(result)
             assertEquals(false, harness.repository.isAuthenticating.value)
+        }
+
+    @Test
+    fun `loginWithPersonalAccessToken 成功校验后落盘凭据并激活登录态`() =
+        runTest {
+            val userProfileJson =
+                """
+                {"id":42,"username":"test_user","nickname":"测试用户","user_group":1,"sign":"签名"}
+                """.trimIndent()
+            val harness = harness(apiWith(HttpStatusCode.OK, userProfileJson))
+
+            val result = harness.repository.loginWithPersonalAccessToken("my_test_pat_token")
+
+            assertIs<AppResult.Success<*>>(result)
+            assertTrue(harness.repository.isLoggedIn.first())
+            assertEquals(
+                42L,
+                harness.repository.activeProfile
+                    .first()
+                    ?.id,
+            )
+            assertEquals(
+                "测试用户",
+                harness.repository.activeProfile
+                    .first()
+                    ?.nickname,
+            )
+            assertEquals("my_test_pat_token", harness.tokenProvider.getAccessToken())
+        }
+
+    @Test
+    fun `loginWithPersonalAccessToken 空令牌被拦截并返回错误`() =
+        runTest {
+            val harness = harness(apiWith(HttpStatusCode.OK, ""))
+
+            val result = harness.repository.loginWithPersonalAccessToken("   ")
+
+            assertIs<AppResult.Error>(result)
+            assertEquals(false, harness.repository.isLoggedIn.first())
+        }
+
+    @Test
+    fun `loginWithPersonalAccessToken 令牌无效抛 401 时返回错误并不改变登录态`() =
+        runTest {
+            val harness = harness(apiWith(HttpStatusCode.Unauthorized, """{"error":"invalid_token"}"""))
+
+            val result = harness.repository.loginWithPersonalAccessToken("bad_token")
+
+            assertIs<AppResult.Error>(result)
+            assertEquals(false, harness.repository.isLoggedIn.first())
         }
 }

@@ -46,8 +46,8 @@ data class UserProfile(
             return null
         }
 
-    private companion object {
-        const val MIN_REGISTERED_YEAR = 1900
-        const val MAX_REGISTERED_YEAR = 2100
+    companion object {
+        private const val MIN_REGISTERED_YEAR = 1900
+        private const val MAX_REGISTERED_YEAR = 2100
     }
 }

@@ -43,6 +43,12 @@ interface AuthRepository {
         state: String?,
     ): AppResult<Unit>
 
+    /**
+     * 个人访问令牌（Personal Access Token）登录入口：
+     * 校验 token 有效性 → 获取用户资料 → 加密落盘 → 激活会话
+     */
+    suspend fun loginWithPersonalAccessToken(token: String): AppResult<Unit>
+
     /** 切换当前活跃账号 */
     suspend fun switchAccount(userId: Long)
 
@@ -141,6 +147,34 @@ class AuthRepositoryImpl(
             // 会原样显示给用户。统一走 toUserFriendlyMessage 归一化。
             log.e(e) { "[LOGIN:COMPLETE:FAILED] serialization exception: ${e.message}" }
             AppResult.Error(e, e.toUserFriendlyMessage("兑换响应解析"))
+        } finally {
+            _isAuthenticating.value = false
+        }
+    }
+
+    override suspend fun loginWithPersonalAccessToken(token: String): AppResult<Unit> {
+        _isAuthenticating.value = true
+        log.i { "[LOGIN:PAT:START] verifying personal access token" }
+        return try {
+            val trimmed = token.trim()
+            if (trimmed.isBlank()) {
+                log.w { "[LOGIN:PAT:REJECTED] token is empty" }
+                return AppResult.Error(IllegalArgumentException("访问令牌不能为空"))
+            }
+            val profile = tokenService.verifyToken(trimmed)
+            // saveTokens 同时把该用户置为凭据库的活跃账号，登录态随之成立
+            tokenProvider.saveTokens(profile.id, trimmed, "")
+            userPreferences.saveUserProfile(profile)
+            log.i { "[LOGIN:PAT:SUCCESS] userId=${profile.id}, nickname=${profile.nickname}" }
+            AppResult.Success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: BgmNetworkException) {
+            log.e(e) { "[LOGIN:PAT:FAILED] network exception: ${e.message}" }
+            AppResult.Error(e, e.toUserFriendlyMessage("令牌验证"))
+        } catch (e: Exception) {
+            log.e(e) { "[LOGIN:PAT:FAILED] unexpected exception: ${e.message}" }
+            AppResult.Error(e, "令牌验证失败: ${e.message ?: "未知错误"}")
         } finally {
             _isAuthenticating.value = false
         }

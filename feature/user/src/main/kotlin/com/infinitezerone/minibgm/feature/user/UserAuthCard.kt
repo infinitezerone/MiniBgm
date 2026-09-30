@@ -17,22 +17,34 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -178,9 +190,19 @@ private fun UnauthenticatedCardPreview() {
 @Composable
 internal fun UnauthenticatedLandingView(
     onLogin: () -> Unit,
+    onLoginWithToken: (String, (Boolean, String?) -> Unit) -> Unit = { _, _ -> },
     isAuthenticating: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    var showTokenDialog by rememberSaveable { mutableStateOf(false) }
+
+    if (showTokenDialog) {
+        PersonalAccessTokenDialog(
+            onDismiss = { showTokenDialog = false },
+            onSubmit = onLoginWithToken,
+        )
+    }
+
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
@@ -199,7 +221,7 @@ internal fun UnauthenticatedLandingView(
             Column(
                 modifier = Modifier.padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // 品牌/头像质感徽标
                 Surface(
@@ -294,14 +316,162 @@ internal fun UnauthenticatedLandingView(
                     }
                 }
 
+                // 次级操作：Access Token 直连登录
+                OutlinedButton(
+                    onClick = { showTokenDialog = true },
+                    enabled = !isAuthenticating,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(46.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Key,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = "使用 Access Token 登录 (国内推荐)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+
                 Text(
-                    text = "使用 bgm.tv 官方 OAuth 安全授权协议登录",
+                    text = "支持官方 OAuth 网页授权与个人访问令牌直连",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 )
             }
         }
     }
+}
+
+@Composable
+private fun PersonalAccessTokenDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, (Boolean, String?) -> Unit) -> Unit,
+) {
+    var tokenText by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var isLoading by rememberSaveable { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Key,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(text = "使用 Access Token 登录")
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text =
+                        "国内直连推荐方案：无需梯子与网页跳转，长期有效免续期。\n\n" +
+                            "1. 在任意设备浏览器打开：\n   https://next.bgm.tv/demo/access-token\n" +
+                            "2. 登录并复制生成的 Access Token 粘贴至下方。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                OutlinedTextField(
+                    value = tokenText,
+                    onValueChange = {
+                        tokenText = it
+                        errorMessage = null
+                    },
+                    label = { Text("个人访问令牌") },
+                    placeholder = { Text("在此粘贴 Access Token") },
+                    singleLine = true,
+                    enabled = !isLoading,
+                    isError = errorMessage != null,
+                    supportingText = {
+                        if (errorMessage != null) {
+                            Text(
+                                text = errorMessage.orEmpty(),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                clipboardManager.getText()?.text?.let { clipText ->
+                                    tokenText = clipText.trim()
+                                    errorMessage = null
+                                }
+                            },
+                            enabled = !isLoading,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ContentPaste,
+                                contentDescription = "粘贴",
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val token = tokenText.trim()
+                    if (token.isBlank()) {
+                        errorMessage = "令牌不能为空"
+                        return@Button
+                    }
+                    isLoading = true
+                    errorMessage = null
+                    onSubmit(token) { success, error ->
+                        isLoading = false
+                        if (success) {
+                            onDismiss()
+                        } else {
+                            errorMessage = error ?: "登录失败，请检查令牌有效性"
+                        }
+                    }
+                },
+                enabled = !isLoading && tokenText.isNotBlank(),
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text("验证并登录")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading,
+            ) {
+                Text("取消")
+            }
+        },
+    )
 }
 
 @Composable
