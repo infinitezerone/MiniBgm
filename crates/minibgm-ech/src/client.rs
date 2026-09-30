@@ -353,6 +353,9 @@ fn try_fetch_with_config(
 
             let mut has_content_length = false;
             for (k, v) in headers {
+                if k.eq_ignore_ascii_case("host") || k.eq_ignore_ascii_case("connection") {
+                    continue;
+                }
                 if k.eq_ignore_ascii_case("content-length") {
                     has_content_length = true;
                 }
@@ -383,7 +386,7 @@ fn try_fetch_with_config(
             let ech_accepted = tls.conn.ech_status() == EchStatus::Accepted;
 
             // 使用 httparse 与流式状态机接收并解析 HTTP 响应
-            match read_http_response(&mut tls, ech_accepted, Some(addr_str.clone())) {
+            match read_http_response(&mut tls, method, ech_accepted, Some(addr_str.clone())) {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
                     last_error = Some(Box::new(e));
@@ -399,6 +402,7 @@ fn try_fetch_with_config(
 /// 基于官方 httparse 的流式 HTTP/1.1 响应接收与解析
 fn read_http_response<R: Read>(
     stream: &mut R,
+    method: &str,
     ech_accepted: bool,
     connected_addr: Option<String>,
 ) -> Result<HttpResponse, std::io::Error> {
@@ -462,8 +466,12 @@ fn read_http_response<R: Read>(
     // Phase 3: 流式获取 Body（精准截断，杜绝阻塞挂起与 O(N^2) 重复扫描）
     let initial_body = &buffer[header_len..];
 
-    // 1xx, 204, 304 规范无 Body
-    if (100..200).contains(&status_code) || status_code == 204 || status_code == 304 {
+    // RFC 9112 Section 6.3: HEAD 请求或 1xx, 204, 304 规范无 Body
+    if method.eq_ignore_ascii_case("HEAD")
+        || (100..200).contains(&status_code)
+        || status_code == 204
+        || status_code == 304
+    {
         return Ok(HttpResponse {
             status_code,
             headers: out_headers,
@@ -598,7 +606,7 @@ mod tests {
     fn test_read_http_response_with_httparse() {
         let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 13\r\n\r\n{\"key\":\"val\"}";
         let mut cursor = std::io::Cursor::new(raw);
-        let resp = read_http_response(&mut cursor, true, Some("127.0.0.1:443".into())).unwrap();
+        let resp = read_http_response(&mut cursor, "GET", true, Some("127.0.0.1:443".into())).unwrap();
         assert_eq!(resp.status_code, 200);
         assert_eq!(resp.body, b"{\"key\":\"val\"}");
         assert!(resp.ech_accepted);
@@ -609,8 +617,17 @@ mod tests {
     fn test_read_no_content() {
         let raw = b"HTTP/1.1 204 No Content\r\n\r\n";
         let mut cursor = std::io::Cursor::new(raw);
-        let resp = read_http_response(&mut cursor, false, None).unwrap();
+        let resp = read_http_response(&mut cursor, "GET", false, None).unwrap();
         assert_eq!(resp.status_code, 204);
+        assert!(resp.body.is_empty());
+    }
+
+    #[test]
+    fn test_read_head_response() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 1024\r\n\r\n";
+        let mut cursor = std::io::Cursor::new(raw);
+        let resp = read_http_response(&mut cursor, "HEAD", false, None).unwrap();
+        assert_eq!(resp.status_code, 200);
         assert!(resp.body.is_empty());
     }
 
