@@ -184,7 +184,7 @@ class FakeCollectionRepository : CollectionRepository {
         return AppResult.Success(Unit)
     }
 
-    override suspend fun syncWatchingCollections(): AppResult<Unit> {
+    override suspend fun syncWatchingCollections(force: Boolean): AppResult<Unit> {
         syncWatchingCallCount++
         syncWatchingResult?.let { return it }
         return AppResult.Success(Unit)

@@ -15,7 +15,10 @@ import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.ProxyConfig
@@ -82,11 +85,15 @@ internal fun InAppWebView(
     val currentOnInterceptor by rememberUpdatedState(onInterceptor)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
 
+    var isProxyReady by remember { mutableStateOf(!isProxyOverrideSupported()) }
+
     // 让 WebView 的流量经过本机环回代理：这是唯一能让 POST 完整到达代理的途径——
     // WebViewClient 的请求拦截回调不提供请求体，而代理在网络层收包，表单与 AJAX 都不受影响。
     // 页面因此可以保持真实域名（origin 正确、同源无 CORS），代理设置是全局的，离开时必须清除。
     DisposableEffect(session.proxyBaseUrl) {
-        applyLoopbackProxy(session.proxyBaseUrl)
+        applyLoopbackProxy(session.proxyBaseUrl) {
+            isProxyReady = true
+        }
         onDispose { clearLoopbackProxy() }
     }
 
@@ -213,11 +220,13 @@ internal fun InAppWebView(
                         }
                     }
                 currentOnWebViewCreated(this)
-                loadUrl(session.url)
+                if (isProxyReady) {
+                    loadUrl(session.url)
+                }
             }
         },
         update = { webView ->
-            if (webView.url != session.url && session.url.isNotBlank()) {
+            if (isProxyReady && webView.url != session.url && session.url.isNotBlank()) {
                 webView.loadUrl(session.url)
             }
         },
@@ -242,9 +251,13 @@ internal fun isProxyOverrideSupported(): Boolean = WebViewFeature.isFeatureSuppo
  * 系统解析不可用，因此由代理接管、继续走原生 ECH 通道。选择代理而非请求拦截回调，是因为
  * 后者**不提供请求体**——表单与 AJAX 的 POST 都无法转发；代理在网络层收包，天然完整。
  *
+ * @param onApplied 代理配置真正写入 Chromium 网络栈后的就绪回调
  * @return 是否成功应用代理；若设备底层 WebView 不支持则返回 false
  */
-internal fun applyLoopbackProxy(proxyBaseUrl: String): Boolean {
+internal fun applyLoopbackProxy(
+    proxyBaseUrl: String,
+    onApplied: (() -> Unit)? = null,
+): Boolean {
     if (!isProxyOverrideSupported()) {
         proxyLogger.w { "[INAPP_PROXY:UNSUPPORTED] PROXY_OVERRIDE is not supported on this device" }
         return false
@@ -261,7 +274,8 @@ internal fun applyLoopbackProxy(proxyBaseUrl: String): Boolean {
                 .addBypassRule("challenges.cloudflare.com")
                 .addBypassRule("*.challenges.cloudflare.com")
                 .build()
-        ProxyController.getInstance().setProxyOverride(config, PROXY_EXECUTOR, PROXY_NOOP)
+        val listener = onApplied?.let { Runnable { it() } } ?: PROXY_NOOP
+        ProxyController.getInstance().setProxyOverride(config, PROXY_EXECUTOR, listener)
         proxyLogger.i { "[INAPP_PROXY:SET] $hostPort" }
         true
     }.getOrElse { error ->

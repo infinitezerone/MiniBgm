@@ -369,10 +369,14 @@ class LocalOAuthProxyServer(
                 }
             }
 
-            // HTTP 代理的 CONNECT：为 https 建裸 TCP 隧道。WebView 自己完成 TLS，这里不做 MITM
-            // （那需要伪造证书）。bgm 系的 https 链接已在改写阶段降级为 http、改走代理转发，
-            // 因此走到这里的都是第三方（Turnstile、自动填充等），它们本就依赖系统网络。
+            // HTTP 代理的 CONNECT：为 https 建裸 TCP 隧道。WebView 自己完成 TLS，这里不做 MITM。
+            // 必须严格校验目标白名单并禁止内网地址，杜绝开放代理与 SSRF 风险。
             if (method.equals("CONNECT", ignoreCase = true)) {
+                if (!isAllowedConnectHost(rawTarget, active)) {
+                    log.w { "[PROXY:REJECT_CONNECT] forbidden CONNECT target: $rawTarget" }
+                    writeForbidden(output)
+                    return
+                }
                 tunnelRawTcp(rawTarget, socket, input, output)
                 return
             }
@@ -524,13 +528,36 @@ class LocalOAuthProxyServer(
         }
     }
 
+    private fun isAllowedConnectHost(
+        rawTarget: String,
+        active: ProxySession,
+    ): Boolean {
+        val host = rawTarget.substringBeforeLast(':', rawTarget).trim().lowercase()
+        // 杜绝任何环回与私有内网 IP，防止 SSRF
+        if (host == "localhost" ||
+            host == "127.0.0.1" ||
+            host == "::1" ||
+            host.startsWith("10.") ||
+            host.startsWith("192.168.") ||
+            host.startsWith("172.")
+        ) {
+            return false
+        }
+        if (isAllowedUpstreamHost(host, active)) return true
+        return ALLOWED_CONNECT_DOMAINS.any { domain ->
+            host == domain || host.endsWith(".$domain")
+        }
+    }
+
     private fun isTextOrHtml(contentType: String): Boolean {
         val lower = contentType.lowercase()
         return lower.contains("text/html") ||
             lower.contains("application/xhtml+xml") ||
             lower.contains("text/javascript") ||
             lower.contains("application/javascript") ||
-            lower.contains("text/css")
+            lower.contains("text/css") ||
+            lower.contains("application/json") ||
+            lower.contains("text/json")
     }
 
     private fun sanitizeSetCookie(cookie: String): String =
@@ -551,6 +578,12 @@ class LocalOAuthProxyServer(
 
         /** 代理允许转发的目标主域白名单（含其所有子域名），防止沦为任意目标的开放代理。 */
         val ALLOWED_PROXY_DOMAINS = listOf("bgm.tv", "bangumi.tv", "chii.in")
+
+        /** CONNECT 隧道允许连接的外部辅助域（如 Cloudflare 挑战）。 */
+        val ALLOWED_CONNECT_DOMAINS =
+            listOf(
+                "challenges.cloudflare.com",
+            )
 
         val EXCLUDED_REQUEST_HEADERS =
             setOf(

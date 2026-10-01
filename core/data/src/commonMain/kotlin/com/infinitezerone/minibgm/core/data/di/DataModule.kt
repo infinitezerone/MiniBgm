@@ -43,6 +43,7 @@ val dataModule =
                 apiService = get<BangumiApiService>(),
                 userCollectionDao = get<UserCollectionDao>(),
                 tokenProvider = get<TokenProvider>(),
+                userPreferences = get<UserPreferencesDataSource>(),
             )
         }
         single<ScheduleRepository> {

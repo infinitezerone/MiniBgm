@@ -572,8 +572,6 @@ class ScheduleViewModel(
                 if (subjectId == null || subjectId <= 0L) {
                     flowOf(null)
                 } else {
-                    // 分集列表仅在 fetchEpisodes 成功后进入本地缓存流，先兜底拉取
-                    subjectRepository.fetchEpisodes(subjectId)
                     combine(
                         subjectRepository.getEpisodesStream(subjectId),
                         collectionRepository.getCollectionStream(subjectId),
@@ -800,7 +798,7 @@ class ScheduleViewModel(
             try {
                 if (isLoggedIn.value) {
                     launch {
-                        collectionRepository.syncWatchingCollections()
+                        collectionRepository.syncWatchingCollections(force = force)
                     }
                 }
                 // 全量快照管线：单次 CDN 快照直拉并直接入库

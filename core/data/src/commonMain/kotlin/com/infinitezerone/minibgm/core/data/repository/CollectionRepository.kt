@@ -116,7 +116,7 @@ interface CollectionRepository : UserDataClearable {
      * 时刻表「我追的」、待补更新、桌面小组件与开播提醒均消费本地收藏流，
      * 本地无数据即表现为「没有在追的番」，故会话建立时必须先执行本同步。
      */
-    suspend fun syncWatchingCollections(): AppResult<Unit>
+    suspend fun syncWatchingCollections(force: Boolean = false): AppResult<Unit>
 }
 
 /**
@@ -135,7 +135,11 @@ class CollectionRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userCollectionDao: UserCollectionDao,
     private val tokenProvider: TokenProvider,
+    private val userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource? = null,
 ) : CollectionRepository {
+    private val syncWatchingMutex = Mutex()
+    private var inMemoryLastSync: Long = 0L
+
     // 活跃用户由凭据库派生（token 存在才有会话）：偏好文件不参与登录判定，
     // 避免云备份恢复出的陈旧标记让未登录设备渲染「在追/待补」内容
     private val activeUserIdFlow: Flow<Long?> =
@@ -635,44 +639,61 @@ class CollectionRepositoryImpl(
         }
     }
 
-    override suspend fun syncWatchingCollections(): AppResult<Unit> =
-        try {
-            val activeUid =
-                tokenProvider.activeUserId.first()
-                    ?: return AppResult.Error(IllegalStateException("未登录账号，无法同步收藏"))
-            val pageSize = 50
-            // 防御服务端 total 异常：最多 20 页（1000 条）封顶
-            val maxPages = 20
-            var offset = 0
-            var total = Int.MAX_VALUE
-            var pages = 0
-            val allDoingCollections = mutableListOf<UserCollectionEntity>()
-            while (offset < total && pages < maxPages) {
-                val page =
-                    apiService.getUserCollections(
-                        username = activeUid.toString(),
-                        // 时刻表/待补/提醒的消费面只有动画条目，无需同步全类型
-                        subjectType = 2,
-                        type = CollectionType.DOING.value,
-                        limit = pageSize,
-                        offset = offset,
-                    )
-                total = page.total
-                allDoingCollections.addAll(page.data.map { it.asEntity(activeUid) })
-                offset += pageSize
-                pages++
+    override suspend fun syncWatchingCollections(force: Boolean): AppResult<Unit> =
+        syncWatchingMutex.withLock {
+            try {
+                val activeUid =
+                    tokenProvider.activeUserId.first()
+                        ?: return AppResult.Error(IllegalStateException("未登录账号，无法同步收藏"))
+
+                if (!force) {
+                    val lastSync =
+                        userPreferences?.userPreferences?.firstOrNull()?.collectionsLastSyncTimestamp
+                            ?: inMemoryLastSync
+                    val hasLocalDoing =
+                        userCollectionDao.getCollectionsByType(activeUid, CollectionType.DOING.value).firstOrNull()?.isNotEmpty() == true
+                    if (hasLocalDoing && (TimeUtils.nowEpochMillis() - lastSync < COLLECTIONS_SYNC_THROTTLE_MILLIS)) {
+                        return AppResult.Success(Unit)
+                    }
+                }
+
+                val pageSize = 50
+                // 防御服务端 total 异常：最多 20 页（1000 条）封顶
+                val maxPages = 20
+                var offset = 0
+                var total = Int.MAX_VALUE
+                var pages = 0
+                val allDoingCollections = mutableListOf<UserCollectionEntity>()
+                while (offset < total && pages < maxPages) {
+                    val page =
+                        apiService.getUserCollections(
+                            username = activeUid.toString(),
+                            // 时刻表/待补/提醒的消费面只有动画条目，无需同步全类型
+                            subjectType = 2,
+                            type = CollectionType.DOING.value,
+                            limit = pageSize,
+                            offset = offset,
+                        )
+                    total = page.total
+                    allDoingCollections.addAll(page.data.map { it.asEntity(activeUid) })
+                    offset += pageSize
+                    pages++
+                }
+                // 全部页面拉取成功后，单事务整体替换本地 DOING 列表，彻底消除已弃番/已看过的陈旧脏数据
+                userCollectionDao.replaceCollectionsByType(
+                    userId = activeUid,
+                    type = CollectionType.DOING.value,
+                    collections = allDoingCollections,
+                )
+                val now = TimeUtils.nowEpochMillis()
+                inMemoryLastSync = now
+                userPreferences?.setCollectionsLastSyncTimestamp(now)
+                AppResult.Success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppResult.Error(e, e.toUserFriendlyMessage("同步在看收藏"))
             }
-            // 全部页面拉取成功后，单事务整体替换本地 DOING 列表，彻底消除已弃番/已看过的陈旧脏数据
-            userCollectionDao.replaceCollectionsByType(
-                userId = activeUid,
-                type = CollectionType.DOING.value,
-                collections = allDoingCollections,
-            )
-            AppResult.Success(Unit)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("同步在看收藏"))
         }
 
     override suspend fun clearUserData(userId: Long) =
@@ -688,6 +709,7 @@ class CollectionRepositoryImpl(
         }
 
     private companion object {
+        const val COLLECTIONS_SYNC_THROTTLE_MILLIS = 6L * 60L * 60L * 1000L // 6 小时节流
         const val CACHE_TTL_MILLIS = 10 * 60 * 1000L // 10 分钟缓存有效期
     }
 }

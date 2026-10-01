@@ -1,9 +1,10 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.common.BgmImageUtils
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
+import com.infinitezerone.minibgm.core.common.toBgmCdnUrl
+import com.infinitezerone.minibgm.core.common.toSecureUrl
 import com.infinitezerone.minibgm.core.common.unescapeHtmlEntities
 import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
@@ -25,6 +26,7 @@ import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotResult
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
@@ -348,9 +350,31 @@ class ScheduleRepositoryImpl(
      * 快照下载失败时保持本地现状（fail-open），等待下一班 CI / 刷新。
      */
     private suspend fun syncAirEvents() {
-        val snapshot =
-            runCatchingCancellable { snapshotService.getSnapshot() }.getOrNull()
+        val cachedEtag =
+            runCatchingCancellable {
+                userPreferences.userPreferences
+                    .firstOrNull()
+                    ?.scheduleSnapshotEtag
+                    ?.ifBlank { null }
+            }.getOrNull()
+        val snapshotResult =
+            runCatchingCancellable { snapshotService.getSnapshot(cachedEtag) }.getOrNull()
                 ?: return
+        val snapshot =
+            when (snapshotResult) {
+                is ScheduleSnapshotResult.NotModified -> {
+                    // 远端快照未变动：304 节省 100% 流量与数据库重写开销
+                    userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
+                    return
+                }
+                is ScheduleSnapshotResult.Modified -> {
+                    val etag = snapshotResult.etag
+                    if (!etag.isNullOrBlank()) {
+                        userPreferences.setScheduleSnapshotEtag(etag)
+                    }
+                    snapshotResult.snapshot
+                }
+            }
         val baseEntities = scheduleDao.getAllSchedulesList()
         val nowMillis = TimeUtils.nowEpochMillis()
         val resolution = resolveWeeklyAiringSchedules(baseEntities, nowMillis, snapshot)
@@ -378,13 +402,7 @@ class ScheduleRepositoryImpl(
         if (entities.isEmpty()) return
 
         val keepIds = entities.map { it.bgmId }.toSet()
-        airEventDao.deleteEventsNotIn(keepIds.toList())
-        // 清除所有历史遗留预测事件（彻底废弃 PREDICTED 假数据）
-        airEventDao.deleteAllPredictedEvents()
-        scheduleDao.deleteSchedulesNotIn(keepIds.toList())
-
         val cutoffDate = TimeUtils.formatEpochSecondsToDate((nowMillis - ROSTER_LOOKBACK_DAYS * DAY_MILLIS) / 1000)
-        scheduleDao.deleteStaleBgmDataSchedules(cutoffDate)
 
         val targets =
             if (!trackingSubjectIds.isNullOrEmpty()) {
@@ -399,15 +417,11 @@ class ScheduleRepositoryImpl(
 
         // 1. 快照自带逐话真值与高清封面（拆季偏移在此生效）
         val (anilistEvents, _, anilistCovers) = fetchAnilistAirEvents(targets, nowMillis, snapshot)
-        // 用偏移后的逐话真值替换同 (subjectId, airAt) 的旧事件（含周排期写入的原始集数事件），
-        // 只替换 airAt 命中的那些以保留窗口外的事件，且整体原子执行
-        anilistEvents.groupBy { it.subjectId }.forEach { (subjectId, events) ->
-            airEventDao.replaceAnilistEventsAt(
-                subjectId = subjectId,
-                airAts = events.map { it.airAtUtc }.distinct(),
-                events = events,
-            )
-        }
+        // 单一事务原子同步播出事件，杜绝中间态导致 UI 重组闪烁
+        airEventDao.syncAirEventsTransaction(
+            keepSubjectIds = keepIds.toList(),
+            eventsGroupedBySubject = anilistEvents.groupBy { it.subjectId },
+        )
 
         // 3. 仲裁回写：next* 字段取未来最近一话（或刚播出的上一话），回补 AniList 高清封面，并剔除已完结僵尸条目
         val allEvents = airEventDao.getAllAirEvents().groupBy { it.subjectId }
@@ -430,12 +444,15 @@ class ScheduleRepositoryImpl(
             entitiesWithCovers.partition { entity ->
                 !isZombieBgmDataSchedule(entity, allEvents[entity.bgmId].orEmpty(), nowMillis)
             }
-        if (zombieEntities.isNotEmpty()) {
-            scheduleDao.deleteBgmDataSchedulesByIds(zombieEntities.map { it.bgmId })
-        }
 
         val reconciled = reconcileScheduleEntities(activeEntities, allEvents, nowMillis)
-        scheduleDao.insertSchedules(reconciled)
+        // 单一事务原子同步时刻表条目
+        scheduleDao.syncSchedulesTransaction(
+            keepBgmIds = keepIds.toList(),
+            cutoffDate = cutoffDate,
+            zombieBgmIds = zombieEntities.map { it.bgmId },
+            reconciledSchedules = reconciled,
+        )
     }
 
     private suspend fun fetchAnilistAirEvents(
@@ -461,7 +478,7 @@ class ScheduleRepositoryImpl(
             val mediaSchedule = schedulesByAnilistId[anilistId] ?: continue
             val coverUrl = mediaSchedule.coverUrl
             if (!coverUrl.isNullOrBlank()) {
-                coversBySubjectId[entity.bgmId] = BgmImageUtils.toSecureUrl(coverUrl)
+                coversBySubjectId[entity.bgmId] = coverUrl.toSecureUrl()
             }
             val episodes = mediaSchedule.episodes
             if (episodes.isEmpty()) continue
@@ -595,10 +612,18 @@ class ScheduleRepositoryImpl(
             // D) 均未映射：直接跳过（CI 侧未收录条目，客户端不发起实时搜索/探测，不生成占位条目）
         }
 
+        // 保持在播状态或在未来仍有播出事件的条目名单，防止单周停更被误删
+        val allActiveAnilistIds =
+            snapshot.items
+                .filter { item ->
+                    item.status != "FINISHED" || item.episodes.any { it.t >= windowStartSeconds }
+                }.map { it.anilistId }
+                .toSet()
+
         persistWeeklyResolution(state)
         return WeeklyResolution(
             entities = state.entitiesByBgmId.values.toList(),
-            rosterAnilistIds = weeklyItems.map { it.anilistId }.toSet(),
+            rosterAnilistIds = allActiveAnilistIds.ifEmpty { weeklyItems.map { it.anilistId }.toSet() },
         )
     }
 
@@ -1021,7 +1046,7 @@ class ScheduleRepositoryImpl(
             bgmId = bgmId,
             title = title.unescapeHtmlEntities(),
             titleCn = titleCn.unescapeHtmlEntities(),
-            coverUrl = BgmImageUtils.optimizeBgmImageUrl(coverUrl),
+            coverUrl = coverUrl.toBgmCdnUrl(),
             ratingScore = ratingScore,
             airDate = airDate,
             beginAtUtc = beginAtUtc,
@@ -1155,8 +1180,8 @@ class ScheduleRepositoryImpl(
                 "ⅻ" to "12",
             )
 
-        /** 非强制刷新的节流阈值：冷启动/切 Tab 的页面重建不重跑全量管线 */
-        const val REFRESH_THROTTLE_MILLIS = 30L * 60L * 1000L
+        /** 非强制刷新的节流阈值：12 小时内不重跑全量管线，杜绝后台无谓唤醒与高频网络请求 */
+        const val REFRESH_THROTTLE_MILLIS = 12L * 60L * 60L * 1000L
 
         private fun buildBilibiliUrl(id: String): String =
             when {

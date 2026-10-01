@@ -383,6 +383,7 @@ class CollectionRepositoryImplTest {
                 apiService = api,
                 userCollectionDao = dao,
                 tokenProvider = tokenProvider,
+                userPreferences = UserPreferencesDataSource(dataStore),
             )
     }
 

@@ -98,8 +98,9 @@ class SubjectRepositoryImpl(
             .map { it[id] }
             .distinctUntilChanged()
 
-    override suspend fun fetchSubjectDetail(id: Long): AppResult<Subject> =
-        try {
+    override suspend fun fetchSubjectDetail(id: Long): AppResult<Subject> {
+        getCachedSubject(id)?.let { return AppResult.Success(it) }
+        return try {
             val subject = apiService.getSubject(id)
             cacheMutex.withLock {
                 subjectAccessOrder.remove(id)
@@ -118,6 +119,7 @@ class SubjectRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("获取条目详情"))
         }
+    }
 
     override fun getCachedSubject(id: Long): Subject? = subjectsState.value[id]
 
@@ -133,7 +135,9 @@ class SubjectRepositoryImpl(
             .map { it[subjectId] ?: false }
             .distinctUntilChanged()
 
-    override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> = loadEpisodes(subjectId, descending = false)
+    override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> =
+        getCachedEpisodes(subjectId)?.takeIf { it.isNotEmpty() }?.let { AppResult.Success(it) }
+            ?: loadEpisodes(subjectId, descending = false)
 
     override suspend fun loadEpisodes(
         subjectId: Long,

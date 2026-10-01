@@ -4,6 +4,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.Serializable
 
@@ -52,29 +54,52 @@ data class ScheduleSnapshotEpisodeDto(
     val t: Long,
 )
 
+sealed interface ScheduleSnapshotResult {
+    data class Modified(
+        val snapshot: ScheduleSnapshotDto,
+        val etag: String?,
+    ) : ScheduleSnapshotResult
+
+    data object NotModified : ScheduleSnapshotResult
+}
+
 interface ScheduleSnapshotService {
     /** 拉取当前快照；所有 CDN 均不可达时抛出异常，由调用方降级到本地缓存。 */
-    suspend fun getSnapshot(): ScheduleSnapshotDto
+    suspend fun getSnapshot(): ScheduleSnapshotDto =
+        when (val result = getSnapshot(null)) {
+            is ScheduleSnapshotResult.Modified -> result.snapshot
+            is ScheduleSnapshotResult.NotModified -> throw IllegalStateException("Unexpected 304 without ETag")
+        }
+
+    /** 支持 ETag / 304 条件请求的快照拉取 */
+    suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult
 }
 
 class ScheduleSnapshotServiceImpl(
     private val client: HttpClient,
     private val cdnUrls: List<String> = DEFAULT_SCHEDULE_SNAPSHOT_URLS,
 ) : ScheduleSnapshotService {
-    override suspend fun getSnapshot(): ScheduleSnapshotDto {
+    override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult {
         var lastException: Throwable? = null
         for (url in cdnUrls) {
             try {
                 val response =
                     client.get(url) {
+                        if (!ifNoneMatchEtag.isNullOrBlank()) {
+                            header(HttpHeaders.IfNoneMatch, ifNoneMatchEtag)
+                        }
                         timeout {
-                            requestTimeoutMillis = 30_000
-                            connectTimeoutMillis = 15_000
-                            socketTimeoutMillis = 30_000
+                            requestTimeoutMillis = 8_000
+                            connectTimeoutMillis = 5_000
+                            socketTimeoutMillis = 8_000
                         }
                     }
+                if (response.status == HttpStatusCode.NotModified) {
+                    return ScheduleSnapshotResult.NotModified
+                }
                 if (response.status == HttpStatusCode.OK) {
-                    return response.body<ScheduleSnapshotDto>()
+                    val etag = response.headers[HttpHeaders.ETag]
+                    return ScheduleSnapshotResult.Modified(response.body<ScheduleSnapshotDto>(), etag)
                 }
             } catch (e: Throwable) {
                 lastException = e
@@ -86,9 +111,11 @@ class ScheduleSnapshotServiceImpl(
     companion object {
         val DEFAULT_SCHEDULE_SNAPSHOT_URLS =
             listOf(
-                "https://cdn.jsdelivr.net/gh/infinitezerone/minibgm-schedule-data@main/data/snapshot.json",
+                "https://ghproxy.net/https://raw.githubusercontent.com/infinitezerone/minibgm-schedule-data/main/data/snapshot.json",
                 "https://fastly.jsdelivr.net/gh/infinitezerone/minibgm-schedule-data@main/data/snapshot.json",
+                "https://raw.githubusercontent.com/infinitezerone/minibgm-schedule-data/main/data/snapshot.json",
                 "https://gcore.jsdelivr.net/gh/infinitezerone/minibgm-schedule-data@main/data/snapshot.json",
+                "https://cdn.jsdelivr.net/gh/infinitezerone/minibgm-schedule-data@main/data/snapshot.json",
             )
     }
 }

@@ -36,10 +36,14 @@ data class UserPreferences(
     val airingReminderNotifiedKeys: List<String> = emptyList(),
     /** bangumi-data CDN 静态数据的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
     val bangumiDataEtag: String = "",
+    /** 放送时刻表快照的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
+    val scheduleSnapshotEtag: String = "",
     /** 播放源后台自动同步频率 */
     val syncInterval: com.infinitezerone.minibgm.core.model.SyncInterval = com.infinitezerone.minibgm.core.model.SyncInterval.WEEKLY,
     /** 上次成功同步 bangumi-data 播放源的时间戳 (毫秒) */
     val bangumiDataLastSyncTimestamp: Long = 0L,
+    /** 上次成功同步「在看」收藏的时间戳 (毫秒) */
+    val collectionsLastSyncTimestamp: Long = 0L,
     /** 放送时刻表默认筛选：false 为全部，true 为仅展示我追的番 */
     val scheduleDefaultOnlyWatching: Boolean = false,
     val showRestrictedContent: Boolean = false,

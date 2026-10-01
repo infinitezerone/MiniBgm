@@ -27,6 +27,13 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const ECH_CONFIG_TTL: Duration = Duration::from_secs(60 * 60);
 const H2_CONNECTION_MAX_AGE: Duration = Duration::from_secs(120);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PoolKey {
+    host: String,
+    port: u16,
+    is_ech: bool,
+}
+
 #[derive(Clone)]
 struct Http2ConnectionEntry {
     sender: http2::SendRequest<Full<Bytes>>,
@@ -151,7 +158,7 @@ pub struct EchHttpClient {
     root_store: RootCertStore,
     tls_configs_with_ech: RwLock<HashMap<String, EchConfigEntry>>,
     tls_config_standard: Arc<ClientConfig>,
-    h2_pool: RwLock<HashMap<String, Http2ConnectionEntry>>,
+    h2_pool: RwLock<HashMap<PoolKey, Http2ConnectionEntry>>,
 }
 
 /// 根据 ECH Config List 字节流构建 ClientConfig
@@ -232,7 +239,7 @@ impl EchHttpClient {
                     },
                 );
                 let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
-                pool.remove(host);
+                pool.retain(|k, _| k.host != host);
                 true
             }
             Err(e) => {
@@ -268,7 +275,7 @@ impl EchHttpClient {
                     },
                 );
                 let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
-                pool.remove(host);
+                pool.retain(|k, _| k.host != host);
                 log::info!(
                     "ECH configuration dynamically updated for {host} from server retry_configs"
                 );
@@ -362,59 +369,92 @@ impl EchHttpClient {
         };
 
         // 优先尝试从 HTTP/2 连接池中复用持久长连接
+        let pool_key = PoolKey {
+            host: host.to_owned(),
+            port,
+            is_ech: enable_ech,
+        };
         let pooled_connection = {
             let pool = self.h2_pool.read().unwrap_or_else(|p| p.into_inner());
-            pool.get(host).cloned()
+            pool.get(&pool_key).cloned()
         };
 
         if let Some(mut entry) = pooled_connection {
             let fresh = entry.created_at.elapsed() <= H2_CONNECTION_MAX_AGE;
-            let ech_ok = !require_ech || entry.ech_accepted;
+            let ech_ok = !enable_ech || entry.ech_accepted;
             if fresh && ech_ok && !entry.sender.is_closed() {
-                let mut request = Request::builder().method(method).uri(uri.clone());
-                for (name, value) in headers {
-                    if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("connection")
-                    {
-                        continue;
-                    }
-                    request = request.header(name, value);
-                }
-                request = request.header("host", &authority);
-                if let Ok(request_body) =
-                    request.body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))
-                {
-                    let request_timeout = Duration::from_millis(timeout_ms.max(3000));
-                    if let Ok(Ok(hyper_response)) =
-                        timeout(request_timeout, entry.sender.send_request(request_body)).await
-                    {
-                        let status_code = hyper_response.status().as_u16();
-                        let response_headers = hyper_response
-                            .headers()
-                            .iter()
-                            .map(|(name, value)| {
-                                (name.to_string(), value.to_str().unwrap_or("").to_string())
-                            })
-                            .collect();
-                        if let Ok(resp) = process_hyper_response(
-                            status_code,
-                            response_headers,
-                            hyper_response,
-                            entry.ech_accepted,
-                            Some(entry.connected_addr.clone()),
-                            None,
-                            stream.as_ref(),
-                        )
-                        .await
+                // 发送前探测连接就绪态：若已被对端关闭（如收到 GOAWAY/RST），ready() 立即返回错误
+                match entry.sender.ready().await {
+                    Ok(_) => {
+                        let mut request = Request::builder().method(method).uri(uri.clone());
+                        for (name, value) in headers {
+                            if name.eq_ignore_ascii_case("host")
+                                || name.eq_ignore_ascii_case("connection")
+                            {
+                                continue;
+                            }
+                            request = request.header(name, value);
+                        }
+                        request = request.header("host", &authority);
+                        let request_body = match request
+                            .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))
                         {
-                            log::debug!("Reused active HTTP/2 connection for {host}");
-                            return Ok(resp);
+                            Ok(b) => b,
+                            Err(e) => return Err(AttemptError::before_request(e).into()),
+                        };
+
+                        let request_timeout = Duration::from_millis(timeout_ms.max(3000));
+                        // 请求已交付网络层：此后的任何超时/断连严禁向后穿透重发，彻底阻断非幂等写重复提交
+                        match timeout(request_timeout, entry.sender.send_request(request_body))
+                            .await
+                        {
+                            Ok(Ok(hyper_response)) => {
+                                let status_code = hyper_response.status().as_u16();
+                                let response_headers = hyper_response
+                                    .headers()
+                                    .iter()
+                                    .map(|(name, value)| {
+                                        (name.to_string(), value.to_str().unwrap_or("").to_string())
+                                    })
+                                    .collect();
+                                let resp = process_hyper_response(
+                                    status_code,
+                                    response_headers,
+                                    hyper_response,
+                                    entry.ech_accepted,
+                                    Some(entry.connected_addr.clone()),
+                                    None,
+                                    stream.as_ref(),
+                                )
+                                .await
+                                .map_err(AttemptError::after_request)?;
+                                log::debug!("Reused active HTTP/2 connection for {host}:{port} (ech={enable_ech})");
+                                return Ok(resp);
+                            }
+                            Ok(Err(error)) => {
+                                let mut pool =
+                                    self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                                pool.remove(&pool_key);
+                                return Err(AttemptError::after_request(error).into());
+                            }
+                            Err(elapsed) => {
+                                let mut pool =
+                                    self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                                pool.remove(&pool_key);
+                                return Err(AttemptError::after_request(elapsed).into());
+                            }
                         }
                     }
+                    Err(_) => {
+                        // 发送前检测到连接已失效：请求完全未发出，安全移除失效连接并放行新建连接流程
+                        let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                        pool.remove(&pool_key);
+                    }
                 }
+            } else {
+                let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                pool.remove(&pool_key);
             }
-            // 复用不成功或连接已关闭，从池中清除
-            let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
-            pool.remove(host);
         }
 
         if !enable_ech {
@@ -594,7 +634,7 @@ async fn try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
-    pool: Option<&RwLock<HashMap<String, Http2ConnectionEntry>>>,
+    pool: Option<&RwLock<HashMap<PoolKey, Http2ConnectionEntry>>>,
 ) -> Result<HttpResponse, AttemptError> {
     async_try_fetch_with_config(
         tls_config,
@@ -622,7 +662,7 @@ async fn async_try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
-    pool: Option<&RwLock<HashMap<String, Http2ConnectionEntry>>>,
+    pool: Option<&RwLock<HashMap<PoolKey, Http2ConnectionEntry>>>,
 ) -> Result<HttpResponse, AttemptError> {
     let host = parsed_url
         .host_str()
@@ -709,9 +749,14 @@ async fn async_try_fetch_with_config(
                     });
 
                     if let Some(pool) = pool {
+                        let pool_key = PoolKey {
+                            host: host.to_owned(),
+                            port: parsed_url.port_or_known_default().unwrap_or(443),
+                            is_ech: ech_accepted,
+                        };
                         let mut guard = pool.write().unwrap_or_else(|p| p.into_inner());
                         guard.insert(
-                            host.to_owned(),
+                            pool_key,
                             Http2ConnectionEntry {
                                 sender: sender.clone(),
                                 ech_accepted,
@@ -1110,5 +1155,53 @@ mod tests {
             ech_entry.config.alpn_protocols,
             vec![b"h2".to_vec(), b"http/1.1".to_vec()]
         );
+    }
+
+    #[test]
+    fn test_pool_key_isolation_and_cleanup() {
+        let key_ech = PoolKey {
+            host: "api.bgm.tv".to_owned(),
+            port: 443,
+            is_ech: true,
+        };
+        let key_std = PoolKey {
+            host: "api.bgm.tv".to_owned(),
+            port: 443,
+            is_ech: false,
+        };
+        let key_other_port = PoolKey {
+            host: "api.bgm.tv".to_owned(),
+            port: 8443,
+            is_ech: true,
+        };
+
+        // 强隔离：同一个 host 下，不同 ECH 状态与端口互不相等
+        assert_ne!(key_ech, key_std);
+        assert_ne!(key_ech, key_other_port);
+
+        let client = EchHttpClient::new().unwrap();
+        {
+            let mut pool = client.h2_pool.write().unwrap();
+            // 验证 retain 逻辑按 host 清理
+            let mut dummy_map = HashMap::new();
+            dummy_map.insert(key_ech.clone(), ());
+            dummy_map.insert(key_std.clone(), ());
+            dummy_map.insert(
+                PoolKey {
+                    host: "example.com".to_owned(),
+                    port: 443,
+                    is_ech: true,
+                },
+                (),
+            );
+            dummy_map.retain(|k, _| k.host != "api.bgm.tv");
+            assert_eq!(dummy_map.len(), 1);
+            assert!(dummy_map.contains_key(&PoolKey {
+                host: "example.com".to_owned(),
+                port: 443,
+                is_ech: true,
+            }));
+            let _ = pool;
+        }
     }
 }

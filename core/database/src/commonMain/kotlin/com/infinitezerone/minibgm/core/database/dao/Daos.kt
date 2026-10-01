@@ -44,6 +44,24 @@ interface AirScheduleDao {
 
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
+
+    /** 单一事务整体同步与裁决时刻表条目，避免中间态产生 UI 抖动 */
+    @Transaction
+    suspend fun syncSchedulesTransaction(
+        keepBgmIds: List<Long>,
+        cutoffDate: String,
+        zombieBgmIds: List<Long>,
+        reconciledSchedules: List<AirScheduleEntity>,
+    ) {
+        deleteSchedulesNotIn(keepBgmIds)
+        deleteStaleBgmDataSchedules(cutoffDate)
+        if (zombieBgmIds.isNotEmpty()) {
+            deleteBgmDataSchedulesByIds(zombieBgmIds)
+        }
+        if (reconciledSchedules.isNotEmpty()) {
+            insertSchedules(reconciledSchedules)
+        }
+    }
 }
 
 @Dao
@@ -82,6 +100,21 @@ interface AirEventDao {
 
     @Query("DELETE FROM air_events WHERE subjectId NOT IN (:keepIds)")
     suspend fun deleteEventsNotIn(keepIds: List<Long>)
+
+    /** 单一事务整体同步与裁决播出事件，避免向外界发射部分被清空的中间态 */
+    @Transaction
+    suspend fun syncAirEventsTransaction(
+        keepSubjectIds: List<Long>,
+        eventsGroupedBySubject: Map<Long, List<AirEventEntity>>,
+    ) {
+        deleteEventsNotIn(keepSubjectIds)
+        deleteAllPredictedEvents()
+        for ((subjectId, events) in eventsGroupedBySubject) {
+            val airAts = events.map { it.airAtUtc }.distinct()
+            if (airAts.isNotEmpty()) deleteAnilistEventsAt(subjectId, airAts)
+            if (events.isNotEmpty()) insertAirEvents(events)
+        }
+    }
 
     @Query(
         "SELECT * FROM air_events " +

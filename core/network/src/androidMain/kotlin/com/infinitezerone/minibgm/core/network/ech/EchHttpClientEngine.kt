@@ -57,6 +57,9 @@ class EchHttpClientEngine(
 
         return withContext(dispatcher) {
             val urlString = data.url.toString()
+            if (!urlString.startsWith("https://", ignoreCase = true)) {
+                throw IOException("EchHttpClientEngine only supports https requests; got: $urlString")
+            }
             val methodString = data.method.value
 
             val headerKeysList = ArrayList<String>()

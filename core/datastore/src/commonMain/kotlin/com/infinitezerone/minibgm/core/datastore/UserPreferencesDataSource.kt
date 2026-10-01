@@ -135,6 +135,12 @@ class UserPreferencesDataSource(
         }
     }
 
+    suspend fun setScheduleSnapshotEtag(etag: String) {
+        dataStore.updateData { current ->
+            current.copy(scheduleSnapshotEtag = etag)
+        }
+    }
+
     suspend fun setSyncInterval(interval: com.infinitezerone.minibgm.core.model.SyncInterval) {
         dataStore.updateData { current ->
             current.copy(syncInterval = interval)
@@ -144,6 +150,12 @@ class UserPreferencesDataSource(
     suspend fun setBangumiDataLastSyncTimestamp(timestamp: Long) {
         dataStore.updateData { current ->
             current.copy(bangumiDataLastSyncTimestamp = timestamp)
+        }
+    }
+
+    suspend fun setCollectionsLastSyncTimestamp(timestamp: Long) {
+        dataStore.updateData { current ->
+            current.copy(collectionsLastSyncTimestamp = timestamp)
         }
     }
 

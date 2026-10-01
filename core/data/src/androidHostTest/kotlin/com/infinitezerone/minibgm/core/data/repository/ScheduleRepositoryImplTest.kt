@@ -30,6 +30,7 @@ import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotEpisodeDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotResult
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
@@ -178,8 +179,8 @@ class ScheduleRepositoryImplTest {
                 customSnapshot = value
             }
 
-        override suspend fun getSnapshot(): ScheduleSnapshotDto {
-            if (customSnapshot != null) return customSnapshot!!
+        override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult {
+            if (customSnapshot != null) return ScheduleSnapshotResult.Modified(customSnapshot!!, etag = "custom-etag")
 
             data class ItemMeta(
                 val weekly: AniListWeeklyScheduleItem?,
@@ -205,50 +206,54 @@ class ScheduleRepositoryImplTest {
                     .getOrPut(id) { mutableListOf() }
                     .addAll(eps.map { ScheduleSnapshotEpisodeDto(n = it.episode, t = it.airAtEpochSeconds) })
             }
-            return ScheduleSnapshotDto(
-                schema = "minibgm-schedule-snapshot/1",
-                generatedAt = "",
-                items =
-                    episodesById.map { (id, eps) ->
-                        val m = meta[id]
-                        val mappedItem =
-                            dataService?.let { ds ->
-                                (ds.dataResult as? BangumiDataResult.Success)?.items?.firstOrNull { item ->
-                                    item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
-                                } ?: ds.monthItems.values.flatMap { it.first }.firstOrNull { item ->
-                                    item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
+            val snapshotDto =
+                ScheduleSnapshotDto(
+                    schema = "minibgm-schedule-snapshot/1",
+                    generatedAt = "",
+                    items =
+                        episodesById.map { (id, eps) ->
+                            val m = meta[id]
+                            val mappedItem =
+                                dataService?.let { ds ->
+                                    (ds.dataResult as? BangumiDataResult.Success)?.items?.firstOrNull { item ->
+                                        item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
+                                    } ?: ds.monthItems.values.flatMap { it.first }.firstOrNull { item ->
+                                        item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
+                                    }
                                 }
-                            }
-                        val bgmId = bgmIdByAnilistId[id] ?: mappedItem?.bgmSubjectId
-                        val titleCn = titleCnByAnilistId[id] ?: mappedItem?.chineseTitle
-                        val airDate = mappedItem?.begin?.substringBefore("T")
-                        val sites =
-                            mappedItem?.sites?.map {
-                                com.infinitezerone.minibgm.core.network.ScheduleSnapshotSiteDto(
-                                    site = it.site,
-                                    id = it.id,
-                                    url = it.url,
-                                )
-                            } ?: emptyList()
-                        ScheduleSnapshotItemDto(
-                            anilistId = id,
-                            bgmId = bgmId,
-                            title = m?.weekly?.titleNative ?: "",
-                            titleCn = titleCn,
-                            countryOfOrigin = "JP",
-                            format = m?.weekly?.format ?: "",
-                            status = "RELEASING",
-                            coverUrl = m?.weekly?.coverUrl ?: m?.media?.coverUrl,
-                            isAdult = m?.weekly?.isAdult ?: false,
-                            startYear = m?.weekly?.startYear ?: 0,
-                            startMonth = m?.weekly?.startMonth ?: 0,
-                            airDate = airDate,
-                            sites = sites,
-                            episodes = eps.distinctBy { it.n }.sortedBy { it.n },
-                        )
-                    },
-            )
+                            val bgmId = bgmIdByAnilistId[id] ?: mappedItem?.bgmSubjectId
+                            val titleCn = titleCnByAnilistId[id] ?: mappedItem?.chineseTitle
+                            val airDate = mappedItem?.begin?.substringBefore("T")
+                            val sites =
+                                mappedItem?.sites?.map {
+                                    com.infinitezerone.minibgm.core.network.ScheduleSnapshotSiteDto(
+                                        site = it.site,
+                                        id = it.id,
+                                        url = it.url,
+                                    )
+                                } ?: emptyList()
+                            ScheduleSnapshotItemDto(
+                                anilistId = id,
+                                bgmId = bgmId,
+                                title = m?.weekly?.titleNative ?: "",
+                                titleCn = titleCn,
+                                countryOfOrigin = "JP",
+                                format = m?.weekly?.format ?: "",
+                                status = "RELEASING",
+                                coverUrl = m?.weekly?.coverUrl ?: m?.media?.coverUrl,
+                                isAdult = m?.weekly?.isAdult ?: false,
+                                startYear = m?.weekly?.startYear ?: 0,
+                                startMonth = m?.weekly?.startMonth ?: 0,
+                                airDate = airDate,
+                                sites = sites,
+                                episodes = eps.distinctBy { it.n }.sortedBy { it.n },
+                            )
+                        },
+                )
+            return ScheduleSnapshotResult.Modified(snapshotDto, etag = "fake-etag")
         }
+
+        override suspend fun getSnapshot(): ScheduleSnapshotDto = (getSnapshot(null) as ScheduleSnapshotResult.Modified).snapshot
     }
 
     private class FakeBangumiApiService : BangumiApiService {
