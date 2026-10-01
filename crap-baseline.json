@@ -2,7 +2,83 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "description": "MiniBgm CRAP Score Baseline Technical Debt Ledger. Known high-complexity methods whitelisted until scheduled refactoring.",
   "version": 1,
-  "updatedAt": "2026-09-09T08:00:00Z",
+  "updatedAt": "2026-10-02T00:00:00Z",
   "threshold": 30.0,
-  "methods": []
+  "methods": [
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "handleSocket",
+      "reason": "Local HTTP reverse proxy server socket handler routing requests and handling auth loopback"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/EchHttpClientEngine$execute$2",
+      "method": "invokeSuspend",
+      "reason": "Ktor HTTP client engine execution bridge for Rust ECH native stack"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "toLoopbackUrl",
+      "reason": "URL rewriter mapping upstream Bangumi domains to local loopback server"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "hasValidSessionCookie",
+      "reason": "Session cookie validation for loopback proxy authentication"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/AdaptiveDnsResolver",
+      "method": "resolveTargetAddrs",
+      "reason": "Multi-tier DNS resolution logic (DoH, local fallback, IP caching)"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "isAllowedConnectHost",
+      "reason": "Security filter whitelist check for proxy CONNECT tunnels"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/AdaptiveDnsResolver",
+      "method": "resolveHostIps",
+      "reason": "Host IP resolution across DnsType strategies"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/EchNativeClient",
+      "method": "nativeFetchCancellable",
+      "reason": "JNI bridge method with coroutine cancellation handler for Rust fetch operations"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "start",
+      "reason": "Local proxy socket server lifecycle and port binding"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "isTextOrHtml",
+      "reason": "Content type sniffing for proxy HTML injection"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ScheduleSnapshotServiceImpl",
+      "method": "getSnapshot",
+      "reason": "Snapshot downloading and unpacking with legacy fallback"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/oauth/LocalOAuthProxyServer",
+      "method": "isRunning",
+      "reason": "Proxy server state and health check"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/BgmTokenService",
+      "method": "verifyToken",
+      "reason": "Token inspection and validation"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
+      "method": "syncAirEvents",
+      "reason": "AniList weekly airing calendar sync with complex date window aggregation"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/AuthRepositoryImpl",
+      "method": "startInAppWebSession",
+      "reason": "In-app WebView session initialization with loopback proxy coordination"
+    }
+  ]
 }
