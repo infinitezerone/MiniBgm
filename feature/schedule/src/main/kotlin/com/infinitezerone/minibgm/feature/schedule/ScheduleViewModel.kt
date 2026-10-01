@@ -241,6 +241,7 @@ class ScheduleViewModel(
     private val selectedWeekday = MutableStateFlow(today().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
     private val isRefreshing = MutableStateFlow(false)
+    private val isSyncing = MutableStateFlow(true)
     private val errorMessage = MutableStateFlow<String?>(null)
     private val showLoginPromptDialog = MutableStateFlow(false)
 
@@ -373,8 +374,8 @@ class ScheduleViewModel(
         }
 
     private val statusFlow =
-        combine(isRefreshing, errorMessage) { refreshing, error ->
-            refreshing to error
+        combine(isRefreshing, isSyncing, errorMessage) { refreshing, syncing, error ->
+            Triple(refreshing, syncing, error)
         }
 
     private data class ExtraScheduleState(
@@ -405,7 +406,7 @@ class ScheduleViewModel(
             (daySchedules, weeklySchedules),
             (watchingIds, collectionMap),
             (pageIndex, onlyWatch),
-            (refreshing, error),
+            (refreshing, syncing, error),
             extra,
             ->
             val (delayMinutes, dismissed, showLogin, loggedIn) = extra
@@ -521,7 +522,8 @@ class ScheduleViewModel(
             }
 
             ScheduleUiState(
-                isLoading = refreshing && daySchedules.values.all { it.isEmpty() } && weeklySchedules.values.all { it.isEmpty() },
+                isLoading =
+                    (syncing || refreshing) && daySchedules.values.all { it.isEmpty() } && weeklySchedules.values.all { it.isEmpty() },
                 isRefreshing = refreshing,
                 error = error,
                 selectedPageIndex = pageIndex,
@@ -546,7 +548,7 @@ class ScheduleViewModel(
                     val initialToday = today()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
-                        isLoading = false,
+                        isLoading = true,
                         isRefreshing = false,
                         selectedPageIndex = TODAY_PAGE_INDEX,
                         selectedWeekday = initialWeekday,
@@ -794,18 +796,23 @@ class ScheduleViewModel(
             if (force) {
                 isRefreshing.value = true
             }
-            if (isLoggedIn.value) {
-                launch {
-                    collectionRepository.syncWatchingCollections()
+            isSyncing.value = true
+            try {
+                if (isLoggedIn.value) {
+                    launch {
+                        collectionRepository.syncWatchingCollections()
+                    }
                 }
-            }
-            // 全量快照管线：单次 CDN 快照直拉并直接入库
-            val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
-            schedulesResult
-                .onSuccess { errorMessage.value = null }
-                .onError { _, message -> errorMessage.value = message }
-            if (force) {
-                isRefreshing.value = false
+                // 全量快照管线：单次 CDN 快照直拉并直接入库
+                val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
+                schedulesResult
+                    .onSuccess { errorMessage.value = null }
+                    .onError { _, message -> errorMessage.value = message }
+            } finally {
+                isSyncing.value = false
+                if (force) {
+                    isRefreshing.value = false
+                }
             }
         }
     }

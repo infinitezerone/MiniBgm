@@ -260,7 +260,7 @@ fun ScheduleScreen(
 
             // 主体：左右手势丝滑翻页的 HorizontalPager
             PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
+                isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
                 onRefresh = { viewModel.refresh(force = true) },
                 modifier = Modifier.fillMaxSize(),
             ) {
