@@ -471,7 +471,9 @@ impl EchHttpClient {
                 .await
                 {
                     Ok(resp) => {
-                        log::debug!("Reused active HTTP/2 connection for {host}:{port} (ech={enable_ech})");
+                        log::debug!(
+                            "Reused active HTTP/2 connection for {host}:{port} (ech={enable_ech})"
+                        );
                         return Ok(resp);
                     }
                     Err(error) => {
@@ -532,7 +534,9 @@ impl EchHttpClient {
                     .await
                     {
                         Ok(resp) => {
-                            log::debug!("Single-flight follower reused HTTP/2 connection for {host}:{port}");
+                            log::debug!(
+                                "Single-flight follower reused HTTP/2 connection for {host}:{port}"
+                            );
                             return Ok(resp);
                         }
                         Err(error) => {
