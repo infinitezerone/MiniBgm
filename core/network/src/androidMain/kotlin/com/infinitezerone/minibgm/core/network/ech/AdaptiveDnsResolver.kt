@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network.ech
 
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,16 @@ internal object AdaptiveDnsResolver {
 
     /** 单次请求最多交给底层尝试的池内候选数，避免用坏节点摊薄请求预算。 */
     private const val MAX_POOL_CANDIDATES = 8
+
+    /** 内存 DNS 缓存 TTL（10 分钟）：消除并发图片请求重复进行同步网络 DNS 查询的巨大开销。 */
+    private const val DNS_CACHE_TTL_MILLIS = 10L * 60 * 1000
+
+    private data class DnsCacheEntry(
+        val ips: List<String>,
+        val expiresAt: Long,
+    )
+
+    private val dnsCache = ConcurrentHashMap<String, DnsCacheEntry>()
 
     /** public_name 之外的候选来源都可能为空，兜底探测需要能在后台跑，不阻塞请求。 */
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -176,11 +187,23 @@ internal object AdaptiveDnsResolver {
         }
     }
 
-    private fun resolveHostIps(host: String): List<String> =
-        runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
-            .onFailure { logger.d { "[DNS] resolution failed for $host: ${it.message}" } }
-            .getOrDefault(emptyList())
-            .filterNot { isPoisonedIp(it) }
+    private fun resolveHostIps(host: String): List<String> {
+        val now = TimeUtils.nowEpochMillis()
+        val cached = dnsCache[host]
+        if (cached != null && cached.expiresAt > now && cached.ips.isNotEmpty()) {
+            return cached.ips
+        }
+        val ips =
+            runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
+                .onFailure { logger.d { "[DNS] resolution failed for $host: ${it.message}" } }
+                .getOrDefault(emptyList())
+                .filterNot { isPoisonedIp(it) }
+
+        if (ips.isNotEmpty()) {
+            dnsCache[host] = DnsCacheEntry(ips, now + DNS_CACHE_TTL_MILLIS)
+        }
+        return ips
+    }
 
     private fun launchBackgroundProbe() {
         if (!backgroundProbeInFlight.compareAndSet(false, true)) return
@@ -199,5 +222,6 @@ internal object AdaptiveDnsResolver {
     /** 仅供测试：清空解析记忆，避免用例之间互相污染。 */
     fun resetForTest() {
         resolvedCandidates.clear()
+        dnsCache.clear()
     }
 }

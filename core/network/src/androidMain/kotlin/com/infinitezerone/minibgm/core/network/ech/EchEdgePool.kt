@@ -67,8 +67,17 @@ internal object EchEdgePool {
         }
     }
 
-    /** 按健康分排序的候选纯 IP（不含端口）。 */
-    fun snapshot(now: Long = TimeUtils.nowEpochMillis()): List<String> = synchronized(lock) { orderLocked(now).map { it.ip } }
+    /** 按健康分排序的候选纯 IP（不含端口）。优先返回未熔断节点，避免坏节点霸占前排拖垮请求。 */
+    fun snapshot(now: Long = TimeUtils.nowEpochMillis()): List<String> =
+        synchronized(lock) {
+            val ordered = orderLocked(now)
+            val healthyCandidates = ordered.filter { healthRank(it, now) < 4 }
+            if (healthyCandidates.isNotEmpty()) {
+                healthyCandidates.map { it.ip }
+            } else {
+                ordered.map { it.ip }
+            }
+        }
 
     /** 池里是否存在"最近成功过且未被连续判死"的节点。为 false 时应启动兜底探测。 */
     fun hasFreshNodes(now: Long = TimeUtils.nowEpochMillis()): Boolean =
@@ -236,10 +245,12 @@ internal object EchEdgePool {
         )
 
     /**
-     * 健康分层。刻意把"从未试过"（次数为 0 但没有成功记录）与"已验证健康"分开——
-     * 只看失败次数会让一个刚入池、从未被试过的 IP 冒充健康节点，把真正验证过的节点挤到后面；
-     * 反过来，曾经能用但已连续失败的节点也不该压过从未试过的候选（在网段被黑洞的环境里，
-     * 未试过的那一个反而更可能通）。
+     * 健康分层：
+     * Rank 0: 黄金节点 —— 曾成功、0 失败且未过期；
+     * Rank 1: 优质新节点 —— 从未失败的新发现候选（0 失败）；
+     * Rank 2: 轻度抖动节点 —— 曾成功过，仅连续失败 1~2 次；
+     * Rank 3: 待观察新节点 —— 未曾成功但仅失败 1~2 次；
+     * Rank 4: 熔断隔离节点 —— 连续失败 >= 3 次（无论历史记录如何，一律打入冷宫）。
      */
     private fun healthRank(
         node: Node,
@@ -247,9 +258,10 @@ internal object EchEdgePool {
     ): Int =
         when {
             node.lastSuccessAtMillis > 0 && node.consecutiveFailures == 0 && !isStale(node, now) -> 0
-            node.lastSuccessAtMillis <= 0 && node.consecutiveFailures == 0 -> 1
-            node.lastSuccessAtMillis > 0 -> 2
-            else -> 3
+            node.consecutiveFailures == 0 -> 1
+            node.lastSuccessAtMillis > 0 && node.consecutiveFailures < UNHEALTHY_FAILURE_THRESHOLD -> 2
+            node.consecutiveFailures < UNHEALTHY_FAILURE_THRESHOLD -> 3
+            else -> 4
         }
 
     private fun isStale(
@@ -264,7 +276,9 @@ internal object EchEdgePool {
             val node = iterator.next().value
             val neverSeenRecently = now - node.lastObservedAtMillis > FORGET_AFTER_MILLIS
             val neverSucceededRecently = now - node.lastSuccessAtMillis > FORGET_AFTER_MILLIS
-            if (neverSeenRecently && neverSucceededRecently) {
+            // 连续失败 10 次及以上的死节点直接清除，绝不留存拖垮调度
+            val permanentlyDead = node.consecutiveFailures >= 10
+            if ((neverSeenRecently && neverSucceededRecently) || permanentlyDead) {
                 iterator.remove()
                 changed = true
             }

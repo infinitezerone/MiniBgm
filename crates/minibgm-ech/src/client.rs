@@ -12,7 +12,7 @@ use rustls::pki_types::{EchConfigListBytes, ServerName};
 use rustls::{ClientConfig, RootCertStore};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use std::time::Instant;
 use tokio::time::timeout;
@@ -32,6 +32,20 @@ struct PoolKey {
     host: String,
     port: u16,
     is_ech: bool,
+}
+
+struct InFlightGuard<'a> {
+    in_flight: &'a Mutex<HashMap<PoolKey, Arc<tokio::sync::Notify>>>,
+    key: PoolKey,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl<'a> Drop for InFlightGuard<'a> {
+    fn drop(&mut self) {
+        let mut map = self.in_flight.lock().unwrap_or_else(|p| p.into_inner());
+        map.remove(&self.key);
+        self.notify.notify_waiters();
+    }
 }
 
 #[derive(Clone)]
@@ -160,6 +174,7 @@ pub struct EchHttpClient {
     tls_configs_with_ech: RwLock<HashMap<String, EchConfigEntry>>,
     tls_config_standard: Arc<ClientConfig>,
     h2_pool: RwLock<HashMap<PoolKey, Http2ConnectionEntry>>,
+    in_flight_connect: Mutex<HashMap<PoolKey, Arc<tokio::sync::Notify>>>,
 }
 
 /// 根据 ECH Config List 字节流构建 ClientConfig
@@ -212,6 +227,7 @@ impl EchHttpClient {
             tls_configs_with_ech: RwLock::new(HashMap::new()),
             tls_config_standard: Arc::new(config_std),
             h2_pool: RwLock::new(HashMap::new()),
+            in_flight_connect: Mutex::new(HashMap::new()),
         })
     }
 
@@ -289,7 +305,65 @@ impl EchHttpClient {
         }
     }
 
-    /// 发起 HTTP/1.1 请求
+    async fn try_send_via_pooled_entry(
+        entry: &mut Http2ConnectionEntry,
+        method: &str,
+        uri: &Uri,
+        authority: &str,
+        headers: &[(String, String)],
+        body: Option<&[u8]>,
+        timeout_ms: u64,
+        stream: Option<&tokio::sync::mpsc::Sender<StreamEvent>>,
+    ) -> Result<HttpResponse, AttemptError> {
+        match entry.sender.ready().await {
+            Ok(_) => {
+                let mut request = Request::builder().method(method).uri(uri.clone());
+                for (name, value) in headers {
+                    if is_disallowed_header(name, true) {
+                        continue;
+                    }
+                    request = request.header(name, value);
+                }
+                request = request.header("host", authority);
+                let request_body = match request
+                    .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))
+                {
+                    Ok(b) => b,
+                    Err(e) => return Err(AttemptError::before_request(e)),
+                };
+
+                let request_timeout = Duration::from_millis(timeout_ms.max(3000));
+                match timeout(request_timeout, entry.sender.send_request(request_body)).await {
+                    Ok(Ok(hyper_response)) => {
+                        let status_code = hyper_response.status().as_u16();
+                        let response_headers = hyper_response
+                            .headers()
+                            .iter()
+                            .map(|(name, value)| {
+                                (name.to_string(), value.to_str().unwrap_or("").to_string())
+                            })
+                            .collect();
+                        process_hyper_response(
+                            status_code,
+                            response_headers,
+                            hyper_response,
+                            entry.ech_accepted,
+                            Some(entry.connected_addr.clone()),
+                            None,
+                            stream,
+                        )
+                        .await
+                        .map_err(AttemptError::after_request)
+                    }
+                    Ok(Err(error)) => Err(AttemptError::after_request(error)),
+                    Err(elapsed) => Err(AttemptError::after_request(elapsed)),
+                }
+            }
+            Err(e) => Err(AttemptError::before_request(e)),
+        }
+    }
+
+    /// 发起 HTTP 请求
     ///
     /// 参数清单与 JNI 层 nativeStart 的签名一一对应（见 lib.rs）；拆成结构体只是把同一份
     /// 契约换个位置，故显式放行 clippy 的参数个数检查。
@@ -384,75 +458,92 @@ impl EchHttpClient {
             let fresh = entry.created_at.elapsed() <= H2_CONNECTION_MAX_AGE;
             let ech_ok = !enable_ech || entry.ech_accepted;
             if fresh && ech_ok && !entry.sender.is_closed() {
-                // 发送前探测连接就绪态：若已被对端关闭（如收到 GOAWAY/RST），ready() 立即返回错误
-                match entry.sender.ready().await {
-                    Ok(_) => {
-                        let mut request = Request::builder().method(method).uri(uri.clone());
-                        for (name, value) in headers {
-                            if is_disallowed_header(name, true) {
-                                continue;
-                            }
-                            request = request.header(name, value);
-                        }
-                        request = request.header("host", &authority);
-                        let request_body = match request
-                            .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))
-                        {
-                            Ok(b) => b,
-                            Err(e) => return Err(AttemptError::before_request(e).into()),
-                        };
-
-                        let request_timeout = Duration::from_millis(timeout_ms.max(3000));
-                        // 请求已交付网络层：此后的任何超时/断连严禁向后穿透重发，彻底阻断非幂等写重复提交
-                        match timeout(request_timeout, entry.sender.send_request(request_body))
-                            .await
-                        {
-                            Ok(Ok(hyper_response)) => {
-                                let status_code = hyper_response.status().as_u16();
-                                let response_headers = hyper_response
-                                    .headers()
-                                    .iter()
-                                    .map(|(name, value)| {
-                                        (name.to_string(), value.to_str().unwrap_or("").to_string())
-                                    })
-                                    .collect();
-                                let resp = process_hyper_response(
-                                    status_code,
-                                    response_headers,
-                                    hyper_response,
-                                    entry.ech_accepted,
-                                    Some(entry.connected_addr.clone()),
-                                    None,
-                                    stream.as_ref(),
-                                )
-                                .await
-                                .map_err(AttemptError::after_request)?;
-                                log::debug!("Reused active HTTP/2 connection for {host}:{port} (ech={enable_ech})");
-                                return Ok(resp);
-                            }
-                            Ok(Err(error)) => {
-                                let mut pool =
-                                    self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
-                                pool.remove(&pool_key);
-                                return Err(AttemptError::after_request(error).into());
-                            }
-                            Err(elapsed) => {
-                                let mut pool =
-                                    self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
-                                pool.remove(&pool_key);
-                                return Err(AttemptError::after_request(elapsed).into());
-                            }
-                        }
+                match Self::try_send_via_pooled_entry(
+                    &mut entry,
+                    method,
+                    &uri,
+                    &authority,
+                    headers,
+                    body,
+                    timeout_ms,
+                    stream.as_ref(),
+                )
+                .await
+                {
+                    Ok(resp) => {
+                        log::debug!("Reused active HTTP/2 connection for {host}:{port} (ech={enable_ech})");
+                        return Ok(resp);
                     }
-                    Err(_) => {
-                        // 发送前检测到连接已失效：请求完全未发出，安全移除失效连接并放行新建连接流程
+                    Err(error) => {
                         let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
                         pool.remove(&pool_key);
+                        if error.request_possibly_sent {
+                            return Err(error.into());
+                        }
                     }
                 }
             } else {
                 let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
                 pool.remove(&pool_key);
+            }
+        }
+
+        // Single-Flight 机制：并发图片/请求去重握手，防连接雪崩
+        let (_leader_guard, follower_notify) = {
+            let mut in_flight = self
+                .in_flight_connect
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            if let Some(notify) = in_flight.get(&pool_key).cloned() {
+                (None, Some(notify))
+            } else {
+                let notify = Arc::new(tokio::sync::Notify::new());
+                in_flight.insert(pool_key.clone(), notify.clone());
+                let guard = InFlightGuard {
+                    in_flight: &self.in_flight_connect,
+                    key: pool_key.clone(),
+                    notify,
+                };
+                (Some(guard), None)
+            }
+        };
+
+        if let Some(notify) = follower_notify {
+            // 作为 Follower 等待 Leader 建立好 HTTP/2 连接（最多 3.5 秒）
+            let _ = tokio::time::timeout(Duration::from_millis(3500), notify.notified()).await;
+            let pooled_connection = {
+                let pool = self.h2_pool.read().unwrap_or_else(|p| p.into_inner());
+                pool.get(&pool_key).cloned()
+            };
+            if let Some(mut entry) = pooled_connection {
+                let fresh = entry.created_at.elapsed() <= H2_CONNECTION_MAX_AGE;
+                let ech_ok = !enable_ech || entry.ech_accepted;
+                if fresh && ech_ok && !entry.sender.is_closed() {
+                    match Self::try_send_via_pooled_entry(
+                        &mut entry,
+                        method,
+                        &uri,
+                        &authority,
+                        headers,
+                        body,
+                        timeout_ms,
+                        stream.as_ref(),
+                    )
+                    .await
+                    {
+                        Ok(resp) => {
+                            log::debug!("Single-flight follower reused HTTP/2 connection for {host}:{port}");
+                            return Ok(resp);
+                        }
+                        Err(error) => {
+                            let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                            pool.remove(&pool_key);
+                            if error.request_possibly_sent {
+                                return Err(error.into());
+                            }
+                        }
+                    }
+                }
             }
         }
 
