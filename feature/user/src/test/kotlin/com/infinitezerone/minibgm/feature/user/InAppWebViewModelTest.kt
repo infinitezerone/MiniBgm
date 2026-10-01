@@ -25,7 +25,7 @@ class InAppWebViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
-    fun beginLoginSession_returnsLoopbackSessionFromRepository() =
+    fun beginLoginSession_returnsSessionFromRepository() =
         runTest {
             val authRepo = FakeAuthRepository(initialLoggedIn = false)
             val viewModel = InAppWebViewModel(authRepo)
@@ -34,7 +34,9 @@ class InAppWebViewModelTest {
 
             assertNotNull(session)
             assertEquals(1, authRepo.beginInAppLoginCallCount)
-            assertTrue(session!!.url.startsWith("http://127.0.0.1"))
+            // 加载地址必须是真实站点（origin 决定第三方校验是否放行），环回基址另存一处
+            assertTrue(session!!.url.startsWith("http://bgm.tv/"))
+            assertTrue(session.proxyBaseUrl.startsWith("http://127.0.0.1"))
             assertTrue(session.cookieValue.isNotBlank())
         }
 
@@ -58,7 +60,7 @@ class InAppWebViewModelTest {
             val session = viewModel.beginBrowseSession(tokenPageUrl)
 
             assertEquals(1, authRepo.beginInAppBrowseCallCount)
-            assertEquals(tokenPageUrl, session?.url)
+            assertEquals(tokenPageUrl.replaceFirst("https://", "http://"), session?.url)
         }
 
     @Test

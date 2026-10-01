@@ -163,17 +163,20 @@ class AuthRepositoryImpl(
         val host = hostOf(upstreamUrl) ?: return null
         if (!isBgmWebHost(host)) return null
         return try {
-            proxy.start(host)
+            val port = proxy.start(host)
             val cookie = proxy.sessionCookie()
-            val loopback = proxy.toLoopbackUrl(upstreamUrl)
-            if (cookie == null || loopback == null) {
+            if (cookie == null) {
                 proxy.stop()
                 null
             } else {
                 InAppWebSession(
-                    url = loopback,
+                    // 用**真实 host** 的 http 地址加载：WebView 的 origin 必须与站点一致，
+                    // Cloudflare Turnstile 这类第三方校验才会放行；scheme 取 http，是为了让
+                    // 改写后的表单 action 直连环回代理时不触发混合内容限制。
+                    url = upstreamUrl.replaceFirst("https://", "http://"),
                     cookieName = cookie.first,
                     cookieValue = cookie.second,
+                    proxyBaseUrl = "http://127.0.0.1:$port",
                 )
             }
         } catch (e: Exception) {

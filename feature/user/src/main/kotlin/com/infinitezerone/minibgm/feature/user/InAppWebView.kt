@@ -13,11 +13,17 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.ProxyConfig
+import androidx.webkit.ProxyController
+import androidx.webkit.WebViewFeature
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.model.InAppWebSession
+import java.util.concurrent.Executor
 
 /** 内置网页 UA：与登录页保持一致，避免 bgm 网页按老旧内核降级渲染。 */
 private const val INAPP_WEB_USER_AGENT =
@@ -26,20 +32,27 @@ private const val INAPP_WEB_USER_AGENT =
 /**
  * 把会话 Cookie 写入 WebView。
  *
- * 环回代理只接受携带该令牌的请求，因此必须在加载任何页面之前写入：否则首个请求就被 403。
- * Cookie 按 host 归属（与端口无关），同名 Cookie 会被覆盖，不会在多轮会话间堆积。
- * 附带 HttpOnly 限制 JavaScript 访问，防止页面脚本读取代理会话令牌。
+ * 代理只接受携带该令牌的请求，因此必须在加载任何页面之前写入：否则首个请求就被 403。
+ * 令牌写在**页面的真实 origin** 上：WebView 经代理发请求时，只有目标域名下的 Cookie 会被带上
+ * （令牌随之进入 Cookie 头，代理校验后转发前剥掉，不会泄漏给上游）。
+ * HttpOnly 限制 JavaScript 访问，防止页面脚本读取代理会话令牌。
  */
 internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
     val cookieManager = CookieManager.getInstance()
     cookieManager.setAcceptCookie(true)
     cookieManager.setCookie(session.url, "${session.cookieName}=${session.cookieValue}; Path=/; HttpOnly")
+    cookieManager.setCookie("http://bgm.tv", "${session.cookieName}=${session.cookieValue}; Domain=.bgm.tv; Path=/; HttpOnly")
     cookieManager.flush()
 }
 
 /**
  * 加载经环回代理渲染的页面（代理侧走原生 ECH 通道）。
  *
+ * 页面以**真实站点的 http 地址**加载（见 [InAppWebSession.url]），因此凡是指向 bgm 系域名的
+ * 请求都由 [forwardToLoopbackProxy] 交给本机环回代理；第三方资源（如 Turnstile）直连。
+ * 这既保住了页面 origin（第三方脚本据此校验），又让流量继续走 ECH 通道。
+ *
+ * @param session 会话：加载地址、环回基址与会话令牌
  * @param onPageLoadingChanged 页面开始/结束加载状态回调
  * @param onProgressChanged 网页加载进度百分比（0..100）
  * @param onTitleReceived 提取到的网页真实标题
@@ -51,7 +64,7 @@ internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun InAppWebView(
-    url: String,
+    session: InAppWebSession,
     modifier: Modifier = Modifier,
     onPageLoadingChanged: (Boolean) -> Unit = {},
     onProgressChanged: (Int) -> Unit = {},
@@ -68,6 +81,14 @@ internal fun InAppWebView(
     val currentOnCanGoBackChanged by rememberUpdatedState(onCanGoBackChanged)
     val currentOnInterceptor by rememberUpdatedState(onInterceptor)
     val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
+
+    // 让 WebView 的流量经过本机环回代理：这是唯一能让 POST 完整到达代理的途径——
+    // WebViewClient 的请求拦截回调不提供请求体，而代理在网络层收包，表单与 AJAX 都不受影响。
+    // 页面因此可以保持真实域名（origin 正确、同源无 CORS），代理设置是全局的，离开时必须清除。
+    DisposableEffect(session.proxyBaseUrl) {
+        applyLoopbackProxy(session.proxyBaseUrl)
+        onDispose { clearLoopbackProxy() }
+    }
 
     AndroidView(
         factory = { context ->
@@ -192,12 +213,12 @@ internal fun InAppWebView(
                         }
                     }
                 currentOnWebViewCreated(this)
-                loadUrl(url)
+                loadUrl(session.url)
             }
         },
         update = { webView ->
-            if (webView.url != url && url.isNotBlank()) {
-                webView.loadUrl(url)
+            if (webView.url != session.url && session.url.isNotBlank()) {
+                webView.loadUrl(session.url)
             }
         },
         onRelease = { webView ->
@@ -210,3 +231,64 @@ internal fun InAppWebView(
         modifier = modifier,
     )
 }
+
+/** 判断当前设备的 WebView 是否支持 PROXY_OVERRIDE 特性。 */
+internal fun isProxyOverrideSupported(): Boolean = WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)
+
+/**
+ * 让 WebView 的流量经过本机环回代理。
+ *
+ * 页面以真实域名加载（origin 必须与站点一致，第三方校验才放行），而 bgm 系域名在该网络下的
+ * 系统解析不可用，因此由代理接管、继续走原生 ECH 通道。选择代理而非请求拦截回调，是因为
+ * 后者**不提供请求体**——表单与 AJAX 的 POST 都无法转发；代理在网络层收包，天然完整。
+ *
+ * @return 是否成功应用代理；若设备底层 WebView 不支持则返回 false
+ */
+internal fun applyLoopbackProxy(proxyBaseUrl: String): Boolean {
+    if (!isProxyOverrideSupported()) {
+        proxyLogger.w { "[INAPP_PROXY:UNSUPPORTED] PROXY_OVERRIDE is not supported on this device" }
+        return false
+    }
+    val hostPort = proxyBaseUrl.removePrefix("http://").removePrefix("https://")
+    return runCatching {
+        val config: ProxyConfig =
+            ProxyConfig
+                .Builder()
+                .addProxyRule(hostPort)
+                // Turnstile 的挑战跑在 challenges.cloudflare.com 及其子域（如
+                // brunhild.challenges.cloudflare.com）。通配写法只匹配子域，apex 必须单独列出，
+                // 否则同一套挑战的两个 host 会走两条不同路径——这类"部分生效"最难排查。
+                .addBypassRule("challenges.cloudflare.com")
+                .addBypassRule("*.challenges.cloudflare.com")
+                .build()
+        ProxyController.getInstance().setProxyOverride(config, PROXY_EXECUTOR, PROXY_NOOP)
+        proxyLogger.i { "[INAPP_PROXY:SET] $hostPort" }
+        true
+    }.getOrElse { error ->
+        proxyLogger.e(error) { "[INAPP_PROXY:FAIL] $hostPort" }
+        false
+    }
+}
+
+/** 清除 WebView 代理设置。该设置是全局的，离开页面必须清理，否则会波及播放捕获用的 WebView。 */
+internal fun clearLoopbackProxy() {
+    if (isProxyOverrideSupported()) {
+        runCatching {
+            ProxyController.getInstance().clearProxyOverride(PROXY_EXECUTOR, PROXY_NOOP)
+        }
+    }
+}
+
+/** 代理设置回调的执行器：直接在当前线程执行，不需要额外调度。 */
+private val PROXY_EXECUTOR: Executor =
+    object : Executor {
+        override fun execute(command: Runnable) = command.run()
+    }
+
+/** 代理设置完成回调：这里没有收尾动作。 */
+private val PROXY_NOOP: Runnable =
+    object : Runnable {
+        override fun run() = Unit
+    }
+
+private val proxyLogger = bgmLogger("Bgm/InAppProxy")

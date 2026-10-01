@@ -49,7 +49,11 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 
 /**
- * 把 WebView 当前的环回地址转回上游公开地址（如把 `http://127.0.0.1:port/topic/1` 转成 `https://bgm.tv/topic/1`）。
+ * 把 WebView 当前的内部地址转回上游公开地址。
+ *
+ * 两种情况：环回地址（`http://127.0.0.1:port/topic/1`）取 path 拼回上游；
+ * 真实域名但被降级成 http 的页面（`http://bgm.tv/topic/1`）则补回 https——
+ * 应用内之所以用 http，只是为了让表单直连环回代理，对外分享必须是 https。
  * 若当前地址已是外部标准链接，则保持原样。
  */
 internal fun resolveUpstreamUrl(
@@ -58,11 +62,15 @@ internal fun resolveUpstreamUrl(
 ): String {
     if (currentUrl.isNullOrBlank()) return "https://$upstreamHost"
     val uri = runCatching { Uri.parse(currentUrl) }.getOrNull() ?: return currentUrl
-    if (uri.host == "127.0.0.1" || uri.host == "localhost") {
-        val path = uri.encodedPath.orEmpty()
-        val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
-        val fragment = uri.encodedFragment?.let { "#$it" }.orEmpty()
+    val host = uri.host
+    val path = uri.encodedPath.orEmpty()
+    val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
+    val fragment = uri.encodedFragment?.let { "#$it" }.orEmpty()
+    if (host == "127.0.0.1" || host == "localhost") {
         return "https://$upstreamHost$path$query$fragment"
+    }
+    if (uri.scheme.equals("http", ignoreCase = true) && !host.isNullOrBlank()) {
+        return "https://$host$path$query$fragment"
     }
     return currentUrl
 }

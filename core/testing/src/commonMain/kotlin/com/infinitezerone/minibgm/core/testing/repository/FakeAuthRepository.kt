@@ -78,9 +78,10 @@ class FakeAuthRepository(
     /** 应用内会话默认值；置 null 可模拟「环回代理不可用」的降级路径。 */
     var inAppWebSession: InAppWebSession? =
         InAppWebSession(
-            url = "http://127.0.0.1:1/oauth/authorize?client_id=test",
+            url = "http://bgm.tv/oauth/authorize?client_id=test",
             cookieName = "minibgm_inapp_web",
             cookieValue = "test_token",
+            proxyBaseUrl = "http://127.0.0.1:1",
         )
 
     override suspend fun beginInAppLogin(): InAppWebSession? {
@@ -90,7 +91,8 @@ class FakeAuthRepository(
 
     override suspend fun beginInAppBrowse(url: String): InAppWebSession? {
         beginInAppBrowseCallCount++
-        return inAppWebSession?.copy(url = url)
+        // 与真实实现一致：加载地址降级为 http，真实流量仍由拦截层经 ECH 引擎转发
+        return inAppWebSession?.copy(url = url.replaceFirst("https://", "http://"))
     }
 
     override fun stopInAppWeb() {

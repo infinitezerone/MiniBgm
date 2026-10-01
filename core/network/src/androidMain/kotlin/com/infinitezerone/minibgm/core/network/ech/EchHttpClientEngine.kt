@@ -10,6 +10,7 @@ import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.Headers
 import io.ktor.http.HeadersBuilder
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpProtocolVersion
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
@@ -18,6 +19,7 @@ import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.InternalAPI
 import io.ktor.utils.io.readAvailable
 import io.ktor.utils.io.writeFully
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -67,6 +69,18 @@ class EchHttpClientEngine(
                 }
             }
 
+            // body 自带的 Content-Type 必须由引擎折进头部。Ktor 的官方引擎（OkHttp / CIO）都会做这件事，
+            // 本引擎此前只转抄 data.headers，于是 `setBody(ByteArrayContent(bytes, ct))` 的类型被丢掉，
+            // 上游收到"有 body 但无 Content-Type"的请求，Fastify 一类框架会以 415 Unsupported Media Type 拒收。
+            // 显式头部优先：只有调用方没自己写 Content-Type 时才补。
+            val bodyContentType = data.body.contentType
+            if (bodyContentType != null &&
+                headerKeysList.none { it.equals(HttpHeaders.ContentType, ignoreCase = true) }
+            ) {
+                headerKeysList.add(HttpHeaders.ContentType)
+                headerValuesList.add(bodyContentType.toString())
+            }
+
             // 处理 Body
             val bodyBytes: ByteArray? =
                 when (val body = data.body) {
@@ -110,6 +124,13 @@ class EchHttpClientEngine(
                         requireEch = config.requireEch && enableEch,
                         echConfig = echConfig,
                     )
+                } catch (cancellation: CancellationException) {
+                    // 取消是控制流而非故障，必须原样转发：
+                    // ① 结构化并发依赖它传播——包成 IOException 会让调用方把"用户离开页面"当成网络错误；
+                    // ② 列表滚动时成片的图片加载被取消，若在此记 error 级日志，正常滚动就是一屏告警噪声。
+                    // 注意 catch 顺序：TimeoutCancellationException 是它的子类，但 body 读循环里的超时
+                    // 已在下面被显式翻译成 IOException，不会走到这里。
+                    throw cancellation
                 } catch (t: Throwable) {
                     logger.e(t) { "EchNativeClient.nativeFetch crashed for $urlString" }
                     throw IOException("ECH native fetch failed: ${t.message}", t)

@@ -77,6 +77,11 @@ internal fun InAppLoginScreen(
         val started = viewModel.beginLoginSession()
         isStarting = false
         if (started != null) {
+            if (!isProxyOverrideSupported()) {
+                // 不支持代理覆盖时无法走原生 ECH 环回代理，平滑降级到系统浏览器
+                openInBrowser()
+                return@LaunchedEffect
+            }
             applyInAppWebSessionCookie(started)
             session = started
         }
@@ -105,7 +110,7 @@ internal fun InAppLoginScreen(
                 val active = session
                 if (active != null) {
                     InAppWebView(
-                        url = active.url,
+                        session = active,
                         modifier = Modifier.fillMaxSize(),
                         onPageLoadingChanged = { loading ->
                             isPageLoading = loading

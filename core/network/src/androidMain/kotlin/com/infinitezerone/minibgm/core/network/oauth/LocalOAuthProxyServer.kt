@@ -6,18 +6,25 @@ import io.ktor.client.request.header
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.content.ByteArrayContent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
@@ -145,16 +152,44 @@ class LocalOAuthProxyServer(
 
     override fun sessionCookie(): Pair<String, String>? = session?.let { SESSION_COOKIE_NAME to it.token }
 
+    /**
+     * 校验请求是否来自本应用的 WebView。
+     *
+     * 规则（遵循 W3C Fetch Metadata 标准）：
+     * 1. 携带合法会话令牌的请求恒放行；
+     * 2. 现代 Chromium WebView 发出的子资源请求（图片/脚本/样式/字体等）均带有 `Sec-Fetch-Dest` 头。
+     *    当目标并非主文档（Sec-Fetch-Dest != "document"）且为只读安全方法（GET/HEAD）时放行，
+     *    彻底解决跨域或子资源未附加 Cookie 导致的页面渲染残缺；
+     * 3. 任何主文档页面跳转（document / navigate）或非只读操作（POST/PUT 等）未带令牌一律 403 阻断，
+     *    防止外部应用借道进行未授权操作。
+     */
     private fun hasValidSessionCookie(
         inboundHeaders: Map<String, String>,
         active: ProxySession,
+        method: String,
     ): Boolean {
         val cookie =
             inboundHeaders.entries
                 .firstOrNull { it.key.equals(HttpHeaders.Cookie, ignoreCase = true) }
                 ?.value
-                ?: return false
-        return cookie.split(';').any { it.trim() == "$SESSION_COOKIE_NAME=${active.token}" }
+        val hasToken = cookie?.split(';')?.any { it.trim() == "$SESSION_COOKIE_NAME=${active.token}" } == true
+        if (hasToken) return true
+
+        val isSafeMethod = method.equals("GET", ignoreCase = true) || method.equals("HEAD", ignoreCase = true)
+        val fetchDest = inboundHeaders.entries.firstOrNull { it.key.equals("sec-fetch-dest", ignoreCase = true) }?.value
+        val isSubResource = fetchDest != null && !fetchDest.equals("document", ignoreCase = true)
+        return isSafeMethod && isSubResource
+    }
+
+    private fun isAllowedUpstreamHost(
+        targetHost: String,
+        active: ProxySession,
+    ): Boolean {
+        val host = targetHost.lowercase()
+        if (host == active.upstreamHost.lowercase()) return true
+        return ALLOWED_PROXY_DOMAINS.any { domain ->
+            host == domain || host.endsWith(".$domain")
+        }
     }
 
     /** 转发前剥掉会话令牌，避免把本应用的代理凭据泄漏给上游。 */
@@ -171,6 +206,100 @@ class LocalOAuthProxyServer(
                 .toByteArray(Charsets.ISO_8859_1),
         )
         output.flush()
+    }
+
+    private fun writePayloadTooLarge(output: BufferedOutputStream) {
+        output.write(
+            "HTTP/1.1 413 Payload Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .toByteArray(Charsets.ISO_8859_1),
+        )
+        output.flush()
+    }
+
+    /**
+     * 处理 HTTP 代理的 CONNECT：在客户端与目标之间双向转抄字节流。
+     *
+     * 隧道内的 TLS 由 WebView 自行协商、代理不参与，因此这条路径**不会经过原生 ECH 通道**。
+     * 它只用于第三方域名——bgm 系的 https 链接已在 HTML 改写时降级为 http，改走代理转发。
+     */
+    private suspend fun tunnelRawTcp(
+        target: String,
+        clientSocket: Socket,
+        clientInput: BufferedInputStream,
+        clientOutput: BufferedOutputStream,
+    ) {
+        val host = target.substringBeforeLast(':', target)
+        val port = target.substringAfterLast(':', "443").toIntOrNull() ?: 443
+        // 必须带连接超时：目标 IP 被运营商黑洞时，裸 `Socket(host, port)` 会挂到系统默认超时
+        // （可达两分钟），WebView 侧表现为页面长时间空白且无法取消。
+        val upstream =
+            runCatching {
+                Socket().apply { connect(InetSocketAddress(host, port), TUNNEL_CONNECT_TIMEOUT_MILLIS) }
+            }.getOrNull()
+        if (upstream == null) {
+            log.w { "[PROXY:TUNNEL_FAIL] $target" }
+            clientOutput.write("HTTP/1.1 502 Bad Gateway\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+            clientOutput.flush()
+            return
+        }
+        log.d { "[PROXY:TUNNEL] $target" }
+        clientOutput.write("HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+        clientOutput.flush()
+        // 隧道内不该有读超时：连接建立时设的 15s 只用于"读请求头不被拖死"，
+        // 带进隧道会让长连接（Turnstile 的心跳/复用）在空闲 15s 后被我们主动掐断。
+        runCatching { clientSocket.soTimeout = 0 }
+        runCatching { upstream.soTimeout = 0 }
+        try {
+            coroutineScope {
+                val toUpstream =
+                    launch(Dispatchers.IO) {
+                        try {
+                            pump(clientInput, upstream.getOutputStream())
+                        } finally {
+                            runCatching { upstream.shutdownOutput() }
+                        }
+                    }
+                val toClient =
+                    launch(Dispatchers.IO) {
+                        try {
+                            pump(upstream.getInputStream(), clientOutput)
+                        } finally {
+                            runCatching { clientSocket.shutdownOutput() }
+                        }
+                    }
+                // 任意一端断开或异常时，协同取消并结束隧道
+                select<Unit> {
+                    toUpstream.onJoin {}
+                    toClient.onJoin {}
+                }
+                toUpstream.cancel()
+                toClient.cancel()
+            }
+        } finally {
+            runCatching { upstream.close() }
+            runCatching { clientSocket.close() }
+        }
+    }
+
+    /**
+     * 隧道内的单向转抄。
+     *
+     * 不能用 `InputStream.copyTo(OutputStream)`：它不会 flush，而隧道两侧的写端是
+     * [BufferedOutputStream]。TLS 握手的前几个报文（ServerHello 等）只有几百字节，
+     * 不足缓冲容量就会一直躺在缓冲区里发不出去，表现为浏览器侧 `SSL handshake failed` /
+     * `ERR_CONNECTION_CLOSED`（实测在 15s 读超时后才失败）。
+     */
+    private fun pump(
+        from: InputStream,
+        to: OutputStream,
+    ) {
+        val buffer = ByteArray(16 * 1024)
+        while (true) {
+            val count = from.read(buffer)
+            if (count < 0) break
+            to.write(buffer, 0, count)
+            to.flush()
+        }
     }
 
     /**
@@ -204,7 +333,25 @@ class LocalOAuthProxyServer(
             val parts = requestLine.trim().split(" ")
             if (parts.size < 2) return
             val method = parts[0]
-            val rawPath = parts[1]
+            val rawTarget = parts[1]
+
+            // 作为 WebView 的 HTTP 代理使用时，请求行是 absolute-form（`GET http://host/path`）——
+            // 这正是选中代理方案的原因：WebView 的拦截回调拿不到 POST body，而走代理时网络层
+            // 的完整请求会原样到达这里。直连环回端口的旧形态仍是 origin-form（`GET /path`）。
+            val resolved =
+                if (rawTarget.startsWith("http://", ignoreCase = true)) {
+                    val uri = runCatching { URI(rawTarget) }.getOrNull()
+                    val host = uri?.host
+                    if (host == null) {
+                        writeForbidden(output)
+                        return
+                    }
+                    host to "${uri.rawPath.orEmpty().ifEmpty { "/" }}${uri.rawQuery?.let { "?$it" }.orEmpty()}"
+                } else {
+                    active.upstreamHost to rawTarget
+                }
+            val targetHost = resolved.first
+            val rawPath = resolved.second
 
             val inboundHeaders = mutableMapOf<String, String>()
             var contentLength = 0
@@ -222,9 +369,30 @@ class LocalOAuthProxyServer(
                 }
             }
 
-            if (!hasValidSessionCookie(inboundHeaders, active)) {
-                log.w { "[PROXY:REJECT] missing session token for $rawPath" }
+            // HTTP 代理的 CONNECT：为 https 建裸 TCP 隧道。WebView 自己完成 TLS，这里不做 MITM
+            // （那需要伪造证书）。bgm 系的 https 链接已在改写阶段降级为 http、改走代理转发，
+            // 因此走到这里的都是第三方（Turnstile、自动填充等），它们本就依赖系统网络。
+            if (method.equals("CONNECT", ignoreCase = true)) {
+                tunnelRawTcp(rawTarget, socket, input, output)
+                return
+            }
+
+            // 限制 targetHost 白名单：防止开放代理
+            if (!isAllowedUpstreamHost(targetHost, active)) {
+                log.w { "[PROXY:REJECT_HOST] forbidden upstream host: $targetHost" }
                 writeForbidden(output)
+                return
+            }
+
+            if (!hasValidSessionCookie(inboundHeaders, active, method)) {
+                log.w { "[PROXY:REJECT] missing or invalid session token for $method $rawPath" }
+                writeForbidden(output)
+                return
+            }
+
+            if (contentLength > MAX_REQUEST_BODY_BYTES) {
+                log.w { "[PROXY:BODY_TOO_LARGE] length $contentLength exceeds $MAX_REQUEST_BODY_BYTES" }
+                writePayloadTooLarge(output)
                 return
             }
 
@@ -242,8 +410,18 @@ class LocalOAuthProxyServer(
                     ByteArray(0)
                 }
 
-            val targetUrl = "https://${active.upstreamHost}$rawPath"
+            val targetUrl = "https://$targetHost$rawPath"
             log.d { "[PROXY:REQ] $method $rawPath -> $targetUrl" }
+
+            // 请求体的 Content-Type 交给 setBody 处理（见下），这里只取出来备用
+            val originalContentType =
+                inboundHeaders.entries
+                    .firstOrNull { it.key.equals(HttpHeaders.ContentType, ignoreCase = true) }
+                    ?.value
+                    ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
+            if (bodyBytes.isNotEmpty()) {
+                log.d { "[PROXY:BODY] $method $rawPath content-type=${originalContentType ?: "<none>"} bytes=${bodyBytes.size}" }
+            }
 
             val response =
                 client.request(targetUrl) {
@@ -255,24 +433,30 @@ class LocalOAuthProxyServer(
                             val forwarded = stripSessionCookie(value)
                             if (forwarded.isNotBlank()) header(name, forwarded)
                         } else if (lower == "referer") {
-                            header(name, value.replace("http://127.0.0.1:${active.port}", "https://${active.upstreamHost}"))
+                            // 页面以 http 加载（origin 需求），而上游是 https：还原后再发出去
+                            header(name, restoreSecureScheme(value))
+                        } else if (lower == "origin") {
+                            header(name, restoreSecureScheme(value))
                         } else {
                             header(name, value)
                         }
                     }
-                    header(HttpHeaders.Host, active.upstreamHost)
+                    header(HttpHeaders.Host, targetHost)
                     if (bodyBytes.isNotEmpty()) {
-                        setBody(bodyBytes)
+                        // 必须显式带上原始 Content-Type：setBody(ByteArray) 会把它重置为
+                        // application/octet-stream，上游会因此拒收（415 Unsupported Media Type）。
+                        setBody(ByteArrayContent(bodyBytes, originalContentType ?: ContentType.Application.OctetStream))
                     }
                 }
 
             val status = response.status
             val responseBytes = response.bodyAsBytes()
             val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
+            log.d { "[PROXY:RESP] ${status.value} ${status.description} $method $rawPath ct=$contentType" }
 
             val finalBody =
                 if (isTextOrHtml(contentType)) {
-                    rewriteToLoopback(responseBytes.decodeToString(), active).encodeToByteArray()
+                    rewriteSecureLinks(responseBytes.decodeToString()).encodeToByteArray()
                 } else {
                     responseBytes
                 }
@@ -285,7 +469,7 @@ class LocalOAuthProxyServer(
                     values.forEach { rawVal ->
                         val finalVal =
                             when (lower) {
-                                "location" -> rewriteToLoopback(rawVal, active)
+                                "location" -> rewriteSecureLinks(rawVal)
                                 "set-cookie" -> sanitizeSetCookie(rawVal)
                                 else -> rawVal
                             }
@@ -309,27 +493,21 @@ class LocalOAuthProxyServer(
     }
 
     /**
-     * 把上游域名地址改写成环回地址，让 WebView 的后续导航继续留在代理内。
-     * 上游为 bgm.tv 时同时覆盖 bangumi.tv / chii.in 别名（旧行为）。
+     * 把页面里指向 bgm 系的 **https** 绝对链接降级为 http。
+     *
+     * 页面本身以 http 加载（origin 必须与站点一致，第三方校验才放行）。若保留 https 链接，
+     * WebView 会为它发起 CONNECT 隧道——那条路径既不经过原生 ECH 通道，也绕不过域名封锁。
+     * 降级为 http 后，请求会以 absolute-form 交给本机代理，继续走 ECH。
      */
-    private fun rewriteToLoopback(
-        text: String,
-        active: ProxySession,
-    ): String {
-        var rewritten =
-            text
-                .replace("https://${active.upstreamHost}", "http://127.0.0.1:${active.port}")
-                .replace("http://${active.upstreamHost}", "http://127.0.0.1:${active.port}")
-        if (active.upstreamHost == BGM_WEB_PROXY_HOST) {
-            rewritten =
-                rewritten
-                    .replace("https://bangumi.tv", "http://127.0.0.1:${active.port}")
-                    .replace("http://bangumi.tv", "http://127.0.0.1:${active.port}")
-                    .replace("https://chii.in", "http://127.0.0.1:${active.port}")
-                    .replace("http://chii.in", "http://127.0.0.1:${active.port}")
-        }
-        return rewritten
-    }
+    private fun rewriteSecureLinks(text: String): String = BGM_HTTPS_LINK.replace(text) { match -> "http://${match.groupValues[1]}" }
+
+    /**
+     * 把指回 bgm 系的 http 链接还原成 https。
+     *
+     * 页面为了保住 origin 以 http 加载，而上游是 https——请求头里的 referer/origin 若不还原，
+     * 服务端看到的是一个 http 来源，校验可能拒绝。
+     */
+    private fun restoreSecureScheme(value: String): String = BGM_HTTP_LINK.replace(value) { match -> "https://${match.groupValues[1]}" }
 
     private fun readLine(input: BufferedInputStream): String? {
         val out = ByteArrayOutputStream()
@@ -365,12 +543,23 @@ class LocalOAuthProxyServer(
             }.joinToString("; ")
 
     private companion object {
+        /** CONNECT 隧道的建连超时；超出即回 502，把失败暴露给 WebView 而不是静默悬挂。 */
+        const val TUNNEL_CONNECT_TIMEOUT_MILLIS = 10_000
+
+        /** 限制代理请求体最大为 10MB，防止恶意大报文消耗内存导致 OOM。 */
+        const val MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024
+
+        /** 代理允许转发的目标主域白名单（含其所有子域名），防止沦为任意目标的开放代理。 */
+        val ALLOWED_PROXY_DOMAINS = listOf("bgm.tv", "bangumi.tv", "chii.in")
+
         val EXCLUDED_REQUEST_HEADERS =
             setOf(
                 "host",
                 "connection",
                 "accept-encoding",
                 "content-length",
+                // 由 setBody 的 ByteArrayContent 携带，避免被覆盖成 octet-stream
+                "content-type",
             )
         val EXCLUDED_RESPONSE_HEADERS =
             setOf(
@@ -378,6 +567,20 @@ class LocalOAuthProxyServer(
                 "transfer-encoding",
                 "content-length",
                 "content-encoding",
+            )
+
+        /** 匹配指向 bgm 系的 https 绝对链接，分组 1 为完整 host（含子域）。 */
+        val BGM_HTTPS_LINK =
+            Regex(
+                """https://((?:[a-z0-9-]+\.)*(?:bgm\.tv|bangumi\.tv|chii\.in))""",
+                RegexOption.IGNORE_CASE,
+            )
+
+        /** 匹配指向 bgm 系的 http 绝对链接，用于把请求头还原成上游的 https 形态。 */
+        val BGM_HTTP_LINK =
+            Regex(
+                """http://((?:[a-z0-9-]+\.)*(?:bgm\.tv|bangumi\.tv|chii\.in))""",
+                RegexOption.IGNORE_CASE,
             )
     }
 }
