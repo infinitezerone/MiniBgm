@@ -39,27 +39,21 @@ import java.time.LocalDate
 private const val PAGE_SIZE = 20
 
 /**
- * 界面上的完整筛选条件：**服务端条件**（年份／季度／排序／能下推的标签）与**客户端条件**
- * （产地／形式）绑成一份不可分状态，作为 UI 的单一输入源。
- *
- * 它**不等于**"一次网络请求"——决定请求的是 [requestKey]。这个分离是本类的核心：
- * 产地切「欧美」、形式开关「短片」这类只改动客户端谓词的筛选不产生新请求，
- * 已取到的条目原样留着，不再退回第一页重取。
+ * 界面上的完整筛选条件：年份／季度／排序／产地／形式。
+ * 所有条件 100% 精确下推服务端，作为 UI 的单一输入源。
  */
 private data class SeasonQuery(
     val year: Int,
     val quarter: SeasonQuarter,
     val origin: SeasonOriginFilter,
-    val forms: Set<SeasonFormFilter>,
+    val form: SeasonFormFilter,
     val sort: SeasonSortOption,
 )
 
 /**
  * 一次网络请求的全部输入 —— **换挡的唯一判据**。
  *
- * 由 [SeasonQuery] 投影而来，只保留真正会写进请求体的部分：产地取 [SeasonOriginFilter.metaTag]，
- * 形式取 [SeasonFormFilter.serverMetaTagOf]。于是「全部→欧美」「正片→正片+短片」这类
- * 下推结果相同的改动折叠成同一个 key，被 `distinctUntilChanged` 挡在门外，一次请求都不多发。
+ * 由 [SeasonQuery] 投影而来，只保留写入请求体的部分。
  */
 private data class RequestKey(
     val year: Int,
@@ -73,16 +67,11 @@ private fun SeasonQuery.requestKey(): RequestKey =
         year = year,
         quarter = quarter,
         sort = sort,
-        // 顺序固定为「产地在前、形式在后」，保证 key 的相等性稳定
-        metaTags = listOfNotNull(origin.metaTag, SeasonFormFilter.serverMetaTagOf(forms)),
+        metaTags = listOfNotNull(origin.metaTag, form.metaTag),
     )
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)
-    // 能精确表达的条件一律下推服务端，并组合成 AND（如「日本 + 剧场版」）。
-    // 产地「欧美」不下推：服务端 meta_tags 是精确单标签匹配，"欧美 vs 只标具体国家"这种"或"表达不了。
-    // 形式里只有"恰好只选剧场版"能下推；正片（TV 或 WEB）与短片（MV 或 PV 或 …）都是"或"关系，
-    // 服务端多值又是 AND、没有排除语法，只能客户端筛。见 SeasonalGuideUiState.filteredSubjects。
     return SearchSubjectsRequest(
         sort = sort.apiValue,
         filter =
@@ -99,7 +88,7 @@ private data class PagedSubjects(
     val subjects: List<Subject> = emptyList(),
     val pageOffset: Int = 0,
     val hasMore: Boolean = false,
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,
     val error: String? = null,
@@ -162,7 +151,7 @@ class SeasonalGuideViewModel(
                         SeasonQuarter.fromDate(currentDate)
                     },
                 origin = SeasonOriginFilter.ALL,
-                forms = SeasonFormFilter.DEFAULT,
+                form = SeasonFormFilter.DEFAULT,
                 sort = SeasonSortOption.DEFAULT,
             ),
         )
@@ -196,6 +185,7 @@ class SeasonalGuideViewModel(
             availableYears = ((currentDate.year + 1) downTo (currentDate.year - 15)).toList(),
             selectedYear = seasonQuery.value.year,
             selectedQuarter = seasonQuery.value.quarter,
+            isLoading = true,
         )
 
     /**
@@ -213,7 +203,7 @@ class SeasonalGuideViewModel(
                     selectedYear = query.year,
                     selectedQuarter = query.quarter,
                     selectedOrigin = query.origin,
-                    selectedForms = query.forms,
+                    selectedForm = query.form,
                     selectedSort = query.sort,
                     viewMode = mode,
                     subjects = pages.subjects,
@@ -247,11 +237,7 @@ class SeasonalGuideViewModel(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
     init {
-        // 分页链只在**请求本身**变化时换挡：先投影成 RequestKey 再 distinctUntilChanged，
-        // 于是「欧美」「正片↔正片+短片」这类只改客户端谓词的筛选既不重取、也不会取消在飞的请求
-        // （客户端谓词一变就取消分页会话，会把进行中的标记位永久留在 true）。
-        // 三条触发流 merge 成一条信号流，每个信号触发一次会话（作为信号流的副作用挂起执行）。
-        // 用 onEach 顺序处理而非 collectLatest——同一请求内的连续信号应当排队。
+        // 分页链在 RequestKey 变化时换挡重查
         seasonQuery
             .map { it.requestKey() }
             .distinctUntilChanged()
@@ -278,24 +264,11 @@ class SeasonalGuideViewModel(
         quarter: SeasonQuarter,
     ) = setQuery { it.copy(year = year, quarter = quarter) }
 
-    /**
-     * 切换产地筛选。
-     *
-     * 日本／国产能下推服务端 → [RequestKey] 变 → 重新取数（服务端筛过，total 与分页才准）；
-     * 全部／欧美不下推 → key 不变 → **一次请求都不发**，只在已取到的条目上重算可见性。
-     */
+    /** 切换产地筛选（全部 / 日本 / 国产）；100% 服务端下推，切换即重查 */
     fun selectOrigin(origin: SeasonOriginFilter) = setQuery { it.copy(origin = origin) }
 
-    /**
-     * 开关一档放送形式。允许把三档全关掉：空集合表示"不筛形式"，与多选筛选的通用语义一致。
-     *
-     * 只有「恰好只选剧场版」这一种组合能下推服务端；其余组合 key 不变，不重新取数，
-     * 改由 [loadMore] 在可见条目不足时补取。
-     */
-    fun toggleForm(form: SeasonFormFilter) =
-        setQuery { current ->
-            current.copy(forms = if (form in current.forms) current.forms - form else current.forms + form)
-        }
+    /** 切换形式筛选（全部 / 剧场版）；100% 服务端下推，切换即重查 */
+    fun selectForm(form: SeasonFormFilter) = setQuery { it.copy(form = form) }
 
     /** 切换排序方式；服务端排序，切换即一次新查询 */
     fun selectSort(sort: SeasonSortOption) = setQuery { it.copy(sort = sort) }
@@ -387,88 +360,79 @@ class SeasonalGuideViewModel(
         key: RequestKey,
         signal: PageSignal,
     ) {
-        val resetting = signal != PageSignal.More
-        // 客户端谓词始终取**最新**的一份：换挡时它可能与 key 一起变（产地/形式同属一次改动），
-        // 而同请求内的触底加载只改它。判定可见性必须用当前值，否则"取到可见条目变多"的判据会错位。
-        val filter = seasonQuery.value
-        // 判据是"可见条目数比会话开始时多"：客户端还压着服务端表达不了的过滤
-        // （产地「欧美」是"或"关系、正片与短片是"以上皆非"），会整页整页地把条目滤掉——
-        // 若只取一页就收工，可见内容与滚动范围都不变，触底加载会卡死（滑到底不动、不转圈也不加载）。
-        val visibleBefore =
-            if (resetting) {
-                0
-            } else {
-                pagedSubjects.value.subjects.count { it.isVisibleUnder(filter) }
-            }
-        if (resetting) {
-            pagedSubjects.value = PagedSubjects()
-        } else {
-            val current = pagedSubjects.value
-            // 并发控制的唯一入口：已在取页/刷新、或已经取尽，就不再发请求
-            if (current.isLoading || current.isRefreshing || current.isLoadingMore || !current.hasMore) return
+        val isRefresh = signal is PageSignal.Refresh
+        val isInitialOrRetry = signal is PageSignal.Initial || signal is PageSignal.Retry
+        val isMore = signal is PageSignal.More
+
+        val current = pagedSubjects.value
+        // 并发控制：
+        // 1. More 信号：若已有任意拉取正在进行或已经没有更多，忽略
+        if (isMore && (current.isLoading || current.isRefreshing || current.isLoadingMore || !current.hasMore)) {
+            return
+        }
+        // 2. Refresh 信号：若正在首屏加载或刷新中，忽略
+        if (isRefresh && (current.isLoading || current.isRefreshing)) {
+            return
         }
 
-        while (true) {
-            val current = pagedSubjects.value
-            pagedSubjects.value =
-                current.copy(
-                    isLoading = signal is PageSignal.Initial || signal is PageSignal.Retry,
-                    isRefreshing = signal is PageSignal.Refresh,
-                    isLoadingMore = signal is PageSignal.More,
-                    error = null,
-                )
+        // 仅在 Initial/Retry 时清空现有列表；Refresh 保持原列表展示（非破坏性刷新）
+        if (isInitialOrRetry) {
+            pagedSubjects.value = PagedSubjects(isLoading = true)
+        } else if (isRefresh) {
+            pagedSubjects.value = current.copy(isRefreshing = true, error = null)
+        } else if (isMore) {
+            pagedSubjects.value = current.copy(isLoadingMore = true, error = null)
+        }
 
-            when (val result = searchRepository.searchSubjectsAdvanced(key.toRequest(), PAGE_SIZE, current.pageOffset)) {
-                is AppResult.Error -> {
-                    val message = result.message
-                    settle(error = message)
-                    // 列表还有内容时失败属于"追加失败"，用 Snackbar 提示即可；
-                    // 列表为空则交由全屏错误态（uiState.error）呈现，不重复弹。
-                    // 直接透传：message 已带仓库层的动作前缀，再拼「加载更多失败：」会叠成两层。
-                    if (pagedSubjects.value.subjects.isNotEmpty()) {
-                        postEffect(UiEffect.ShowMessage(message))
-                    }
-                    return
-                }
+        val offset = if (isMore) current.pageOffset else 0
 
-                is AppResult.Loading -> {
-                    settle()
-                    return
-                }
-
-                is AppResult.Success -> {
-                    val page = result.data.list
-                    // 服务端没有更多条目时必须在此收工：游标按 page.size 前进，空页不会推进 offset，
-                    // 若继续循环就会拿同一个 offset 无限重发（曾让单测挂死 8 分钟）
-                    if (page.isEmpty()) {
-                        // 顺手把 hasMore 关掉，让下一次 More 信号在入口就被 guard 挡住，不再空发请求
-                        pagedSubjects.value = current.copy(hasMore = false)
-                        settle()
-                        return
-                    }
-                    // 游标按服务端返回的原始条数前进，过滤不参与——一路取到底得到的过滤结果才是完整的
+        when (val result = searchRepository.searchSubjectsAdvanced(key.toRequest(), PAGE_SIZE, offset)) {
+            is AppResult.Error -> {
+                val message = result.message
+                if (isRefresh || isMore) {
+                    // 刷新或追加失败：保留原数据展示，仅收起进度并通过 Snackbar 提示
                     pagedSubjects.value =
                         current.copy(
-                            subjects =
-                                if (current.pageOffset == 0) {
-                                    page
-                                } else {
-                                    current.subjects.mergeDistinct(page)
-                                },
-                            pageOffset = current.pageOffset + page.size,
-                            hasMore = current.pageOffset + page.size < result.data.total,
+                            isLoading = false,
+                            isRefreshing = false,
+                            isLoadingMore = false,
                         )
+                    if (current.subjects.isNotEmpty()) {
+                        postEffect(UiEffect.ShowMessage(message))
+                    } else {
+                        pagedSubjects.value = pagedSubjects.value.copy(error = message)
+                    }
+                } else {
+                    // 首屏或重试失败：交由全屏错误态呈现
+                    settle(error = message)
                 }
             }
 
-            val settled = pagedSubjects.value
-            if (settled.subjects.isEmpty() || !settled.hasMore) {
+            is AppResult.Loading -> {
                 settle()
-                return
             }
-            if (settled.pageOffset > 0 && settled.subjects.count { it.isVisibleUnder(filter) } > visibleBefore) {
-                settle()
-                return
+
+            is AppResult.Success -> {
+                val page = result.data.list
+                val updatedSubjects =
+                    if (isMore) {
+                        current.subjects.mergeDistinct(page)
+                    } else {
+                        page
+                    }
+                val newOffset = offset + page.size
+                val hasMore = newOffset < result.data.total && page.isNotEmpty()
+
+                pagedSubjects.value =
+                    PagedSubjects(
+                        subjects = updatedSubjects,
+                        pageOffset = newOffset,
+                        hasMore = hasMore,
+                        isLoading = false,
+                        isRefreshing = false,
+                        isLoadingMore = false,
+                        error = null,
+                    )
             }
         }
     }
@@ -490,7 +454,4 @@ class SeasonalGuideViewModel(
         val known = map { it.id }.toSet()
         return this + page.filter { it.id !in known }
     }
-
-    /** 条目是否落在当前筛选的可见范围内 */
-    private fun Subject.isVisibleUnder(query: SeasonQuery): Boolean = matchesOrigin(this, query.origin) && matchesForm(this, query.forms)
 }

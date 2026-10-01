@@ -287,7 +287,7 @@ fun ExploreEmptyState(
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onReset) {
-            Text("重置为本季热门")
+            Text("重置筛选")
         }
     }
 }

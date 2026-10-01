@@ -247,3 +247,47 @@ data class ExploreUiState(
     val error: String? = null,
     val userMessage: String? = null,
 )
+
+/**
+ * 是否存在生效中的用户自定义筛选条件。
+ *
+ * 判据：只有当用户脱离了顶部的预设频道（selectedMood == null），且设置了非默认的
+ * 时间、标签、分类或排序时，才视为自定义筛选生效。
+ *
+ * 当用户处于预设频道（selectedMood != null）时，所有条件均由预设统领，
+ * 不属于用户自选，不应出现 ActiveFilterPillRow 或在高级筛选图标上亮起 Badge，
+ * 避免在切换预设时突然弹出“清除全部”等令人困惑的 UI。
+ */
+val ExploreUiState.isCustomFilterActive: Boolean
+    get() =
+        selectedMood == null &&
+            (
+                selectedSeason != ALL_TIME_SEASON ||
+                    selectedTags.isNotEmpty() ||
+                    selectedCategory != ExploreCategory.ANIME ||
+                    selectedSort != ExploreSort.RANK
+            )
+
+/** 生成已选自定义筛选条件的紧凑单行摘要文本 */
+val ExploreUiState.customFilterSummary: String
+    get() {
+        val parts = mutableListOf<String>()
+        if (selectedSeason != ALL_TIME_SEASON) {
+            parts.add(selectedSeason.label)
+        }
+        if (selectedCategory != ExploreCategory.ANIME) {
+            parts.add(selectedCategory.label)
+        }
+        selectedTags.forEach { tag ->
+            parts.add("#$tag")
+        }
+        if (selectedSort != ExploreSort.RANK) {
+            parts.add(selectedSort.label)
+        }
+        val count = parts.size
+        return if (parts.isEmpty()) {
+            "未筛选"
+        } else {
+            "${parts.joinToString(" · ")} ($count)"
+        }
+    }

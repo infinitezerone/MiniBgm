@@ -1,8 +1,16 @@
 package com.infinitezerone.minibgm.feature.search.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -10,6 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -21,12 +32,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.feature.search.ALL_TIME_SEASON
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreMood
 import com.infinitezerone.minibgm.feature.search.ExploreSort
+import com.infinitezerone.minibgm.feature.search.ExploreUiState
 import com.infinitezerone.minibgm.feature.search.SeasonOption
+import com.infinitezerone.minibgm.feature.search.customFilterSummary
 
 /** 心境/场景快捷胶囊筛选栏 */
 @Composable
@@ -64,6 +78,118 @@ fun MoodFilterRow(
     }
 }
 
+/**
+ * 自定义筛选整合控制条：
+ * - 默认展示收起态的紧凑单行摘要胶囊与清除全部按钮，高度仅 36dp，绝不挤压瀑布流视野；
+ * - 点击摘要胶囊可平滑展开详细标签 Chips，支持单项移除；
+ * - 列表滑动时自动收起，体验流畅。
+ */
+@Composable
+fun ActiveCustomFilterBar(
+    uiState: ExploreUiState,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onClearSeason: () -> Unit,
+    onClearCategory: () -> Unit,
+    onTagToggle: (String) -> Unit,
+    onClearSort: () -> Unit,
+    onResetAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                onClick = onToggleExpanded,
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(36.dp),
+            ) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.FilterList,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = uiState.customFilterSummary,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        imageVector =
+                            if (expanded) {
+                                Icons.Filled.KeyboardArrowUp
+                            } else {
+                                Icons.Filled.KeyboardArrowDown
+                            },
+                        contentDescription = if (expanded) "收起已选标签" else "展开已选标签",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            TextButton(
+                onClick = onResetAll,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.height(36.dp),
+            ) {
+                Text(
+                    text = "清除全部",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            ActiveFilterPillRow(
+                selectedSeason = uiState.selectedSeason,
+                selectedCategory = uiState.selectedCategory,
+                selectedTags = uiState.selectedTags,
+                selectedSort = uiState.selectedSort,
+                onClearSeason = onClearSeason,
+                onClearCategory = onClearCategory,
+                onTagToggle = onTagToggle,
+                onClearSort = onClearSort,
+                onResetAll = onResetAll,
+                showResetButton = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
 /** 生效中的筛选条件快捷展示与一键清除栏 */
 @Composable
 fun ActiveFilterPillRow(
@@ -77,9 +203,18 @@ fun ActiveFilterPillRow(
     onClearSort: () -> Unit,
     onResetAll: () -> Unit,
     modifier: Modifier = Modifier,
+    showResetButton: Boolean = true,
 ) {
+    val hasFilters =
+        selectedSeason != ALL_TIME_SEASON ||
+            selectedTags.isNotEmpty() ||
+            selectedCategory != ExploreCategory.ANIME ||
+            selectedSort != ExploreSort.RANK
+
+    if (!hasFilters) return
+
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier,
@@ -111,7 +246,7 @@ fun ActiveFilterPillRow(
             }
         }
 
-        if (selectedSort != ExploreSort.HEAT) {
+        if (selectedSort != ExploreSort.RANK) {
             item {
                 ActiveFilterChip(
                     text = selectedSort.label,
@@ -120,16 +255,18 @@ fun ActiveFilterPillRow(
             }
         }
 
-        item {
-            TextButton(
-                onClick = onResetAll,
-                contentPadding = PaddingValues(horizontal = 8.dp),
-            ) {
-                Text(
-                    text = "清除全部",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+        if (showResetButton) {
+            item {
+                TextButton(
+                    onClick = onResetAll,
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    Text(
+                        text = "清除全部",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }

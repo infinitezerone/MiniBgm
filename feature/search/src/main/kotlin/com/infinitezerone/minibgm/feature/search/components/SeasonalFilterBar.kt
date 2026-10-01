@@ -49,7 +49,7 @@ fun SeasonalFilterBar(
     onOpenSeasonPicker: () -> Unit,
     onToggleViewMode: () -> Unit,
     onSelectOrigin: (SeasonOriginFilter) -> Unit,
-    onToggleForm: (SeasonFormFilter) -> Unit,
+    onSelectForm: (SeasonFormFilter) -> Unit,
     onSelectSort: (SeasonSortOption) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -179,7 +179,7 @@ fun SeasonalFilterBar(
                     }
                 }
 
-                // 二级筛选：放送形式（可多选）
+                // 二级筛选：放送形式（全部 / 剧场版）
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -187,8 +187,8 @@ fun SeasonalFilterBar(
                     SeasonFormFilter.entries.forEach { form ->
                         SeasonalGuideFilterChip(
                             label = form.label,
-                            selected = form in uiState.selectedForms,
-                            onClick = { onToggleForm(form) },
+                            selected = uiState.selectedForm == form,
+                            onClick = { onSelectForm(form) },
                         )
                     }
                 }

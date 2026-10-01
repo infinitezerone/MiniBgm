@@ -78,12 +78,17 @@ class ExploreViewModel(
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
     private val communityRepository: CommunityRepository? = null,
+    autoStart: Boolean = true,
 ) : ViewModel() {
     // ── 输入：用户意图（仅有的可变状态）──
     private val exploreQuery = MutableStateFlow(ExploreQuery())
     private val loginPromptVisible = MutableStateFlow(false)
     private val userMessage = MutableStateFlow<String?>(null)
     private val hotComments = MutableStateFlow<Map<Long, SubjectComment>>(emptyMap())
+
+    // ── 延迟加载控制：Tab 首次展示时才激活拉取 ──
+    private var hasStarted = false
+    private val startTrigger = MutableSharedFlow<Unit>(replay = 1)
 
     // ── 取页信号源 ──
     private val retryTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -141,12 +146,28 @@ class ExploreViewModel(
         )
 
     init {
-        exploreQuery
-            .onEach {
-                pagedSubjects.value = ExplorePagedSubjects()
-                hotComments.value = emptyMap()
-            }.flatMapLatest { query -> onPageSignals(query) }
-            .launchIn(viewModelScope)
+        if (autoStart) {
+            loadIfNeeded()
+        }
+
+        startTrigger
+            .flatMapLatest {
+                exploreQuery
+                    .onEach {
+                        pagedSubjects.value = ExplorePagedSubjects(isLoading = true)
+                        hotComments.value = emptyMap()
+                    }.flatMapLatest { query -> onPageSignals(query) }
+            }.launchIn(viewModelScope)
+    }
+
+    /**
+     * 延迟加载入口：仅当 Tab 首次在屏幕上展示时才发起数据请求，避免后台空耗流量与性能
+     */
+    fun loadIfNeeded() {
+        if (!hasStarted) {
+            hasStarted = true
+            startTrigger.tryEmit(Unit)
+        }
     }
 
     private fun onPageSignals(query: ExploreQuery): Flow<ExplorePageSignal> =
@@ -274,6 +295,7 @@ class ExploreViewModel(
     }
 
     private inline fun setQuery(transform: (ExploreQuery) -> ExploreQuery) {
+        loadIfNeeded()
         val next = transform(exploreQuery.value)
         if (next != exploreQuery.value) {
             exploreQuery.value = next
@@ -287,6 +309,7 @@ class ExploreViewModel(
                 mood = mood,
                 tags = mood.tags.toSet(),
                 sort = mood.sort,
+                category = ExploreCategory.ANIME,
                 season = ALL_TIME_SEASON,
             )
         }
@@ -367,14 +390,17 @@ class ExploreViewModel(
     }
 
     fun refresh() {
+        loadIfNeeded()
         refreshTrigger.tryEmit(Unit)
     }
 
     fun retry() {
+        loadIfNeeded()
         retryTrigger.tryEmit(Unit)
     }
 
     fun loadMore() {
+        loadIfNeeded()
         loadMoreTrigger.tryEmit(Unit)
     }
 }

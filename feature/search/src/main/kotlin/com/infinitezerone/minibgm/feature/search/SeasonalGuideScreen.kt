@@ -63,8 +63,6 @@ import kotlinx.coroutines.flow.first
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-private const val MIN_VISIBLE_ITEMS = 12
-
 /**
  * 季度片单界面（独立二级页容器）
  */
@@ -159,7 +157,13 @@ fun SeasonalGuideContent(
         filterExpanded = false
     }
 
-    LaunchedEffect(uiState.selectedOrigin, uiState.selectedForms) {
+    LaunchedEffect(
+        uiState.selectedYear,
+        uiState.selectedQuarter,
+        uiState.selectedSort,
+        uiState.selectedOrigin,
+        uiState.selectedForm,
+    ) {
         when (uiState.viewMode) {
             SeasonalViewMode.LIST -> listState.scrollToItem(0)
             SeasonalViewMode.POSTER -> gridState.scrollToItem(0)
@@ -197,17 +201,6 @@ fun SeasonalGuideContent(
         }
     }
 
-    LaunchedEffect(uiState.viewMode, uiState.filteredSubjects.size, uiState.hasMore, uiState.isLoading) {
-        val state = uiState
-        if (state.hasMore &&
-            !state.isLoading &&
-            !state.isLoadingMore &&
-            state.filteredSubjects.size < MIN_VISIBLE_ITEMS
-        ) {
-            viewModel.loadMore()
-        }
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -225,9 +218,9 @@ fun SeasonalGuideContent(
                         filterExpanded = false
                         viewModel.selectOrigin(origin)
                     },
-                    onToggleForm = { form ->
+                    onSelectForm = { form ->
                         filterExpanded = false
-                        viewModel.toggleForm(form)
+                        viewModel.selectForm(form)
                     },
                     onSelectSort = { sort ->
                         filterExpanded = false
@@ -235,7 +228,7 @@ fun SeasonalGuideContent(
                     },
                 )
 
-                if (uiState.isLoading && uiState.subjects.isNotEmpty()) {
+                if ((uiState.isLoading || uiState.isLoadingMore) && uiState.subjects.isNotEmpty()) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
@@ -256,7 +249,7 @@ fun SeasonalGuideContent(
                         )
                     }
 
-                    !uiState.isLoading && uiState.filteredSubjects.isEmpty() -> {
+                    !uiState.isLoading && uiState.subjects.isEmpty() -> {
                         SeasonalGuideEmptyState(
                             selectedYear = uiState.selectedYear,
                             selectedQuarter = uiState.selectedQuarter,
@@ -300,6 +293,23 @@ fun SeasonalGuideContent(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            } else if (uiState.error != null && uiState.hasMore) {
+                                item(key = "loadMoreRetry") {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        TextButton(onClick = viewModel::loadMore) {
+                                            Text(
+                                                text = "加载失败，点击重试",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -350,6 +360,23 @@ fun SeasonalGuideContent(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+                            } else if (uiState.error != null && uiState.hasMore) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        TextButton(onClick = viewModel::loadMore) {
+                                            Text(
+                                                text = "加载失败，点击重试",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
                                     }
                                 }
                             }

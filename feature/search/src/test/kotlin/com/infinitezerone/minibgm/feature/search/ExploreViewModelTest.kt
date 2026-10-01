@@ -95,6 +95,101 @@ class ExploreViewModelTest {
         }
 
     @Test
+    fun moodPresets_doNotTriggerCustomFilterActive_preventingUnexpectedClearAllRow() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            // 初始状态处于 MASTERPIECE 预设，不是自定义筛选
+            assertFalse(viewModel.uiState.value.isCustomFilterActive)
+
+            // 遍历所有预设，均不得被判定为自定义筛选，避免展示奇怪的“清除全部”条
+            ExploreMood.entries.forEach { mood ->
+                viewModel.onMoodSelect(mood)
+                advanceUntilIdle()
+                assertEquals(mood, viewModel.uiState.value.selectedMood)
+                assertFalse(
+                    "预设 ${mood.label} 不应激活自定义筛选栏",
+                    viewModel.uiState.value.isCustomFilterActive,
+                )
+            }
+        }
+
+    @Test
+    fun manualFiltering_activatesCustomFilterAndClearingPresetsIt() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            // 手动勾选标签，脱离预设并激活自定义筛选
+            viewModel.onTagToggle("科幻")
+            advanceUntilIdle()
+            assertNull(viewModel.uiState.value.selectedMood)
+            assertTrue(viewModel.uiState.value.isCustomFilterActive)
+
+            // 重新选择任一预设，恢复预设模式并重置自定义状态
+            viewModel.onMoodSelect(ExploreMood.MASTERPIECE)
+            advanceUntilIdle()
+            assertEquals(ExploreMood.MASTERPIECE, viewModel.uiState.value.selectedMood)
+            assertFalse(viewModel.uiState.value.isCustomFilterActive)
+        }
+
+    @Test
+    fun customFilterSummary_correctlyFormatsActiveFilters() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            viewModel.onTagToggle("科幻")
+            viewModel.onTagToggle("冒险")
+            advanceUntilIdle()
+
+            assertEquals("#科幻 · #冒险 (2)", viewModel.uiState.value.customFilterSummary)
+
+            viewModel.onSortSelect(ExploreSort.HEAT)
+            advanceUntilIdle()
+            assertEquals("#科幻 · #冒险 · 热门排行 (3)", viewModel.uiState.value.customFilterSummary)
+        }
+
+    @Test
+    fun lazyLoading_whenAutoStartIsFalse_doesNotQueryUntilLoadIfNeeded() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel =
+                ExploreViewModel(
+                    searchRepository = searchRepository,
+                    collectionRepository = collectionRepository,
+                    authRepository = authRepository,
+                    autoStart = false,
+                )
+            advanceUntilIdle()
+
+            // 尚未切换显示时，不发起任何网络请求
+            assertEquals(0, searchRepository.advancedSearchCallCount)
+
+            // 切换展示后，触发首次加载
+            viewModel.loadIfNeeded()
+            advanceUntilIdle()
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+
+            // 再次触发 loadIfNeeded（例如切回 Tab 0 又切回 Tab 1），不重复请求
+            viewModel.loadIfNeeded()
+            advanceUntilIdle()
+            assertEquals(1, searchRepository.advancedSearchCallCount)
+        }
+
+    @Test
     fun toggleWishWhenNotLoggedInShowsLoginDialog() =
         runTest {
             val searchRepository = FakeSearchRepository()

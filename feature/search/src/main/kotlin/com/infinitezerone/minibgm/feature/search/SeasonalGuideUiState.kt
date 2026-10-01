@@ -96,131 +96,35 @@ enum class SeasonalViewMode {
 /**
  * 一级筛选：作品产地。
  *
- * 取值来自 Bangumi 官方元标签 `meta_tags`，与高级搜索的 `filter.meta_tags` 同源。
- * 日本／国产都能用单个标签精确下推；[WESTERN] 不行，原因见该档注释。
+ * 100% 服务端下推（`filter.meta_tags`），零客户端过滤，分页游标与 total 严格对齐。
  */
 enum class SeasonOriginFilter(
     val label: String,
-    /** 下推服务端用的 `meta_tags` 值；null 表示服务端不追加该条件（改由客户端筛，或本就无需筛） */
     val metaTag: String?,
 ) {
     ALL("全部", null),
-    JAPAN("日本", META_TAG_JAPAN),
-    CHINA("国产", META_TAG_CHINA),
-
-    /**
-     * 欧美。
-     *
-     * 服务端的 `meta_tags` 是**精确单标签匹配、且多值为 AND**，没有"或"。实测当季 20 条欧美条目里，
-     * 只有 7 条带「欧美」标签、15 条带「美国」，两者重叠仅 5 条——用任何一个单标签下推都会漏掉一半以上。
-     * 因此这一档服务端不过滤，改在客户端按 [META_TAGS_WESTERN] 整个集合筛。
-     */
-    WESTERN("欧美", null),
-    ;
-
-    /**
-     * 首播列表是否还需要客户端补过滤。
-     *
-     * 服务端筛过的档位不能再客户端筛一遍：两端口径不完全一致时会误杀。
-     */
-    val needsClientFilter: Boolean
-        get() = this == WESTERN
+    JAPAN("日本", "日本"),
+    CHINA("国产", "中国"),
 }
 
 /**
- * 二级筛选：放送形式（**多选**）。
+ * 二级筛选：放送形式。
  *
- * 早先按 `platform` 字段的取值拆成 TV / 网络 / 剧场版 / 短片 四档单选，是照着数据字段的形状设计界面，
- * 结果既反直觉又冗余。实测当季 240 条：
- * - TV 87 / WEB 75，两者**严格互斥**（没有任何条目同时带这两个 meta_tag），等于把占 67.5% 的
- *   同一类东西（正常时长的连载番）硬劈两半、逼用户二选一；
- * - TV/WEB 与产地几乎完全重合（日本条目 82% 是 TV、国产条目 98% 是 WEB），这一层基本是上一级的
- *   重复编码，还会组合出近乎空集——选「国产 + TV」只剩 1 部，界面看起来像坏了。
- *
- * 改按**内容形态**分成三档并放开为多选：用户真正会同时关心的是「正片 + 剧场版」，
- * 「在哪个平台播」没人关心。三档互斥且恰好覆盖 100%（正片 67.1%、剧场版 12.9%、短片 20.0%）。
- *
- * **全不选 = 不筛形式**（显示全部），与多选筛选的通用语义一致。
+ * 仅保留全集与官方 API 唯一下推精确支持的「剧场版」（`filter.meta_tags: ["剧场版"]`）。
+ * 100% 服务端下推，无需任何客户端补筛。
  */
 enum class SeasonFormFilter(
     val label: String,
+    val metaTag: String?,
 ) {
-    /**
-     * 正常时长的连载番：TV + 网络 + OVA。
-     * **只能客户端筛**——服务端 `meta_tags` 多值是 AND 语义，表达不了「TV 或 WEB」。
-     */
-    MAIN("正片"),
-
-    /** 剧场版。恰好只选中这一档时可下推服务端，此时分页总数是准的（见 [serverMetaTagOf]） */
-    MOVIE("剧场版"),
-
-    /** 片段型：MV / PV / CM / 短片。同样是「或」关系（MV 或 PV 或 …），服务端表达不了 */
-    SHORT("短片 / MV"),
+    ALL("全部", null),
+    MOVIE("剧场版", "剧场版"),
     ;
 
     companion object {
-        /** 默认只开「正片」——导视的首要诉求是「这季有哪些连载番在播」 */
-        val DEFAULT: Set<SeasonFormFilter> = setOf(MAIN)
-
-        /**
-         * 能整体下推服务端的组合，返回对应的 `meta_tags` 值；表达不了则为 null。
-         *
-         * 只有「恰好只选剧场版」这一种情况服务端能精确表达（`meta_tags: ["剧场版"]`）。
-         * 正片与短片都是「或」关系，而服务端多值 meta_tags 是 AND、又没有排除语法。
-         */
-        fun serverMetaTagOf(forms: Set<SeasonFormFilter>): String? = if (forms == setOf(MOVIE)) META_TAG_MOVIE else null
+        val DEFAULT = ALL
     }
 }
-
-private const val META_TAG_JAPAN = "日本"
-private const val META_TAG_CHINA = "中国"
-private const val META_TAG_MOVIE = "剧场版"
-
-/**
- * 判定产地为欧美用的元标签集合。
- *
- * 「欧美」这个聚合标签只覆盖了一部分条目——真实数据里大量条目**只标了具体国家**没标「欧美」
- * （当季 20 条欧美条目中只有 7 条带「欧美」），所以判定要取整个集合。
- */
-private val META_TAGS_WESTERN = setOf("欧美", "美国", "英国", "法国", "加拿大", "德国")
-
-/** 条目是否符合产地筛选 */
-fun matchesOrigin(
-    subject: Subject,
-    origin: SeasonOriginFilter,
-): Boolean =
-    when (origin) {
-        SeasonOriginFilter.ALL -> true
-        SeasonOriginFilter.JAPAN -> META_TAG_JAPAN in subject.metaTags
-        SeasonOriginFilter.CHINA -> META_TAG_CHINA in subject.metaTags
-        SeasonOriginFilter.WESTERN -> subject.metaTags.any { it in META_TAGS_WESTERN }
-    }
-
-/**
- * 条目属于哪一档形式。三档互斥，恰好覆盖全部条目（实测当季 240 条：161 / 31 / 48）。
- *
- * 先判片段型：[Subject.isShortForm] 已经同时看 `platform` 与片段类元标签——
- * 真实数据里有 `platform` 标成 WEB 却带「短片」标签的条目，只看 `platform` 会漏。
- */
-fun formBucketOf(subject: Subject): SeasonFormFilter =
-    when {
-        subject.isShortForm -> SeasonFormFilter.SHORT
-        subject.platform == META_TAG_MOVIE || META_TAG_MOVIE in subject.metaTags -> SeasonFormFilter.MOVIE
-        else -> SeasonFormFilter.MAIN
-    }
-
-/**
- * 条目是否符合形式筛选。
- *
- * 空集合表示「不筛形式」；否则按 [formBucketOf] 归类后看该档是否被选中。
- *
- * 服务端只在「恰好只选剧场版」时筛过一遍，且其判据与 [formBucketOf] 同源，重复筛不会误杀；
- * 其余组合服务端都表达不了，只能靠这里补。
- */
-fun matchesForm(
-    subject: Subject,
-    forms: Set<SeasonFormFilter>,
-): Boolean = forms.isEmpty() || formBucketOf(subject) in forms
 
 /**
  * 排序方式。只有服务端真实支持的取值才进得来：
@@ -256,8 +160,7 @@ data class SeasonalGuideUiState(
     val currentYear: Int = 2026,
     val currentQuarter: SeasonQuarter = SeasonQuarter.WINTER,
     val selectedOrigin: SeasonOriginFilter = SeasonOriginFilter.ALL,
-    /** 二级筛选可多选；**空集合 = 不筛形式**（显示全部） */
-    val selectedForms: Set<SeasonFormFilter> = SeasonFormFilter.DEFAULT,
+    val selectedForm: SeasonFormFilter = SeasonFormFilter.DEFAULT,
     /** 排序方式；服务端排序，切换即一次新查询 */
     val selectedSort: SeasonSortOption = SeasonSortOption.DEFAULT,
     /** 视图形态；纯展示偏好，切换不需要重新取数 */
@@ -277,32 +180,18 @@ data class SeasonalGuideUiState(
     val isLoggedIn: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
 ) {
-    /**
-     * 首播列表的可见条目。
-     *
-     * 产地仍是「日本／国产下推服务端，欧美客户端兜」——服务端筛过的档位判据与
-     * [matchesOrigin] 同源，不重复筛也不会误杀。形式则一律在这里补：服务端只在
-     * 「恰好只选剧场版」时筛过一次（见 [SeasonFormFilter.serverMetaTagOf]），其余组合它表达不了。
-     *
-     * 过滤不改变翻页游标——游标始终按服务端返回的原始条数前进，所以一路加载到底得到的就是完整结果。
-     */
+    /** 筛选完全下推服务端，可见条目即服务端返回的原始条目 */
     val filteredSubjects: List<Subject>
-        get() =
-            subjects.filter { subject ->
-                val originMatches = !selectedOrigin.needsClientFilter || matchesOrigin(subject, selectedOrigin)
-                originMatches && matchesForm(subject, selectedForms)
-            }
+        get() = subjects
 
     /**
-     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 正片」「正片+剧场版」「全部」。
-     *
-     * 产地为「全部」时不显示它，避免出现「全部 · 全部」这种同义重复；两者都无约束时回落为「全部」。
+     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 剧场版」「剧场版」「全部」。
      */
     val filterSummary: String
         get() {
             val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
-            val formsLabel = selectedForms.sorted().joinToString("+") { it.label }.ifEmpty { null }
-            return listOfNotNull(originLabel, formsLabel)
+            val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
+            return listOfNotNull(originLabel, formLabel)
                 .joinToString(" · ")
                 .ifEmpty { SeasonOriginFilter.ALL.label }
         }
