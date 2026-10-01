@@ -164,6 +164,18 @@ internal object AdaptiveDnsResolver {
         logger.d { "[DNS] $host connected via $succeededIp; demoted $index preceding candidate(s)" }
     }
 
+    /**
+     * 完整请求失败（超时或连接彻底失败）。把为该域名准备的全部候选标记为失败一次，
+     * 避免坏节点因从未成功而永久留在池顶。
+     */
+    fun recordFailure(host: String) {
+        val candidates = resolvedCandidates[host].orEmpty()
+        candidates.forEach { EchEdgePool.recordFailure(it) }
+        if (candidates.isNotEmpty()) {
+            logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s)" }
+        }
+    }
+
     private fun resolveHostIps(host: String): List<String> =
         runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
             .onFailure { logger.d { "[DNS] resolution failed for $host: ${it.message}" } }

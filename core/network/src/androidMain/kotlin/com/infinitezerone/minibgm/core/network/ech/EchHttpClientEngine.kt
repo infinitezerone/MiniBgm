@@ -128,19 +128,17 @@ class EchHttpClientEngine(
                         echConfig = echConfig,
                     )
                 } catch (cancellation: CancellationException) {
-                    // 取消是控制流而非故障，必须原样转发：
-                    // ① 结构化并发依赖它传播——包成 IOException 会让调用方把"用户离开页面"当成网络错误；
-                    // ② 列表滚动时成片的图片加载被取消，若在此记 error 级日志，正常滚动就是一屏告警噪声。
-                    // 注意 catch 顺序：TimeoutCancellationException 是它的子类，但 body 读循环里的超时
-                    // 已在下面被显式翻译成 IOException，不会走到这里。
+                    AdaptiveDnsResolver.recordFailure(host)
                     throw cancellation
                 } catch (t: Throwable) {
+                    AdaptiveDnsResolver.recordFailure(host)
                     logger.e(t) { "EchNativeClient.nativeFetch crashed for $urlString" }
                     throw IOException("ECH native fetch failed: ${t.message}", t)
                 }
 
             val nativeResp = nativeCall.response
             if (nativeResp.errorMessage != null && nativeResp.errorMessage.isNotBlank()) {
+                AdaptiveDnsResolver.recordFailure(host)
                 logger.w { "ECH native fetch failed: ${nativeResp.errorMessage} ($urlString)" }
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
             }

@@ -22,7 +22,7 @@ import java.io.File
 internal object EchConfigStore {
     /** 内置引导配置（Cloudflare，public_name = cloudflare-ech.com）。 */
     const val DEFAULT_CLOUDFLARE_ECH_CONFIG: String =
-        "AEX+DQBBIQAgACDepu5XFhjNsTaJykFP5aC6eLhW+KKUXtgKGuWt2c26QgAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA="
+        "AEX+DQBB/QAgACDXnBlS7WsBpW3het4JiVs5q/cfBYlfPPlRrwAHBZwcJQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA="
 
     /** 旧版本按 host 落盘的 retry 派生配置前缀。 */
     private const val LEGACY_CONFIG_PREFIX = "ech_active_config_"

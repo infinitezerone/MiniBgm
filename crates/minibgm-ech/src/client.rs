@@ -23,7 +23,7 @@ const MAX_RESPONSE_BODY_SIZE: usize = 16 * 1024 * 1024;
 const MAX_REQUEST_BODY_SIZE: usize = 16 * 1024 * 1024;
 const MAX_REQUEST_HEADERS: usize = 128;
 const MAX_HEADER_VALUE_SIZE: usize = 16 * 1024;
-const CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
+const CONNECT_TIMEOUT: Duration = Duration::from_millis(2000);
 const ECH_CONFIG_TTL: Duration = Duration::from_secs(60 * 60);
 const H2_CONNECTION_MAX_AGE: Duration = Duration::from_secs(120);
 
