@@ -13,7 +13,9 @@ import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpRedirect
+import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.plugin
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import org.koin.android.ext.koin.androidContext
@@ -23,22 +25,32 @@ import org.koin.dsl.module
 val imageLoaderModule =
     module {
         single<HttpClient>(named("imageHttpClient")) {
-            BgmHttpClient.createBaseClient(
-                engine = getOrNull(),
-                userAgent = appUserAgent,
-                loggerTag = "Bgm/ImageHttp",
-            ) {
-                install(HttpRedirect)
-                install(HttpTimeout) {
-                    connectTimeoutMillis = 10_000
-                    socketTimeoutMillis = 15_000
-                    requestTimeoutMillis = 30_000
+            BgmHttpClient
+                .createBaseClient(
+                    engine = getOrNull(),
+                    userAgent = appUserAgent,
+                    loggerTag = "Bgm/ImageHttp",
+                ) {
+                    install(HttpRedirect)
+                    install(HttpTimeout) {
+                        connectTimeoutMillis = 8_000
+                        socketTimeoutMillis = 10_000
+                        requestTimeoutMillis = 15_000
+                    }
+                    install(DefaultRequest) {
+                        header(HttpHeaders.Accept, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                    }
+                }.also { client ->
+                    // 动态 Referer：仅 Bangumi 官方图床（lain.bgm.tv 等）需要 Referer: https://bgm.tv/；
+                    // 评论区里的第三方外链图床（新浪、B站、Imgur 等）若携带 bgm.tv Referer 会直接被防盗链策略 403 阻断，
+                    // 因此第三方图床严格不发送该 Referer，确保评论区外链图片顺利直出。
+                    client.plugin(HttpSend).intercept { request ->
+                        if (BgmImageUtils.isBgmImageHost(request.url.host)) {
+                            request.header("Referer", "https://bgm.tv/")
+                        }
+                        execute(request)
+                    }
                 }
-                install(DefaultRequest) {
-                    header("Referer", "https://bgm.tv/")
-                    header(HttpHeaders.Accept, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
-                }
-            }
         }
         single<ImageLoader> {
             val context = androidContext()

@@ -34,10 +34,18 @@ object BgmImageUtils {
         )
 
     /**
-     * 将给定的 URL 升轨为安全的 https:// 协议
+     * 判断域名是否属于 Bangumi 官方域（如 lain.bgm.tv / bgm.tv 等）
+     */
+    fun isBgmImageHost(hostOrUrl: String): Boolean {
+        val lower = hostOrUrl.lowercase()
+        return lower.contains("bgm.tv") || lower.contains("bangumi.tv") || lower.contains("chii.in")
+    }
+
+    /**
+     * 将给定的 URL 升轨为安全的 https:// 协议（仅针对 Bangumi 官方域名生效，避免破坏不支持 HTTPS 的第三方图床）
      */
     fun toSecureUrl(url: String): String {
-        if (url.startsWith("http://", ignoreCase = true)) {
+        if (url.startsWith("http://", ignoreCase = true) && isBgmImageHost(url)) {
             return "https://" + url.substring(7)
         }
         return url

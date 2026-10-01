@@ -58,9 +58,14 @@ class BgmImageUtilsTest {
     @Test
     fun optimizeBgmImageUrl_handlesExternalAndBlankUrls() {
         assertEquals("", BgmImageUtils.optimizeBgmImageUrl(""))
+        // 外部第三方图片不属于 Bangumi 域名，不得盲目升轨为 https，避免破坏不支持 HTTPS 的外部图床
+        assertEquals(
+            "http://example.com/pic/cover/l/test.jpg",
+            BgmImageUtils.optimizeBgmImageUrl("http://example.com/pic/cover/l/test.jpg"),
+        )
         assertEquals(
             "https://example.com/pic/cover/l/test.jpg",
-            BgmImageUtils.optimizeBgmImageUrl("http://example.com/pic/cover/l/test.jpg"),
+            BgmImageUtils.optimizeBgmImageUrl("https://example.com/pic/cover/l/test.jpg"),
         )
     }
 }
