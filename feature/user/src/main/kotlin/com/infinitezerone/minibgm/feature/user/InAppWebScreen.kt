@@ -83,9 +83,7 @@ internal fun InAppWebScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            webView?.destroy()
             webView = null
-            viewModel.stopSession()
         }
     }
 
@@ -99,12 +97,11 @@ internal fun InAppWebScreen(
     }
 
     val displayHost = extractDisplayHost(currentUrl)
-    val subtitleText = "$displayHost • ECH 安全加密"
 
     Box(modifier = Modifier.fillMaxSize()) {
         InAppWebScaffold(
             title = pageTitle,
-            subtitle = subtitleText,
+            subtitle = displayHost,
             progress = progress,
             isBusy = isStarting || isPageLoading,
             canGoBack = canGoBack,
@@ -153,8 +150,7 @@ internal fun InAppWebScreen(
 
                 InAppWebLoadingPlaceholder(
                     visible = isStarting || isPageLoading,
-                    title = if (isStarting) "正在建立 ECH 安全连接…" else "正在载入页面…",
-                    subtitle = "$displayHost • 端到端防封锁通道",
+                    title = "正在载入…",
                 )
             }
         }

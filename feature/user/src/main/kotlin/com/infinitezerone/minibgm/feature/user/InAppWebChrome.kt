@@ -13,17 +13,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Button
@@ -34,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -101,157 +101,157 @@ internal fun InAppWebScaffold(
     closeEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            BgmTopAppBar(
-                title = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+    Scaffold(
+        topBar = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                BgmTopAppBar(
+                    title = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Lock,
-                                contentDescription = null,
-                                modifier = Modifier.size(11.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = subtitle ?: "bgm.tv • ECH 安全加密",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = title,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
+                            if (!subtitle.isNullOrBlank()) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
-                    }
-                },
-                navigationIcon = {
-                    if (canGoBack && onNavigateBack != null) {
-                        IconButton(
-                            onClick = onNavigateBack,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "返回上一页",
-                            )
+                    },
+                    navigationIcon = {
+                        if (canGoBack && onNavigateBack != null) {
+                            IconButton(
+                                onClick = onNavigateBack,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回上一页",
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = onClose,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "关闭",
+                                )
+                            }
                         }
+                    },
+                    actions = {
+                        if (canGoBack && onNavigateBack != null) {
+                            IconButton(
+                                onClick = onClose,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "关闭",
+                                )
+                            }
+                        }
+                        if (onReload != null) {
+                            IconButton(
+                                onClick = onReload,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = "重新加载",
+                                )
+                            }
+                        }
+                        if (onCopyUrl != null) {
+                            IconButton(
+                                onClick = onCopyUrl,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = "复制链接",
+                                )
+                            }
+                        }
+                        if (onOpenInBrowser != null) {
+                            IconButton(
+                                onClick = onOpenInBrowser,
+                                enabled = closeEnabled,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = "用系统浏览器打开",
+                                )
+                            }
+                        }
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
+                    height = 54.dp,
+                )
+
+                val animatedProgress by animateFloatAsState(
+                    targetValue = (progress / 100f).coerceIn(0f, 1f),
+                    animationSpec = tween(durationMillis = 200, easing = LinearEasing),
+                    label = "web_progress",
+                )
+
+                AnimatedVisibility(
+                    visible = isBusy && animatedProgress < 1f,
+                    exit = fadeOut(animationSpec = tween(200)),
+                ) {
+                    if (progress > 0) {
+                        LinearProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(2.5.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
                     } else {
-                        IconButton(
-                            onClick = onClose,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "关闭",
-                            )
-                        }
+                        LinearProgressIndicator(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(2.5.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        )
                     }
-                },
-                actions = {
-                    if (canGoBack && onNavigateBack != null) {
-                        IconButton(
-                            onClick = onClose,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "关闭",
-                            )
-                        }
-                    }
-                    if (onReload != null) {
-                        IconButton(
-                            onClick = onReload,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "重新加载",
-                            )
-                        }
-                    }
-                    if (onCopyUrl != null) {
-                        IconButton(
-                            onClick = onCopyUrl,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.ContentCopy,
-                                contentDescription = "复制链接",
-                            )
-                        }
-                    }
-                    if (onOpenInBrowser != null) {
-                        IconButton(
-                            onClick = onOpenInBrowser,
-                            enabled = closeEnabled,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                contentDescription = "用系统浏览器打开",
-                            )
-                        }
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                height = 54.dp,
-            )
-
-            val animatedProgress by animateFloatAsState(
-                targetValue = (progress / 100f).coerceIn(0f, 1f),
-                animationSpec = tween(durationMillis = 200, easing = LinearEasing),
-                label = "web_progress",
-            )
-
-            AnimatedVisibility(
-                visible = isBusy && animatedProgress < 1f,
-                exit = fadeOut(animationSpec = tween(200)),
-            ) {
-                if (progress > 0) {
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(2.5.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(2.5.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
                 }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    thickness = 0.5.dp,
+                )
             }
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                thickness = 0.5.dp,
-            )
-
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.fillMaxSize(),
+    ) { innerPadding ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+        ) {
             content()
         }
     }
@@ -264,8 +264,8 @@ internal fun InAppWebScaffold(
 @Composable
 internal fun InAppWebLoadingPlaceholder(
     visible: Boolean,
-    title: String = "正在建立 ECH 安全连接…",
-    subtitle: String = "bgm.tv • 端到端防封锁通道",
+    title: String = "正在载入…",
+    subtitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -291,28 +291,20 @@ internal fun InAppWebLoadingPlaceholder(
                     strokeWidth = 3.dp,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(modifier = Modifier.height(20.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.primary,
+                if (title.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                if (!subtitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                     )
                 }
             }

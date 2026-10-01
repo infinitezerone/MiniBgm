@@ -16,11 +16,25 @@ import kotlinx.coroutines.launch
 class InAppWebViewModel(
     private val authRepository: AuthRepository,
 ) : ViewModel() {
-    /** 启动应用内登录会话；null 表示环回代理不可用（调用方应降级到系统浏览器）。 */
-    suspend fun beginLoginSession(): InAppWebSession? = authRepository.beginInAppLogin()
+    private var activeSession: InAppWebSession? = null
 
-    /** 启动应用内浏览会话（仅 bgm 系域名）；null 表示不适用或代理不可用。 */
-    suspend fun beginBrowseSession(url: String): InAppWebSession? = authRepository.beginInAppBrowse(url)
+    /**
+     * 启动应用内登录会话；null 表示环回代理不可用（调用方应降级到系统浏览器）。
+     * 在会话未显式停止前复用当前会话，避免配置变更（如旋屏）时重复启动代理与重置 PKCE。
+     */
+    suspend fun beginLoginSession(): InAppWebSession? {
+        activeSession?.let { return it }
+        return authRepository.beginInAppLogin()?.also { activeSession = it }
+    }
+
+    /**
+     * 启动应用内浏览会话（仅 bgm 系域名）；null 表示不适用或代理不可用。
+     * 在会话未显式停止前复用当前会话，避免配置变更时重复启动代理。
+     */
+    suspend fun beginBrowseSession(url: String): InAppWebSession? {
+        activeSession?.let { return it }
+        return authRepository.beginInAppBrowse(url)?.also { activeSession = it }
+    }
 
     /** 系统浏览器兜底：生成官方授权地址（不经过环回代理）。 */
     suspend fun beginBrowserLogin(): String = authRepository.beginLogin()
@@ -41,11 +55,12 @@ class InAppWebViewModel(
     }
 
     /**
-     * 收摊：关闭环回代理。
+     * 收摊：关闭环回代理并重置当前会话缓存。
      *
      * 非 suspend 且幂等——页面被销毁时也要调用，不能依赖协程作用域（那时它可能已被取消）。
      */
     fun stopSession() {
+        activeSession = null
         authRepository.stopInAppWeb()
     }
 

@@ -112,4 +112,42 @@ class InAppWebViewModelTest {
 
         assertEquals(1, authRepo.stopInAppWebCallCount)
     }
+
+    @Test
+    fun beginLoginSession_cachesActiveSessionUntilStopped() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel = InAppWebViewModel(authRepo)
+
+            val session1 = viewModel.beginLoginSession()
+            val session2 = viewModel.beginLoginSession()
+
+            assertEquals(session1, session2)
+            assertEquals(1, authRepo.beginInAppLoginCallCount)
+
+            viewModel.stopSession()
+            val session3 = viewModel.beginLoginSession()
+
+            assertNotNull(session3)
+            assertEquals(2, authRepo.beginInAppLoginCallCount)
+        }
+
+    @Test
+    fun beginBrowseSession_cachesActiveSessionUntilStopped() =
+        runTest {
+            val authRepo = FakeAuthRepository(initialLoggedIn = false)
+            val viewModel = InAppWebViewModel(authRepo)
+            val targetUrl = "https://next.bgm.tv/demo"
+
+            val session1 = viewModel.beginBrowseSession(targetUrl)
+            val session2 = viewModel.beginBrowseSession(targetUrl)
+
+            assertEquals(session1, session2)
+            assertEquals(1, authRepo.beginInAppBrowseCallCount)
+
+            viewModel.stopSession()
+            viewModel.beginBrowseSession(targetUrl)
+
+            assertEquals(2, authRepo.beginInAppBrowseCallCount)
+        }
 }

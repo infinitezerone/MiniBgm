@@ -2,14 +2,19 @@ package com.infinitezerone.minibgm.feature.user
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.JsResult
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.infinitezerone.minibgm.core.model.InAppWebSession
@@ -23,11 +28,12 @@ private const val INAPP_WEB_USER_AGENT =
  *
  * 环回代理只接受携带该令牌的请求，因此必须在加载任何页面之前写入：否则首个请求就被 403。
  * Cookie 按 host 归属（与端口无关），同名 Cookie 会被覆盖，不会在多轮会话间堆积。
+ * 附带 HttpOnly 限制 JavaScript 访问，防止页面脚本读取代理会话令牌。
  */
 internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
     val cookieManager = CookieManager.getInstance()
     cookieManager.setAcceptCookie(true)
-    cookieManager.setCookie(session.url, "${session.cookieName}=${session.cookieValue}; Path=/")
+    cookieManager.setCookie(session.url, "${session.cookieName}=${session.cookieValue}; Path=/; HttpOnly")
     cookieManager.flush()
 }
 
@@ -40,7 +46,7 @@ internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
  * @param onUrlChanged 网页发生内部跳转时的实际地址更新
  * @param onCanGoBackChanged 网页历史记录是否支持后退
  * @param onInterceptor 命中自定义 scheme（如 `minibgm://` 登录回调）时返回 true 表示已消费
- * @param onWebViewCreated 暴露 WebView 实例，供调用方在离开页面时 destroy 或手动触发刷新/后退
+ * @param onWebViewCreated 暴露 WebView 实例，供调用方手动触发刷新/后退
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -55,9 +61,18 @@ internal fun InAppWebView(
     onInterceptor: ((Uri) -> Boolean)? = null,
     onWebViewCreated: (WebView) -> Unit = {},
 ) {
+    val currentOnPageLoadingChanged by rememberUpdatedState(onPageLoadingChanged)
+    val currentOnProgressChanged by rememberUpdatedState(onProgressChanged)
+    val currentOnTitleReceived by rememberUpdatedState(onTitleReceived)
+    val currentOnUrlChanged by rememberUpdatedState(onUrlChanged)
+    val currentOnCanGoBackChanged by rememberUpdatedState(onCanGoBackChanged)
+    val currentOnInterceptor by rememberUpdatedState(onInterceptor)
+    val currentOnWebViewCreated by rememberUpdatedState(onWebViewCreated)
+
     AndroidView(
         factory = { context ->
             WebView(context).apply {
+                setBackgroundColor(Color.TRANSPARENT)
                 layoutParams =
                     ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -76,7 +91,7 @@ internal fun InAppWebView(
                             view: WebView?,
                             newProgress: Int,
                         ) {
-                            onProgressChanged(newProgress)
+                            currentOnProgressChanged(newProgress)
                         }
 
                         override fun onReceivedTitle(
@@ -85,8 +100,45 @@ internal fun InAppWebView(
                         ) {
                             super.onReceivedTitle(view, title)
                             if (!title.isNullOrBlank()) {
-                                onTitleReceived(title)
+                                currentOnTitleReceived(title)
                             }
+                        }
+
+                        override fun onJsAlert(
+                            view: WebView?,
+                            url: String?,
+                            message: String?,
+                            result: JsResult?,
+                        ): Boolean {
+                            val ctx = view?.context ?: return false
+                            runCatching {
+                                android.app.AlertDialog
+                                    .Builder(ctx)
+                                    .setMessage(message)
+                                    .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                                    .setOnCancelListener { result?.cancel() }
+                                    .show()
+                            }.onFailure { result?.cancel() }
+                            return true
+                        }
+
+                        override fun onJsConfirm(
+                            view: WebView?,
+                            url: String?,
+                            message: String?,
+                            result: JsResult?,
+                        ): Boolean {
+                            val ctx = view?.context ?: return false
+                            runCatching {
+                                android.app.AlertDialog
+                                    .Builder(ctx)
+                                    .setMessage(message)
+                                    .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                                    .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                                    .setOnCancelListener { result?.cancel() }
+                                    .show()
+                            }.onFailure { result?.cancel() }
+                            return true
                         }
                     }
                 webViewClient =
@@ -96,7 +148,7 @@ internal fun InAppWebView(
                             request: WebResourceRequest?,
                         ): Boolean {
                             val uri = request?.url ?: return false
-                            return onInterceptor?.invoke(uri) ?: false
+                            return currentOnInterceptor?.invoke(uri) ?: false
                         }
 
                         override fun onPageStarted(
@@ -104,18 +156,29 @@ internal fun InAppWebView(
                             url: String?,
                             favicon: Bitmap?,
                         ) {
-                            onPageLoadingChanged(true)
-                            url?.let(onUrlChanged)
-                            onCanGoBackChanged(view?.canGoBack() == true)
+                            currentOnPageLoadingChanged(true)
+                            url?.let(currentOnUrlChanged)
+                            currentOnCanGoBackChanged(view?.canGoBack() == true)
                         }
 
                         override fun onPageFinished(
                             view: WebView?,
                             url: String?,
                         ) {
-                            onPageLoadingChanged(false)
-                            url?.let(onUrlChanged)
-                            onCanGoBackChanged(view?.canGoBack() == true)
+                            currentOnPageLoadingChanged(false)
+                            url?.let(currentOnUrlChanged)
+                            currentOnCanGoBackChanged(view?.canGoBack() == true)
+                        }
+
+                        override fun onReceivedError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            error: WebResourceError?,
+                        ) {
+                            super.onReceivedError(view, request, error)
+                            if (request?.isForMainFrame == true) {
+                                currentOnPageLoadingChanged(false)
+                            }
                         }
 
                         override fun doUpdateVisitedHistory(
@@ -124,13 +187,25 @@ internal fun InAppWebView(
                             isReload: Boolean,
                         ) {
                             super.doUpdateVisitedHistory(view, url, isReload)
-                            url?.let(onUrlChanged)
-                            onCanGoBackChanged(view?.canGoBack() == true)
+                            url?.let(currentOnUrlChanged)
+                            currentOnCanGoBackChanged(view?.canGoBack() == true)
                         }
                     }
-                onWebViewCreated(this)
+                currentOnWebViewCreated(this)
                 loadUrl(url)
             }
+        },
+        update = { webView ->
+            if (webView.url != url && url.isNotBlank()) {
+                webView.loadUrl(url)
+            }
+        },
+        onRelease = { webView ->
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.stopLoading()
+            webView.webChromeClient = null
+            webView.clearHistory()
+            webView.destroy()
         },
         modifier = modifier,
     )

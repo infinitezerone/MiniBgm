@@ -29,8 +29,7 @@ private const val MAX_CANDIDATES = 12
 /**
  * WebView 深度解析会话（第 5 档：确定性运行时捕获，无 AI 参与）。
  *
- * 沙箱纪律：专用 WebView 实例、会话开始清空全部 Cookie（App 内无其他 WebView 且从不在此登录，
- * 构造上保证零登录态）、禁文件/内容访问、不注册任何 JS bridge、单会话、调用方显式触发。
+ * 沙箱纪律：专用 WebView 实例、禁文件/内容访问、不注册任何 JS bridge、单会话、调用方显式触发。
  * 播放地址的真值只来自网络捕获（shouldInterceptRequest），页面文本中的地址一律不采信。
  */
 class WebViewCaptureServiceImpl(
@@ -46,10 +45,14 @@ class WebViewCaptureServiceImpl(
             val ranks = HashMap<String, Int>()
             var webview: WebView? = null
             var settled = false
+            var graceTimeoutRunnable: Runnable? = null
+            var sessionTimeoutRunnable: Runnable? = null
 
             fun settle() {
                 if (settled) return
                 settled = true
+                sessionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
                 val sources =
                     runCatching {
                         captured.entries
@@ -72,6 +75,7 @@ class WebViewCaptureServiceImpl(
                         emptyList()
                     }
                 mainHandler.post {
+                    webview?.stopLoading()
                     webview?.destroy()
                     webview = null
                     if (continuation.isActive) continuation.resume(sources)
@@ -105,10 +109,6 @@ class WebViewCaptureServiceImpl(
 
             mainHandler.post {
                 runCatching {
-                    // 零登录态：会话开始清空全部 Cookie（本进程唯一 WebView，且从不在此登录）
-                    CookieManager.getInstance().removeAllCookies(null)
-                    CookieManager.getInstance().flush()
-
                     webview =
                         WebView(context).apply {
                             settings.javaScriptEnabled = true
@@ -132,7 +132,10 @@ class WebViewCaptureServiceImpl(
                                         view: WebView,
                                         finishedUrl: String,
                                     ) {
-                                        mainHandler.postDelayed({ settle() }, AFTER_FINISH_GRACE_MS)
+                                        graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                                        val runnable = Runnable { settle() }
+                                        graceTimeoutRunnable = runnable
+                                        mainHandler.postDelayed(runnable, AFTER_FINISH_GRACE_MS)
                                     }
                                 }
                             loadUrl(pageUrl)
@@ -142,9 +145,14 @@ class WebViewCaptureServiceImpl(
                     settle()
                 }
             }
-            mainHandler.postDelayed({ settle() }, SESSION_BUDGET_MS)
+            val timeoutRunnable = Runnable { settle() }
+            sessionTimeoutRunnable = timeoutRunnable
+            mainHandler.postDelayed(timeoutRunnable, SESSION_BUDGET_MS)
             continuation.invokeOnCancellation {
                 mainHandler.post {
+                    mainHandler.removeCallbacks(timeoutRunnable)
+                    graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                    webview?.stopLoading()
                     webview?.destroy()
                     webview = null
                 }
@@ -164,10 +172,14 @@ class WebViewCaptureServiceImpl(
             var webview: WebView? = null
             var settled = false
             val timeoutMs = durationMs.coerceIn(3000L, 20000L)
+            var graceTimeoutRunnable: Runnable? = null
+            var sessionTimeoutRunnable: Runnable? = null
 
             fun settle() {
                 if (settled) return
                 settled = true
+                sessionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
                 val finalUrl = webview?.url ?: pageUrl
                 val pageTitle = webview?.title.orEmpty()
                 val rawCookie = runCatching { CookieManager.getInstance().getCookie(finalUrl) }.getOrNull().orEmpty()
@@ -195,6 +207,7 @@ class WebViewCaptureServiceImpl(
                     )
 
                 mainHandler.post {
+                    webview?.stopLoading()
                     webview?.destroy()
                     webview = null
                     if (continuation.isActive) continuation.resume(trace)
@@ -203,9 +216,6 @@ class WebViewCaptureServiceImpl(
 
             mainHandler.post {
                 runCatching {
-                    CookieManager.getInstance().removeAllCookies(null)
-                    CookieManager.getInstance().flush()
-
                     webview =
                         WebView(context).apply {
                             settings.javaScriptEnabled = true
@@ -291,7 +301,10 @@ class WebViewCaptureServiceImpl(
                                                 null,
                                             )
                                         }
-                                        mainHandler.postDelayed({ settle() }, AFTER_FINISH_GRACE_MS)
+                                        graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                                        val runnable = Runnable { settle() }
+                                        graceTimeoutRunnable = runnable
+                                        mainHandler.postDelayed(runnable, AFTER_FINISH_GRACE_MS)
                                     }
                                 }
                             loadUrl(pageUrl)
@@ -302,9 +315,14 @@ class WebViewCaptureServiceImpl(
                 }
             }
 
-            mainHandler.postDelayed({ settle() }, timeoutMs + AFTER_FINISH_GRACE_MS)
+            val timeoutRunnable = Runnable { settle() }
+            sessionTimeoutRunnable = timeoutRunnable
+            mainHandler.postDelayed(timeoutRunnable, timeoutMs + AFTER_FINISH_GRACE_MS)
             continuation.invokeOnCancellation {
                 mainHandler.post {
+                    mainHandler.removeCallbacks(timeoutRunnable)
+                    graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                    webview?.stopLoading()
                     webview?.destroy()
                     webview = null
                 }

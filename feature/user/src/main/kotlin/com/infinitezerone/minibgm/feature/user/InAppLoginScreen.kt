@@ -69,9 +69,7 @@ internal fun InAppLoginScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            webView?.destroy()
             webView = null
-            viewModel.stopSession()
         }
     }
 
@@ -87,6 +85,7 @@ internal fun InAppLoginScreen(
     if (isSucceeded) {
         LaunchedEffect(Unit) {
             delay(LOGIN_SUCCESS_HOLD_MS)
+            viewModel.stopSession()
             onBack()
         }
     }
@@ -94,7 +93,7 @@ internal fun InAppLoginScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         InAppWebScaffold(
             title = pageTitle,
-            subtitle = "bgm.tv • ECH 安全登录",
+            subtitle = "bgm.tv",
             progress = progress,
             isBusy = isStarting || isPageLoading || isExchanging,
             onClose = ::handleClose,
@@ -156,8 +155,7 @@ internal fun InAppLoginScreen(
 
                 InAppWebLoadingPlaceholder(
                     visible = (isStarting || isPageLoading) && !isExchanging && !isSucceeded,
-                    title = if (isStarting) "正在建立 ECH 安全连接…" else "正在加载登录页面…",
-                    subtitle = "bgm.tv • 无需跳转外部浏览器",
+                    title = "正在加载…",
                 )
 
                 if (isExchanging) {
