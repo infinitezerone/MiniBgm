@@ -216,12 +216,19 @@ abstract class BuildEchNativeTask : DefaultTask() {
                         add("--locked")
                         add("-p")
                         add(CRATE_NAME)
+                        if (System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) {
+                            val tempTargetDir = File(System.getProperty("java.io.tmpdir"), "minibgm-cargo-target")
+                            tempTargetDir.mkdirs()
+                            add("--target-dir")
+                            add(tempTargetDir.absolutePath)
+                        }
                     }
                 commandLine(command)
                 environment("ANDROID_NDK_HOME", ndkDir.absolutePath)
                 environment("ANDROID_NDK_ROOT", ndkDir.absolutePath)
-                // CI 与本地 PATH 布局不同：显式把 cargo 所在目录前置，保证 rustc / llvm 工具链可见
-                environment("PATH", cargo.parentFile.absolutePath + File.pathSeparator + currentPath())
+                val cmakeDir = resolveCmakeDir()
+                val extraPath = listOfNotNull(cargo.parentFile.absolutePath, cmakeDir?.absolutePath).joinToString(File.pathSeparator)
+                environment("PATH", extraPath + File.pathSeparator + currentPath())
             }.assertNormalExitValue()
 
         verifyAbiArtifacts(outputDir, expectedAbis)
@@ -382,13 +389,35 @@ abstract class BuildEchNativeTask : DefaultTask() {
             "   修复：sdkmanager --install \"ndk;27.2.12479018\"，或显式传 -P$NDK_DIR_PROPERTY=<ndk 路径>。"
     }
 
+    private fun resolveCmakeDir(): File? {
+        findExecutable("cmake")?.parentFile?.let { return it }
+        val sdkDir =
+            sdkDirFromEnv.orNull?.takeIf { it.isNotBlank() }?.let(::File)
+                ?: readSdkDirFromLocalProperties()
+                ?: return null
+        val cmakeRoot = File(sdkDir, "cmake")
+        if (!cmakeRoot.isDirectory) return null
+        return cmakeRoot.listFiles { file -> file.isDirectory }
+            ?.map { File(it, "bin") }
+            ?.firstOrNull { File(it, "cmake.exe").isFile || File(it, "cmake").isFile }
+    }
+
     private fun cargoMissingMessage(): String =
         "❌ [ech-native] 未找到 Rust 工具链（cargo），无法编译 libminibgm_ech.so。\n" +
             "   安装：https://rustup.rs（并 rustup target add aarch64-linux-android x86_64-linux-android）。\n" +
             "   若本机已有该库产物，可加 -P$SKIP_BUILD_PROPERTY=true 跳过编译（仍会校验产物与源码一致）。"
 }
 
-private fun currentPath(): String = System.getenv("PATH").orEmpty()
+private fun currentPath(): String {
+    val raw = System.getenv("PATH").orEmpty()
+    return raw.split(File.pathSeparator)
+        .filter { path ->
+            !path.contains("Hostx64\\x86", ignoreCase = true) &&
+                !path.contains("Hostx86", ignoreCase = true) &&
+                !path.contains("pcsuite", ignoreCase = true)
+        }
+        .joinToString(File.pathSeparator)
+}
 
 /** 在 PATH 与 ~/.cargo/bin 里定位可执行文件（Windows 需要补 .exe）。 */
 private fun findExecutable(name: String): File? {
