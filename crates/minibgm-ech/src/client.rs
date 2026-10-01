@@ -2,9 +2,9 @@ use base64::Engine;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
-use hyper::client::conn::http1;
+use hyper::client::conn::{http1, http2};
 use hyper::{Method, Request, Uri};
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use rustls::client::{EchConfig, EchMode, EchStatus};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::handshake::EchConfigPayload;
@@ -25,6 +25,15 @@ const MAX_REQUEST_HEADERS: usize = 128;
 const MAX_HEADER_VALUE_SIZE: usize = 16 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(5000);
 const ECH_CONFIG_TTL: Duration = Duration::from_secs(60 * 60);
+const H2_CONNECTION_MAX_AGE: Duration = Duration::from_secs(120);
+
+#[derive(Clone)]
+struct Http2ConnectionEntry {
+    sender: http2::SendRequest<Full<Bytes>>,
+    ech_accepted: bool,
+    connected_addr: String,
+    created_at: Instant,
+}
 /// 单个流式事件等待 Kotlin 读取循环取走的时限。
 ///
 /// 读取循环可能因为协程取消/异常而永远不来取数据，而 Receiver 由请求状态持有（不会随协程
@@ -142,6 +151,7 @@ pub struct EchHttpClient {
     root_store: RootCertStore,
     tls_configs_with_ech: RwLock<HashMap<String, EchConfigEntry>>,
     tls_config_standard: Arc<ClientConfig>,
+    h2_pool: RwLock<HashMap<String, Http2ConnectionEntry>>,
 }
 
 /// 根据 ECH Config List 字节流构建 ClientConfig
@@ -157,13 +167,16 @@ fn build_ech_client_config(
 
     let ech_mode = EchMode::from(ech_config);
 
-    let config_ech = ClientConfig::builder_with_provider(Arc::new(
+    let mut config_ech = ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
     .with_ech(ech_mode)
     .map_err(|e| format!("Configure with_ech failed: {:?}", e))?
     .with_root_certificates(root_store.clone())
     .with_no_client_auth();
+
+    config_ech.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    config_ech.resumption = rustls::client::Resumption::in_memory_sessions(64);
 
     Ok(config_ech)
 }
@@ -175,7 +188,7 @@ impl EchHttpClient {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
 
-        let config_std = ClientConfig::builder_with_provider(Arc::new(
+        let mut config_std = ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::aws_lc_rs::default_provider(),
         ))
         .with_safe_default_protocol_versions()
@@ -183,10 +196,14 @@ impl EchHttpClient {
         .with_root_certificates(root_store.clone())
         .with_no_client_auth();
 
+        config_std.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        config_std.resumption = rustls::client::Resumption::in_memory_sessions(64);
+
         Ok(Self {
             root_store,
             tls_configs_with_ech: RwLock::new(HashMap::new()),
             tls_config_standard: Arc::new(config_std),
+            h2_pool: RwLock::new(HashMap::new()),
         })
     }
 
@@ -214,6 +231,8 @@ impl EchHttpClient {
                         updated_at: Instant::now(),
                     },
                 );
+                let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                pool.remove(host);
                 true
             }
             Err(e) => {
@@ -248,6 +267,8 @@ impl EchHttpClient {
                         updated_at: Instant::now(),
                     },
                 );
+                let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+                pool.remove(host);
                 log::info!(
                     "ECH configuration dynamically updated for {host} from server retry_configs"
                 );
@@ -318,6 +339,84 @@ impl EchHttpClient {
             addrs_to_try.push(format!("{}:{}", host, port));
         }
 
+        let authority_host = if host.contains(':') && !host.starts_with('[') {
+            format!("[{host}]")
+        } else {
+            host.to_owned()
+        };
+        let authority = match parsed_url.port() {
+            Some(port) => format!("{authority_host}:{port}"),
+            None => authority_host,
+        };
+        let request_target = match parsed_url.query() {
+            Some(query) => format!("{}?{}", parsed_url.path(), query),
+            None => parsed_url.path().to_owned(),
+        };
+        let uri: Uri = if request_target.is_empty() {
+            "/".parse()
+                .map_err(|error: hyper::http::uri::InvalidUri| format!("invalid URI: {error}"))?
+        } else {
+            request_target
+                .parse()
+                .map_err(|error: hyper::http::uri::InvalidUri| format!("invalid URI: {error}"))?
+        };
+
+        // 优先尝试从 HTTP/2 连接池中复用持久长连接
+        let pooled_connection = {
+            let pool = self.h2_pool.read().unwrap_or_else(|p| p.into_inner());
+            pool.get(host).cloned()
+        };
+
+        if let Some(mut entry) = pooled_connection {
+            let fresh = entry.created_at.elapsed() <= H2_CONNECTION_MAX_AGE;
+            let ech_ok = !require_ech || entry.ech_accepted;
+            if fresh && ech_ok && !entry.sender.is_closed() {
+                let mut request = Request::builder().method(method).uri(uri.clone());
+                for (name, value) in headers {
+                    if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("connection")
+                    {
+                        continue;
+                    }
+                    request = request.header(name, value);
+                }
+                request = request.header("host", &authority);
+                if let Ok(request_body) =
+                    request.body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))
+                {
+                    let request_timeout = Duration::from_millis(timeout_ms.max(3000));
+                    if let Ok(Ok(hyper_response)) =
+                        timeout(request_timeout, entry.sender.send_request(request_body)).await
+                    {
+                        let status_code = hyper_response.status().as_u16();
+                        let response_headers = hyper_response
+                            .headers()
+                            .iter()
+                            .map(|(name, value)| {
+                                (name.to_string(), value.to_str().unwrap_or("").to_string())
+                            })
+                            .collect();
+                        if let Ok(resp) = process_hyper_response(
+                            status_code,
+                            response_headers,
+                            hyper_response,
+                            entry.ech_accepted,
+                            Some(entry.connected_addr.clone()),
+                            None,
+                            stream.as_ref(),
+                        )
+                        .await
+                        {
+                            log::debug!("Reused active HTTP/2 connection for {host}");
+                            return Ok(resp);
+                        }
+                    }
+                }
+            }
+            // 复用不成功或连接已关闭，从池中清除
+            let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+            pool.remove(host);
+        }
+
         if !enable_ech {
             return try_fetch_with_config(
                 self.tls_config_standard.clone(),
@@ -329,6 +428,7 @@ impl EchHttpClient {
                 &addrs_to_try,
                 stream.clone(),
                 None,
+                Some(&self.h2_pool),
             )
             .await
             .map_err(Into::into);
@@ -379,6 +479,7 @@ impl EchHttpClient {
                     &addrs_to_try,
                     stream.clone(),
                     None,
+                    Some(&self.h2_pool),
                 )
                 .await
                 .map_err(Into::into);
@@ -395,6 +496,7 @@ impl EchHttpClient {
             &addrs_to_try,
             stream.clone(),
             None,
+            Some(&self.h2_pool),
         )
         .await
         {
@@ -443,6 +545,7 @@ impl EchHttpClient {
                                 &addrs_to_try,
                                 stream,
                                 Some(new_ech_b64),
+                                Some(&self.h2_pool),
                             )
                             .await
                             .map_err(Into::into);
@@ -468,6 +571,7 @@ impl EchHttpClient {
                     &addrs_to_try,
                     stream,
                     None,
+                    Some(&self.h2_pool),
                 )
                 .await
                 .map_err(Into::into)
@@ -490,6 +594,7 @@ async fn try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
+    pool: Option<&RwLock<HashMap<String, Http2ConnectionEntry>>>,
 ) -> Result<HttpResponse, AttemptError> {
     async_try_fetch_with_config(
         tls_config,
@@ -501,6 +606,7 @@ async fn try_fetch_with_config(
         addrs_to_try,
         stream,
         updated_ech_config,
+        pool,
     )
     .await
 }
@@ -516,6 +622,7 @@ async fn async_try_fetch_with_config(
     addrs_to_try: &[String],
     stream: Option<tokio::sync::mpsc::Sender<StreamEvent>>,
     updated_ech_config: Option<String>,
+    pool: Option<&RwLock<HashMap<String, Http2ConnectionEntry>>>,
 ) -> Result<HttpResponse, AttemptError> {
     let host = parsed_url
         .host_str()
@@ -588,107 +695,99 @@ async fn async_try_fetch_with_config(
                 })
                 .await??;
                 let ech_accepted = tls.get_ref().1.ech_status() == EchStatus::Accepted;
-
+                let is_h2 = tls.get_ref().1.alpn_protocol() == Some(b"h2");
                 let io = TokioIo::new(tls);
-                let (mut sender, connection) = http1::handshake(io).await?;
-                tokio::spawn(async move {
-                    if let Err(error) = connection.await {
-                        log::debug!("HTTP/1.1 connection closed: {error}");
-                    }
-                });
 
-                let mut request = Request::builder().method(method.clone()).uri(uri.clone());
-                for (name, value) in headers {
-                    if name.eq_ignore_ascii_case("host") || name.eq_ignore_ascii_case("connection")
-                    {
-                        continue;
-                    }
-                    request = request.header(name, value);
-                }
-                request = request.header("host", &authority);
-                request = request.header("connection", "close");
-                let request =
-                    request.body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
-                request_started = true;
-                let hyper_response = sender.send_request(request).await?;
-                let status_code = hyper_response.status().as_u16();
-                let response_headers = hyper_response
-                    .headers()
-                    .iter()
-                    .map(|(name, value)| {
-                        (name.to_string(), value.to_str().unwrap_or("").to_string())
-                    })
-                    .collect();
-                let mut response = HttpResponse {
-                    status_code,
-                    headers: response_headers,
-                    body: Vec::new(),
-                    ech_accepted,
-                    connected_addr: Some(socket_addr.to_string()),
-                    updated_ech_config: updated_ech_config.clone(),
-                };
-                if let Some(stream) = &stream {
-                    send_event(stream, StreamEvent::Response(response)).await?;
-                    let mut response_body = hyper_response.into_body();
-                    let mut total = 0usize;
-                    while let Some(frame) = response_body.frame().await {
-                        match frame {
-                            Ok(frame) => {
-                                if let Ok(data) = frame.into_data() {
-                                    total = total.saturating_add(data.len());
-                                    if total > MAX_RESPONSE_BODY_SIZE {
-                                        let _ = send_event(
-                                            stream,
-                                            StreamEvent::Error(format!(
-                                                "HTTP response exceeds {} bytes",
-                                                MAX_RESPONSE_BODY_SIZE
-                                            )),
-                                        )
-                                        .await;
-                                        return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-                                            HttpResponse {
-                                                status_code,
-                                                headers: Vec::new(),
-                                                body: Vec::new(),
-                                                ech_accepted,
-                                                connected_addr: Some(socket_addr.to_string()),
-                                                updated_ech_config: updated_ech_config.clone(),
-                                            },
-                                        );
-                                    }
-                                    for chunk in data.chunks(64 * 1024) {
-                                        send_event(stream, StreamEvent::Data(chunk.to_vec()))
-                                            .await?;
-                                    }
-                                }
-                            }
-                            Err(error) => {
-                                let _ =
-                                    send_event(stream, StreamEvent::Error(error.to_string())).await;
-                                return Ok(HttpResponse {
-                                    status_code,
-                                    headers: Vec::new(),
-                                    body: Vec::new(),
-                                    ech_accepted,
-                                    connected_addr: Some(socket_addr.to_string()),
-                                    updated_ech_config: updated_ech_config.clone(),
-                                });
-                            }
+                let (status_code, response_headers, hyper_response) = if is_h2 {
+                    let (mut sender, connection) = http2::Builder::new(TokioExecutor::new())
+                        .handshake(io)
+                        .await?;
+                    tokio::spawn(async move {
+                        if let Err(error) = connection.await {
+                            log::debug!("HTTP/2 connection closed: {error}");
                         }
+                    });
+
+                    if let Some(pool) = pool {
+                        let mut guard = pool.write().unwrap_or_else(|p| p.into_inner());
+                        guard.insert(
+                            host.to_owned(),
+                            Http2ConnectionEntry {
+                                sender: sender.clone(),
+                                ech_accepted,
+                                connected_addr: socket_addr.to_string(),
+                                created_at: Instant::now(),
+                            },
+                        );
                     }
-                    let _ = send_event(stream, StreamEvent::End).await;
-                    Ok(HttpResponse {
-                        status_code,
-                        headers: Vec::new(),
-                        body: Vec::new(),
-                        ech_accepted,
-                        connected_addr: Some(socket_addr.to_string()),
-                        updated_ech_config: updated_ech_config.clone(),
-                    })
+
+                    let mut request = Request::builder().method(method.clone()).uri(uri.clone());
+                    for (name, value) in headers {
+                        if name.eq_ignore_ascii_case("host")
+                            || name.eq_ignore_ascii_case("connection")
+                        {
+                            continue;
+                        }
+                        request = request.header(name, value);
+                    }
+                    request = request.header("host", &authority);
+                    let request = request
+                        .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
+                    request_started = true;
+                    let resp = sender.send_request(request).await?;
+                    let status = resp.status().as_u16();
+                    let resp_headers = resp
+                        .headers()
+                        .iter()
+                        .map(|(name, value)| {
+                            (name.to_string(), value.to_str().unwrap_or("").to_string())
+                        })
+                        .collect();
+                    (status, resp_headers, resp)
                 } else {
-                    response.body = collect_response_body(hyper_response.into_body()).await?;
-                    Ok(response)
-                }
+                    let (mut sender, connection) = http1::handshake(io).await?;
+                    tokio::spawn(async move {
+                        if let Err(error) = connection.await {
+                            log::debug!("HTTP/1.1 connection closed: {error}");
+                        }
+                    });
+
+                    let mut request = Request::builder().method(method.clone()).uri(uri.clone());
+                    for (name, value) in headers {
+                        if name.eq_ignore_ascii_case("host")
+                            || name.eq_ignore_ascii_case("connection")
+                        {
+                            continue;
+                        }
+                        request = request.header(name, value);
+                    }
+                    request = request.header("host", &authority);
+                    request = request.header("connection", "close");
+                    let request = request
+                        .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
+                    request_started = true;
+                    let resp = sender.send_request(request).await?;
+                    let status = resp.status().as_u16();
+                    let resp_headers = resp
+                        .headers()
+                        .iter()
+                        .map(|(name, value)| {
+                            (name.to_string(), value.to_str().unwrap_or("").to_string())
+                        })
+                        .collect();
+                    (status, resp_headers, resp)
+                };
+
+                process_hyper_response(
+                    status_code,
+                    response_headers,
+                    hyper_response,
+                    ech_accepted,
+                    Some(socket_addr.to_string()),
+                    updated_ech_config.clone(),
+                    stream.as_ref(),
+                )
+                .await
             })
             .await;
 
@@ -698,6 +797,13 @@ async fn async_try_fetch_with_config(
                     if request_started {
                         // 请求已经发出：把这个事实原样上抛，禁止上层换配置/换地址重发
                         return Err(AttemptError::after_request(error));
+                    }
+                    if extract_retry_configs(&*error).is_some() {
+                        // 服务端已明确拒绝当前 ECH 配置并下发了 retry_configs。
+                        // 由于 Cloudflare 是 Anycast 架构，所有边缘使用同一套 ECHConfig，
+                        // 继续尝试下一个 IP 依然会被拒绝且徒增 RTT / 耗尽超时，
+                        // 立即中断候选循环并返回该错误以触发自愈重试。
+                        return Err(AttemptError::before_request(error));
                     }
                     last_error = Some(error);
                 }
@@ -714,6 +820,84 @@ async fn async_try_fetch_with_config(
     Err(AttemptError::before_request(last_error.unwrap_or_else(
         || "All candidate connections failed".into(),
     )))
+}
+
+/// 处理并分发 hyper 响应（支持流式与整体收集）
+async fn process_hyper_response(
+    status_code: u16,
+    response_headers: Vec<(String, String)>,
+    hyper_response: hyper::Response<Incoming>,
+    ech_accepted: bool,
+    connected_addr: Option<String>,
+    updated_ech_config: Option<String>,
+    stream: Option<&tokio::sync::mpsc::Sender<StreamEvent>>,
+) -> Result<HttpResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let mut response = HttpResponse {
+        status_code,
+        headers: response_headers,
+        body: Vec::new(),
+        ech_accepted,
+        connected_addr: connected_addr.clone(),
+        updated_ech_config: updated_ech_config.clone(),
+    };
+    if let Some(stream) = stream {
+        send_event(stream, StreamEvent::Response(response)).await?;
+        let mut response_body = hyper_response.into_body();
+        let mut total = 0usize;
+        while let Some(frame) = response_body.frame().await {
+            match frame {
+                Ok(frame) => {
+                    if let Ok(data) = frame.into_data() {
+                        total = total.saturating_add(data.len());
+                        if total > MAX_RESPONSE_BODY_SIZE {
+                            let _ = send_event(
+                                stream,
+                                StreamEvent::Error(format!(
+                                    "HTTP response exceeds {} bytes",
+                                    MAX_RESPONSE_BODY_SIZE
+                                )),
+                            )
+                            .await;
+                            return Ok(HttpResponse {
+                                status_code,
+                                headers: Vec::new(),
+                                body: Vec::new(),
+                                ech_accepted,
+                                connected_addr,
+                                updated_ech_config,
+                            });
+                        }
+                        for chunk in data.chunks(64 * 1024) {
+                            send_event(stream, StreamEvent::Data(chunk.to_vec())).await?;
+                        }
+                    }
+                }
+                Err(error) => {
+                    let _ = send_event(stream, StreamEvent::Error(error.to_string())).await;
+                    return Ok(HttpResponse {
+                        status_code,
+                        headers: Vec::new(),
+                        body: Vec::new(),
+                        ech_accepted,
+                        connected_addr,
+                        updated_ech_config,
+                    });
+                }
+            }
+        }
+        let _ = send_event(stream, StreamEvent::End).await;
+        Ok(HttpResponse {
+            status_code,
+            headers: Vec::new(),
+            body: Vec::new(),
+            ech_accepted,
+            connected_addr,
+            updated_ech_config,
+        })
+    } else {
+        response.body = collect_response_body(hyper_response.into_body()).await?;
+        Ok(response)
+    }
 }
 
 /// 向 Kotlin 读取循环投递一个流式事件（带消费者停滞保护，见 [CONSUMER_STALL_TIMEOUT]）。
@@ -906,5 +1090,25 @@ mod tests {
 
         let not_sent = AttemptError::before_request("dns failure".to_owned());
         assert!(!not_sent.request_possibly_sent);
+    }
+
+    #[test]
+    fn test_alpn_and_session_resumption_configured() {
+        let client = EchHttpClient::new().unwrap();
+        // 校验标准 TLS 配置包含 h2 与 http/1.1
+        assert_eq!(
+            client.tls_config_standard.alpn_protocols,
+            vec![b"h2".to_vec(), b"http/1.1".to_vec()]
+        );
+
+        // 校验带 ECH 的 TLS 配置也包含 h2 与 http/1.1
+        let test_ech_b64 = "AEX+DQBBXQAgACAMpYldYzQ9l7qOXBLrrdhR4BcdHHeNfu4qhqehUSG4NQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=";
+        assert!(client.set_ech_config_b64("api.bgm.tv", test_ech_b64));
+        let guard = client.tls_configs_with_ech.read().unwrap();
+        let ech_entry = guard.get("api.bgm.tv").unwrap();
+        assert_eq!(
+            ech_entry.config.alpn_protocols,
+            vec![b"h2".to_vec(), b"http/1.1".to_vec()]
+        );
     }
 }

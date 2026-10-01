@@ -316,12 +316,17 @@ class LocalOAuthProxyServer(
         text: String,
         active: ProxySession,
     ): String {
-        var rewritten = text.replace("https://${active.upstreamHost}", "http://127.0.0.1:${active.port}")
+        var rewritten =
+            text
+                .replace("https://${active.upstreamHost}", "http://127.0.0.1:${active.port}")
+                .replace("http://${active.upstreamHost}", "http://127.0.0.1:${active.port}")
         if (active.upstreamHost == BGM_WEB_PROXY_HOST) {
             rewritten =
                 rewritten
                     .replace("https://bangumi.tv", "http://127.0.0.1:${active.port}")
+                    .replace("http://bangumi.tv", "http://127.0.0.1:${active.port}")
                     .replace("https://chii.in", "http://127.0.0.1:${active.port}")
+                    .replace("http://chii.in", "http://127.0.0.1:${active.port}")
         }
         return rewritten
     }
@@ -352,8 +357,12 @@ class LocalOAuthProxyServer(
 
     private fun sanitizeSetCookie(cookie: String): String =
         cookie
-            .replace(Regex("(?i);?\\s*domain=[^;]+"), "")
-            .replace(Regex("(?i);?\\s*secure"), "")
+            .split(';')
+            .map { it.trim() }
+            .filterNot { part ->
+                part.startsWith("domain=", ignoreCase = true) ||
+                    part.equals("secure", ignoreCase = true)
+            }.joinToString("; ")
 
     private companion object {
         val EXCLUDED_REQUEST_HEADERS =

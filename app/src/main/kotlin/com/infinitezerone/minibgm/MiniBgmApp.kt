@@ -50,9 +50,9 @@ class MiniBgmApp :
             appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
         )
 
-        // 初始化 ECH 运行时配置与磁盘缓存
-        com.infinitezerone.minibgm.core.network.ech.EchConfigStore
-            .init(filesDir)
+        // 初始化 ECH 运行时：config 磁盘缓存 + CF 边缘节点优选池
+        com.infinitezerone.minibgm.core.network.ech.EchRuntime
+            .initialize(filesDir)
 
         startKoin {
             // release 下仅记录错误，避免 DI 结构信息进入公共日志
@@ -84,6 +84,9 @@ class MiniBgmApp :
         super.onTrimMemory(level)
         // 当用户切换出应用返回桌面时，智能按需刷新一次小组件（内部带有 hasActiveWidgets 守卫）
         if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            // 优选池的落盘是节流的，退到后台时补一次强制刷写，避免节流窗口内的排序变更丢失
+            com.infinitezerone.minibgm.core.network.ech.EchRuntime
+                .flush()
             appScope.launch {
                 WidgetSync.requestUpdate(this@MiniBgmApp)
             }
