@@ -62,29 +62,7 @@ class EchHttpClientEngine(
             }
             val methodString = data.method.value
 
-            val headerKeysList = ArrayList<String>()
-            val headerValuesList = ArrayList<String>()
-
-            data.headers.forEach { name, values ->
-                values.forEach { v ->
-                    headerKeysList.add(name)
-                    headerValuesList.add(v)
-                }
-            }
-
-            // body 自带的 Content-Type 必须由引擎折进头部。Ktor 的官方引擎（OkHttp / CIO）都会做这件事，
-            // 本引擎此前只转抄 data.headers，于是 `setBody(ByteArrayContent(bytes, ct))` 的类型被丢掉，
-            // 上游收到"有 body 但无 Content-Type"的请求，Fastify 一类框架会以 415 Unsupported Media Type 拒收。
-            // 显式头部优先：只有调用方没自己写 Content-Type 时才补。
-            val bodyContentType = data.body.contentType
-            if (bodyContentType != null &&
-                headerKeysList.none { it.equals(HttpHeaders.ContentType, ignoreCase = true) }
-            ) {
-                headerKeysList.add(HttpHeaders.ContentType)
-                headerValuesList.add(bodyContentType.toString())
-            }
-
-            // 处理 Body
+            // 1. 优先提取 Body 字节，确保请求体长度与格式确定
             val bodyBytes: ByteArray? =
                 when (val body = data.body) {
                     is OutgoingContent.ByteArrayContent -> body.bytes()
@@ -102,6 +80,37 @@ class EchHttpClientEngine(
                     }
                     else -> throw IOException("ECH engine does not support streaming request body: ${body::class.qualifiedName}")
                 }
+
+            val headerKeysList = ArrayList<String>()
+            val headerValuesList = ArrayList<String>()
+
+            // 2. 提取 Headers：过滤掉 Transfer-Encoding 与原有陈旧的 Content-Length，
+            // 避免因 ReadChannelContent 携带 Transfer-Encoding: chunked 导致对端服务端在收到非 chunked 的裸 JSON 时等待超时
+            data.headers.forEach { name, values ->
+                if (!name.equals(HttpHeaders.TransferEncoding, ignoreCase = true) &&
+                    !name.equals(HttpHeaders.ContentLength, ignoreCase = true)
+                ) {
+                    values.forEach { v ->
+                        headerKeysList.add(name)
+                        headerValuesList.add(v)
+                    }
+                }
+            }
+
+            // 3. body 自带的 Content-Type 必须由引擎折进头部
+            val bodyContentType = data.body.contentType
+            if (bodyContentType != null &&
+                headerKeysList.none { it.equals(HttpHeaders.ContentType, ignoreCase = true) }
+            ) {
+                headerKeysList.add(HttpHeaders.ContentType)
+                headerValuesList.add(bodyContentType.toString())
+            }
+
+            // 4. 精确注入实际 bodyBytes 长度
+            if (bodyBytes != null) {
+                headerKeysList.add(HttpHeaders.ContentLength)
+                headerValuesList.add(bodyBytes.size.toString())
+            }
 
             if (!EchNativeClient.isAvailable()) {
                 throw IOException("libminibgm_ech.so is not available on this device")

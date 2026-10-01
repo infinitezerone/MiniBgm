@@ -389,9 +389,7 @@ impl EchHttpClient {
                     Ok(_) => {
                         let mut request = Request::builder().method(method).uri(uri.clone());
                         for (name, value) in headers {
-                            if name.eq_ignore_ascii_case("host")
-                                || name.eq_ignore_ascii_case("connection")
-                            {
+                            if is_disallowed_header(name, true) {
                                 continue;
                             }
                             request = request.header(name, value);
@@ -766,9 +764,7 @@ async fn async_try_fetch_with_config(
 
                     let mut request = Request::builder().method(method.clone()).uri(uri.clone());
                     for (name, value) in headers {
-                        if name.eq_ignore_ascii_case("host")
-                            || name.eq_ignore_ascii_case("connection")
-                        {
+                        if is_disallowed_header(name, true) {
                             continue;
                         }
                         request = request.header(name, value);
@@ -797,9 +793,7 @@ async fn async_try_fetch_with_config(
 
                     let mut request = Request::builder().method(method.clone()).uri(uri.clone());
                     for (name, value) in headers {
-                        if name.eq_ignore_ascii_case("host")
-                            || name.eq_ignore_ascii_case("connection")
-                        {
+                        if is_disallowed_header(name, false) {
                             continue;
                         }
                         request = request.header(name, value);
@@ -863,6 +857,24 @@ async fn async_try_fetch_with_config(
     Err(AttemptError::before_request(last_error.unwrap_or_else(
         || "All candidate connections failed".into(),
     )))
+}
+
+/// 过滤不允许向远端发送的伪头、连接专属头或与全量 Body 冲突的传输编码头
+fn is_disallowed_header(name: &str, is_h2: bool) -> bool {
+    if name.eq_ignore_ascii_case("host") {
+        return true;
+    }
+    if is_h2 {
+        // RFC 7540 §8.1.2.2: Connection-specific headers must not be sent over HTTP/2.
+        // Transfer-encoding is also disallowed in HTTP/2.
+        name.eq_ignore_ascii_case("connection")
+            || name.eq_ignore_ascii_case("keep-alive")
+            || name.eq_ignore_ascii_case("proxy-connection")
+            || name.eq_ignore_ascii_case("transfer-encoding")
+            || name.eq_ignore_ascii_case("upgrade")
+    } else {
+        name.eq_ignore_ascii_case("connection") || name.eq_ignore_ascii_case("transfer-encoding")
+    }
 }
 
 /// 处理并分发 hyper 响应（支持流式与整体收集）

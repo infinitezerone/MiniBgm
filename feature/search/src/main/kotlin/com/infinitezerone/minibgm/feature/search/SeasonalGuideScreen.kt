@@ -59,6 +59,7 @@ import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideErrorSt
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeletonGrid
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeletonList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -192,8 +193,13 @@ fun SeasonalGuideContent(
                         info.totalItemsCount to (info.visibleItemsInfo.lastOrNull()?.index ?: 0)
                     }
                 }
-            totalItems > 0 && lastVisible >= totalItems - 6
-        }.collect { shouldLoadMore ->
+            val threshold =
+                when (uiState.viewMode) {
+                    SeasonalViewMode.LIST -> 1
+                    SeasonalViewMode.POSTER -> 2
+                }
+            totalItems > 0 && lastVisible >= totalItems - threshold
+        }.distinctUntilChanged().collect { shouldLoadMore ->
             val state = uiState
             if (shouldLoadMore && state.hasMore && !state.isLoadingMore && !state.isLoading) {
                 viewModel.loadMore()
@@ -228,7 +234,8 @@ fun SeasonalGuideContent(
                     },
                 )
 
-                if ((uiState.isLoading || uiState.isLoadingMore) && uiState.subjects.isNotEmpty()) {
+                // 仅在整体换挡重新拉取时在顶部展示进度，追加翻页由底部指示器表达
+                if (uiState.isLoading && uiState.subjects.isNotEmpty()) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
@@ -312,6 +319,22 @@ fun SeasonalGuideContent(
                                         }
                                     }
                                 }
+                            } else if (!uiState.hasMore && uiState.filteredSubjects.size >= 10) {
+                                item(key = "endOfList") {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 20.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = "已经到底啦，共发现 ${uiState.filteredSubjects.size} 部条目",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -377,6 +400,22 @@ fun SeasonalGuideContent(
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
                                         }
+                                    }
+                                }
+                            } else if (!uiState.hasMore && uiState.filteredSubjects.size >= 10) {
+                                item(key = "endOfGrid", span = { GridItemSpan(maxLineSpan) }) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 20.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = "已经到底啦，共发现 ${uiState.filteredSubjects.size} 部条目",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        )
                                     }
                                 }
                             }

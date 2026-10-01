@@ -32,7 +32,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -112,7 +114,19 @@ fun SettingsScreen(
             if (granted) {
                 viewModel.setAiringReminderEnabled(true)
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("已开启追番开播提醒")
+                    val result =
+                        snackbarHostState.showSnackbar(
+                            message = "已开启追番开播提醒（如需横幅/振动可在系统设置中开启）",
+                            actionLabel = "去设置",
+                            duration = SnackbarDuration.Short,
+                        )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        val intent =
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            }
+                        context.startActivity(intent)
+                    }
                 }
             } else {
                 viewModel.setAiringReminderEnabled(false)

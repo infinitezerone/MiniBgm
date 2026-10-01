@@ -20,13 +20,17 @@ import com.infinitezerone.minibgm.sync.work.R
 class AiringReminderNotifier(
     private val context: Context,
 ) {
-    fun notificationsEnabled(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    fun notificationsEnabled(): Boolean {
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return false
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
         } else {
-            NotificationManagerCompat.from(context).areNotificationsEnabled()
+            true
         }
+    }
 
     /** 每日汇总通知（固定 ID，点击跳转时刻表） */
     fun notify(upcoming: List<UpcomingAiring>) {
@@ -45,6 +49,10 @@ class AiringReminderNotifier(
                 .setContentTitle(context.getString(R.string.airing_reminder_title, upcoming.size))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
                 .setContentIntent(launchScheduleIntent())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setVibrate(VIBRATION_PATTERN)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setAutoCancel(true)
                 .build()
 
@@ -87,6 +95,8 @@ class AiringReminderNotifier(
                     .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
                     .setContentIntent(launchSubjectIntent(item.subjectId))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setVibrate(VIBRATION_PATTERN)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setAutoCancel(true)
                     .build()
@@ -134,6 +144,7 @@ class AiringReminderNotifier(
         const val CHANNEL_ID = "airing_reminders"
         const val NOTIFICATION_ID = 4701
         const val PRE_AIR_CHANNEL_ID = "airing_pre_air"
+        private val VIBRATION_PATTERN = longArrayOf(0, 250, 250, 250)
 
         fun notificationIdForSubject(subjectId: Long): Int = (47000 + (subjectId % 10000)).toInt()
 
@@ -152,15 +163,19 @@ class AiringReminderNotifier(
                 ),
             )
 
-            // 2. 每日更新汇总渠道 (DEFAULT)
+            // 2. 每日更新汇总渠道 (HIGH, 带振动与锁屏公开)
             val dailyChannel =
                 NotificationChannel(
                     CHANNEL_ID,
                     context.getString(R.string.airing_reminder_channel_name),
-                    NotificationManager.IMPORTANCE_DEFAULT,
+                    NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
                     group = GROUP_ID
                     description = context.getString(R.string.airing_reminder_channel_desc)
+                    enableVibration(true)
+                    vibrationPattern = VIBRATION_PATTERN
+                    setShowBadge(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
             manager.createNotificationChannel(dailyChannel)
 
@@ -174,6 +189,7 @@ class AiringReminderNotifier(
                     group = GROUP_ID
                     description = context.getString(R.string.airing_pre_air_channel_desc)
                     enableVibration(true)
+                    vibrationPattern = VIBRATION_PATTERN
                     setShowBadge(true)
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
