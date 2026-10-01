@@ -22,7 +22,7 @@ class EchConfigCodecTest {
         assertEquals(EchConfigCodec.VERSION_DRAFT_18, fields.version)
         assertEquals(EchConfigCodec.KEM_X25519_HKDF_SHA256, fields.kemId)
         assertEquals("cloudflare-ech.com", fields.publicName)
-        assertEquals(253, fields.configId)
+        assertEquals(33, fields.configId)
     }
 
     @Test

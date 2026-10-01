@@ -49,6 +49,7 @@ const CONSUMER_STALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct EchConfigEntry {
     config: Arc<ClientConfig>,
+    #[allow(dead_code)]
     source_b64: String,
     updated_at: Instant,
 }
@@ -481,10 +482,7 @@ impl EchHttpClient {
                     .read()
                     .unwrap_or_else(|p| p.into_inner());
                 lock.get(host)
-                    .map(|entry| {
-                        entry.source_b64 != cfg_b64.trim()
-                            || entry.updated_at.elapsed() > ECH_CONFIG_TTL
-                    })
+                    .map(|entry| entry.updated_at.elapsed() > ECH_CONFIG_TTL)
                     .unwrap_or(true)
             };
             if needs_update {
