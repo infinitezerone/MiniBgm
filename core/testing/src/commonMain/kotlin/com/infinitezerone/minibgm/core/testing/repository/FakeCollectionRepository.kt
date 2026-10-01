@@ -87,7 +87,10 @@ class FakeCollectionRepository : CollectionRepository {
         return AppResult.Success(counts)
     }
 
-    override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> = AppResult.Success(collectionsState.value[subjectId])
+    override suspend fun fetchCollection(
+        subjectId: Long,
+        force: Boolean,
+    ): AppResult<UserCollection?> = AppResult.Success(collectionsState.value[subjectId])
 
     override suspend fun updateCollectionStatus(
         subjectId: Long,

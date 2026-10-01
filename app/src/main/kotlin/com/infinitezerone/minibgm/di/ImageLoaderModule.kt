@@ -51,8 +51,9 @@ private class ImageRoutingEngine(
         get() = primaryEngine.supportedCapabilities.intersect(fallbackEngine.supportedCapabilities)
 
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
+        val host = data.url.host
         val targetEngine =
-            if (data.url.host.isBgmDomain) {
+            if (host.isBgmDomain || host.equals("anilist.co", ignoreCase = true) || host.endsWith(".anilist.co", ignoreCase = true)) {
                 primaryEngine
             } else {
                 fallbackEngine

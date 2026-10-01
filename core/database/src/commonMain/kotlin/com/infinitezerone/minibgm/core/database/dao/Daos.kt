@@ -42,6 +42,12 @@ interface AirScheduleDao {
     @Query("DELETE FROM air_schedules WHERE bgmId NOT IN (:keepIds)")
     suspend fun deleteSchedulesNotIn(keepIds: List<Long>)
 
+    @Query("UPDATE air_schedules SET coverUrl = :coverUrl WHERE bgmId = :bgmId AND coverUrl != :coverUrl")
+    suspend fun updateCoverUrl(
+        bgmId: Long,
+        coverUrl: String,
+    )
+
     @Query("DELETE FROM air_schedules")
     suspend fun clearSchedules()
 

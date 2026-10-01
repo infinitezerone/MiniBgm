@@ -1409,4 +1409,40 @@ class CollectionRepositoryImplTest {
                     .firstOrNull { it.subjectId == 100L }
             assertEquals(null, stored)
         }
+
+    @Test
+    fun fetchCollection_whenLocalExistsAndNotForce_returnsLocalWithoutNetwork() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            harness.dao.insertCollection(
+                UserCollectionEntity(
+                    userId = 42L,
+                    subjectId = 100L,
+                    subjectType = 2,
+                    type = CollectionType.DOING.value,
+                    epStatus = 5,
+                    updatedAt = "2026-09-01T00:00:00Z",
+                ),
+            )
+
+            val result = harness.repository.fetchCollection(100L, force = false)
+
+            assertIs<AppResult.Success<UserCollection?>>(result)
+            assertEquals(5, result.data?.epStatus)
+            assertEquals(0, harness.api.getCollectionCallCount)
+        }
+
+    @Test
+    fun fetchCollection_whenForce_callsNetworkAndUpdatesLocal() =
+        runTest {
+            val harness = Harness()
+            harness.tokenProvider.saveTokens(42L, "at", "rt")
+
+            val result = harness.repository.fetchCollection(100L, force = true)
+
+            assertIs<AppResult.Success<UserCollection?>>(result)
+            assertEquals(1, harness.api.getCollectionCallCount)
+        }
 }

@@ -62,8 +62,11 @@ interface CollectionRepository : UserDataClearable {
         force: Boolean = false,
     ): AppResult<Map<CollectionType, Int>>
 
-    /** 从远端拉取指定条目的收藏详情并更新本地 Room 缓存 */
-    suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?>
+    /** 从远端拉取指定条目的收藏详情并更新本地 Room 缓存。[force] 为 true 时绕过本地缓存直接请求网络 */
+    suspend fun fetchCollection(
+        subjectId: Long,
+        force: Boolean = false,
+    ): AppResult<UserCollection?>
 
     /** 更新条目收藏状态（想看/在看/看过、评分、简评等） */
     suspend fun updateCollectionStatus(
@@ -278,8 +281,17 @@ class CollectionRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("获取收藏统计"))
         }
 
-    override suspend fun fetchCollection(subjectId: Long): AppResult<UserCollection?> {
+    override suspend fun fetchCollection(
+        subjectId: Long,
+        force: Boolean,
+    ): AppResult<UserCollection?> {
         val activeUid = tokenProvider.activeUserId.first() ?: return AppResult.Success(null)
+        if (!force) {
+            val local = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+            if (local != null) {
+                return AppResult.Success(local.asExternalModel())
+            }
+        }
         return try {
             val collection = apiService.getCollection(activeUid.toString(), subjectId)
             if (collection != null) {
@@ -289,7 +301,12 @@ class CollectionRepositoryImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏状态"))
+            val fallback = userCollectionDao.getCollectionBySubjectId(activeUid, subjectId).firstOrNull()
+            if (fallback != null) {
+                AppResult.Success(fallback.asExternalModel())
+            } else {
+                AppResult.Error(e, e.toUserFriendlyMessage("获取收藏状态"))
+            }
         }
     }
 
@@ -650,9 +667,13 @@ class CollectionRepositoryImpl(
                     val lastSync =
                         userPreferences?.userPreferences?.firstOrNull()?.collectionsLastSyncTimestamp
                             ?: inMemoryLastSync
-                    val hasLocalDoing =
-                        userCollectionDao.getCollectionsByType(activeUid, CollectionType.DOING.value).firstOrNull()?.isNotEmpty() == true
-                    if (hasLocalDoing && (TimeUtils.nowEpochMillis() - lastSync < COLLECTIONS_SYNC_THROTTLE_MILLIS)) {
+                    val now = TimeUtils.nowEpochMillis()
+                    // 1. 冷却期保护：短时间内（5分钟）刚刚尝试过同步，避免网络波动引发死循环重试风暴
+                    if (inMemoryLastSync > 0 && (now - inMemoryLastSync < RETRY_COOL_DOWN_MILLIS)) {
+                        return AppResult.Success(Unit)
+                    }
+                    // 2. 正常 6 小时节流：若存在有效历史同步记录且在 6 小时内，直接命中节流
+                    if (lastSync > 0 && (now - lastSync < COLLECTIONS_SYNC_THROTTLE_MILLIS)) {
                         return AppResult.Success(Unit)
                     }
                 }
@@ -692,6 +713,7 @@ class CollectionRepositoryImpl(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                inMemoryLastSync = TimeUtils.nowEpochMillis()
                 AppResult.Error(e, e.toUserFriendlyMessage("同步在看收藏"))
             }
         }
@@ -710,6 +732,7 @@ class CollectionRepositoryImpl(
 
     private companion object {
         const val COLLECTIONS_SYNC_THROTTLE_MILLIS = 6L * 60L * 60L * 1000L // 6 小时节流
+        const val RETRY_COOL_DOWN_MILLIS = 5L * 60L * 1000L // 5 分钟重试冷却期
         const val CACHE_TTL_MILLIS = 10 * 60 * 1000L // 10 分钟缓存有效期
     }
 }

@@ -95,6 +95,16 @@ class ScheduleRepositoryImplTest {
             schedulesFlow.value = schedulesFlow.value.filter { it.bgmId in keep }
         }
 
+        override suspend fun updateCoverUrl(
+            bgmId: Long,
+            coverUrl: String,
+        ) {
+            schedulesFlow.value =
+                schedulesFlow.value.map {
+                    if (it.bgmId == bgmId) it.copy(coverUrl = coverUrl) else it
+                }
+        }
+
         override suspend fun clearSchedules() {
             schedulesFlow.value = emptyList()
         }

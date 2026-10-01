@@ -293,27 +293,39 @@ class SubjectDetailViewModel(
                         )
                     }
 
-                    // 2. 分集数据（拉取完成后立即退出分集骨架态）
-                    val episodesResult = subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
+                    // 2. 分集数据（本地已有且非用户显式下拉时优先命中缓存短路，不打扰网络）
+                    val episodesResult =
+                        if (isUserPullToRefresh || _uiState.value.episodes.isEmpty()) {
+                            subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
+                        } else {
+                            subjectRepository.fetchEpisodes(subjectId)
+                        }
                     episodesResult.onError { _, message ->
                         if (_uiState.value.episodes.isEmpty()) {
                             _uiState.update { it.copy(episodesError = message) }
                         }
-                        if (_uiState.value.subject == null) {
+                        if (_uiState.value.subject == null && _uiState.value.episodes.isEmpty()) {
                             _uiState.update { it.copy(error = message) }
                         }
                     }
                     _uiState.update { current ->
                         current.copy(
                             isEpisodesLoading = false,
-                            episodesError = if (episodesResult is AppResult.Success) null else current.episodesError,
+                            episodesError =
+                                if (episodesResult is AppResult.Success ||
+                                    current.episodes.isNotEmpty()
+                                ) {
+                                    null
+                                } else {
+                                    current.episodesError
+                                },
                         )
                     }
 
-                    // 3. 收藏状态
-                    val collectionResult = collectionRepository.fetchCollection(subjectId)
+                    // 3. 收藏状态（本地优先，用户下拉时才强制向远端同步）
+                    val collectionResult = collectionRepository.fetchCollection(subjectId, force = isUserPullToRefresh)
                     collectionResult.onError { _, message ->
-                        if (_uiState.value.subject == null) {
+                        if (_uiState.value.subject == null && _uiState.value.collection == null) {
                             _uiState.update { it.copy(error = message) }
                         }
                     }
@@ -321,7 +333,7 @@ class SubjectDetailViewModel(
                         current.copy(
                             collection =
                                 if (collectionResult is AppResult.Success) {
-                                    collectionResult.data
+                                    collectionResult.data ?: current.collection
                                 } else {
                                     current.collection
                                 },
