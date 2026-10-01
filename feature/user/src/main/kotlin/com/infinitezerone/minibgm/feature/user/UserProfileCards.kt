@@ -309,7 +309,7 @@ internal fun UserStatsIsland(
                         .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
             )
             UserStatCell(
-                label = "在追",
+                label = "在看",
                 value = doingCount,
                 onClick = { onSelectType(com.infinitezerone.minibgm.core.model.CollectionType.DOING) },
                 modifier = Modifier.weight(1f),
@@ -494,7 +494,7 @@ internal fun TasteDnaCard(
                 )
                 DnaLegendItem(
                     color = MaterialTheme.colorScheme.tertiary,
-                    label = "在追",
+                    label = "在看",
                     percentage = (doingRatio * 100).toInt(),
                 )
                 DnaLegendItem(

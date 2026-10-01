@@ -196,16 +196,16 @@ internal fun CollectionArchivesGrid(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             ArchiveTile(
-                title = "已看完毕",
-                subtitle = "历史沉淀",
+                title = "看过",
+                subtitle = "已完成的收藏",
                 count = collectCount,
                 isSelected = selectedType == CollectionType.COLLECT,
                 onClick = { onSelectType(CollectionType.COLLECT) },
                 modifier = Modifier.weight(1f),
             )
             ArchiveTile(
-                title = "正在追更",
-                subtitle = "当季活跃",
+                title = "在看",
+                subtitle = "正在追番 / 观看",
                 count = doingCount,
                 isSelected = selectedType == CollectionType.DOING,
                 onClick = { onSelectType(CollectionType.DOING) },
@@ -220,16 +220,16 @@ internal fun CollectionArchivesGrid(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             ArchiveTile(
-                title = "补番心愿",
-                subtitle = "种草清单",
+                title = "想看",
+                subtitle = "追番预定 / 心愿单",
                 count = wishCount,
                 isSelected = selectedType == CollectionType.WISH,
                 onClick = { onSelectType(CollectionType.WISH) },
                 modifier = Modifier.weight(1f),
             )
             ArchiveTile(
-                title = "封存归档",
-                subtitle = "搁置 / 抛弃",
+                title = "搁置 / 抛弃",
+                subtitle = "暂停与弃坑",
                 count = archiveCount,
                 isSelected = selectedType == CollectionType.ON_HOLD || selectedType == CollectionType.DROPPED,
                 onClick = { onSelectType(CollectionType.ON_HOLD) },
