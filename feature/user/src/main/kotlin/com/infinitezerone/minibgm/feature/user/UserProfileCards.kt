@@ -4,10 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WorkspacePremium
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,14 +25,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
-import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
 import com.infinitezerone.minibgm.core.designsystem.component.bounceClickable
@@ -166,30 +161,21 @@ internal fun UserProfileHero(
             }
         }
 
-        // 个性签名：左侧主题色细线引导，随文本高度自适应。签名为空时整块不渲染。
+        // 个性签名：轻柔微气泡底色包裹，随文本高度自适应。签名为空时整块不渲染。
         if (sign.isNotBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
+            Spacer(modifier = Modifier.height(14.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .width(3.dp)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                )
-                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = sign,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
         }
@@ -260,71 +246,93 @@ private fun AccountSwitchChip(
 private const val STAT_PLACEHOLDER = "—"
 
 /**
- * 个人页第二层：通栏数字带。
+ * 个人页第二层：黄金三维统计岛屿（Stat Island）。
  *
- * 形态纪律（见 `docs/PROFILE_HUB_REDESIGN.md` §3）：全页只有这一排同形数字。
+ * 契合二次元追番社区的核心用户资产维度：
+ * 1.「看过」—— 累计完结的动画资产（历史沉淀）；
+ * 2.「在追」—— 当前活跃追番负荷（当下状态）；
+ * 3.「想看」—— 待补新番心愿单储备（未来期待）。
  *
- * [footprint] 可空且**本行始终渲染**：Room 首次发射有一帧延迟，若按 null 整项不渲染，
- * 数字带会晚一步插进来，把吸顶 Tab 与内容流整体往下顶一次。占位比消失稳。
- *
- * **本带不含「在看」**：该指标已由下方吸顶 Tab 承担，而 Tab 计数来自远端 legacy 统计、
- * 本带若也放一份则来自 Room 本地聚合——两者不同源，同步滞后时会并排出现同一指标的
- * 两个数字。因此本带只放 Tab 无法表达的累计量（在看集数 / 本月打卡），
- * 与 Tab 的分区计数互不重叠。两条细分隔线夹一条「带」，不读作卡片。
- *
- * 命名口径：「在看集数」对应 `SUM(epStatus) WHERE type = 3`，即**当前在看那批番的已看集数之和**。
- * 番剧看完转为「看过」后即退出统计，数字会回落——所以它不是"累计"，旧名「累计追集」名不副实，
- * 已按实际口径更名。本地表只同步 DOING，无法给出跨状态的真正累计值。
+ * 零额外 API 开销：直接消费 [counts]（官方单接口 status 返回的真实汇总）。
+ * 视觉形态：一体化圆角岛屿卡片，彻底消灭两条生硬贯穿全屏的表格分隔细线；
+ * 交互联动：点击任一维度平滑联动切换下方对应 Tab 并滚动到位。
  */
 @Composable
-internal fun TrackingStatsRow(
-    footprint: TrackingFootprint?,
-    onClick: () -> Unit,
+internal fun UserStatsIsland(
+    counts: Map<com.infinitezerone.minibgm.core.model.CollectionType, Int>,
+    onSelectType: (com.infinitezerone.minibgm.core.model.CollectionType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bounceState = rememberBounceOnClick(pressedScale = 0.98f)
-    Column(
+    val collectCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.COLLECT]?.toString() ?: STAT_PLACEHOLDER
+    val doingCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.DOING]?.toString() ?: STAT_PLACEHOLDER
+    val wishCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.WISH]?.toString() ?: STAT_PLACEHOLDER
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
         modifier =
             modifier
                 .fillMaxWidth()
-                .bounceClickable(state = bounceState, onClickLabel = "查看收藏明细") { onClick() },
+                .padding(horizontal = 20.dp, vertical = 4.dp),
     ) {
-        HorizontalDivider(
-            thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-        )
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TrackingStatCell(
-                label = "在看集数",
-                value = footprint?.episodesWatched?.toString() ?: STAT_PLACEHOLDER,
+            UserStatCell(
+                label = "看过",
+                value = collectCount,
+                onClick = { onSelectType(com.infinitezerone.minibgm.core.model.CollectionType.COLLECT) },
                 modifier = Modifier.weight(1f),
             )
-            TrackingStatCell(
-                label = "本月打卡",
-                value = footprint?.monthActiveCount?.toString() ?: STAT_PLACEHOLDER,
+            Box(
+                modifier =
+                    Modifier
+                        .width(1.dp)
+                        .height(24.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+            )
+            UserStatCell(
+                label = "在追",
+                value = doingCount,
+                onClick = { onSelectType(com.infinitezerone.minibgm.core.model.CollectionType.DOING) },
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                modifier =
+                    Modifier
+                        .width(1.dp)
+                        .height(24.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+            )
+            UserStatCell(
+                label = "想看",
+                value = wishCount,
+                onClick = { onSelectType(com.infinitezerone.minibgm.core.model.CollectionType.WISH) },
                 modifier = Modifier.weight(1f),
             )
         }
-        HorizontalDivider(
-            thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-        )
     }
 }
 
 @Composable
-private fun TrackingStatCell(
+private fun UserStatCell(
     label: String,
     value: String,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    val bounceState = rememberBounceOnClick(pressedScale = 0.95f)
+    Column(
+        modifier =
+            modifier
+                .bounceClickable(state = bounceState, onClickLabel = "查看$label") { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
             text = value,
             style = MaterialTheme.typography.titleLarge,
@@ -334,7 +342,7 @@ private fun TrackingStatCell(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

@@ -154,9 +154,8 @@ fun UserScreenContent(
         }
     }
 
-    // 数字带位于头部之下、吸顶 Tab 之上，据此推出 Tab 在列表中的下标（供点击数字带跳转用）
-    val statsVisible = uiState.trackingFootprint != null
-    val tabsIndex = if (statsVisible) 2 else 1
+    // 统计岛屿位于头部（下标0）之下、吸顶 Tab 之上（下标2）
+    val tabsIndex = 2
 
     // 触底加载：滑动到列表末尾（倒数第 3 项以内）且有更多数据时自动增量加载
     val activeType = collectionsState.selectedType
@@ -276,11 +275,12 @@ fun UserScreenContent(
                             )
                         }
 
-                        // 始终占位渲染：footprint 未就绪时显示「—」，不整项消失（否则下方会跳版）
-                        item(key = "tracking_stats") {
-                            TrackingStatsRow(
-                                footprint = uiState.trackingFootprint,
-                                onClick = {
+                        // 黄金三维统计岛屿：看过 / 在追 / 想看
+                        item(key = "user_stats_island") {
+                            UserStatsIsland(
+                                counts = uiState.collectionCounts,
+                                onSelectType = { type ->
+                                    onSelectCollectionType(type)
                                     coroutineScope.launch { listState.animateScrollToItem(tabsIndex) }
                                 },
                             )

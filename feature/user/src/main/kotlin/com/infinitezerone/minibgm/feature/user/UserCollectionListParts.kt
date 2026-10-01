@@ -31,6 +31,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
@@ -39,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -271,6 +273,24 @@ internal fun UserCollectionCard(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
+                // 进度与打卡区（增加精致圆角微进度条）
+                if (totalEps > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val progressRatio = (epStatus.toFloat() / totalEps).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progressRatio },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -278,52 +298,56 @@ internal fun UserCollectionCard(
                 ) {
                     val progressText =
                         if (totalEps > 0) {
-                            "进度: $epStatus / $totalEps 话"
+                            "$epStatus / $totalEps 话"
+                        } else if (epStatus > 0) {
+                            "已看 $epStatus 话"
                         } else {
-                            "进度: $epStatus 话"
+                            "尚未开始"
                         }
                     Text(
                         text = progressText,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    FilledTonalIconButton(
-                        onClick = onIncrementProgress,
-                        enabled = !isUpdating && canIncrement,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        if (isUpdating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.PlusOne,
-                                contentDescription = "+1 话",
-                                modifier = Modifier.size(18.dp),
-                            )
+                    if (canIncrement || isUpdating) {
+                        FilledTonalIconButton(
+                            onClick = onIncrementProgress,
+                            enabled = !isUpdating && canIncrement,
+                            modifier = Modifier.size(30.dp),
+                        ) {
+                            if (isUpdating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Filled.PlusOne,
+                                    contentDescription = "+1 话",
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 }
 
                 if (collection.comment.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.Top,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.FormatQuote,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                modifier = Modifier.size(13.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
