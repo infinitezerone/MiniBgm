@@ -154,9 +154,6 @@ fun UserScreenContent(
         }
     }
 
-    // 统计岛屿位于头部（下标0）之下、吸顶 Tab 之上（下标2）
-    val tabsIndex = 2
-
     // 触底加载：滑动到列表末尾（倒数第 3 项以内）且有更多数据时自动增量加载
     val activeType = collectionsState.selectedType
     val activeHasMore = collectionsState.hasMoreByType[activeType] ?: false
@@ -262,6 +259,8 @@ fun UserScreenContent(
                     val hasFilterableList =
                         collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
 
+                    val archivesIndex = 4
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -281,13 +280,33 @@ fun UserScreenContent(
                                 counts = uiState.collectionCounts,
                                 onSelectType = { type ->
                                     onSelectCollectionType(type)
-                                    coroutineScope.launch { listState.animateScrollToItem(tabsIndex) }
+                                    coroutineScope.launch { listState.animateScrollToItem(archivesIndex) }
                                 },
                             )
                         }
 
-                        stickyHeader(key = "collection_tabs") {
-                            CollectionTypeTabs(
+                        // 追番基因卡片（Taste DNA）
+                        item(key = "taste_dna") {
+                            TasteDnaCard(counts = uiState.collectionCounts)
+                        }
+
+                        // 近期高光橱窗（Showcase）
+                        val highlightCandidates =
+                            collectionsState.collectionsByType[CollectionType.COLLECT]
+                                ?: collectionsState.collectionsByType[CollectionType.DOING]
+                                ?: collectionsState.collections
+                        if (highlightCandidates.isNotEmpty()) {
+                            item(key = "recent_highlights") {
+                                RecentHighlightsShowcase(
+                                    collections = highlightCandidates,
+                                    onSubjectClick = onSubjectClick,
+                                )
+                            }
+                        }
+
+                        // 收藏档案馆矩阵（2x2 磁贴卡片替代枯燥吸顶 Tab）
+                        item(key = "collection_archives") {
+                            CollectionArchivesGrid(
                                 selectedType = collectionsState.selectedType,
                                 counts = uiState.collectionCounts,
                                 onSelectType = onSelectCollectionType,

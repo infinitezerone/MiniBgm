@@ -2,8 +2,10 @@ package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,19 +14,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,9 +41,13 @@ import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
+import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.bounceClickable
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
+import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 
 /**
  * 个人页第一层：沉浸式身份头部。
@@ -344,6 +356,335 @@ private fun UserStatCell(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 追番基因卡片（Taste DNA）
+ *
+ * 将用户在 Bangumi 的全部收藏转换为直观的五维胶囊占比条与主导性格称号。
+ * 零网络开销：完全由已有的 [counts] 本地计算派生。
+ */
+@Composable
+internal fun TasteDnaCard(
+    counts: Map<com.infinitezerone.minibgm.core.model.CollectionType, Int>,
+    modifier: Modifier = Modifier,
+) {
+    val total = counts.values.sum()
+    if (total <= 0) return
+
+    val collectCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.COLLECT] ?: 0
+    val doingCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.DOING] ?: 0
+    val wishCount = counts[com.infinitezerone.minibgm.core.model.CollectionType.WISH] ?: 0
+    val onHoldCount = counts[CollectionType.ON_HOLD] ?: 0
+    val droppedCount = counts[CollectionType.DROPPED] ?: 0
+
+    val collectRatio = collectCount.toFloat() / total
+    val doingRatio = doingCount.toFloat() / total
+    val wishRatio = wishCount.toFloat() / total
+
+    val personalityTag =
+        when {
+            total >= 300 -> "阅片万卷 · 资深二次元"
+            collectRatio >= 0.65f -> "完结党 · 偏好全篇品味"
+            doingRatio >= 0.35f -> "当季追更前线"
+            wishRatio >= 0.40f -> "愿望单大亨 · 囤番家"
+            collectRatio >= 0.40f -> "阅历丰富 · 探索达人"
+            else -> "动画巡礼中"
+        }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "追番基因",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                ) {
+                    Text(
+                        text = personalityTag,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 多段分色胶囊条
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            ) {
+                if (collectCount > 0) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(collectCount.toFloat())
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.primary),
+                    )
+                }
+                if (doingCount > 0) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(doingCount.toFloat())
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.tertiary),
+                    )
+                }
+                if (wishCount > 0) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(wishCount.toFloat())
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.secondary),
+                    )
+                }
+                val otherCount = onHoldCount + droppedCount
+                if (otherCount > 0) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(otherCount.toFloat())
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 图例与占比
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DnaLegendItem(
+                    color = MaterialTheme.colorScheme.primary,
+                    label = "看过",
+                    percentage = (collectRatio * 100).toInt(),
+                )
+                DnaLegendItem(
+                    color = MaterialTheme.colorScheme.tertiary,
+                    label = "在追",
+                    percentage = (doingRatio * 100).toInt(),
+                )
+                DnaLegendItem(
+                    color = MaterialTheme.colorScheme.secondary,
+                    label = "想看",
+                    percentage = (wishRatio * 100).toInt(),
+                )
+                val otherRatio = (onHoldCount + droppedCount).toFloat() / total
+                if (otherRatio >= 0.01f) {
+                    DnaLegendItem(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        label = "归档",
+                        percentage = (otherRatio * 100).toInt(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DnaLegendItem(
+    color: Color,
+    label: String,
+    percentage: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color),
+        )
+        Text(
+            text = "$label $percentage%",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 近期高光橱窗（Recent Highlights Showcase）
+ *
+ * 横向海报流，呈现用户已评分或最新添加的精品条目。
+ */
+@Composable
+internal fun RecentHighlightsShowcase(
+    collections: List<UserCollection>,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val highlights =
+        remember(collections) {
+            val rated = collections.filter { it.rate > 0 }.sortedByDescending { it.rate }
+            if (rated.isNotEmpty()) rated.take(8) else collections.take(6)
+        }
+
+    if (highlights.isEmpty()) return
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "高光橱窗",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "精选收藏",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(highlights, key = { it.subjectId }) { item ->
+                HighlightItemCard(
+                    collection = item,
+                    onClick = {
+                        val subject = item.subject
+                        onSubjectClick(
+                            SubjectDetailRoute(
+                                subjectId = item.subjectId,
+                                initialName = subject?.displayName ?: "条目 #${item.subjectId}",
+                                initialCoverUrl = subject?.images?.bestImage.orEmpty(),
+                                initialScore = subject?.rating?.score ?: 0.0,
+                                source = "user_showcase",
+                            ),
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HighlightItemCard(
+    collection: UserCollection,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val subject = collection.subject
+    val title = subject?.displayName ?: "条目 #${collection.subjectId}"
+    val coverUrl = subject?.images?.bestImage.orEmpty()
+    val rate = collection.rate
+    val bounceState = rememberBounceOnClick(pressedScale = 0.96f)
+
+    Column(
+        modifier =
+            modifier
+                .width(92.dp)
+                .bounceClickable(state = bounceState, onClickLabel = title) { onClick() },
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(width = 92.dp, height = 130.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+        ) {
+            CoverImage(
+                url = coverUrl,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                cornerRadius = 10.dp,
+            )
+
+            if (rate > 0) {
+                Surface(
+                    shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = 0.dp, bottomEnd = 8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.90f),
+                    modifier = Modifier.align(Alignment.TopStart),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Text(
+                            text = "$rate",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

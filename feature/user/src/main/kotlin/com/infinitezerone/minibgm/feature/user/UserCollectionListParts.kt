@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
+import com.infinitezerone.minibgm.core.designsystem.component.bounceClickable
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBounceOnClick
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -127,6 +130,173 @@ internal fun CollectionTypeTabs(
                     },
                 )
             }
+        }
+    }
+}
+
+/**
+ * 收藏档案馆矩阵（Collection Archives Hub）。
+ *
+ * 替代死板重复的吸顶单排 Tab，以 2x2 磁贴卡片矩阵组织四大收藏空间：
+ * - 🎬 已看完毕 (COLLECT)
+ * - ⚡ 正在追更 (DOING)
+ * - ⏳ 补番心愿 (WISH)
+ * - 📦 封存归档 (ON_HOLD / DROPPED)
+ *
+ * 点击任一磁贴即可激活并展开下方对应的明细列表与类型筛选。
+ */
+@Composable
+internal fun CollectionArchivesGrid(
+    selectedType: CollectionType,
+    counts: Map<CollectionType, Int>,
+    onSelectType: (CollectionType) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val collectCount = counts[CollectionType.COLLECT]?.toString() ?: "—"
+    val doingCount = counts[CollectionType.DOING]?.toString() ?: "—"
+    val wishCount = counts[CollectionType.WISH]?.toString() ?: "—"
+    val onHoldCount = counts[CollectionType.ON_HOLD] ?: 0
+    val droppedCount = counts[CollectionType.DROPPED] ?: 0
+    val archiveCount =
+        if (counts.containsKey(CollectionType.ON_HOLD) || counts.containsKey(CollectionType.DROPPED)) {
+            (onHoldCount + droppedCount).toString()
+        } else {
+            "—"
+        }
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "收藏档案馆",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "点击切换展区",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ArchiveTile(
+                title = "已看完毕",
+                subtitle = "历史沉淀",
+                count = collectCount,
+                isSelected = selectedType == CollectionType.COLLECT,
+                onClick = { onSelectType(CollectionType.COLLECT) },
+                modifier = Modifier.weight(1f),
+            )
+            ArchiveTile(
+                title = "正在追更",
+                subtitle = "当季活跃",
+                count = doingCount,
+                isSelected = selectedType == CollectionType.DOING,
+                onClick = { onSelectType(CollectionType.DOING) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ArchiveTile(
+                title = "补番心愿",
+                subtitle = "种草清单",
+                count = wishCount,
+                isSelected = selectedType == CollectionType.WISH,
+                onClick = { onSelectType(CollectionType.WISH) },
+                modifier = Modifier.weight(1f),
+            )
+            ArchiveTile(
+                title = "封存归档",
+                subtitle = "搁置 / 抛弃",
+                count = archiveCount,
+                isSelected = selectedType == CollectionType.ON_HOLD || selectedType == CollectionType.DROPPED,
+                onClick = { onSelectType(CollectionType.ON_HOLD) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArchiveTile(
+    title: String,
+    subtitle: String,
+    count: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bounceState = rememberBounceOnClick(pressedScale = 0.97f)
+    val containerColor =
+        if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        }
+    val borderColor =
+        if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderColor),
+        modifier =
+            modifier
+                .bounceClickable(state = bounceState, onClickLabel = "切换到$title") { onClick() },
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = count,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            )
         }
     }
 }
