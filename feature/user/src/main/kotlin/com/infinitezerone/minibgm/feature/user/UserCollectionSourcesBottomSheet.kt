@@ -185,7 +185,6 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 1：哔哩哔哩搜索
                 UserSourceOptionCard(
                     title = "哔哩哔哩搜索",
-                    subtitle = "搜索：$searchKeyword",
                     iconVector = Icons.Filled.Tv,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -201,7 +200,6 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 2：蜜柑计划
                 UserSourceOptionCard(
                     title = "蜜柑计划",
-                    subtitle = "搜索磁力与字幕组资源",
                     iconVector = Icons.Filled.Download,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -224,7 +222,6 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 3：前往条目详情
                 UserSourceOptionCard(
                     title = "进入条目详情",
-                    subtitle = "查看全部分集列表、吐槽讨论与播放源配置",
                     iconVector = Icons.Filled.Info,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -249,7 +246,6 @@ internal fun UserCollectionSourcesBottomSheet(
 @Composable
 private fun UserSourceOptionCard(
     title: String,
-    subtitle: String,
     iconVector: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -277,33 +273,25 @@ private fun UserSourceOptionCard(
             Surface(
                 shape = BgmShapes.small,
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(36.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = iconVector,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
