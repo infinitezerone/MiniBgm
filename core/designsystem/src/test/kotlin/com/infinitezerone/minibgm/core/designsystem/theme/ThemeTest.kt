@@ -110,6 +110,12 @@ class ThemeTest {
         assertEquals(Color(0xFFF59E0B), RatingGold)
         assertEquals(Color(0xFFFCD34D), RatingGoldBright)
 
+        // Platform brand colors
+        assertEquals(Color(0xFFFB7299), BrandBilibili)
+        assertEquals(Color(0xFFE0567E), OnBrandBilibili)
+        assertEquals(Color(0xFF009688), BrandMikan)
+        assertEquals(Color(0xFF00796B), OnBrandMikan)
+
         // Backward compatibility mappings
         assertEquals(StatusWish, ActionWish)
         assertEquals(StatusDoing, ActionDoing)

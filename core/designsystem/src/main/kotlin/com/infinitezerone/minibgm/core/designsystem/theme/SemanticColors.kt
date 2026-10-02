@@ -179,3 +179,15 @@ val TypeGameContainer = Color(0xFFE8F5E9)
 val OnTypeGame = Color(0xFF2E7D32)
 val TypeRealContainer = Color(0xFFFCE4EC)
 val OnTypeReal = Color(0xFFC2185B)
+
+// ==========================================
+// 播放与资源渠道平台色
+// ==========================================
+
+/** 哔哩哔哩品牌粉色 */
+val BrandBilibili = Color(0xFFFB7299)
+val OnBrandBilibili = Color(0xFFE0567E)
+
+/** 蜜柑计划品牌青绿色 */
+val BrandMikan = Color(0xFF009688)
+val OnBrandMikan = Color(0xFF00796B)

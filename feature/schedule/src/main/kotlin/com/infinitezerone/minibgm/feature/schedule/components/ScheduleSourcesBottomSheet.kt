@@ -75,10 +75,6 @@ fun ScheduleSourcesBottomSheet(
         remember(displayName) {
             StreamingIntentResolver.buildBilibiliSearchTarget(displayName)
         }
-    val bilibiliOfficialLink =
-        remember(schedule.siteLinks) {
-            schedule.siteLinks.firstOrNull { it.siteName.equals("bilibili", ignoreCase = true) }
-        }
 
     val mikanLink =
         remember(schedule.siteLinks) {
@@ -231,22 +227,16 @@ fun ScheduleSourcesBottomSheet(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 )
 
-                // 源 1：哔哩哔哩 (Bilibili)
+                // 源 1：哔哩哔哩 (Bilibili 搜索)
                 ScheduleSourceCard(
-                    title = "哔哩哔哩",
-                    subtitle =
-                        if (bilibiliOfficialLink != null) {
-                            "打开 B 站观看正版番剧"
-                        } else {
-                            "打开 B 站客户端/网页搜索"
-                        },
+                    title = "哔哩哔哩搜索",
+                    subtitle = "唤起 B 站客户端搜索番剧（正版及二创熟肉）",
                     iconVector = Icons.Filled.Tv,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
                             val targetUrl =
-                                bilibiliOfficialLink?.playUrl
-                                    ?: bilibiliTarget.deepLinkUri
+                                bilibiliTarget.deepLinkUri
                                     ?: bilibiliTarget.webFallbackUrl
                             onOpenUrl(targetUrl)
                         }
@@ -282,7 +272,7 @@ fun ScheduleSourcesBottomSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = "更多外部源 (${otherLinks.size})",
+                                text = "其他外部平台（大陆多无版权或需代理）(${otherLinks.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

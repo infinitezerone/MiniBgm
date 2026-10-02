@@ -21,10 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,14 +50,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BrandBilibili
+import com.infinitezerone.minibgm.core.designsystem.theme.BrandMikan
+import com.infinitezerone.minibgm.core.designsystem.theme.OnBrandBilibili
+import com.infinitezerone.minibgm.core.designsystem.theme.OnBrandMikan
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
-import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.core.navigation.launchBilibiliSearch
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 
 enum class AirStatus {
@@ -411,65 +417,71 @@ fun ScheduleTimelineSingleCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // 标题（中文名 + 原名）
-                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = if (originalTitle != null) 1 else 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-
-                    if (originalTitle != null) {
+                // 顶部：左侧标题与原名 + 右侧突出集数徽章
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                    ) {
                         Text(
-                            text = originalTitle,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                            maxLines = 1,
+                            text = displayName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                }
 
-                // 话数更新胶囊
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (schedule.nextEpisodeNumber == 1) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                        ) {
+                        if (originalTitle != null) {
                             Text(
-                                text = "首播 · 第 1 话",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                text = originalTitle,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
-                    } else if (schedule.nextEpisodeNumber > 1) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
-                        ) {
-                            Text(
-                                text = "今日更新 · 第 ${schedule.nextEpisodeNumber} 话",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
+                    }
+
+                    if (schedule.nextEpisodeNumber > 0) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        if (schedule.nextEpisodeNumber == 1) {
+                            Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                            ) {
+                                Text(
+                                    text = "首播 · 第 1 话",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                )
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(5.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                            ) {
+                                Text(
+                                    text = "第 ${schedule.nextEpisodeNumber} 话",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                )
+                            }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.weight(1f, fill = false))
 
-                // 底部终端区：左侧播放源 + 右侧追番药丸
+                // 底部终端区：左侧实用找源栏 + 右侧追番药丸
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -482,16 +494,10 @@ fun ScheduleTimelineSingleCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         )
                     } else {
-                        SiteLinksRow(
-                            links = schedule.siteLinks,
-                            onOpenUrl = { url ->
-                                if (onOpenUrl != null) {
-                                    onOpenUrl(url)
-                                } else {
-                                    context.launchStreamingUrl(url)
-                                }
-                            },
-                            onShowMoreSources = { onShowSources(schedule) },
+                        ScheduleSourceActionsRow(
+                            schedule = schedule,
+                            onShowSources = { onShowSources(schedule) },
+                            onOpenUrl = onOpenUrl,
                         )
 
                         BookmarkChip(
@@ -558,91 +564,107 @@ fun BookmarkChip(
 }
 
 @Composable
-fun SiteLinksRow(
-    links: List<SiteLink>,
-    onOpenUrl: (String) -> Unit,
-    onShowMoreSources: () -> Unit,
+fun ScheduleSourceActionsRow(
+    schedule: AirSchedule,
+    onShowSources: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
-    if (links.isEmpty()) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val displayName = schedule.titleCn.ifBlank { schedule.title }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = modifier,
+    ) {
+        // 1. 哔哩哔哩快捷搜索（直接唤起 B 站 App 搜番，避开失效直链）
         Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                context.launchBilibiliSearch(displayName)
+            },
             shape = RoundedCornerShape(6.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-            modifier = modifier,
+            color = BrandBilibili.copy(alpha = 0.12f),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
+                Icon(
+                    imageVector = Icons.Filled.Tv,
+                    contentDescription = "B站搜索",
+                    tint = OnBrandBilibili,
+                    modifier = Modifier.size(11.dp),
+                )
                 Text(
-                    text = "待上线播放",
+                    text = "B站",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnBrandBilibili,
                 )
             }
         }
-        return
-    }
 
-    val hasBilibili = remember(links) { links.any { it.siteName.equals("bilibili", ignoreCase = true) } }
-    val hasBahamut =
-        remember(links) {
-            links.any {
-                it.siteName.contains("gamer", ignoreCase = true) ||
-                    it.siteName.contains("bahamut", ignoreCase = true)
+        // 2. 蜜柑计划（BT/字幕组资源直达）
+        val mikanLink =
+            remember(schedule.siteLinks) {
+                schedule.siteLinks.firstOrNull { it.siteName.equals("mikan", ignoreCase = true) }
+            }
+        val mikanUrl =
+            remember(mikanLink, displayName) {
+                mikanLink?.playUrl ?: StreamingIntentResolver.buildMikanUrl(keyword = displayName)
+            }
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (onOpenUrl != null) {
+                    onOpenUrl(mikanUrl)
+                } else {
+                    context.launchStreamingUrl(mikanUrl)
+                }
+            },
+            shape = RoundedCornerShape(6.dp),
+            color = BrandMikan.copy(alpha = 0.12f),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Download,
+                    contentDescription = "蜜柑计划",
+                    tint = OnBrandMikan,
+                    modifier = Modifier.size(11.dp),
+                )
+                Text(
+                    text = "蜜柑",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnBrandMikan,
+                )
             }
         }
 
-    Surface(
-        onClick = onShowMoreSources,
-        shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        // 3. 找源（展开底层面板，含内置播放器、AI找源等）
+        Surface(
+            onClick = onShowSources,
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
-            Icon(
-                imageVector = Icons.Filled.PlayCircleOutline,
-                contentDescription = null,
-                modifier = Modifier.size(13.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = "播放源",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (hasBilibili) {
-                Surface(
-                    shape = RoundedCornerShape(3.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                ) {
-                    Text(
-                        text = "B站",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
-                    )
-                }
-            }
-            if (hasBahamut) {
-                Surface(
-                    shape = RoundedCornerShape(3.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-                ) {
-                    Text(
-                        text = "巴哈",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
-                    )
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+            ) {
+                Text(
+                    text = "找源",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
