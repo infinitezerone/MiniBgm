@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -306,7 +305,6 @@ fun ScheduleTimelineSingleCard(
 ) {
     val context = LocalContext.current
     val displayName = schedule.titleCn.ifBlank { schedule.title }
-    val originalTitle = schedule.title.takeIf { it.isNotBlank() && it != displayName }
     val score = schedule.ratingScore
 
     Card(
@@ -380,6 +378,22 @@ fun ScheduleTimelineSingleCard(
                     }
                 }
 
+                // 封面右上角：已在追状态标记（仅静默小图标，不与底栏抢横向空间）
+                if (isWatching) {
+                    Surface(
+                        shape = RoundedCornerShape(bottomStart = 6.dp, topEnd = 8.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Bookmark,
+                            contentDescription = "已在追",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(3.dp).size(10.dp),
+                        )
+                    }
+                }
+
                 // 封面左下角：Bangumi 评分
                 if (score > 0.0) {
                     Surface(
@@ -414,146 +428,67 @@ fun ScheduleTimelineSingleCard(
             // 2. 内容信息流
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // 行 1：番剧标题（独占整行，从容显示完整片名）
+                // 行 1：番剧标题（单一标题，清晰易读，最多两行）
                 Text(
                     text = displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 20.sp,
+                        ),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // 行 2：播出集数突出徽章 + 原名横向呼吸排列
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
-                ) {
-                    if (schedule.nextEpisodeNumber > 0) {
-                        if (schedule.nextEpisodeNumber == 1) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                            ) {
-                                Text(
-                                    text = "首播 · 第 1 话",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
-                                )
-                            }
-                        } else {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                            ) {
-                                Text(
-                                    text = "第 ${schedule.nextEpisodeNumber} 话",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
-                                )
-                            }
-                        }
-                    }
-
-                    if (originalTitle != null) {
+                // 行 2：播出集数显著徽章（加大加粗，作为时间表的核心定位锚点）
+                if (schedule.nextEpisodeNumber > 0) {
+                    val isFirstEp = schedule.nextEpisodeNumber == 1
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color =
+                            if (isFirstEp) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
+                            },
+                        modifier = Modifier.padding(top = 1.dp),
+                    ) {
                         Text(
-                            text = originalTitle,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
+                            text = if (isFirstEp) "首播 · 第 1 话" else "第 ${schedule.nextEpisodeNumber} 话",
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                            fontWeight = FontWeight.ExtraBold,
+                            color =
+                                if (isFirstEp) {
+                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.weight(1f, fill = false))
 
-                // 行 3：底部终端区（左侧 [B站] [蜜柑] + 右侧 [追番]，两端对齐绝不挤压溢出）
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
-                ) {
-                    if (schedule.isUnmapped) {
-                        Text(
-                            text = "AniList 在播 · 暂未收录",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        )
-                    } else {
-                        ScheduleSourceActionsRow(
-                            schedule = schedule,
-                            onOpenUrl = onOpenUrl,
-                        )
-
-                        BookmarkChip(
-                            isWatching = isWatching,
-                            onToggle = { onToggleWatching(schedule.bgmId) },
-                        )
-                    }
+                // 行 3：播放源快捷直达（B站 / 蜜柑，独占底栏呼吸感充足）
+                if (schedule.isUnmapped) {
+                    Text(
+                        text = "AniList 在播 · 暂未收录",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                } else {
+                    ScheduleSourceActionsRow(
+                        schedule = schedule,
+                        onOpenUrl = onOpenUrl,
+                    )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun BookmarkChip(
-    isWatching: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val haptic = LocalHapticFeedback.current
-    Surface(
-        onClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            onToggle()
-        },
-        shape = RoundedCornerShape(6.dp),
-        color =
-            if (isWatching) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-        modifier = modifier,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Icon(
-                imageVector = if (isWatching) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                contentDescription = if (isWatching) "已在追" else "追番",
-                tint =
-                    if (isWatching) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                modifier = Modifier.size(12.dp),
-            )
-            Text(
-                text = if (isWatching) "已追" else "追番",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                fontWeight = FontWeight.Bold,
-                color =
-                    if (isWatching) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-            )
         }
     }
 }
