@@ -97,18 +97,18 @@ internal fun UserProfileHero(
             modifier
                 .fillMaxWidth()
                 .ambientGlow(dominantColor = ambientGlowState.dominantColor)
-                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            // 头像：主色调内环。88dp —— 个人页头部的视觉锚点，比列表场景再大一档
+            // 头像：主色调内环。74dp —— 紧凑沉浸式视觉锚点
             Surface(
                 shape = CircleShape,
                 border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)),
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(88.dp),
+                modifier = Modifier.size(74.dp),
             ) {
                 val avatarUrl = profile?.avatar?.bestAvatar.orEmpty()
                 if (avatarUrl.isNotBlank()) {
@@ -126,7 +126,7 @@ internal fun UserProfileHero(
                             imageVector = Icons.Filled.Person,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(46.dp),
+                            modifier = Modifier.size(40.dp),
                         )
                     }
                 }

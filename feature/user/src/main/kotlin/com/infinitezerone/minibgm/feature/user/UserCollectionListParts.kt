@@ -13,17 +13,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlusOne
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,13 +30,10 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -45,6 +41,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,40 +90,57 @@ internal fun CollectionTypeTabs(
         color = MaterialTheme.colorScheme.surface,
         modifier = modifier.fillMaxWidth(),
     ) {
-        PrimaryTabRow(
+        PrimaryScrollableTabRow(
             selectedTabIndex = COLLECTION_TYPES.indexOf(selectedType).coerceAtLeast(0),
+            edgePadding = 12.dp,
+            divider = {},
             modifier = Modifier.fillMaxWidth(),
         ) {
             COLLECTION_TYPES.forEach { type ->
                 val isSelected = selectedType == type
+                val count = counts[type]
                 Tab(
                     selected = isSelected,
                     onClick = { onSelectType(type) },
                     text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
                             Text(
                                 text = type.label,
-                                style = MaterialTheme.typography.labelLarge,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 maxLines = 1,
                                 softWrap = false,
                             )
-                            // 计数降一档字号 + 浅色：读作「分类角标」而非指标，
-                            // 不与上方通栏数字带的数字争夺视觉重量
-                            Spacer(modifier = Modifier.width(3.dp))
-                            // 计数未就绪时也占住位置，否则计数到达会让 5 个标签同时左右位移
-                            Box(modifier = Modifier.widthIn(min = 10.dp)) {
-                                counts[type]?.let { count ->
+                            if (count != null) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
+                                        },
+                                ) {
                                     Text(
                                         text = count.toString(),
                                         style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
                                         color =
                                             if (isSelected) {
-                                                MaterialTheme.colorScheme.primary
+                                                MaterialTheme.colorScheme.onPrimaryContainer
                                             } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                             },
-                                        maxLines = 1,
-                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp),
                                     )
                                 }
                             }
@@ -304,7 +319,7 @@ private fun ArchiveTile(
     }
 }
 
-/** 条目类型筛选行：横向胶囊，不做吸顶，随内容滚出即可 */
+/** 条目类型筛选行：横向精致胶囊，不做吸顶，随内容滚出即可 */
 @Composable
 internal fun SubjectFilterRow(
     selectedFilter: CollectionSubjectFilter,
@@ -313,25 +328,40 @@ internal fun SubjectFilterRow(
 ) {
     LazyRow(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(CollectionSubjectFilter.entries) { filter ->
-            FilterChip(
-                selected = selectedFilter == filter,
+            val isSelected = selectedFilter == filter
+            Surface(
                 onClick = { onSelectFilter(filter) },
-                label = { Text(filter.label) },
-                border = null,
-                // 选中态刻意不用 primaryContainer 实心块：吸顶 Tab 的选中态已经是实心高亮，
-                // 两排同构会让人以为「状态」和「条目类型」是同一组筛选器。这里降为淡色底 + 主色字。
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.primary,
-                    ),
-            )
+                shape = CircleShape,
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+                border =
+                    if (isSelected) {
+                        null
+                    } else {
+                        BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    },
+            ) {
+                Text(
+                    text = filter.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
         }
     }
 }
@@ -345,23 +375,40 @@ internal fun AirFilterRow(
 ) {
     LazyRow(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(CollectionAirFilter.entries) { filter ->
-            FilterChip(
-                selected = selectedFilter == filter,
+            val isSelected = selectedFilter == filter
+            Surface(
                 onClick = { onSelectFilter(filter) },
-                label = { Text(filter.label) },
-                border = null,
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        selectedContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        selectedLabelColor = MaterialTheme.colorScheme.tertiary,
-                    ),
-            )
+                shape = CircleShape,
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+                border =
+                    if (isSelected) {
+                        null
+                    } else {
+                        BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    },
+            ) {
+                Text(
+                    text = filter.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.5.dp),
+                )
+            }
         }
     }
 }
@@ -373,9 +420,11 @@ internal fun UserCollectionCard(
     isBinge: Boolean = false,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
+    onPlayClick: (() -> Unit)? = null,
     onToggleBinge: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
     val subject = collection.subject
     val title = subject?.displayName ?: "条目 #${collection.subjectId}"
     val coverUrl = subject?.images?.bestImage.orEmpty()
@@ -539,25 +588,33 @@ internal fun UserCollectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (onToggleBinge != null) {
-                            IconButton(
-                                onClick = onToggleBinge,
-                                modifier = Modifier.size(30.dp),
+                        if (onPlayClick != null && (collection.subjectType == 2 || collection.subjectType == 6)) {
+                            Surface(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onPlayClick()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
-                                Icon(
-                                    imageVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
-                                    contentDescription = if (isBinge) "已设为囤番（完结提醒）" else "设为囤番待看",
-                                    tint =
-                                        if (isBinge) {
-                                            MaterialTheme.colorScheme.tertiary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                                .copy(
-                                                    alpha = 0.6f,
-                                                )
-                                        },
-                                    modifier = Modifier.size(16.dp),
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = "选源播放",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Text(
+                                        text = if (epStatus > 0) "续播" else "播放",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
                             }
                         }
 

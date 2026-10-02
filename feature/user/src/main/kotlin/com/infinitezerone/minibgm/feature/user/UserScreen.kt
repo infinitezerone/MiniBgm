@@ -36,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
@@ -48,6 +49,8 @@ import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -148,6 +151,9 @@ fun UserScreenContent(
     var showAccountSheet by remember { mutableStateOf(false) }
     var accountToLogout by remember { mutableStateOf<UserProfile?>(null) }
     var showLogoutAllDialog by remember { mutableStateOf(false) }
+    var selectedCollectionForSources by remember { mutableStateOf<UserCollection?>(null) }
+    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val context = LocalContext.current
 
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -312,6 +318,7 @@ fun UserScreenContent(
                             state = collectionsState,
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
+                            onPlayClick = { selectedCollectionForSources = it },
                             onToggleBinge = onToggleBinge,
                             onRefresh = onRefresh,
                             onRetry = onRetryCollections,
@@ -423,6 +430,48 @@ fun UserScreenContent(
             },
         )
     }
+
+    selectedCollectionForSources?.let { col ->
+        UserCollectionSourcesBottomSheet(
+            collection = col,
+            onDismissRequest = { selectedCollectionForSources = null },
+            onOpenUrl = { url ->
+                context.launchStreamingUrl(
+                    url = url,
+                    onAppNotInstalled = { appName, webUrl ->
+                        appNotInstalledPrompt = appName to webUrl
+                    },
+                )
+            },
+            onSubjectClick = { route ->
+                selectedCollectionForSources = null
+                onSubjectClick(route)
+            },
+        )
+    }
+
+    appNotInstalledPrompt?.let { (appName, webUrl) ->
+        AlertDialog(
+            onDismissRequest = { appNotInstalledPrompt = null },
+            title = { Text("未安装 $appName 客户端") },
+            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        appNotInstalledPrompt = null
+                        context.launchWebUrl(webUrl)
+                    },
+                ) {
+                    Text("浏览器打开")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appNotInstalledPrompt = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
 }
 
 /**
@@ -435,6 +484,7 @@ private fun LazyListScope.collectionSection(
     state: UserCollectionsUiState,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
+    onPlayClick: (UserCollection) -> Unit,
     onToggleBinge: (Long) -> Unit,
     onRefresh: () -> Unit,
     onRetry: () -> Unit,
@@ -488,6 +538,7 @@ private fun LazyListScope.collectionSection(
                     isBinge = state.bingeSubjectIds.contains(item.subjectId),
                     onSubjectClick = onSubjectClick,
                     onIncrementProgress = { onIncrementProgress(item) },
+                    onPlayClick = { onPlayClick(item) },
                     onToggleBinge = { onToggleBinge(item.subjectId) },
                     modifier =
                         Modifier.padding(
