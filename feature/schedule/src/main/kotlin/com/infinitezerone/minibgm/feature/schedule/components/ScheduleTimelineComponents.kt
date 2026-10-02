@@ -21,11 +21,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -49,20 +48,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
-import com.infinitezerone.minibgm.core.designsystem.theme.BrandBilibili
-import com.infinitezerone.minibgm.core.designsystem.theme.BrandMikan
-import com.infinitezerone.minibgm.core.designsystem.theme.OnBrandBilibili
-import com.infinitezerone.minibgm.core.designsystem.theme.OnBrandMikan
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
-import com.infinitezerone.minibgm.core.navigation.launchBilibiliSearch
-import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 
 enum class AirStatus {
     NORMAL,
@@ -304,6 +296,7 @@ fun ScheduleTimelineSingleCard(
     onOpenUrl: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val displayName = schedule.titleCn.ifBlank { schedule.title }
     val score = schedule.ratingScore
 
@@ -475,7 +468,7 @@ fun ScheduleTimelineSingleCard(
 
                 Spacer(modifier = Modifier.weight(1f, fill = false))
 
-                // 行 3：播放源快捷直达（B站 / 蜜柑，独占底栏呼吸感充足）
+                // 行 3：播放操作入口（点击唤起播放源 BottomSheet：内置播放器 / AI找源 / B站 / 蜜柑等）
                 if (schedule.isUnmapped) {
                     Text(
                         text = "AniList 在播 · 暂未收录",
@@ -483,98 +476,34 @@ fun ScheduleTimelineSingleCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                 } else {
-                    ScheduleSourceActionsRow(
-                        schedule = schedule,
-                        onOpenUrl = onOpenUrl,
-                    )
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onShowSources(schedule)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = "播放",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = "播放",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun ScheduleSourceActionsRow(
-    schedule: AirSchedule,
-    modifier: Modifier = Modifier,
-    onOpenUrl: ((String) -> Unit)? = null,
-) {
-    val context = LocalContext.current
-    val haptic = LocalHapticFeedback.current
-    val displayName = schedule.titleCn.ifBlank { schedule.title }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-        modifier = modifier,
-    ) {
-        // 1. 哔哩哔哩快捷搜索（直接唤起 B 站 App 搜番，避开失效直链）
-        Surface(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                context.launchBilibiliSearch(displayName)
-            },
-            shape = RoundedCornerShape(6.dp),
-            color = BrandBilibili.copy(alpha = 0.12f),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Tv,
-                    contentDescription = "B站搜索",
-                    tint = OnBrandBilibili,
-                    modifier = Modifier.size(11.dp),
-                )
-                Text(
-                    text = "B站",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnBrandBilibili,
-                )
-            }
-        }
-
-        // 2. 蜜柑计划（BT/字幕组资源直达）
-        val mikanLink =
-            remember(schedule.siteLinks) {
-                schedule.siteLinks.firstOrNull { it.siteName.equals("mikan", ignoreCase = true) }
-            }
-        val mikanUrl =
-            remember(mikanLink, displayName) {
-                mikanLink?.playUrl ?: StreamingIntentResolver.buildMikanUrl(keyword = displayName)
-            }
-        Surface(
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                if (onOpenUrl != null) {
-                    onOpenUrl(mikanUrl)
-                } else {
-                    context.launchStreamingUrl(mikanUrl)
-                }
-            },
-            shape = RoundedCornerShape(6.dp),
-            color = BrandMikan.copy(alpha = 0.12f),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Download,
-                    contentDescription = "蜜柑计划",
-                    tint = OnBrandMikan,
-                    modifier = Modifier.size(11.dp),
-                )
-                Text(
-                    text = "蜜柑",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = OnBrandMikan,
-                )
             }
         }
     }
