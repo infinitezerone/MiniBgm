@@ -9,10 +9,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -47,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.components.ActiveCustomFilterBar
 import com.infinitezerone.minibgm.feature.search.components.ExploreEmptyState
@@ -142,7 +139,7 @@ fun ExploreScreen(
                                         },
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.FilterList,
+                                            imageVector = BgmIcons.FilterList,
                                             contentDescription = "高级筛选",
                                             tint =
                                                 if (isFilterActive) {
@@ -158,7 +155,7 @@ fun ExploreScreen(
                             // 进入全域深度检索
                             IconButton(onClick = onSearchClick) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Search,
+                                    imageVector = BgmIcons.SearchBorder,
                                     contentDescription = "搜索",
                                 )
                             }
@@ -345,7 +342,7 @@ fun ExploreScreen(
                 onDismissRequest = exploreViewModel::dismissLoginPrompt,
                 icon = {
                     Icon(
-                        imageVector = Icons.Outlined.AccountCircle,
+                        imageVector = BgmIcons.AccountCircle,
                         contentDescription = null,
                         modifier = Modifier.size(36.dp),
                         tint = MaterialTheme.colorScheme.primary,

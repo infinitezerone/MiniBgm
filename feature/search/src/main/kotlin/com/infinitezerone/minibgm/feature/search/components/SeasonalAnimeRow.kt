@@ -10,11 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -184,7 +180,7 @@ fun SeasonalAnimeRow(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = RatingGold,
                                 modifier = Modifier.size(10.dp),
@@ -309,21 +305,21 @@ private fun QuickCollectionPill(
                 CollectionPillStyle(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    icon = Icons.Filled.Check,
+                    icon = BgmIcons.Check,
                     label = "在看",
                 )
             isWished ->
                 CollectionPillStyle(
                     containerColor = RatingGold.copy(alpha = 0.16f),
                     contentColor = RatingGold,
-                    icon = Icons.Filled.Bookmark,
+                    icon = BgmIcons.Bookmark,
                     label = "已想看",
                 )
             else ->
                 CollectionPillStyle(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    icon = Icons.Filled.BookmarkBorder,
+                    icon = BgmIcons.BookmarkBorder,
                     label = "想看",
                 )
         }

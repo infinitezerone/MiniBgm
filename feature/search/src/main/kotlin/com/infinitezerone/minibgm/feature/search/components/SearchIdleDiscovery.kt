@@ -17,11 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** 搜索初始/空闲状态视图（真实搜索历史与纯净搜索引导，不包含任何虚假数据） */
 @OptIn(ExperimentalLayoutApi::class)
@@ -62,7 +58,7 @@ fun SearchIdleView(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.History,
+                                imageVector = BgmIcons.History,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp),
@@ -79,7 +75,7 @@ fun SearchIdleView(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
+                                imageVector = BgmIcons.Delete,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp),
                                 tint = MaterialTheme.colorScheme.outline,
@@ -122,7 +118,7 @@ fun SearchIdleView(
                                         modifier = Modifier.size(20.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.Close,
+                                            imageVector = BgmIcons.Close,
                                             contentDescription = "删除记录",
                                             tint = MaterialTheme.colorScheme.outline,
                                             modifier = Modifier.size(12.dp),
@@ -155,7 +151,7 @@ fun SearchIdleView(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.Search,
+                            imageVector = BgmIcons.Search,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(36.dp),

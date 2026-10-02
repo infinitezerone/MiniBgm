@@ -15,9 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -32,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.SeasonQuarter
 
 /** 骨架屏加载列表（行式：58dp 封面块 + 三根文本条，与真实行等高） */
@@ -168,7 +166,7 @@ fun SeasonalGuideErrorState(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.Refresh,
+                imageVector = BgmIcons.RefreshBorder,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.error,
@@ -201,7 +199,7 @@ fun SeasonalGuideEmptyState(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.CalendarMonth,
+                imageVector = BgmIcons.CalendarBorder,
                 contentDescription = null,
                 modifier = Modifier.size(56.dp),
                 tint = MaterialTheme.colorScheme.outline,

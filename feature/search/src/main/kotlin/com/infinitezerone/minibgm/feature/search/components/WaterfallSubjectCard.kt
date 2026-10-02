@@ -16,12 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -40,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BadgeClassic
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
@@ -167,7 +162,7 @@ fun WaterfallSubjectCard(
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Star,
+                                    imageVector = BgmIcons.Star,
                                     contentDescription = null,
                                     tint = RatingGold,
                                     modifier = Modifier.size(11.dp),
@@ -196,7 +191,7 @@ fun WaterfallSubjectCard(
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.LocalFireDepartment,
+                                    imageVector = BgmIcons.Trending,
                                     contentDescription = null,
                                     tint = Color.White,
                                     modifier = Modifier.size(10.dp),
@@ -220,7 +215,7 @@ fun WaterfallSubjectCard(
                                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Group,
+                                    imageVector = BgmIcons.Group,
                                     contentDescription = null,
                                     tint = Color.White,
                                     modifier = Modifier.size(10.dp),
@@ -431,7 +426,7 @@ private fun WishButton(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Icon(
-                imageVector = if (isWished) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                imageVector = if (isWished) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
                 contentDescription = if (isWished) "已想看" else "想看",
                 tint = contentColor,
                 modifier = Modifier.size(14.dp),

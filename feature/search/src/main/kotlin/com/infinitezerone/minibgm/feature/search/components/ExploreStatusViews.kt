@@ -17,8 +17,6 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExploreOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,6 +34,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.skeletonNode
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** 探索页双列瀑布流与焦点大卡骨架屏加载状态 */
 @Composable
@@ -268,7 +267,7 @@ fun ExploreEmptyState(
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(
-            imageVector = Icons.Outlined.ExploreOff,
+            imageVector = BgmIcons.ExploreOff,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(64.dp),

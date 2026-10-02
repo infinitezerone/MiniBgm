@@ -17,9 +17,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.components.SeasonPickerBottomSheet
@@ -93,7 +91,7 @@ fun SeasonalGuideScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = BgmIcons.ArrowBack,
                             contentDescription = "返回",
                         )
                     }
@@ -436,7 +434,7 @@ fun SeasonalGuideContent(
                 onDismissRequest = viewModel::dismissLoginPrompt,
                 icon = {
                     Icon(
-                        imageVector = Icons.Outlined.AccountCircle,
+                        imageVector = BgmIcons.AccountCircle,
                         contentDescription = null,
                         modifier = Modifier.size(36.dp),
                         tint = MaterialTheme.colorScheme.primary,

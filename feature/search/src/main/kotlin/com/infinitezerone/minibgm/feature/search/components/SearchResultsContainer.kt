@@ -21,9 +21,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -363,9 +361,9 @@ fun SearchSortFilterBar(
             Icon(
                 imageVector =
                     if (viewMode == SearchViewMode.LIST) {
-                        Icons.Filled.GridView
+                        BgmIcons.GridView
                     } else {
-                        Icons.AutoMirrored.Filled.ViewList
+                        BgmIcons.ViewList
                     },
                 contentDescription = if (viewMode == SearchViewMode.LIST) "切换为海报网格" else "切换为详细列表",
                 tint = MaterialTheme.colorScheme.primary,

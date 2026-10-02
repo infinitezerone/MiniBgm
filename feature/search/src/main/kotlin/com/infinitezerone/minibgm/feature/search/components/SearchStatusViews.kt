@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** 骨架屏加载状态 */
 @Composable
@@ -118,7 +117,7 @@ fun SearchNoResultsState(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Outlined.SearchOff,
+                    imageVector = BgmIcons.SearchOff,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.size(36.dp),

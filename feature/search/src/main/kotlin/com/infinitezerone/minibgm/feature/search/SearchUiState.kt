@@ -1,13 +1,8 @@
 package com.infinitezerone.minibgm.feature.search
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 
@@ -17,11 +12,11 @@ enum class SearchCategory(
     val label: String,
     val icon: ImageVector,
 ) {
-    ALL(0, "全部", Icons.Filled.AutoAwesome),
-    ANIME(2, "动画", Icons.Filled.Tv),
-    BOOK(1, "书籍", Icons.Filled.Book),
-    GAME(4, "游戏", Icons.Filled.SportsEsports),
-    MUSIC(3, "音乐", Icons.Filled.MusicNote),
+    ALL(0, "全部", BgmIcons.Assistant),
+    ANIME(2, "动画", BgmIcons.Tv),
+    BOOK(1, "书籍", BgmIcons.Book),
+    GAME(4, "游戏", BgmIcons.Game),
+    MUSIC(3, "音乐", BgmIcons.Music),
     ;
 
     companion object {

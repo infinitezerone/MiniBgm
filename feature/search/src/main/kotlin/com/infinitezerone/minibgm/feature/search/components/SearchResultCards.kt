@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -39,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionDoing
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionWish
@@ -272,7 +270,7 @@ fun SearchResultCard(
                     ) {
                         if (rating != null && rating.score > 0.0) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = RatingGold,
                                 modifier = Modifier.size(13.dp),
@@ -514,7 +512,7 @@ fun QuickCapsuleButton(
         ) {
             if (isActive) {
                 Icon(
-                    imageVector = Icons.Filled.Check,
+                    imageVector = BgmIcons.Check,
                     contentDescription = null,
                     tint = activeColor,
                     modifier = Modifier.size(10.dp),

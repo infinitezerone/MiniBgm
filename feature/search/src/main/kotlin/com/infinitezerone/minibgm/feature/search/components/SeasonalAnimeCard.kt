@@ -12,10 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -114,7 +111,7 @@ fun SeasonalAnimeCard(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = RatingGold,
                                 modifier = Modifier.size(11.dp),
@@ -206,7 +203,7 @@ fun SeasonalAnimeCard(
                             .PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                 ) {
                     Icon(
-                        imageVector = if (isDoing) Icons.Filled.Check else Icons.Outlined.Add,
+                        imageVector = if (isDoing) BgmIcons.Check else BgmIcons.AddBorder,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
                     )

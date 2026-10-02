@@ -13,13 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.SeasonFormFilter
 import com.infinitezerone.minibgm.feature.search.SeasonOriginFilter
 import com.infinitezerone.minibgm.feature.search.SeasonSortOption
@@ -74,7 +68,7 @@ fun SeasonalFilterBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.CalendarMonth,
+                        imageVector = BgmIcons.CalendarBorder,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
@@ -86,7 +80,7 @@ fun SeasonalFilterBar(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        imageVector = BgmIcons.KeyboardArrowDown,
                         contentDescription = "选择档期",
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -112,7 +106,7 @@ fun SeasonalFilterBar(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.FilterList,
+                        imageVector = BgmIcons.FilterList,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
@@ -128,9 +122,9 @@ fun SeasonalFilterBar(
                     Icon(
                         imageVector =
                             if (filterExpanded) {
-                                Icons.Filled.KeyboardArrowUp
+                                BgmIcons.KeyboardArrowUp
                             } else {
-                                Icons.Filled.KeyboardArrowDown
+                                BgmIcons.KeyboardArrowDown
                             },
                         contentDescription = if (filterExpanded) "收起筛选" else "展开筛选",
                         modifier = Modifier.size(18.dp),
@@ -147,9 +141,9 @@ fun SeasonalFilterBar(
                 Icon(
                     imageVector =
                         if (uiState.viewMode == SeasonalViewMode.LIST) {
-                            Icons.Filled.GridView
+                            BgmIcons.GridView
                         } else {
-                            Icons.AutoMirrored.Filled.ViewList
+                            BgmIcons.ViewList
                         },
                     contentDescription =
                         if (uiState.viewMode == SeasonalViewMode.LIST) {

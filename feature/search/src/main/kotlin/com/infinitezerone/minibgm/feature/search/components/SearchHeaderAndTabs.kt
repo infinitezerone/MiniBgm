@@ -20,10 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +38,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.SearchCategory
 
 /** 顶部现代一体化搜索栏（符合 Edge-to-Edge 与 M3 TopAppBar 状态栏规范） */
@@ -69,7 +66,7 @@ fun SearchTopHeader(
                         .padding(horizontal = 10.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Search,
+                    imageVector = BgmIcons.Search,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp),
@@ -117,7 +114,7 @@ fun SearchTopHeader(
                         modifier = Modifier.size(24.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Clear,
+                            imageVector = BgmIcons.Clear,
                             contentDescription = "清空输入",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp),
@@ -130,7 +127,7 @@ fun SearchTopHeader(
             if (onBackClick != null) {
                 IconButton(onClick = onBackClick) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector = BgmIcons.ArrowBack,
                         contentDescription = "返回",
                         tint = MaterialTheme.colorScheme.onSurface,
                     )

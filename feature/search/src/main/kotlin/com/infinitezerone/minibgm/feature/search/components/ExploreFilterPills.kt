@@ -16,11 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -34,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.ALL_TIME_SEASON
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreMood
@@ -126,7 +122,7 @@ fun ActiveCustomFilterBar(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.FilterList,
+                        imageVector = BgmIcons.FilterList,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
@@ -143,9 +139,9 @@ fun ActiveCustomFilterBar(
                     Icon(
                         imageVector =
                             if (expanded) {
-                                Icons.Filled.KeyboardArrowUp
+                                BgmIcons.KeyboardArrowUp
                             } else {
-                                Icons.Filled.KeyboardArrowDown
+                                BgmIcons.KeyboardArrowDown
                             },
                         contentDescription = if (expanded) "收起已选标签" else "展开已选标签",
                         modifier = Modifier.size(18.dp),
@@ -296,7 +292,7 @@ fun ActiveFilterChip(
                 fontWeight = FontWeight.SemiBold,
             )
             Icon(
-                imageVector = Icons.Filled.Close,
+                imageVector = BgmIcons.Close,
                 contentDescription = "移除",
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(12.dp),

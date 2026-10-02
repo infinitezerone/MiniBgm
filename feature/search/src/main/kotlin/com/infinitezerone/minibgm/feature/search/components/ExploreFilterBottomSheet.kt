@@ -15,10 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -42,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.DEFAULT_SEASONS
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreSort
@@ -105,7 +102,7 @@ fun ExploreFilterBottomSheet(
 
                 TextButton(onClick = onResetAll) {
                     Icon(
-                        imageVector = Icons.Filled.Refresh,
+                        imageVector = BgmIcons.Refresh,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                     )
@@ -148,7 +145,7 @@ fun ExploreFilterBottomSheet(
                                     ),
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                                        imageVector = BgmIcons.Sort,
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
                                     )
@@ -273,7 +270,7 @@ fun ExploreFilterBottomSheet(
                                             fontWeight = FontWeight.SemiBold,
                                         )
                                         Icon(
-                                            imageVector = Icons.Filled.Close,
+                                            imageVector = BgmIcons.Close,
                                             contentDescription = "移除",
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(12.dp),
