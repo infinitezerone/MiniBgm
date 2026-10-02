@@ -15,14 +15,10 @@ import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
-import com.infinitezerone.minibgm.core.model.NextUpAction
-import com.infinitezerone.minibgm.core.model.NextUpUrgency
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.matchesForEpisode
-import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +27,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -69,10 +63,6 @@ data class ScheduleUiState(
     val weeklySchedules: Map<Int, List<AirSchedule>> = emptyMap(),
     val watchingSubjectIds: Set<Long> = emptySet(),
     val onlyWatching: Boolean = false,
-    val nextUpAction: NextUpAction? = null,
-    /** 续看卡的应用内直达路由：按追番进度定位下一待看集（null = 数据未就绪，卡片退回外部跳转） */
-    val nextUpPlayRoute: PlayerRoute? = null,
-    val isActionDismissed: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val isLoggedIn: Boolean = false,
 ) {
@@ -212,7 +202,6 @@ data class ScheduleUiState(
  * - 提供时间段聚合槽逻辑，释放空间并消除同时间冗余；
  * - 离线优先展示，支持下拉刷新。
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val collectionRepository: CollectionRepository,
@@ -222,9 +211,8 @@ class ScheduleViewModel(
     /**
      * 时钟注入点，默认取系统时间。
      *
-     * 排期判定全是"距离现在多久"的窗口比较（≤45 分钟 IMMINENT、>45 分钟 TODAY_UPCOMING、
-     * 已过则 TODAY_AIRED），直接调 `System.currentTimeMillis()` 会让同一份数据在一天中的
-     * 不同时刻得出不同结论——测试因此变成"只有某个时段才通过"的时间炸弹。注入后测试可钉死时间。
+     * 排期相关判定全是"今天/这一周"的日期比较，直接调 `System.currentTimeMillis()` 会让
+     * 跨日时刻的测试变成时间炸弹。注入后测试可钉死时间。
      */
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
@@ -366,8 +354,6 @@ class ScheduleViewModel(
             finalWatchingIds to collectionMap
         }.distinctUntilChanged()
 
-    private val isActionDismissed = MutableStateFlow(false)
-
     private val filterFlow =
         combine(selectedPageIndex, onlyWatching) { pageIndex, onlyWatch ->
             pageIndex to onlyWatch
@@ -379,20 +365,16 @@ class ScheduleViewModel(
         }
 
     private data class ExtraScheduleState(
-        val delayMinutes: Int,
-        val dismissed: Boolean,
         val showLogin: Boolean,
         val loggedIn: Boolean,
     )
 
     private val extraStateFlow =
         combine(
-            settingsRepository.airDelayOffsetMinutes,
-            isActionDismissed,
             showLoginPromptDialog,
             isLoggedIn,
-        ) { delayMinutes, dismissed, showLogin, loggedIn ->
-            ExtraScheduleState(delayMinutes, dismissed, showLogin, loggedIn)
+        ) { showLogin, loggedIn ->
+            ExtraScheduleState(showLogin, loggedIn)
         }
 
     private val baseUiState: StateFlow<ScheduleUiState> =
@@ -409,117 +391,11 @@ class ScheduleViewModel(
             (refreshing, syncing, error),
             extra,
             ->
-            val (delayMinutes, dismissed, showLogin, loggedIn) = extra
+            val (showLogin, loggedIn) = extra
             val currentToday = today()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
             val selectedWeekday = currentDateItems.getOrNull(pageIndex)?.weekday ?: currentWeekday
-
-            var computedNextUpAction: NextUpAction? = null
-            if (!dismissed) {
-                val todayRaw = daySchedules[TODAY_PAGE_INDEX] ?: weeklySchedules[currentWeekday].orEmpty()
-                val nowEpoch = clock()
-
-                var bestImminent: NextUpAction? = null
-                var bestAired: NextUpAction? = null
-                var bestUpcoming: NextUpAction? = null
-
-                for (item in todayRaw) {
-                    if (!watchingIds.contains(item.bgmId)) continue
-                    val col = collectionMap[item.bgmId] ?: continue
-
-                    val officialAirEpochMillis =
-                        if (item.nextEpisodeAtUtc.isNotBlank()) {
-                            try {
-                                java.time.Instant
-                                    .parse(item.nextEpisodeAtUtc)
-                                    .toEpochMilli()
-                            } catch (e: Exception) {
-                                0L
-                            }
-                        } else if (item.timeCst.isNotBlank() || item.timeJst.isNotBlank()) {
-                            try {
-                                val timeStr = item.timeCst.ifBlank { item.timeJst }
-                                val parts = timeStr.split(":")
-                                if (parts.size == 2) {
-                                    val h = parts[0].toIntOrNull() ?: 0
-                                    val m = parts[1].toIntOrNull() ?: 0
-                                    val zdt = currentToday.atTime(h, m).atZone(CST_ZONE_ID)
-                                    zdt.toInstant().toEpochMilli()
-                                } else {
-                                    0L
-                                }
-                            } catch (e: Exception) {
-                                0L
-                            }
-                        } else {
-                            // 针对全天/待定条目（无精确时分），默认按当天中午 12:00 CST 兜底，确保在追番在今日能展示行动卡片
-                            try {
-                                val zdt = currentToday.atTime(12, 0).atZone(CST_ZONE_ID)
-                                zdt.toInstant().toEpochMilli()
-                            } catch (e: Exception) {
-                                0L
-                            }
-                        }
-
-                    if (officialAirEpochMillis <= 0L) continue
-
-                    val effectiveAirEpoch = officialAirEpochMillis + delayMinutes * 60_000L
-                    val epNumber = if (item.nextEpisodeNumber > 0) item.nextEpisodeNumber else 1
-
-                    if (nowEpoch < effectiveAirEpoch) {
-                        val diff = effectiveAirEpoch - nowEpoch
-                        if (diff in 0..45 * 60_000L) {
-                            val mins = diff / 60_000L
-                            val action =
-                                NextUpAction(
-                                    subjectId = item.bgmId,
-                                    title = item.title,
-                                    titleCn = item.titleCn,
-                                    coverUrl = item.coverUrl,
-                                    episodeNumber = epNumber,
-                                    airTimeLabel = "还有 ${maxOf(1L, mins)} 分钟开播",
-                                    urgency = NextUpUrgency.IMMINENT,
-                                )
-                            if (bestImminent == null) bestImminent = action
-                        } else {
-                            val timeStr = item.timeCst.ifBlank { item.timeJst }
-                            val label = if (timeStr.isNotBlank()) "今日 $timeStr 准时放送" else "今日放送"
-                            val action =
-                                NextUpAction(
-                                    subjectId = item.bgmId,
-                                    title = item.title,
-                                    titleCn = item.titleCn,
-                                    coverUrl = item.coverUrl,
-                                    episodeNumber = epNumber,
-                                    airTimeLabel = label,
-                                    urgency = NextUpUrgency.TODAY_UPCOMING,
-                                )
-                            if (bestUpcoming == null) bestUpcoming = action
-                        }
-                    } else {
-                        if (col.epStatus < epNumber) {
-                            val sortedLinks = item.siteLinks.sortedBySitePriority()
-                            val action =
-                                NextUpAction(
-                                    subjectId = item.bgmId,
-                                    title = item.title,
-                                    titleCn = item.titleCn,
-                                    coverUrl = item.coverUrl,
-                                    episodeNumber = epNumber,
-                                    airTimeLabel = "今日已更新 · 第 $epNumber 话",
-                                    urgency = NextUpUrgency.TODAY_AIRED,
-                                    primaryPlayLink = sortedLinks.firstOrNull(),
-                                    allPlayLinks = sortedLinks,
-                                    canMarkWatched = true,
-                                )
-                            if (bestAired == null) bestAired = action
-                        }
-                    }
-                }
-
-                computedNextUpAction = bestImminent ?: bestAired ?: bestUpcoming
-            }
 
             ScheduleUiState(
                 isLoading =
@@ -535,8 +411,6 @@ class ScheduleViewModel(
                 weeklySchedules = weeklySchedules,
                 watchingSubjectIds = watchingIds,
                 onlyWatching = onlyWatch,
-                nextUpAction = computedNextUpAction,
-                isActionDismissed = dismissed,
                 showLoginPromptDialog = showLogin,
                 isLoggedIn = loggedIn,
             )
@@ -560,36 +434,7 @@ class ScheduleViewModel(
                 },
         )
 
-    /**
-     * 续看卡的应用内直达路由：跟随 nextUpAction 的条目，响应式合成
-     * 「下一待看分集 + 片单直链」。数据未就绪时为 null，卡片退回外部跳转。
-     */
-    private val nextUpPlayRouteFlow: Flow<PlayerRoute?> =
-        baseUiState
-            .map { it.nextUpAction?.subjectId }
-            .distinctUntilChanged()
-            .flatMapLatest { subjectId ->
-                if (subjectId == null || subjectId <= 0L) {
-                    flowOf(null)
-                } else {
-                    combine(
-                        subjectRepository.getEpisodesStream(subjectId),
-                        collectionRepository.getCollectionStream(subjectId),
-                        settingsRepository.playlists,
-                    ) { episodes, collection, playlists ->
-                        buildNextUpRoute(subjectId, episodes, collection, playlists)
-                    }
-                }
-            }.distinctUntilChanged()
-
-    val uiState: StateFlow<ScheduleUiState> =
-        combine(baseUiState, nextUpPlayRouteFlow) { state, route ->
-            if (state.nextUpPlayRoute == route) state else state.copy(nextUpPlayRoute = route)
-        }.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = baseUiState.value,
-        )
+    val uiState: StateFlow<ScheduleUiState> = baseUiState
 
     init {
         viewModelScope.launch {
@@ -648,10 +493,6 @@ class ScheduleViewModel(
         }
     }
 
-    fun dismissNextUpAction() {
-        isActionDismissed.value = true
-    }
-
     /** 来源 sheet 的「应用内播放」：按追番进度定位下一集；无分集数据时回退一体化路由（由播放器自主嗅探） */
     suspend fun resolvePlayRoute(schedule: AirSchedule): PlayerRoute {
         val subjectId = schedule.bgmId
@@ -667,24 +508,6 @@ class ScheduleViewModel(
             return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.titleCn.ifBlank { schedule.title })
         }
         return buildEpisodeRoute(subjectId, schedule.titleCn.ifBlank { schedule.title }, target, playlists)
-    }
-
-    private fun buildNextUpRoute(
-        subjectId: Long,
-        episodes: List<Episode>,
-        collection: UserCollection?,
-        playlists: List<PlaybackPlaylist>,
-    ): PlayerRoute? {
-        val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0) ?: return null
-        val schedule =
-            baseUiState.value.daySchedules.values
-                .flatten()
-                .firstOrNull { it.bgmId == subjectId }
-                ?: baseUiState.value.weeklySchedules.values
-                    .flatten()
-                    .firstOrNull { it.bgmId == subjectId }
-        val subjectName = schedule?.let { it.titleCn.ifBlank { it.title } }.orEmpty()
-        return buildEpisodeRoute(subjectId, subjectName, target, playlists)
     }
 
     /** 下一待看集：进度 +1 优先，回退第一个未看正篇，再回退第一集 */
