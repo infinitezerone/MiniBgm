@@ -318,7 +318,7 @@ fun ExploreSpotlightCard(
                                 val isTagSelected = tag.name in selectedTags
                                 Surface(
                                     onClick = { onTagClick(tag.name) },
-                                    shape = RoundedCornerShape(6.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color =
                                         if (isTagSelected) {
                                             MaterialTheme.colorScheme.primary

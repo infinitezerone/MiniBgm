@@ -118,7 +118,7 @@ internal fun UnauthenticatedLandingView(
                 Button(
                     onClick = onLogin,
                     enabled = !isAuthenticating,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier =
                         Modifier
                             .fillMaxWidth()

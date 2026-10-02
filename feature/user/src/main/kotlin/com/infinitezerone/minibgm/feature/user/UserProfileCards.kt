@@ -164,7 +164,7 @@ internal fun UserProfileHero(
         if (sign.isNotBlank()) {
             Spacer(modifier = Modifier.height(14.dp))
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
                 modifier = Modifier.fillMaxWidth(),
             ) {

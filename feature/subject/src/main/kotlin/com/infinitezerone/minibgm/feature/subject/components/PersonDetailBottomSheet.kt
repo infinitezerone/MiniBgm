@@ -199,11 +199,11 @@ fun PersonDetailBottomSheet(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             SkeletonBox(
                                 modifier = Modifier.size(width = 46.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                             SkeletonBox(
                                 modifier = Modifier.size(width = 54.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                         }
                     }

@@ -370,7 +370,7 @@ internal fun PlayerControlsOverlay(
 
                 // 画面比例微标签
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = Color.White.copy(alpha = 0.14f),
                     modifier = Modifier.clickable(onClick = onCycleResizeMode),
                 ) {
@@ -386,7 +386,7 @@ internal fun PlayerControlsOverlay(
 
                 // 倍速药丸（1.0x → 1.25x → 1.5x → 2.0x 循环）
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = Color.White.copy(alpha = 0.14f),
                     modifier = Modifier.clickable(onClick = onCyclePlaybackSpeed),
                 ) {
@@ -442,7 +442,7 @@ internal fun PlayerControlsOverlay(
                 if (isScrubbing && totalDuration > 0L) {
                     val scrubMs = (scrubProgress * totalDuration).toLong()
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = Color.Black.copy(alpha = 0.88f),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                         modifier = Modifier.offset(y = (-32).dp),

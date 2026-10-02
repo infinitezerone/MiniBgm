@@ -158,7 +158,7 @@ private fun AccountItemRow(
                 .then(
                     if (!isActive) Modifier.clickable(onClick = onSwitchClick) else Modifier,
                 ),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color =
             if (isActive) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)

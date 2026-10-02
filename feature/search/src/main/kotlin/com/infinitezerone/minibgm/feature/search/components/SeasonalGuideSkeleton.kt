@@ -126,7 +126,7 @@ fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
                         Modifier
                             .fillMaxWidth()
                             .height(165.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     state = skeletonState,
                 )
                 Spacer(modifier = Modifier.height(8.dp))

@@ -24,6 +24,8 @@ import kotlin.test.fail
  * 10. AI 能力边界：只有 :feature:assistant 可依赖 :core:ai，其他页面须走 AssistantRoute 预填交接
  * 11. 排期单一真源：名单与播出时间只能来自 AniList 周排期（bangumi-data 仅作按需映射/平台表），
  *     不得回退到官方日历、bangumi-data 固定窗口或算术预测事件
+ * 12. 形状令牌收口：app/feature 源码中 RoundedCornerShape 的 dp 字面量只允许 BgmShapes 阶梯
+ *     （4/8/12/16/24）；off-ladder 野值（6/10/14 等）一律改用阶梯值，防止圆角体系再次漂移
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -453,6 +455,45 @@ class ArchitectureRulesTest {
 
         if (violations.isNotEmpty()) {
             fail("违反排期单一真源红线（AniList 为名单+时间唯一真源）：\n" + violations.joinToString("\n"))
+        }
+    }
+
+    @Test
+    fun ui_sources_only_use_ladder_radius_literals() {
+        val violations = mutableListOf<String>()
+        val ladder = setOf("4", "8", "12", "16", "24")
+        val radiusLiteral = Regex("""RoundedCornerShape\\(([^()]*)\\)""")
+        val dpValue = Regex("""(\\d+)\\.dp""")
+
+        for (dir in listOf("feature", "app")) {
+            val rootDir = File(projectRoot, dir)
+            if (!rootDir.isDirectory) continue
+            rootDir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { sourceFile ->
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    val relPath = sourceFile.relativeTo(projectRoot).path
+                    scanner.findMatches(radiusLiteral).forEach { match ->
+                        dpValue.findAll(match.lineContent).forEach { value ->
+                            if (value.groupValues[1] !in ladder) {
+                                violations.add(
+                                    "$relPath:${match.lineNumber} 圆角野值 " +
+                                        "RoundedCornerShape(...${value.groupValues[1]}.dp...) -> ${match.lineContent.trim()}",
+                                )
+                            }
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反形状令牌收口（RoundedCornerShape 的 dp 字面量仅允许 BgmShapes 阶梯 4/8/12/16/24，" +
+                    "圆角应表达 MaterialTheme.shapes.* 或阶梯内的字面量）：\n" +
+                    violations.joinToString("\n"),
+            )
         }
     }
 

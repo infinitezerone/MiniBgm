@@ -149,7 +149,7 @@ fun SearchIdleView(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(72.dp),
                 ) {

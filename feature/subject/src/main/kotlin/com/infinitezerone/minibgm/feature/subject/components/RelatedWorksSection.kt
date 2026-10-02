@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 
@@ -236,7 +237,7 @@ fun RelatedWorksSection(
                                 Modifier
                                     .width(100.dp)
                                     .height(178.dp),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(8.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                         ) {
                             Column(
@@ -343,7 +344,7 @@ private fun RelatedWorkCard(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(modifier = Modifier.padding(6.dp)) {
@@ -353,11 +354,11 @@ private fun RelatedWorkCard(
                     contentDescription = work.displayName,
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 6.dp,
-                    aspectRatio = 0.72f,
+                    aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                 )
                 if (work.staff.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 6.dp, bottomEnd = 6.dp),
+                        shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
                         color = badgeContainerColor,
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -396,7 +397,7 @@ fun EntityInfoPill(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(8.dp),
         color = containerColor,
         modifier = modifier,
     ) {

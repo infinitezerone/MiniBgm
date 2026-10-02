@@ -201,7 +201,7 @@ internal fun PlaylistCard(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f))
                         .padding(horizontal = 8.dp, vertical = 6.dp),
             )

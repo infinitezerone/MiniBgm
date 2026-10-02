@@ -226,7 +226,7 @@ fun EpisodeDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = MaterialTheme.colorScheme.primaryContainer,
                                 ) {
                                     Text(
@@ -240,7 +240,7 @@ fun EpisodeDetailScreen(
 
                                 if (episode != null && episode.type != 0) {
                                     Surface(
-                                        shape = RoundedCornerShape(6.dp),
+                                        shape = RoundedCornerShape(8.dp),
                                         color = MaterialTheme.colorScheme.secondaryContainer,
                                     ) {
                                         Text(
@@ -452,7 +452,7 @@ fun EpisodeDetailScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
@@ -584,7 +584,7 @@ fun EpisodeDetailScreen(
                     } else if (uiState.comments.isEmpty()) {
                         item(key = "comments_empty") {
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {

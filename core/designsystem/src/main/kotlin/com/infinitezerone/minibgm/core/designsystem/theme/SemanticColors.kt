@@ -161,24 +161,98 @@ val ActionCollect = StatusCollect
 val ActionOnHold = StatusOnHold
 val ActionDropped = StatusDropped
 
-// 搜索关键词高亮
+// 搜索关键词高亮（亮/暗双档：暗色档用暖褐深底 + 亮琥珀前景，避免浅黄底在纯黑上发糊）
 
 val HighlightAmber = Color(0xFFD97706)
-val HighlightContainer = Color(0xFFFFF3D0)
-val OnHighlightContainer = Color(0xFFB25E00)
+val HighlightContainerLight = Color(0xFFFFF3D0)
+val OnHighlightContainerLight = Color(0xFFB25E00)
+val HighlightContainerDark = Color(0xFF43330C)
+val OnHighlightContainerDark = Color(0xFFFCD34D)
+val HighlightContainer = HighlightContainerLight
+val OnHighlightContainer = OnHighlightContainerLight
 
-// 条目类型色板（container 为浅底，On 为其上的内容色）
+// 条目类型色板（container 为浅底，On 为其上的内容色；亮/暗双档）
 
 val TypeBookContainer = Color(0xFFFFF3E0)
 val OnTypeBook = Color(0xFFE65100)
+val TypeBookContainerDark = Color(0xFF4E2606)
+val OnTypeBookDark = Color(0xFFFFB68F)
 val TypeAnimeContainer = Color(0xFFE3F2FD)
 val OnTypeAnime = Color(0xFF1976D2)
+val TypeAnimeContainerDark = Color(0xFF0D3B6F)
+val OnTypeAnimeDark = Color(0xFF90CAF9)
 val TypeMusicContainer = Color(0xFFF3E5F5)
 val OnTypeMusic = Color(0xFF7B1FA2)
+val TypeMusicContainerDark = Color(0xFF4A1B66)
+val OnTypeMusicDark = Color(0xFFCE93D8)
 val TypeGameContainer = Color(0xFFE8F5E9)
 val OnTypeGame = Color(0xFF2E7D32)
+val TypeGameContainerDark = Color(0xFF12402A)
+val OnTypeGameDark = Color(0xFFA5D6A7)
 val TypeRealContainer = Color(0xFFFCE4EC)
 val OnTypeReal = Color(0xFFC2185B)
+val TypeRealContainerDark = Color(0xFF59113D)
+val OnTypeRealDark = Color(0xFFF48FB1)
+
+// ==========
+// 搜索关键词高亮自适应助手
+// ==========
+
+@Composable
+@ReadOnlyComposable
+fun highlightContainerColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) HighlightContainerDark else HighlightContainerLight
+
+@Composable
+@ReadOnlyComposable
+fun onHighlightContainerColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnHighlightContainerDark else OnHighlightContainerLight
+
+// ==========
+// 条目类型色板自适应助手
+// ==========
+
+@Composable
+@ReadOnlyComposable
+fun typeBookContainerColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TypeBookContainerDark else TypeBookContainer
+
+@Composable
+@ReadOnlyComposable
+fun onTypeBookColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnTypeBookDark else OnTypeBook
+
+@Composable
+@ReadOnlyComposable
+fun typeAnimeContainerColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TypeAnimeContainerDark else TypeAnimeContainer
+
+@Composable
+@ReadOnlyComposable
+fun onTypeAnimeColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnTypeAnimeDark else OnTypeAnime
+
+@Composable
+@ReadOnlyComposable
+fun typeMusicContainerColor(): Color =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TypeMusicContainerDark else TypeMusicContainer
+
+@Composable
+@ReadOnlyComposable
+fun onTypeMusicColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnTypeMusicDark else OnTypeMusic
+
+@Composable
+@ReadOnlyComposable
+fun typeGameContainerColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TypeGameContainerDark else TypeGameContainer
+
+@Composable
+@ReadOnlyComposable
+fun onTypeGameColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnTypeGameDark else OnTypeGame
+
+@Composable
+@ReadOnlyComposable
+fun typeRealContainerColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) TypeRealContainerDark else TypeRealContainer
+
+@Composable
+@ReadOnlyComposable
+fun onTypeRealColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnTypeRealDark else OnTypeReal
 
 // ==========================================
 // 播放与资源渠道平台色

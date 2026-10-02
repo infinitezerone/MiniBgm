@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
@@ -249,7 +250,7 @@ fun TimelineTrackRail(
 
             if (count > 1) {
                 Surface(
-                    shape = RoundedCornerShape(3.dp),
+                    shape = RoundedCornerShape(4.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
                     modifier = Modifier.padding(top = 2.dp),
                 ) {
@@ -345,14 +346,14 @@ fun ScheduleTimelineSingleCard(
                     url = schedule.coverUrl,
                     contentDescription = displayName,
                     cornerRadius = 8.dp,
-                    aspectRatio = 0.7f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier = Modifier.fillMaxSize(),
                 )
 
                 // 封面左上角：首播标记
                 if (schedule.nextEpisodeNumber == 1) {
                     Surface(
-                        shape = RoundedCornerShape(bottomEnd = 6.dp, topStart = 8.dp),
+                        shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 8.dp),
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -369,7 +370,7 @@ fun ScheduleTimelineSingleCard(
                 // 封面右上角：已在追状态标记（仅静默小图标，不与底栏抢横向空间）
                 if (isWatching) {
                     Surface(
-                        shape = RoundedCornerShape(bottomStart = 6.dp, topEnd = 8.dp),
+                        shape = RoundedCornerShape(bottomStart = 8.dp, topEnd = 8.dp),
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.align(Alignment.TopEnd),
                     ) {
@@ -385,7 +386,7 @@ fun ScheduleTimelineSingleCard(
                 // 封面左下角：Bangumi 评分
                 if (score > 0.0) {
                     Surface(
-                        shape = RoundedCornerShape(topEnd = 6.dp, bottomStart = 8.dp),
+                        shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.76f),
                         modifier = Modifier.align(Alignment.BottomStart),
                     ) {
@@ -442,7 +443,7 @@ fun ScheduleTimelineSingleCard(
                     if (schedule.nextEpisodeNumber > 0) {
                         val isFirstEp = schedule.nextEpisodeNumber == 1
                         Surface(
-                            shape = RoundedCornerShape(5.dp),
+                            shape = RoundedCornerShape(4.dp),
                             color =
                                 if (isFirstEp) {
                                     MaterialTheme.colorScheme.tertiaryContainer
@@ -520,7 +521,7 @@ fun ScheduleUntimedSection(
     var isExpanded by remember { mutableStateOf(true) }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
     ) {

@@ -38,7 +38,7 @@ fun ScheduleDayEmptyNote(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         modifier =
             modifier
                 .fillMaxWidth()

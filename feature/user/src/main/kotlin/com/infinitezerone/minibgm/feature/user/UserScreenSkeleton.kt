@@ -90,7 +90,7 @@ private fun UserProfileHeroSkeleton(
                         Modifier
                             .fillMaxWidth(0.55f)
                             .height(24.dp)
-                            .clip(RoundedCornerShape(6.dp)),
+                            .clip(RoundedCornerShape(8.dp)),
                     state = skeletonState,
                 )
                 // 身份元信息（@用户名 · UID · 年加入，已合并为一行）
@@ -152,7 +152,7 @@ private fun TrackingStatsSkeleton(
                         modifier =
                             Modifier
                                 .size(width = 44.dp, height = 11.dp)
-                                .clip(RoundedCornerShape(3.dp)),
+                                .clip(RoundedCornerShape(4.dp)),
                         state = skeletonState,
                     )
                 }

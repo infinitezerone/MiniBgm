@@ -62,7 +62,7 @@ fun SubjectDetailFullSkeleton(
                             Modifier
                                 .width(108.dp)
                                 .aspectRatio(0.7f),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         state = skeletonState,
                     )
 
@@ -91,7 +91,7 @@ fun SubjectDetailFullSkeleton(
                         ) {
                             SkeletonBox(
                                 modifier = Modifier.size(width = 44.dp, height = 24.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 state = skeletonState,
                             )
                             SkeletonBox(
@@ -105,17 +105,17 @@ fun SubjectDetailFullSkeleton(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             SkeletonBox(
                                 modifier = Modifier.size(width = 42.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 state = skeletonState,
                             )
                             SkeletonBox(
                                 modifier = Modifier.size(width = 50.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 state = skeletonState,
                             )
                             SkeletonBox(
                                 modifier = Modifier.size(width = 38.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 state = skeletonState,
                             )
                         }
@@ -258,7 +258,7 @@ fun SubjectDetailBodySkeleton(
                         ) {
                             SkeletonBox(
                                 modifier = Modifier.size(54.dp),
-                                shape = RoundedCornerShape(27.dp),
+                                shape = RoundedCornerShape(24.dp),
                                 state = skeletonState,
                             )
                             SkeletonBox(

@@ -338,7 +338,7 @@ fun AssistantScreenContent(
 
                 // 悬浮式胶囊输入框（无边框，发送按钮内嵌）
                 Surface(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     shadowElevation = 4.dp,
                     tonalElevation = 2.dp,
@@ -1021,7 +1021,7 @@ private fun DeepResolveEntry(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(

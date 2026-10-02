@@ -50,7 +50,7 @@ fun EpisodeCommentItem(
     onReactionClick: ((CommentReaction) -> Unit)? = null,
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier.fillMaxWidth(),
     ) {

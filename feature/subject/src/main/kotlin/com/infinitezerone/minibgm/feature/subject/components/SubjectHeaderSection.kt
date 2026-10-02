@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -86,13 +87,13 @@ fun SubjectHeaderCard(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = subject.displayName,
                     cornerRadius = 10.dp,
-                    aspectRatio = 0.7f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier =
                         Modifier
                             .width(108.dp)
                             .bgmSharedElement(
                                 key = BgmSharedElementKeys.subjectCover(subject.id, sharedElementSource),
-                                clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                                clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                             ),
                 )
 
@@ -183,7 +184,7 @@ fun SubjectHeaderCard(
                             modifier = Modifier.padding(top = 4.dp),
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = RatingGold.copy(alpha = 0.15f),
                             ) {
                                 Row(
@@ -316,7 +317,7 @@ fun SubjectPersonalProgressCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -353,7 +354,7 @@ fun SubjectPersonalProgressCard(
                     )
                     if (collection != null && collection.rate > 0) {
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = RatingGold.copy(alpha = 0.15f),
                         ) {
                             Text(
@@ -497,7 +498,7 @@ fun SubjectPersonalProgressCard(
                 if (totalEpisodes > 0) {
                     LinearProgressIndicator(
                         progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )

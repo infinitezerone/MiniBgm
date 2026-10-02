@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.feature.assistant.ActionStatus
 import com.infinitezerone.minibgm.feature.assistant.PendingActionCardState
@@ -59,7 +60,7 @@ fun PendingActionCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -238,7 +239,7 @@ fun PendingActionCard(
                         url = action.coverUrl,
                         contentDescription = displayTitle,
                         cornerRadius = 8.dp,
-                        aspectRatio = 0.72f,
+                        aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                         modifier =
                             Modifier
                                 .width(40.dp)

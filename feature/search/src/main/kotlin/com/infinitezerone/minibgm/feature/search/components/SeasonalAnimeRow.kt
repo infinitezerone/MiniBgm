@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -142,21 +143,21 @@ fun SeasonalAnimeRow(
                         .width(ROW_COVER_WIDTH)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(subject.id, "seasonal_guide"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
             ) {
                 CoverImage(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = primaryTitle,
                     cornerRadius = 10.dp,
-                    aspectRatio = 0.7f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 // 形式徽章（TV / WEB / 剧场版 等）
                 if (!platformTag.isNullOrBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(bottomEnd = 6.dp, topStart = 10.dp),
+                        shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.72f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -173,7 +174,7 @@ fun SeasonalAnimeRow(
                 // Bangumi 评分徽章
                 if (score > 0.0) {
                     Surface(
-                        shape = RoundedCornerShape(topEnd = 6.dp, bottomStart = 10.dp),
+                        shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.76f),
                         modifier = Modifier.align(Alignment.BottomStart),
                     ) {
@@ -357,7 +358,7 @@ private fun QuickCollectionPill(
 @Composable
 private fun GenreTag(label: String) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Text(

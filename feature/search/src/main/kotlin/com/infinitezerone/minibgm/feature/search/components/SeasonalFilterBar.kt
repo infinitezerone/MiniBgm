@@ -64,7 +64,7 @@ fun SeasonalFilterBar(
             // 1. 复合档期选择胶囊 [ 2026 · 10月秋 ▾ ]
             Surface(
                 onClick = onOpenSeasonPicker,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.height(36.dp),
             ) {
@@ -99,7 +99,7 @@ fun SeasonalFilterBar(
             // 2. 筛选摘要：收起时以一行文字交代"现在筛的是什么"，点它展开二级 chips
             Surface(
                 onClick = onToggleFilterExpanded,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier =
                     Modifier

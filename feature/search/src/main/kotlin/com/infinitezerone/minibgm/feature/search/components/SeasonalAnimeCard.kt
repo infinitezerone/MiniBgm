@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -90,20 +91,20 @@ fun SeasonalAnimeCard(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = primaryTitle,
                     cornerRadius = 10.dp,
-                    aspectRatio = 2f / 3f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .bgmSharedElement(
                                 key = BgmSharedElementKeys.subjectCover(subject.id, "seasonal_guide"),
-                                clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                                clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                             ),
                 )
 
                 // 评分徽章（左上角）
                 if (score > 0.0) {
                     Surface(
-                        shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 10.dp),
+                        shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.72f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -184,7 +185,7 @@ fun SeasonalAnimeCard(
                         Modifier
                             .fillMaxWidth()
                             .height(28.dp),
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors =
                         ButtonDefaults.filledTonalButtonColors(
                             containerColor =

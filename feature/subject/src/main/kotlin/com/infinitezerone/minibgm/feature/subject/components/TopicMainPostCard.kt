@@ -99,7 +99,7 @@ fun TopicMainPostCard(
                     }
                 }
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                 ) {
                     Text(
@@ -178,8 +178,8 @@ private fun TopicLinkedSubjectBanner(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Row(
@@ -195,7 +195,7 @@ private fun TopicLinkedSubjectBanner(
                     Modifier
                         .width(36.dp)
                         .height(50.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh),
             )
             Column(modifier = Modifier.weight(1f)) {

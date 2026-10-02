@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BadgeClassic
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
@@ -118,7 +119,7 @@ fun WaterfallSubjectCard(
             )
         },
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -137,13 +138,13 @@ fun WaterfallSubjectCard(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = primaryTitle,
                     cornerRadius = 10.dp,
-                    aspectRatio = 0.72f,
+                    aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .bgmSharedElement(
                                 key = BgmSharedElementKeys.subjectCover(subject.id, "explore"),
-                                clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                                clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                             ),
                 )
 
@@ -279,7 +280,7 @@ fun WaterfallSubjectCard(
                             val isTagSelected = tag.name in selectedTags
                             Surface(
                                 onClick = { onTagClick(tag.name) },
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color =
                                     if (isTagSelected) {
                                         MaterialTheme.colorScheme.primary
@@ -308,7 +309,7 @@ fun WaterfallSubjectCard(
                 // 社区精选热评或剧情安利句
                 if (hotComment != null && hotComment.comment.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth(),
                     ) {

@@ -42,22 +42,23 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionDoing
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionWish
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.HighlightAmber
-import com.infinitezerone.minibgm.core.designsystem.theme.HighlightContainer
-import com.infinitezerone.minibgm.core.designsystem.theme.OnHighlightContainer
 import com.infinitezerone.minibgm.core.designsystem.theme.OnRatingGold
-import com.infinitezerone.minibgm.core.designsystem.theme.OnTypeAnime
-import com.infinitezerone.minibgm.core.designsystem.theme.OnTypeBook
-import com.infinitezerone.minibgm.core.designsystem.theme.OnTypeGame
-import com.infinitezerone.minibgm.core.designsystem.theme.OnTypeMusic
-import com.infinitezerone.minibgm.core.designsystem.theme.OnTypeReal
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
-import com.infinitezerone.minibgm.core.designsystem.theme.TypeAnimeContainer
-import com.infinitezerone.minibgm.core.designsystem.theme.TypeBookContainer
-import com.infinitezerone.minibgm.core.designsystem.theme.TypeGameContainer
-import com.infinitezerone.minibgm.core.designsystem.theme.TypeMusicContainer
-import com.infinitezerone.minibgm.core.designsystem.theme.TypeRealContainer
+import com.infinitezerone.minibgm.core.designsystem.theme.highlightContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onHighlightContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onTypeAnimeColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onTypeBookColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onTypeGameColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onTypeMusicColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onTypeRealColor
+import com.infinitezerone.minibgm.core.designsystem.theme.typeAnimeContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.typeBookContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.typeGameContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.typeMusicContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.typeRealContainerColor
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
@@ -77,7 +78,7 @@ fun SearchResultCard(
     modifier: Modifier = Modifier,
 ) {
     val subjectType = remember(subject.type) { SubjectType.fromValue(subject.type) }
-    val typeTheme = remember(subjectType) { getSubjectTypeTheme(subjectType) }
+    val typeTheme = getSubjectTypeTheme(subjectType)
 
     val primaryTitle = subject.displayName
     val secondaryTitle =
@@ -127,7 +128,7 @@ fun SearchResultCard(
                 ),
             )
         },
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -140,7 +141,7 @@ fun SearchResultCard(
                 url = subject.images?.bestImage.orEmpty(),
                 contentDescription = primaryTitle,
                 cornerRadius = 8.dp,
-                aspectRatio = 0.7f,
+                aspectRatio = BGM_POSTER_ASPECT_RATIO,
                 modifier =
                     Modifier
                         .width(74.dp)
@@ -185,14 +186,14 @@ fun SearchResultCard(
                     if (rank > 0) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = HighlightContainer,
+                            color = highlightContainerColor(),
                         ) {
                             Text(
                                 text = "Rank #$rank",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = OnHighlightContainer,
+                                color = onHighlightContainerColor(),
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                             )
                         }
@@ -243,7 +244,7 @@ fun SearchResultCard(
                     ) {
                         topTags.forEach { tag ->
                             Surface(
-                                shape = RoundedCornerShape(3.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
                             ) {
                                 Text(
@@ -336,7 +337,7 @@ fun SearchResultGridCard(
     modifier: Modifier = Modifier,
 ) {
     val subjectType = remember(subject.type) { SubjectType.fromValue(subject.type) }
-    val typeTheme = remember(subjectType) { getSubjectTypeTheme(subjectType) }
+    val typeTheme = getSubjectTypeTheme(subjectType)
     val primaryTitle = subject.displayName
     val primaryTitleAnnotated =
         remember(primaryTitle, query) {
@@ -357,7 +358,7 @@ fun SearchResultGridCard(
                 ),
             )
         },
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -370,8 +371,8 @@ fun SearchResultGridCard(
                         .aspectRatio(3f / 4f)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(subject.id, "search_grid"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
-                        ).clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                            clipInOverlayDuringTransition = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                        ).clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 CoverImage(
@@ -383,7 +384,7 @@ fun SearchResultGridCard(
                 // 左上角 Rank
                 if (rank > 0) {
                     Surface(
-                        shape = RoundedCornerShape(bottomEnd = 6.dp),
+                        shape = RoundedCornerShape(bottomEnd = 8.dp),
                         color = RatingGold,
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -399,7 +400,7 @@ fun SearchResultGridCard(
 
                 // 右上角品类徽章
                 Surface(
-                    shape = RoundedCornerShape(bottomStart = 6.dp),
+                    shape = RoundedCornerShape(bottomStart = 8.dp),
                     color = typeTheme.containerColor.copy(alpha = 0.9f),
                     modifier = Modifier.align(Alignment.TopEnd),
                 ) {
@@ -414,7 +415,7 @@ fun SearchResultGridCard(
                 // 右下角评分
                 if (score > 0.0) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 6.dp),
+                        shape = RoundedCornerShape(topStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.72f),
                         modifier = Modifier.align(Alignment.BottomEnd),
                     ) {
@@ -446,7 +447,7 @@ fun SearchResultGridCard(
                 val isDoing = currentStatus == CollectionType.DOING
                 Surface(
                     onClick = onToggleDoing,
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color =
                         if (isDoing) {
                             ActionDoing
@@ -491,7 +492,7 @@ fun QuickCapsuleButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(8.dp),
         color =
             if (isActive) {
                 activeColor.copy(alpha = 0.18f)
@@ -576,32 +577,33 @@ data class SubjectTypeColorTheme(
     val contentColor: Color,
 )
 
+@Composable
 fun getSubjectTypeTheme(subjectType: SubjectType): SubjectTypeColorTheme =
     when (subjectType) {
         SubjectType.BOOK ->
             SubjectTypeColorTheme(
-                containerColor = TypeBookContainer,
-                contentColor = OnTypeBook,
+                containerColor = typeBookContainerColor(),
+                contentColor = onTypeBookColor(),
             )
         SubjectType.ANIME ->
             SubjectTypeColorTheme(
-                containerColor = TypeAnimeContainer,
-                contentColor = OnTypeAnime,
+                containerColor = typeAnimeContainerColor(),
+                contentColor = onTypeAnimeColor(),
             )
         SubjectType.MUSIC ->
             SubjectTypeColorTheme(
-                containerColor = TypeMusicContainer,
-                contentColor = OnTypeMusic,
+                containerColor = typeMusicContainerColor(),
+                contentColor = onTypeMusicColor(),
             )
         SubjectType.GAME ->
             SubjectTypeColorTheme(
-                containerColor = TypeGameContainer,
-                contentColor = OnTypeGame,
+                containerColor = typeGameContainerColor(),
+                contentColor = onTypeGameColor(),
             )
         SubjectType.REAL ->
             SubjectTypeColorTheme(
-                containerColor = TypeRealContainer,
-                contentColor = OnTypeReal,
+                containerColor = typeRealContainerColor(),
+                contentColor = onTypeRealColor(),
             )
     }
 

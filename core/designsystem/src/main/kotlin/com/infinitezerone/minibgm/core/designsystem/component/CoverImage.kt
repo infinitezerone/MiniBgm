@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.ambient.toDominantColor
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 
 /**
  * 封面或头像在无有效图片 URL 时的占位语义类型
@@ -44,7 +45,7 @@ fun CoverImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 12.dp,
-    aspectRatio: Float = 0.7f,
+    aspectRatio: Float = BGM_POSTER_ASPECT_RATIO,
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.Center,
     placeholder: CoverPlaceholder = CoverPlaceholder.Subject,

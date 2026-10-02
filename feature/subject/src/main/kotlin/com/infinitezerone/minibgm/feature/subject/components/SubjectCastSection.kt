@@ -60,6 +60,8 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
@@ -514,7 +516,7 @@ private fun TimelineNodeCard(
                 CoverImage(
                     url = node.coverUrl.orEmpty(),
                     contentDescription = node.name,
-                    aspectRatio = 0.7f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -605,7 +607,7 @@ private fun RelationCard(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -618,7 +620,7 @@ private fun RelationCard(
                     contentDescription = relation.displayName,
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 8.dp,
-                    aspectRatio = 0.7f,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
                 )
                 if (relation.relation.isNotBlank()) {
                     Surface(
@@ -743,7 +745,7 @@ private fun CharacterCard(
                     contentDescription = character.name,
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 8.dp,
-                    aspectRatio = 0.72f,
+                    aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                     alignment = Alignment.TopCenter,
                     placeholder = CoverPlaceholder.Person,
                 )
@@ -797,7 +799,7 @@ private fun CharacterCard(
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     onClick = { onActorClick(actor.id) },
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -857,7 +859,7 @@ fun StaffSection(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(12.dp),
             colors =
                 CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,

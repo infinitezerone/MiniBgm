@@ -500,7 +500,7 @@ private fun SideCapsuleIndicator(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = Color.Black.copy(alpha = 0.78f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
@@ -523,7 +523,7 @@ private fun SideCapsuleIndicator(
                     Modifier
                         .width(5.dp)
                         .height(84.dp)
-                        .background(Color.White.copy(alpha = 0.25f), shape = RoundedCornerShape(2.5.dp)),
+                        .background(Color.White.copy(alpha = 0.25f), shape = RoundedCornerShape(2.4.dp)),
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Box(
@@ -531,7 +531,7 @@ private fun SideCapsuleIndicator(
                         Modifier
                             .fillMaxWidth()
                             .fillMaxHeight((percent / 100f).coerceIn(0f, 1f))
-                            .background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(2.5.dp)),
+                            .background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(2.4.dp)),
                 )
             }
             Text(
@@ -603,7 +603,7 @@ private fun FastForwardChip(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = Color.Black.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,

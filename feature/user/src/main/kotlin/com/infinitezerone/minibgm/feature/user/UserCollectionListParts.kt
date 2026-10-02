@@ -307,7 +307,7 @@ internal fun UserCollectionCard(
                         .width(76.dp)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(collection.subjectId, "user"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
                 cornerRadius = 10.dp,
             )
@@ -399,7 +399,7 @@ internal fun UserCollectionCard(
                             Modifier
                                 .fillMaxWidth()
                                 .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)),
+                                .clip(RoundedCornerShape(4.dp)),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     )

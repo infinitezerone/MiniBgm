@@ -176,7 +176,7 @@ fun SearchResultsList(
                     if (offlineNotice != null) {
                         item(key = "offline_notice") {
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.tertiaryContainer,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {

@@ -44,6 +44,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -130,7 +131,7 @@ fun CharacterDetailBottomSheet(
                     contentDescription = characterName,
                     modifier = Modifier.width(108.dp),
                     cornerRadius = 12.dp,
-                    aspectRatio = 0.72f,
+                    aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                     alignment = Alignment.TopCenter,
                     placeholder = CoverPlaceholder.Person,
                 )
@@ -191,11 +192,11 @@ fun CharacterDetailBottomSheet(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             SkeletonBox(
                                 modifier = Modifier.size(width = 46.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                             SkeletonBox(
                                 modifier = Modifier.size(width = 54.dp, height = 20.dp),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                         }
                     }
@@ -207,7 +208,7 @@ fun CharacterDetailBottomSheet(
             if (actor != null && actor.name.isNotBlank()) {
                 Surface(
                     onClick = { onActorClick(actor.id) },
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {

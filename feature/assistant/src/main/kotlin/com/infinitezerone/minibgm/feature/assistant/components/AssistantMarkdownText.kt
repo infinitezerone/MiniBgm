@@ -383,7 +383,7 @@ fun AssistantMarkdownText(
                                 Modifier
                                     .width(3.dp)
                                     .height(20.dp)
-                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)),
                         )
                         val annotated =
                             buildMarkdownAnnotatedString(

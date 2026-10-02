@@ -108,7 +108,7 @@ fun SpotlightSkeletonCard(
             ) {
                 SkeletonBox(
                     modifier = Modifier.size(width = 88.dp, height = 20.dp),
-                    shape = RoundedCornerShape(6.dp),
+                    shape = RoundedCornerShape(8.dp),
                     state = skeletonState,
                 )
             }
@@ -168,7 +168,7 @@ fun WaterfallSkeletonCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -182,10 +182,10 @@ fun WaterfallSkeletonCard(
                     Modifier
                         .fillMaxWidth()
                         .aspectRatio(0.72f)
-                        .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                        .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                         .skeletonNode(
                             state = skeletonState,
-                            shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+                            shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
                         ),
             ) {
                 // 左上角评分角标占位
@@ -194,7 +194,7 @@ fun WaterfallSkeletonCard(
                         Modifier
                             .padding(6.dp)
                             .size(width = 38.dp, height = 18.dp)
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)),
                 )
             }
@@ -238,7 +238,7 @@ fun WaterfallSkeletonCard(
                             Modifier
                                 .fillMaxWidth(0.92f)
                                 .height(11.dp),
-                        shape = RoundedCornerShape(3.dp),
+                        shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                 }
@@ -248,7 +248,7 @@ fun WaterfallSkeletonCard(
                             Modifier
                                 .fillMaxWidth(0.68f)
                                 .height(11.dp),
-                        shape = RoundedCornerShape(3.dp),
+                        shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                 }

@@ -91,7 +91,7 @@ fun SubjectCommunitySection(
                 )
                 if (commentTotal > 0) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
                     ) {
                         Text(
@@ -129,7 +129,7 @@ fun SubjectCommunitySection(
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 ) {
                     Column(
@@ -152,7 +152,7 @@ fun SubjectCommunitySection(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .clip(RoundedCornerShape(8.dp))
                                         .clickable { isExpanded = true }
                                         .padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.Center,
@@ -178,7 +178,7 @@ fun SubjectCommunitySection(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .clip(RoundedCornerShape(8.dp))
                                             .clickable(enabled = !isLoadingMoreComments) { onLoadMoreComments() }
                                             .padding(vertical = 8.dp),
                                     horizontalArrangement = Arrangement.Center,
@@ -229,7 +229,7 @@ fun SubjectCommunitySection(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .clip(RoundedCornerShape(8.dp))
                                         .clickable { isExpanded = false }
                                         .padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.Center,
@@ -273,7 +273,7 @@ fun SubjectCommunitySection(
                 )
                 if (topics.isNotEmpty()) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Text(
@@ -307,7 +307,7 @@ fun SubjectCommunitySection(
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                 ) {
                     Column(
@@ -466,7 +466,7 @@ fun SubjectTopicItem(
 
             if (topic.replyCount > 0) {
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 ) {
                     Text(

@@ -124,7 +124,7 @@ fun EpisodesSectionHeader(
                 )
                 if (totalEpisodes > 0) {
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     ) {
                         Text(

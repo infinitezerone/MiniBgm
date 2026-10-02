@@ -110,7 +110,7 @@ fun ActiveCustomFilterBar(
         ) {
             Surface(
                 onClick = onToggleExpanded,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier =
                     Modifier

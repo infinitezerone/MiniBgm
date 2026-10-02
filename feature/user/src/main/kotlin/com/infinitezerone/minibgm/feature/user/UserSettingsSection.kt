@@ -759,7 +759,7 @@ private fun SettingsItemRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(8.dp),
             color = iconTint.copy(alpha = 0.12f),
             modifier = Modifier.size(38.dp),
         ) {
