@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import coil3.ImageLoader
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
@@ -48,6 +49,9 @@ import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.koin.compose.koinInject
 
 /**
  * MiniBgm 应用根导航组件。
@@ -63,6 +67,7 @@ fun BgmNavHost(
     val scheduleScrollToTop = remember(navState) { navState.scrollToTopFor(ScheduleRoute) }
     val exploreScrollToTop = remember(navState) { navState.scrollToTopFor(ExploreRoute) }
     val userScrollToTop = remember(navState) { navState.scrollToTopFor(UserRoute) }
+    val imageLoader = koinInject<ImageLoader>()
 
     val directive = rememberBgmPaneDirective()
     val isSplitMode = directive.isSplitLayout
@@ -188,6 +193,12 @@ fun BgmNavHost(
                                         null
                                     },
                                 enableAiConfig = BuildConfig.ENABLE_AI_ASSISTANT,
+                                onClearCache = {
+                                    withContext(Dispatchers.IO) {
+                                        imageLoader.memoryCache?.clear()
+                                        imageLoader.diskCache?.clear()
+                                    }
+                                },
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 

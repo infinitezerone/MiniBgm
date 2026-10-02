@@ -101,6 +101,7 @@ internal fun SettingsSection(
     onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
+    isClearingCache: Boolean = false,
     onOpenCrashLog: () -> Unit = {},
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
@@ -478,8 +479,8 @@ internal fun SettingsSection(
                     icon = Icons.Filled.CleaningServices,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     title = "清理本地缓存",
-                    subtitle = "清理离线网络图片与临时缓存数据",
-                    onClick = onClearCache,
+                    subtitle = if (isClearingCache) "正在清理…" else "清理离线网络图片缓存",
+                    onClick = if (isClearingCache) null else onClearCache,
                 )
 
                 HorizontalDivider(

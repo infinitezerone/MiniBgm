@@ -45,6 +45,7 @@ fun EntryProviderScope<NavKey>.settingsEntry(
     onBackClick: () -> Unit = {},
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
+    onClearCache: suspend () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<SettingsRoute>(metadata = metadata) {
@@ -52,6 +53,7 @@ fun EntryProviderScope<NavKey>.settingsEntry(
             onBackClick = onBackClick,
             onPlaybackRulesClick = onPlaybackRulesClick,
             enableAiConfig = enableAiConfig,
+            onClearCache = onClearCache,
         )
     }
 }

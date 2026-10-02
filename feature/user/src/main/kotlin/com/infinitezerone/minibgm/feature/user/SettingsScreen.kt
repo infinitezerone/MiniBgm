@@ -81,6 +81,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
+    onClearCache: suspend () -> Unit = {},
     viewModel: UserViewModel = koinViewModel(),
 ) {
     val context = LocalContext.current
@@ -103,6 +104,9 @@ fun SettingsScreen(
     }
 
     var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+
+    // 清理缓存期间行内置忙（onClick 置空防重入），结果按真实成败反馈
+    var isClearingCache by remember { mutableStateOf(false) }
 
     // 崩溃日志按需读取：内容留在 state 里，关掉再打开不必重读磁盘
     var showCrashLogDialog by remember { mutableStateOf(false) }
@@ -196,10 +200,18 @@ fun SettingsScreen(
         onSaveAiConfig = viewModel::setAiConfig,
         onOpenWebUrl = openWebUrl,
         onClearCache = {
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar("本地缓存与临时数据已清理")
+            if (!isClearingCache) {
+                isClearingCache = true
+                coroutineScope.launch {
+                    val result = runCatching { onClearCache() }
+                    isClearingCache = false
+                    snackbarHostState.showSnackbar(
+                        if (result.isSuccess) "已清理图片缓存" else "清理失败，请重试",
+                    )
+                }
             }
         },
+        isClearingCache = isClearingCache,
         onOpenCrashLog = {
             coroutineScope.launch {
                 val log = viewModel.loadLatestCrashLog()
@@ -391,6 +403,7 @@ fun SettingsScreenContent(
     onSaveAiConfig: (AiConfig) -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
+    isClearingCache: Boolean = false,
     onOpenCrashLog: () -> Unit = {},
     onLogoutCurrent: () -> Unit,
     onLogoutAll: () -> Unit,
@@ -471,6 +484,7 @@ fun SettingsScreenContent(
                     onSyncNow = onSyncNow,
                     onOpenWebUrl = onOpenWebUrl,
                     onClearCache = onClearCache,
+                    isClearingCache = isClearingCache,
                     onOpenCrashLog = onOpenCrashLog,
                     onLogoutCurrentClick = { showLogoutCurrentDialog = true },
                     onLogoutAllClick = { showLogoutAllDialog = true },
