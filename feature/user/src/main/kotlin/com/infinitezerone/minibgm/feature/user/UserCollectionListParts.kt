@@ -1,7 +1,8 @@
 package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -247,6 +248,7 @@ internal fun AirFilterRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun UserCollectionCard(
     collection: UserCollection,
@@ -254,6 +256,7 @@ internal fun UserCollectionCard(
     isBinge: Boolean = false,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
+    onEditCollection: (() -> Unit)? = null,
     onPlayClick: (() -> Unit)? = null,
     onToggleBinge: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -272,17 +275,20 @@ internal fun UserCollectionCard(
         modifier =
             modifier
                 .fillMaxWidth()
-                .clickable {
-                    onSubjectClick(
-                        SubjectDetailRoute(
-                            subjectId = collection.subjectId,
-                            initialName = title,
-                            initialCoverUrl = coverUrl,
-                            initialScore = subject?.rating?.score ?: 0.0,
-                            source = "user",
-                        ),
-                    )
-                },
+                .combinedClickable(
+                    onClick = {
+                        onSubjectClick(
+                            SubjectDetailRoute(
+                                subjectId = collection.subjectId,
+                                initialName = title,
+                                initialCoverUrl = coverUrl,
+                                initialScore = subject?.rating?.score ?: 0.0,
+                                source = "user",
+                            ),
+                        )
+                    },
+                    onLongClick = onEditCollection,
+                ),
         shape = MaterialTheme.shapes.large,
         colors =
             CardDefaults.cardColors(

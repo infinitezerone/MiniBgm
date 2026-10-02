@@ -37,6 +37,7 @@ graph TB
   :core:datastore -.->|commonMainImplementation| :core:common
   :core:datastore -.->|commonMainImplementation| :core:model
   :core:designsystem -.-> :core:common
+  :core:designsystem -.-> :core:model
   :core:navigation -.-> :core:common
   :core:network -.->|commonMainImplementation| :core:common
   :core:network -.->|commonMainImplementation| :core:model

@@ -23,7 +23,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -42,9 +44,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserAvatar
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -79,6 +83,26 @@ fun UserScreen(
     // 分区默认落在「在看」，进页面即可见内容，无需用户先手动切一次 Tab
     LaunchedEffect(collectionsViewModel) {
         collectionsViewModel.setInitialType(CollectionType.DOING)
+    }
+
+    // 打卡/编辑结果反馈：+1 成功给 4 秒撤销口，失败显式提示（列表非空时 state.error 不可见）
+    LaunchedEffect(collectionsViewModel) {
+        collectionsViewModel.events.collect { event ->
+            when (event) {
+                is UserCollectionsEvent.ProgressIncremented -> {
+                    val result =
+                        snackbarHostState.showSnackbar(
+                            message = "已打卡至第 " + event.newEp + " 话",
+                            actionLabel = "撤销",
+                            duration = SnackbarDuration.Short,
+                        )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        collectionsViewModel.undoIncrement(event.previous)
+                    }
+                }
+                is UserCollectionsEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
     }
 
     UserScreenContent(
@@ -116,6 +140,7 @@ fun UserScreen(
         onToggleBinge = collectionsViewModel::toggleBingeSubject,
         onLoadMore = collectionsViewModel::loadMore,
         onIncrementProgress = collectionsViewModel::incrementEpisodeProgress,
+        onUpdateCollection = collectionsViewModel::updateCollection,
         onSubjectClick = onSubjectClick,
         scrollToTop = scrollToTop,
         snackbarHostState = snackbarHostState,
@@ -143,6 +168,15 @@ fun UserScreenContent(
     onToggleBinge: (Long) -> Unit = {},
     onLoadMore: (CollectionType) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
+    onUpdateCollection: (
+        collection: UserCollection,
+        type: CollectionType,
+        rate: Int?,
+        comment: String?,
+        private: Boolean,
+        epStatus: Int?,
+        tags: List<String>?,
+    ) -> Unit,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     scrollToTop: Flow<Unit>? = null,
     snackbarHostState: SnackbarHostState,
@@ -152,6 +186,7 @@ fun UserScreenContent(
     var accountToLogout by remember { mutableStateOf<UserProfile?>(null) }
     var showLogoutAllDialog by remember { mutableStateOf(false) }
     var selectedCollectionForSources by remember { mutableStateOf<UserCollection?>(null) }
+    var collectionToEdit by remember { mutableStateOf<UserCollection?>(null) }
     var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
     val context = LocalContext.current
 
@@ -323,6 +358,7 @@ fun UserScreenContent(
                             state = collectionsState,
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
+                            onEditCollection = { collectionToEdit = it },
                             onPlayClick = { selectedCollectionForSources = it },
                             onToggleBinge = onToggleBinge,
                             onRefresh = onRefresh,
@@ -436,6 +472,18 @@ fun UserScreenContent(
         )
     }
 
+    collectionToEdit?.let { toEdit ->
+        CollectionStatusBottomSheet(
+            currentCollection = toEdit,
+            subjectType = SubjectType.fromValue(toEdit.subjectType),
+            totalEpisodes = toEdit.subject?.totalEpisodes?.takeIf { it > 0 } ?: toEdit.subject?.eps ?: 0,
+            onDismiss = { collectionToEdit = null },
+            onSave = { type, rate, comment, private, epStatus, tags ->
+                onUpdateCollection(toEdit, type, rate, comment, private, epStatus, tags)
+            },
+        )
+    }
+
     selectedCollectionForSources?.let { col ->
         val isBinge = collectionsState.bingeSubjectIds.contains(col.subjectId)
         UserCollectionSourcesBottomSheet(
@@ -492,6 +540,7 @@ private fun LazyListScope.collectionSection(
     state: UserCollectionsUiState,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
+    onEditCollection: (UserCollection) -> Unit,
     onPlayClick: (UserCollection) -> Unit,
     onToggleBinge: (Long) -> Unit,
     onRefresh: () -> Unit,
@@ -546,6 +595,7 @@ private fun LazyListScope.collectionSection(
                     isBinge = state.bingeSubjectIds.contains(item.subjectId),
                     onSubjectClick = onSubjectClick,
                     onIncrementProgress = { onIncrementProgress(item) },
+                    onEditCollection = { onEditCollection(item) },
                     onPlayClick = { onPlayClick(item) },
                     onToggleBinge = { onToggleBinge(item.subjectId) },
                     modifier =
@@ -654,6 +704,7 @@ private fun UserScreenLoadingPreview() {
             onSelectSubjectFilter = {},
             onLoadMore = {},
             onIncrementProgress = {},
+            onUpdateCollection = { _, _, _, _, _, _, _ -> },
             onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
@@ -677,6 +728,7 @@ private fun UserScreenUnauthenticatedPreview() {
             onSelectSubjectFilter = {},
             onLoadMore = {},
             onIncrementProgress = {},
+            onUpdateCollection = { _, _, _, _, _, _, _ -> },
             onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )
@@ -700,6 +752,7 @@ private fun UserScreenLoggedInPreview() {
             onSelectSubjectFilter = {},
             onLoadMore = {},
             onIncrementProgress = {},
+            onUpdateCollection = { _, _, _, _, _, _, _ -> },
             onSubjectClick = {},
             snackbarHostState = remember { SnackbarHostState() },
         )

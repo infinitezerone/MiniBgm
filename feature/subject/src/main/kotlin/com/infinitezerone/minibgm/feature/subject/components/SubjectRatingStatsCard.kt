@@ -487,19 +487,3 @@ fun formatCompactNumber(number: Int): String =
         number > 0 -> number.toString()
         else -> "0"
     }
-
-/** Bangumi 评分说明文案 */
-fun getScoreLabel(score: Int): String =
-    when (score) {
-        1 -> "不忍直视"
-        2 -> "很差"
-        3 -> "差"
-        4 -> "较差"
-        5 -> "不过不失"
-        6 -> "还行"
-        7 -> "推荐"
-        8 -> "力荐"
-        9 -> "神作"
-        10 -> "极品"
-        else -> "未评分"
-    }

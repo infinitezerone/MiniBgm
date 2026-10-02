@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.feature.subject.components
+package com.infinitezerone.minibgm.core.designsystem.component
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,6 +49,22 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.model.UserCollection
 import kotlin.math.roundToInt
+
+/** Bangumi 评分说明文案（1~10 分；0 分表示未评分） */
+private fun getScoreLabel(score: Int): String =
+    when (score) {
+        1 -> "不忍直视"
+        2 -> "很差"
+        3 -> "差"
+        4 -> "较差"
+        5 -> "不过不失"
+        6 -> "还行"
+        7 -> "推荐"
+        8 -> "力荐"
+        9 -> "神作"
+        10 -> "极品"
+        else -> "未评分"
+    }
 
 /** 收藏状态 BottomSheet：单选状态、章节进度步进器、1~10 评分器、自定义与热门标签、私密开关、短评输入 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)

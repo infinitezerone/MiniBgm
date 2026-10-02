@@ -27,9 +27,11 @@ graph TB
     direction TB
     :core:common[common]:::kmp-library
     :core:designsystem[designsystem]:::android-library
+    :core:model[model]:::kmp-library
   end
 
   :core:designsystem -.-> :core:common
+  :core:designsystem -.-> :core:model
 
 classDef android-application fill:#CAFFBF,stroke:#000,stroke-width:2px,color:#000;
 classDef android-feature fill:#FFD6A5,stroke:#000,stroke-width:2px,color:#000;

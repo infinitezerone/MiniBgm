@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -406,5 +407,120 @@ class UserCollectionsViewModelTest {
                 viewModel.uiState.value.visibleCollections
                     .isEmpty(),
             )
+        }
+
+    @Test
+    fun updateCollection_optimisticallyMovesItemToTargetTab() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+            viewModel.setInitialType(CollectionType.DOING)
+            advanceUntilIdle()
+
+            viewModel.updateCollection(
+                collection = sampleUserCollection,
+                type = CollectionType.COLLECT,
+                rate = 8,
+                comment = "补完了",
+                private = false,
+                epStatus = 12,
+                tags = null,
+            )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.collectionsByType[CollectionType.DOING].orEmpty().isEmpty())
+            val moved = state.collectionsByType[CollectionType.COLLECT].orEmpty().single()
+            assertEquals(CollectionType.COLLECT.value, moved.type)
+            assertEquals(8, moved.rate)
+            assertEquals("补完了", moved.comment)
+            val event = viewModel.events.first()
+            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message == "收藏已更新")
+        }
+
+    @Test
+    fun updateCollection_rollsBackOnError() =
+        runTest {
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection)
+                    updateCollectionResult = AppResult.Error(IllegalStateException("boom"), "网络异常")
+                }
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+            viewModel.setInitialType(CollectionType.DOING)
+            advanceUntilIdle()
+
+            viewModel.updateCollection(
+                collection = sampleUserCollection,
+                type = CollectionType.DROPPED,
+                rate = null,
+                comment = null,
+                private = false,
+                epStatus = null,
+                tags = null,
+            )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            val restored = state.collectionsByType[CollectionType.DOING].orEmpty().single()
+            assertEquals(sampleUserCollection, restored)
+            val event = viewModel.events.first()
+            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message == "更新失败：网络异常")
+        }
+
+    @Test
+    fun incrementEpisodeProgress_success_emitsUndoableEvent() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(sampleUserCollection)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+            viewModel.setInitialType(CollectionType.DOING)
+            advanceUntilIdle()
+
+            viewModel.incrementEpisodeProgress(sampleUserCollection)
+            advanceUntilIdle()
+
+            val event = viewModel.events.first()
+            assertTrue(event is UserCollectionsEvent.ProgressIncremented)
+            event as UserCollectionsEvent.ProgressIncremented
+            assertEquals(sampleUserCollection.epStatus, event.previous.epStatus)
+            assertEquals(sampleUserCollection.epStatus + 1, event.newEp)
+
+            // 撤销：本地进度回退到快照值，并向仓库回写单集未看
+            viewModel.undoIncrement(event.previous)
+            advanceUntilIdle()
+            val state = viewModel.uiState.value
+            assertEquals(
+                sampleUserCollection.epStatus,
+                state.collections.single { it.subjectId == sampleUserCollection.subjectId }.epStatus,
+            )
+        }
+
+    @Test
+    fun incrementEpisodeProgress_failure_emitsSnackbarInsteadOfSilentRollback() =
+        runTest {
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection)
+                    updateEpisodeResult = AppResult.Error(IllegalStateException("boom"), "网络异常")
+                }
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+            viewModel.setInitialType(CollectionType.DOING)
+            advanceUntilIdle()
+
+            viewModel.incrementEpisodeProgress(sampleUserCollection)
+            advanceUntilIdle()
+
+            // 本地回滚为快照进度
+            assertEquals(
+                sampleUserCollection.epStatus,
+                viewModel.uiState.value.collections
+                    .single { it.subjectId == sampleUserCollection.subjectId }
+                    .epStatus,
+            )
+            // 且失败必须以事件显式提示，不能只写 state.error（列表非空时不可见）
+            val event = viewModel.events.first()
+            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message.contains("打卡失败"))
         }
 }

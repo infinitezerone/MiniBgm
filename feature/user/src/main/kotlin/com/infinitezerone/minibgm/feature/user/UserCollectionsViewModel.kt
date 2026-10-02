@@ -11,10 +11,13 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -88,12 +91,28 @@ data class UserCollectionsUiState(
         get() = errorByType[selectedType] ?: error
 }
 
+/** 收藏列表一次性单发事件 */
+sealed interface UserCollectionsEvent {
+    /** +1 打卡成功：携带打卡前快照，供「撤销」回写 */
+    data class ProgressIncremented(
+        val previous: UserCollection,
+        val newEp: Int,
+    ) : UserCollectionsEvent
+
+    data class ShowSnackbar(
+        val message: String,
+    ) : UserCollectionsEvent
+}
+
 class UserCollectionsViewModel(
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(UserCollectionsUiState())
     val uiState: StateFlow<UserCollectionsUiState> = _uiState.asStateFlow()
+
+    private val _events = Channel<UserCollectionsEvent>(Channel.BUFFERED)
+    val events: Flow<UserCollectionsEvent> = _events.receiveAsFlow()
 
     private val loadJobs = mutableMapOf<CollectionType, Job>()
     private var isInitialized = false
@@ -395,30 +414,131 @@ class UserCollectionsViewModel(
                     )
                 }
 
-            result.onError { _, message ->
-                _uiState.update { state ->
-                    val currentList = state.collectionsByType[type]
-                    val rollbackByType =
-                        if (currentList != null) {
-                            state.collectionsByType + (
-                                type to
-                                    currentList.map { item ->
-                                        if (item.subjectId == subjectId) item.copy(epStatus = collection.epStatus) else item
-                                    }
-                            )
-                        } else {
-                            state.collectionsByType
-                        }
-                    state.copy(
-                        collectionsByType = rollbackByType,
-                        error = message,
-                    )
+            result
+                .onSuccess {
+                    _events.trySend(UserCollectionsEvent.ProgressIncremented(previous = collection, newEp = nextEp))
+                }.onError { _, message ->
+                    _uiState.update { state ->
+                        val currentList = state.collectionsByType[type]
+                        val rollbackByType =
+                            if (currentList != null) {
+                                state.collectionsByType + (
+                                    type to
+                                        currentList.map { item ->
+                                            if (item.subjectId == subjectId) item.copy(epStatus = collection.epStatus) else item
+                                        }
+                                )
+                            } else {
+                                state.collectionsByType
+                            }
+                        state.copy(
+                            collectionsByType = rollbackByType,
+                            error = message,
+                        )
+                    }
+                    // 列表非空时 error 不可见（不打断内容），必须以事件形式显式反馈
+                    _events.trySend(UserCollectionsEvent.ShowSnackbar("打卡失败：" + message.ifBlank { "网络异常" }))
                 }
-            }
 
             _uiState.update { state ->
                 state.copy(updatingSubjectIds = state.updatingSubjectIds - subjectId)
             }
+        }
+    }
+
+    /** 撤销一次 +1 打卡：进度回退到快照值（本地乐观回退 + 网络回写，失败仅提示） */
+    fun undoIncrement(previous: UserCollection) {
+        viewModelScope.launch {
+            val type = CollectionType.fromValue(previous.type)
+            _uiState.update { state ->
+                val currentList = state.collectionsByType[type]
+                val rolledBack =
+                    if (currentList != null) {
+                        state.collectionsByType + (
+                            type to
+                                currentList.map { item ->
+                                    if (item.subjectId == previous.subjectId) item.copy(epStatus = previous.epStatus) else item
+                                }
+                        )
+                    } else {
+                        state.collectionsByType
+                    }
+                state.copy(collectionsByType = rolledBack)
+            }
+
+            val result =
+                if (previous.subjectType == 1) {
+                    collectionRepository.updateCollectionStatus(
+                        subjectId = previous.subjectId,
+                        type = type,
+                        rate = previous.rate.takeIf { it > 0 },
+                        comment = previous.comment.ifBlank { null },
+                        epStatus = previous.epStatus,
+                    )
+                } else {
+                    // 动画/剧集类：把刚标记的那一话（快照进度 +1）恢复为未看
+                    collectionRepository.updateEpisodeStatus(
+                        subjectId = previous.subjectId,
+                        episodeId = null,
+                        isWatched = false,
+                        epNumber = previous.epStatus + 1,
+                    )
+                }
+            result.onError { _, message ->
+                _events.trySend(UserCollectionsEvent.ShowSnackbar("撤销失败：" + message.ifBlank { "网络异常" }))
+            }
+        }
+    }
+
+    /**
+     * 就地编辑收藏（状态/评分/短评/进度/标签）：本地先把条目迁入目标分区并乐观更新，
+     * 网络失败整体回滚到编辑前快照。
+     */
+    fun updateCollection(
+        collection: UserCollection,
+        type: CollectionType,
+        rate: Int?,
+        comment: String?,
+        private: Boolean,
+        epStatus: Int?,
+        tags: List<String>?,
+    ) {
+        val oldType = CollectionType.fromValue(collection.type)
+        val updated =
+            collection.copy(
+                type = type.value,
+                rate = rate ?: 0,
+                comment = comment.orEmpty(),
+                epStatus = epStatus ?: collection.epStatus,
+                tags = tags.orEmpty(),
+            )
+        val previousMap = _uiState.value.collectionsByType
+        _uiState.update { state ->
+            val mutable = state.collectionsByType.toMutableMap()
+            val oldList = mutable[oldType].orEmpty().filterNot { it.subjectId == collection.subjectId }
+            val newList = mutable[type].orEmpty().filterNot { it.subjectId == collection.subjectId } + updated
+            mutable[oldType] = oldList
+            mutable[type] = newList
+            state.copy(collectionsByType = mutable, error = null)
+        }
+
+        viewModelScope.launch {
+            collectionRepository
+                .updateCollectionStatus(
+                    subjectId = collection.subjectId,
+                    type = type,
+                    rate = rate,
+                    comment = comment,
+                    private = private,
+                    epStatus = epStatus,
+                    subjectType = collection.subjectType,
+                    tags = tags,
+                ).onSuccess {
+                    _events.trySend(UserCollectionsEvent.ShowSnackbar("收藏已更新"))
+                }.onError { _, message ->
+                    _uiState.update { it.copy(collectionsByType = previousMap, error = message) }
+                    _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+                }
         }
     }
 }

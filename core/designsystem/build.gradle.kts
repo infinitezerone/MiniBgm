@@ -17,6 +17,7 @@ dependencies {
     implementation(libs.androidx.compose.material3.adaptive)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(project(":core:common"))
+    implementation(project(":core:model"))
     implementation(libs.coil.compose)
     implementation(libs.coil.network.ktor3)
 
