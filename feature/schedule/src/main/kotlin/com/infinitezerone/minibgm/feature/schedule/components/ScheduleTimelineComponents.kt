@@ -444,11 +444,11 @@ fun ScheduleTimelineSingleCard(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
                         ) {
                             Text(
-                                text = "🎉 本季新番 · 第 1 话",
+                                text = "首播 · 第 1 话",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
                     } else if (schedule.nextEpisodeNumber > 1) {
@@ -461,7 +461,7 @@ fun ScheduleTimelineSingleCard(
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
                     }
