@@ -62,6 +62,10 @@ class FakeSettingsRepository(
         settingsState.value = settingsState.value.copy(airingPreAirEnabled = enabled)
     }
 
+    override suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
+        settingsState.value = settingsState.value.copy(airingBingeFinaleEnabled = enabled)
+    }
+
     override suspend fun setAiringReminderHour(hour: Int) {
         setAiringReminderHourCallCount++
         settingsState.value = settingsState.value.copy(airingReminderHour = hour)

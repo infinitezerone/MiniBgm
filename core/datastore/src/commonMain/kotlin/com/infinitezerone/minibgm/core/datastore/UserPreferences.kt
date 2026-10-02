@@ -26,6 +26,8 @@ data class UserPreferences(
     val airingDailySummaryEnabled: Boolean = true,
     /** 单集开播即时通知子开关 */
     val airingPreAirEnabled: Boolean = true,
+    /** 囤番完结提醒子开关：开启时，标记为囤番的条目在最终话开播时提醒 */
+    val airingBingeFinaleEnabled: Boolean = true,
     /** 单集提醒时机相对开播时刻的偏移量（分钟，负数提前，0准时，正数延后，默认 -15 即提前 15 分钟） */
     val airingNotificationOffsetMinutes: Int = -15,
     /** 上次发出更新提醒的日期（yyyy-MM-dd，用于每日去重） */

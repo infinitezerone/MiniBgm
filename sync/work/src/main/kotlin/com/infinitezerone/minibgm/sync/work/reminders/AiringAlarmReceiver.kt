@@ -93,13 +93,15 @@ class AiringAlarmReceiver :
         val nowEpoch = TimeUtils.nowEpochMillis()
         val preAir =
             AiringReminderPlanner.pickPreAir(
-                enabled = prefs.airingReminderEnabled,
+                enabled = prefs.airingReminderEnabled && prefs.airingPreAirEnabled,
                 isLoggedIn = isLoggedIn,
                 notifiedKeys = prefs.airingReminderNotifiedKeys,
                 today = today,
                 nowEpochMillis = nowEpoch,
                 leadMinutes = prefs.notifyBeforeAirMinutes.toLong(),
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
+                bingeSubjectIds = prefs.bingeSubjectIds,
+                bingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
                 upcoming = upcoming,
             )
 

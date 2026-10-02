@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PictureInPictureAlt
@@ -86,6 +87,8 @@ internal fun SettingsSection(
     onToggleAiringDailySummary: (Boolean) -> Unit = {},
     airingPreAirEnabled: Boolean = true,
     onToggleAiringPreAir: (Boolean) -> Unit = {},
+    airingBingeFinaleEnabled: Boolean = true,
+    onToggleAiringBingeFinale: (Boolean) -> Unit = {},
     airingReminderHour: Int,
     hasNotificationPermission: Boolean = true,
     aiConfig: AiConfig = AiConfig(),
@@ -390,7 +393,27 @@ internal fun SettingsSection(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         )
 
-                        // 3. 系统通知渠道设置入口
+                        // 3. 囤番完结提醒
+                        SettingsItemRow(
+                            icon = Icons.Filled.Inventory2,
+                            iconTint = MaterialTheme.colorScheme.tertiary,
+                            title = "囤番完结提醒",
+                            subtitle = if (airingBingeFinaleEnabled) "标记为囤番的条目在全剧完结时提醒开追" else "已关闭（囤番条目完全静默）",
+                            onClick = null,
+                            trailing = {
+                                Switch(
+                                    checked = airingBingeFinaleEnabled,
+                                    onCheckedChange = onToggleAiringBingeFinale,
+                                )
+                            },
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        )
+
+                        // 4. 系统通知渠道设置入口
                         SettingsItemRow(
                             icon = Icons.AutoMirrored.Filled.OpenInNew,
                             iconTint = MaterialTheme.colorScheme.primary,

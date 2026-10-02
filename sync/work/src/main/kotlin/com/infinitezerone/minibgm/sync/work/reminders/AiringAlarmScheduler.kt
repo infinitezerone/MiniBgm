@@ -81,6 +81,8 @@ class AiringAlarmScheduler(
                 nowEpochMillis = TimeUtils.nowEpochMillis(),
                 leadMinutes = prefs.notifyBeforeAirMinutes.toLong(),
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
+                bingeSubjectIds = prefs.bingeSubjectIds,
+                bingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
                 upcoming = upcoming,
             )
 

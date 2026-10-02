@@ -109,6 +109,12 @@ class UserPreferencesDataSource(
         }
     }
 
+    suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(airingBingeFinaleEnabled = enabled)
+        }
+    }
+
     suspend fun setAiringReminderLastNotifiedDate(date: String) {
         dataStore.updateData { current ->
             current.copy(airingReminderLastNotifiedDate = date)

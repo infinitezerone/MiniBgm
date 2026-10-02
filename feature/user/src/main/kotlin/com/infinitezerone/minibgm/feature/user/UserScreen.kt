@@ -432,8 +432,11 @@ fun UserScreenContent(
     }
 
     selectedCollectionForSources?.let { col ->
+        val isBinge = collectionsState.bingeSubjectIds.contains(col.subjectId)
         UserCollectionSourcesBottomSheet(
             collection = col,
+            isBinge = isBinge,
+            onToggleBinge = { onToggleBinge(col.subjectId) },
             onDismissRequest = { selectedCollectionForSources = null },
             onOpenUrl = { url ->
                 context.launchStreamingUrl(

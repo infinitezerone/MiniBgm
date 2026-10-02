@@ -34,6 +34,7 @@ data class UserSettings(
     val airingReminderEnabled: Boolean = true,
     val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
+    val airingBingeFinaleEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
     val notifyBeforeAirMinutes: Int = 15,
     val airDelayOffsetMinutes: Int = 0,
@@ -62,6 +63,9 @@ interface SettingsRepository {
 
     /** 单集开播即时提醒子开关 */
     suspend fun setAiringPreAirEnabled(enabled: Boolean)
+
+    /** 囤番完结开播提醒子开关 */
+    suspend fun setAiringBingeFinaleEnabled(enabled: Boolean)
 
     /** 每日提醒触发时刻（设备本地时间小时） */
     suspend fun setAiringReminderHour(hour: Int)
@@ -180,6 +184,7 @@ class SettingsRepositoryImpl(
                 airingReminderEnabled = prefs.airingReminderEnabled,
                 airingDailySummaryEnabled = prefs.airingDailySummaryEnabled,
                 airingPreAirEnabled = prefs.airingPreAirEnabled,
+                airingBingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
                 airingReminderHour = prefs.airingReminderHour,
                 notifyBeforeAirMinutes = prefs.notifyBeforeAirMinutes,
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes,
@@ -235,6 +240,10 @@ class SettingsRepositoryImpl(
 
     override suspend fun setAiringPreAirEnabled(enabled: Boolean) {
         userPreferences.setAiringPreAirEnabled(enabled)
+    }
+
+    override suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
+        userPreferences.setAiringBingeFinaleEnabled(enabled)
     }
 
     override suspend fun setAiringReminderHour(hour: Int) {

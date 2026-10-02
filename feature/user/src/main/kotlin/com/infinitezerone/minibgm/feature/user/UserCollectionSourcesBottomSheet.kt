@@ -19,7 +19,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -57,6 +60,8 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun UserCollectionSourcesBottomSheet(
     collection: UserCollection,
+    isBinge: Boolean = false,
+    onToggleBinge: (() -> Unit)? = null,
     onDismissRequest: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
@@ -211,6 +216,30 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
+                if (onToggleBinge != null && (collection.subjectType == 2 || collection.subjectType == 6)) {
+                    Text(
+                        text = "追番偏好",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+
+                    UserSourceOptionCard(
+                        title = if (isBinge) "已设为囤番（完结提醒）" else "设为囤番待看",
+                        iconVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
+                        trailing = {
+                            Switch(
+                                checked = isBinge,
+                                onCheckedChange = { onToggleBinge() },
+                            )
+                        },
+                        onClick = onToggleBinge,
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
                 Text(
                     text = "条目详情",
                     style = MaterialTheme.typography.labelMedium,
@@ -249,6 +278,7 @@ private fun UserSourceOptionCard(
     iconVector: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Card(
         modifier =
@@ -293,12 +323,16 @@ private fun UserSourceOptionCard(
                 modifier = Modifier.weight(1f),
             )
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(18.dp),
-            )
+            if (trailing != null) {
+                trailing()
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }

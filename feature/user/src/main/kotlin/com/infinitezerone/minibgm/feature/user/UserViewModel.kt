@@ -43,6 +43,7 @@ data class UserUiState(
     val airingReminderEnabled: Boolean = true,
     val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
+    val airingBingeFinaleEnabled: Boolean = true,
     val airingReminderHour: Int = 8,
     val notifyBeforeAirMinutes: Int = 15,
     val airingNotificationOffsetMinutes: Int = -15,
@@ -167,6 +168,7 @@ class UserViewModel(
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
                 airingDailySummaryEnabled = sync.settings.airingDailySummaryEnabled,
                 airingPreAirEnabled = sync.settings.airingPreAirEnabled,
+                airingBingeFinaleEnabled = sync.settings.airingBingeFinaleEnabled,
                 airingReminderHour = sync.settings.airingReminderHour,
                 notifyBeforeAirMinutes = sync.settings.notifyBeforeAirMinutes,
                 airingNotificationOffsetMinutes = sync.settings.airingNotificationOffsetMinutes,
@@ -260,6 +262,13 @@ class UserViewModel(
     fun setAiringPreAirEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAiringPreAirEnabled(enabled)
+        }
+    }
+
+    /** 囤番完结提醒子开关 */
+    fun setAiringBingeFinaleEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setAiringBingeFinaleEnabled(enabled)
         }
     }
 
