@@ -126,7 +126,7 @@ fun TimelineSlotRow(
                 .fillMaxWidth()
                 .drawBehind {
                     // 左侧轨道轨线与节点绘制在 draw 阶段，消除 IntrinsicSize.Min 双重测量开销
-                    val trackCenterX = 51.dp.toPx()
+                    val trackCenterX = 44.dp.toPx()
                     val dotCenterY = 11.dp.toPx()
 
                     // 垂直轨道连线（向下延伸连接到下一个 item 的 spacing 8.dp）
@@ -179,7 +179,7 @@ fun TimelineSlotRow(
             airStatus = airStatus,
             jstTime = jstTime,
             count = schedules.size,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.width(48.dp),
         )
 
         Column(
@@ -289,8 +289,8 @@ fun TimelineTrackRail(
             }
         }
 
-        // 右列：占位 10.dp，轨道线与节点由父级 Row 的 drawBehind 统一绘制
-        Spacer(modifier = Modifier.width(10.dp))
+        // 右列：占位 8.dp，轨道线与节点由父级 Row 的 drawBehind 统一绘制
+        Spacer(modifier = Modifier.width(8.dp))
     }
 }
 
@@ -346,20 +346,20 @@ fun ScheduleTimelineSingleCard(
             modifier = Modifier.padding(10.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            // 1. 封面海报（宽 72dp，0.7f 比例约 103dp 高，叠加评分徽章与首播提示）
+            // 1. 封面海报（宽 62dp，0.7f 比例约 88dp 高，叠加评分徽章与首播提示）
             Box(
                 modifier =
                     Modifier
-                        .width(72.dp)
+                        .width(62.dp)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
             ) {
                 CoverImage(
                     url = schedule.coverUrl,
                     contentDescription = displayName,
-                    cornerRadius = 10.dp,
+                    cornerRadius = 8.dp,
                     aspectRatio = 0.7f,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -367,7 +367,7 @@ fun ScheduleTimelineSingleCard(
                 // 封面左上角：首播标记
                 if (schedule.nextEpisodeNumber == 1) {
                     Surface(
-                        shape = RoundedCornerShape(bottomEnd = 6.dp, topStart = 10.dp),
+                        shape = RoundedCornerShape(bottomEnd = 6.dp, topStart = 8.dp),
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -384,7 +384,7 @@ fun ScheduleTimelineSingleCard(
                 // 封面左下角：Bangumi 评分
                 if (score > 0.0) {
                     Surface(
-                        shape = RoundedCornerShape(topEnd = 6.dp, bottomStart = 10.dp),
+                        shape = RoundedCornerShape(topEnd = 6.dp, bottomStart = 8.dp),
                         color = Color.Black.copy(alpha = 0.76f),
                         modifier = Modifier.align(Alignment.BottomStart),
                     ) {
@@ -410,82 +410,79 @@ fun ScheduleTimelineSingleCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(9.dp))
 
             // 2. 内容信息流
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                // 顶部：左侧标题与原名 + 右侧突出集数徽章
-                Row(
+                // 行 1：番剧标题（独占整行，从容显示完整片名）
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
+                )
+
+                // 行 2：播出集数突出徽章 + 原名横向呼吸排列
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(1.dp),
-                    ) {
-                        Text(
-                            text = displayName,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-
-                        if (originalTitle != null) {
-                            Text(
-                                text = originalTitle,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-
                     if (schedule.nextEpisodeNumber > 0) {
-                        Spacer(modifier = Modifier.width(6.dp))
                         if (schedule.nextEpisodeNumber == 1) {
                             Surface(
-                                shape = RoundedCornerShape(5.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.tertiaryContainer,
                             ) {
                                 Text(
                                     text = "首播 · 第 1 话",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 )
                             }
                         } else {
                             Surface(
-                                shape = RoundedCornerShape(5.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                             ) {
                                 Text(
                                     text = "第 ${schedule.nextEpisodeNumber} 话",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 )
                             }
                         }
+                    }
+
+                    if (originalTitle != null) {
+                        Text(
+                            text = originalTitle,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.weight(1f, fill = false))
 
-                // 底部终端区：左侧实用找源栏 + 右侧追番药丸
+                // 行 3：底部终端区（左侧 [B站] [蜜柑] + 右侧 [追番]，两端对齐绝不挤压溢出）
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
                 ) {
                     if (schedule.isUnmapped) {
                         Text(
@@ -496,7 +493,6 @@ fun ScheduleTimelineSingleCard(
                     } else {
                         ScheduleSourceActionsRow(
                             schedule = schedule,
-                            onShowSources = { onShowSources(schedule) },
                             onOpenUrl = onOpenUrl,
                         )
 
@@ -523,7 +519,7 @@ fun BookmarkChip(
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
             onToggle()
         },
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(6.dp),
         color =
             if (isWatching) {
                 MaterialTheme.colorScheme.primaryContainer
@@ -534,7 +530,7 @@ fun BookmarkChip(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Icon(
@@ -546,10 +542,10 @@ fun BookmarkChip(
                     } else {
                         MaterialTheme.colorScheme.primary
                     },
-                modifier = Modifier.size(13.dp),
+                modifier = Modifier.size(12.dp),
             )
             Text(
-                text = if (isWatching) "已在追" else "+ 追番",
+                text = if (isWatching) "已追" else "追番",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                 fontWeight = FontWeight.Bold,
                 color =
@@ -566,7 +562,6 @@ fun BookmarkChip(
 @Composable
 fun ScheduleSourceActionsRow(
     schedule: AirSchedule,
-    onShowSources: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenUrl: ((String) -> Unit)? = null,
 ) {
@@ -590,7 +585,7 @@ fun ScheduleSourceActionsRow(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Icon(
@@ -631,7 +626,7 @@ fun ScheduleSourceActionsRow(
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Icon(
@@ -645,25 +640,6 @@ fun ScheduleSourceActionsRow(
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                     fontWeight = FontWeight.SemiBold,
                     color = OnBrandMikan,
-                )
-            }
-        }
-
-        // 3. 找源（展开底层面板，含内置播放器、AI找源等）
-        Surface(
-            onClick = onShowSources,
-            shape = RoundedCornerShape(6.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
-            ) {
-                Text(
-                    text = "找源",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
