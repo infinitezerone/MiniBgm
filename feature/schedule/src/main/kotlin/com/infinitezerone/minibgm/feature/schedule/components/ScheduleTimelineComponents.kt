@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayCircleOutline
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,11 +42,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.SiteLink
@@ -282,7 +288,7 @@ fun TimelineTrackRail(
     }
 }
 
-/** 单番时间线卡片（左侧有醒目时间轨，右侧卡片遵循古腾堡阅读动线与无遮挡海报） */
+/** 单番时间线卡片（左侧有醒目时间轨，右侧高质感海报、中日双标题、集数与评分徽章、播放源与一键追番） */
 @Composable
 fun ScheduleTimelineSingleCard(
     schedule: AirSchedule,
@@ -296,6 +302,7 @@ fun ScheduleTimelineSingleCard(
     val context = LocalContext.current
     val displayName = schedule.titleCn.ifBlank { schedule.title }
     val originalTitle = schedule.title.takeIf { it.isNotBlank() && it != displayName }
+    val score = schedule.ratingScore
 
     Card(
         onClick = {
@@ -305,12 +312,13 @@ fun ScheduleTimelineSingleCard(
                         subjectId = schedule.bgmId,
                         initialName = displayName,
                         initialCoverUrl = schedule.coverUrl,
+                        initialScore = score,
                         source = "schedule",
                     ),
                 )
             }
         },
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -330,97 +338,146 @@ fun ScheduleTimelineSingleCard(
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            // 纯净封面：无任何嵌套 Box 与比例冲突，直接承载共享元素过渡
-            CoverImage(
-                url = schedule.coverUrl,
-                contentDescription = displayName,
-                cornerRadius = 8.dp,
-                aspectRatio = 0.7f,
+            // 1. 封面海报（宽 72dp，0.7f 比例约 103dp 高，叠加评分徽章与首播提示）
+            Box(
                 modifier =
                     Modifier
-                        .width(58.dp)
+                        .width(72.dp)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
+                            clipInOverlayDuringTransition = RoundedCornerShape(10.dp),
                         ),
-            )
+            ) {
+                CoverImage(
+                    url = schedule.coverUrl,
+                    contentDescription = displayName,
+                    cornerRadius = 10.dp,
+                    aspectRatio = 0.7f,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            // 内容区：自上而下的自然阅读动线
+                // 封面左上角：首播标记
+                if (schedule.nextEpisodeNumber == 1) {
+                    Surface(
+                        shape = RoundedCornerShape(bottomEnd = 6.dp, topStart = 10.dp),
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.align(Alignment.TopStart),
+                    ) {
+                        Text(
+                            text = "首播",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
+                        )
+                    }
+                }
+
+                // 封面左下角：Bangumi 评分
+                if (score > 0.0) {
+                    Surface(
+                        shape = RoundedCornerShape(topEnd = 6.dp, bottomStart = 10.dp),
+                        color = Color.Black.copy(alpha = 0.76f),
+                        modifier = Modifier.align(Alignment.BottomStart),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Star,
+                                contentDescription = null,
+                                tint = RatingGold,
+                                modifier = Modifier.size(9.dp),
+                            )
+                            Text(
+                                text = score.toString(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // 2. 内容信息流
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // 1. 顶层：标题独享 100% 水平宽度，支持长标题两行舒展
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // 标题（中文名 + 原名）
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
                         text = displayName,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 2,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = if (originalTitle != null) 1 else 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
                     )
 
                     if (originalTitle != null) {
                         Text(
                             text = originalTitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontSize = MaterialTheme.typography.bodySmall.fontSize * 0.88f,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
 
-                    // 2. 中间层：话数胶囊 + ★ 金色评分
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(top = 2.dp),
-                    ) {
-                        if (schedule.nextEpisodeNumber == 1) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                            ) {
-                                Text(
-                                    text = "首播 · 第 1 话",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp),
-                                )
-                            }
-                        } else if (schedule.nextEpisodeNumber > 1) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                            ) {
-                                Text(
-                                    text = "第 ${schedule.nextEpisodeNumber} 话",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                )
-                            }
+                // 话数更新胶囊
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (schedule.nextEpisodeNumber == 1) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                        ) {
+                            Text(
+                                text = "🎉 本季新番 · 第 1 话",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                            )
+                        }
+                    } else if (schedule.nextEpisodeNumber > 1) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
+                        ) {
+                            Text(
+                                text = "今日更新 · 第 ${schedule.nextEpisodeNumber} 话",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                            )
                         }
                     }
                 }
 
-                // 3. 底部终端区（Terminal Area）：左侧播放源 + 右侧行动召唤追番
+                Spacer(modifier = Modifier.weight(1f, fill = false))
+
+                // 底部终端区：左侧播放源 + 右侧追番药丸
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 ) {
                     if (schedule.isUnmapped) {
                         Text(
-                            text = "AniList 在播 · Bangumi 暂未收录",
+                            text = "AniList 在播 · 暂未收录",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         )
@@ -454,37 +511,40 @@ fun BookmarkChip(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
     Surface(
-        onClick = onToggle,
-        shape = RoundedCornerShape(7.dp),
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onToggle()
+        },
+        shape = RoundedCornerShape(8.dp),
         color =
             if (isWatching) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             },
-        border = null,
         modifier = modifier,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Icon(
                 imageVector = if (isWatching) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                contentDescription = null,
+                contentDescription = if (isWatching) "已在追" else "追番",
                 tint =
                     if (isWatching) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                         MaterialTheme.colorScheme.primary
                     },
-                modifier = Modifier.size(12.dp),
+                modifier = Modifier.size(13.dp),
             )
-            Spacer(modifier = Modifier.width(3.dp))
             Text(
-                text = if (isWatching) "在追" else "追番",
-                style = MaterialTheme.typography.labelSmall,
+                text = if (isWatching) "已在追" else "+ 追番",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                 fontWeight = FontWeight.Bold,
                 color =
                     if (isWatching) {
@@ -504,7 +564,35 @@ fun SiteLinksRow(
     onShowMoreSources: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (links.isEmpty()) {
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+            modifier = modifier,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    text = "待上线播放",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
+        }
+        return
+    }
+
     val hasBilibili = remember(links) { links.any { it.siteName.equals("bilibili", ignoreCase = true) } }
+    val hasBahamut =
+        remember(links) {
+            links.any {
+                it.siteName.contains("gamer", ignoreCase = true) ||
+                    it.siteName.contains("bahamut", ignoreCase = true)
+            }
+        }
+
     Surface(
         onClick = onShowMoreSources,
         shape = RoundedCornerShape(6.dp),
@@ -513,35 +601,46 @@ fun SiteLinksRow(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Icon(
                 imageVector = Icons.Filled.PlayCircleOutline,
                 contentDescription = null,
-                modifier = Modifier.size(11.dp),
+                modifier = Modifier.size(13.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
-            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = "播放源",
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (hasBilibili) {
-                Spacer(modifier = Modifier.width(3.dp))
                 Surface(
                     shape = RoundedCornerShape(3.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                 ) {
                     Text(
                         text = "B站",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.75f,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 2.5.dp, vertical = 0.5.dp),
+                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
+                    )
+                }
+            }
+            if (hasBahamut) {
+                Surface(
+                    shape = RoundedCornerShape(3.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                ) {
+                    Text(
+                        text = "巴哈",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
                     )
                 }
             }
