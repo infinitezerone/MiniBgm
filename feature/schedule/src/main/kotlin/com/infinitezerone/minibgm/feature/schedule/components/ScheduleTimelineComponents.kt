@@ -126,7 +126,7 @@ fun TimelineSlotRow(
                 .fillMaxWidth()
                 .drawBehind {
                     // 左侧轨道轨线与节点绘制在 draw 阶段，消除 IntrinsicSize.Min 双重测量开销
-                    val trackCenterX = 44.dp.toPx()
+                    val trackCenterX = 48.dp.toPx()
                     val dotCenterY = 11.dp.toPx()
 
                     // 垂直轨道连线（向下延伸连接到下一个 item 的 spacing 8.dp）
@@ -172,14 +172,14 @@ fun TimelineSlotRow(
                         }
                     }
                 },
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         TimelineTrackRail(
             time = time,
             airStatus = airStatus,
             jstTime = jstTime,
             count = schedules.size,
-            modifier = Modifier.width(48.dp),
+            modifier = Modifier.width(52.dp),
         )
 
         Column(
@@ -232,8 +232,7 @@ fun TimelineTrackRail(
         ) {
             Text(
                 text = time,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold),
                 color =
                     when (airStatus) {
                         AirStatus.AIRING -> StatusAiring
