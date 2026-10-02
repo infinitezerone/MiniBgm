@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -330,17 +332,18 @@ fun ScheduleTimelineSingleCard(
             } else {
                 null
             },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().height(104.dp),
     ) {
         Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.Top,
+            modifier = Modifier.fillMaxSize().padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 1. 封面海报（宽 62dp，0.7f 比例约 88dp 高，叠加评分徽章与首播提示）
+            // 1. 封面海报（固定比例，高度填满内部 84dp，宽约 59dp）
             Box(
                 modifier =
                     Modifier
-                        .width(62.dp)
+                        .fillMaxHeight()
+                        .aspectRatio(0.7f)
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
                             clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
@@ -351,7 +354,7 @@ fun ScheduleTimelineSingleCard(
                     contentDescription = displayName,
                     cornerRadius = 8.dp,
                     aspectRatio = 0.7f,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxSize(),
                 )
 
                 // 封面左上角：首播标记
@@ -416,21 +419,21 @@ fun ScheduleTimelineSingleCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(9.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // 2. 内容信息流
+            // 2. 内容信息流（高度填满，上部标题，下部集数徽章与播放按钮）
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                // 行 1：番剧标题（单一标题，清晰易读，最多两行）
+                // 上半区：番剧标题（单一标题，最多两行）
                 Text(
                     text = displayName,
                     style =
                         MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 15.sp,
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold,
-                            lineHeight = 20.sp,
+                            lineHeight = 19.sp,
                         ),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
@@ -438,70 +441,73 @@ fun ScheduleTimelineSingleCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                // 行 2：播出集数显著徽章（加大加粗，作为时间表的核心定位锚点）
-                if (schedule.nextEpisodeNumber > 0) {
-                    val isFirstEp = schedule.nextEpisodeNumber == 1
-                    Surface(
-                        shape = RoundedCornerShape(5.dp),
-                        color =
-                            if (isFirstEp) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
-                            },
-                        modifier = Modifier.padding(top = 1.dp),
-                    ) {
-                        Text(
-                            text = if (isFirstEp) "首播 · 第 1 话" else "第 ${schedule.nextEpisodeNumber} 话",
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
-                            fontWeight = FontWeight.ExtraBold,
+                // 下半区：播出集数徽章（左） + 播放操作入口（右）
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (schedule.nextEpisodeNumber > 0) {
+                        val isFirstEp = schedule.nextEpisodeNumber == 1
+                        Surface(
+                            shape = RoundedCornerShape(5.dp),
                             color =
                                 if (isFirstEp) {
-                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                    MaterialTheme.colorScheme.tertiaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.primary
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
                                 },
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f, fill = false))
-
-                // 行 3：播放操作入口（右下角终点操作，符合大拇指触达与 Z 字视觉动线）
-                if (schedule.isUnmapped) {
-                    Text(
-                        text = "AniList 在播 · 暂未收录",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                } else {
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onShowSources(schedule)
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = "播放",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(15.dp),
-                            )
                             Text(
-                                text = "播放",
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                text = if (isFirstEp) "首播 · 第 1 话" else "第 ${schedule.nextEpisodeNumber} 话",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.5.sp),
+                                fontWeight = FontWeight.ExtraBold,
+                                color =
+                                    if (isFirstEp) {
+                                        MaterialTheme.colorScheme.onTertiaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    },
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
                             )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    if (schedule.isUnmapped) {
+                        Text(
+                            text = "AniList 在播 · 暂未收录",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
+                    } else {
+                        Surface(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onShowSources(schedule)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = "播放",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Text(
+                                    text = "播放",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
                         }
                     }
                 }
