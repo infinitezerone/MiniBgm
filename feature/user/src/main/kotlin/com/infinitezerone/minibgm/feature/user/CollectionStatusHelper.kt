@@ -53,18 +53,17 @@ fun UserCollection.currentAiredEpisode(): Int {
  * 获取展示在条目卡片上的状态徽章文案
  */
 fun UserCollection.airStatusBadge(isBinge: Boolean): String {
-    if (isBinge) return "囤番中"
     val total = subject?.totalEpisodes?.takeIf { it > 0 } ?: subject?.eps?.takeIf { it > 0 } ?: 0
-    return if (isFinished()) {
-        if (total > 0) "已完结 · 全 $total 话" else "已完结"
+    if (isFinished()) {
+        return if (total > 0) "已完结 · 全 $total 话" else "已完结"
+    }
+    if (isBinge) return "囤番中"
+    val aired = currentAiredEpisode()
+    return if (total > 0 && aired > 0) {
+        "连载至 $aired/$total 话"
+    } else if (aired > 0) {
+        "连载至第 $aired 话"
     } else {
-        val aired = currentAiredEpisode()
-        if (total > 0 && aired > 0) {
-            "连载至 $aired/$total 话"
-        } else if (aired > 0) {
-            "连载至第 $aired 话"
-        } else {
-            "连载中"
-        }
+        "连载中"
     }
 }

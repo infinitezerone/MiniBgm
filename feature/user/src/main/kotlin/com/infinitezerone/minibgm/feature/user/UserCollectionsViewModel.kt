@@ -63,7 +63,7 @@ data class UserCollectionsUiState(
                 CollectionAirFilter.ALL -> list
                 CollectionAirFilter.AIRING -> list.filter { !it.isFinished() }
                 CollectionAirFilter.FINISHED -> list.filter { it.isFinished() }
-                CollectionAirFilter.BINGE -> list.filter { bingeSubjectIds.contains(it.subjectId) }
+                CollectionAirFilter.BINGE -> list.filter { !it.isFinished() && bingeSubjectIds.contains(it.subjectId) }
             }
         }
 

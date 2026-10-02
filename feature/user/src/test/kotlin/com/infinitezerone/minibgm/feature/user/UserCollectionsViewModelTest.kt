@@ -365,8 +365,18 @@ class UserCollectionsViewModelTest {
     fun toggleBingeSubject_updatesBingeSubjectIdsAndFilters() =
         runTest {
             val collectionRepo = FakeCollectionRepository()
-            val item1 = sampleUserCollection.copy(subjectId = 101L)
-            val item2 = sampleUserCollection.copy(subjectId = 102L)
+            val item1 =
+                sampleUserCollection.copy(
+                    subjectId = 101L,
+                    epStatus = 2,
+                    subject = sampleSubject.copy(id = 101L, totalEpisodes = 12, eps = 12, date = "2026-10-01"),
+                )
+            val item2 =
+                sampleUserCollection.copy(
+                    subjectId = 102L,
+                    epStatus = 2,
+                    subject = sampleSubject.copy(id = 102L, totalEpisodes = 12, eps = 12, date = "2026-10-01"),
+                )
             collectionRepo.sendCollection(item1)
             collectionRepo.sendCollection(item2)
             val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)

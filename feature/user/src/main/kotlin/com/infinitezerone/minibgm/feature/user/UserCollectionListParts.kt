@@ -20,9 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PlusOne
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -421,6 +424,7 @@ internal fun UserCollectionCard(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
+    onToggleBinge: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -430,7 +434,8 @@ internal fun UserCollectionCard(
     val eps = subject?.eps ?: 0
     val totalEps = subject?.totalEpisodes?.takeIf { it > 0 } ?: eps
     val epStatus = collection.epStatus
-    val canIncrement = totalEps == 0 || epStatus < totalEps
+    val isFinished = collection.isFinished()
+    val canIncrement = !isFinished && (totalEps == 0 || epStatus < totalEps)
 
     Card(
         modifier =
@@ -503,11 +508,12 @@ internal fun UserCollectionCard(
                         )
                     }
 
-                    val airBadge = collection.airStatusBadge(isBinge)
+                    val isEffectiveBinge = isBinge && !isFinished
+                    val airBadge = collection.airStatusBadge(isEffectiveBinge)
                     val badgeColors =
                         when {
-                            isBinge -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-                            collection.isFinished() -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
+                            isFinished -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
+                            isEffectiveBinge -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
                             else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     Surface(
@@ -518,7 +524,7 @@ internal fun UserCollectionCard(
                             text = airBadge,
                             style = MaterialTheme.typography.labelSmall,
                             color = badgeColors.second,
-                            fontWeight = if (isBinge || collection.isFinished()) FontWeight.SemiBold else FontWeight.Normal,
+                            fontWeight = if (isEffectiveBinge || isFinished) FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
@@ -587,7 +593,30 @@ internal fun UserCollectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (onPlayClick != null && (collection.subjectType == 2 || collection.subjectType == 6)) {
+                        val isAnimeOrReal = collection.subjectType == 2 || collection.subjectType == 6
+                        if (!isFinished && isAnimeOrReal && onToggleBinge != null) {
+                            IconButton(
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onToggleBinge()
+                                },
+                                modifier = Modifier.size(30.dp),
+                            ) {
+                                Icon(
+                                    imageVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
+                                    contentDescription = if (isBinge) "取消囤番" else "加入囤番",
+                                    tint =
+                                        if (isBinge) {
+                                            MaterialTheme.colorScheme.tertiary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+
+                        if (onPlayClick != null && isAnimeOrReal) {
                             Surface(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -602,13 +631,13 @@ internal fun UserCollectionCard(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.PlayArrow,
-                                        contentDescription = "选源播放",
+                                        imageVector = Icons.Filled.Tv,
+                                        contentDescription = "播放源",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(14.dp),
                                     )
                                     Text(
-                                        text = if (epStatus > 0) "续播" else "播放",
+                                        text = "播放源",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,

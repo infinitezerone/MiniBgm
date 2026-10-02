@@ -76,6 +76,7 @@ internal fun UserCollectionSourcesBottomSheet(
     val totalEps = subject?.totalEpisodes?.takeIf { it > 0 } ?: eps
     val epStatus = collection.epStatus
     val nextEp = epStatus + 1
+    val isFinished = remember(collection) { collection.isFinished() }
 
     val searchKeyword =
         if (nextEp > 1 || (totalEps > 0 && nextEp <= totalEps)) {
@@ -138,6 +139,8 @@ internal fun UserCollectionSourcesBottomSheet(
                     Text(
                         text =
                             when {
+                                isFinished && totalEps > 0 && epStatus >= totalEps -> "已完结 · 全 $totalEps 话全看毕"
+                                isFinished && totalEps > 0 -> "已完结 · 补番至第 $nextEp 话（全 $totalEps 话）"
                                 totalEps > 0 && nextEp <= totalEps -> "续看第 $nextEp 话（全 $totalEps 话）"
                                 epStatus > 0 -> "续看第 $nextEp 话"
                                 else -> "开始观看第 1 话"
@@ -216,7 +219,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                if (onToggleBinge != null && (collection.subjectType == 2 || collection.subjectType == 6)) {
+                if (onToggleBinge != null && (collection.subjectType == 2 || collection.subjectType == 6) && !isFinished) {
                     Text(
                         text = "追番偏好",
                         style = MaterialTheme.typography.labelMedium,
