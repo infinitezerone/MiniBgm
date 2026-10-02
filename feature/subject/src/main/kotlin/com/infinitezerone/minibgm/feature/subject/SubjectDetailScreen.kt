@@ -191,12 +191,8 @@ fun SubjectDetailScreen(
             }
         }
     val isEntering = isNavEntering()
-    var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
-    if (!isEntering) {
-        hasEnteredTransitionFinished = true
-    }
     val hasPreview = initialName.isNotBlank() || initialCoverUrl.isNotBlank()
-    val isTransitionStabilizing = isEntering && !hasEnteredTransitionFinished && hasPreview
+    val isTransitionStabilizing = isEntering && hasPreview
 
     val previewSubject =
         if (hasPreview) {
@@ -318,13 +314,15 @@ fun SubjectDetailScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface),
     ) {
-        AmbientBlurBackdrop(
-            imageUrl = displaySubject?.images?.bestImage,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(420.dp),
-        )
+        if (!isEntering) {
+            AmbientBlurBackdrop(
+                imageUrl = displaySubject?.images?.bestImage,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(420.dp),
+            )
+        }
 
         Scaffold(
             topBar = {

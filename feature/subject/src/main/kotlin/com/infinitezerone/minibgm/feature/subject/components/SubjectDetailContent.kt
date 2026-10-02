@@ -30,7 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -135,7 +134,12 @@ internal fun SubjectDetailContent(
         }
     }
     val tabScrollPositions = remember { mutableMapOf<SubjectDetailTab, Pair<Int, Int>>() }
-    var lastTab by remember { mutableStateOf(selectedTab) }
+    val lastTabRef =
+        remember {
+            object {
+                var value: SubjectDetailTab = selectedTab
+            }
+        }
 
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
     val gridColumns = if (adaptiveInfo.isWide) 7 else 6
@@ -150,9 +154,10 @@ internal fun SubjectDetailContent(
         }
 
     LaunchedEffect(selectedTab) {
+        val lastTab = lastTabRef.value
         if (selectedTab != lastTab) {
             tabScrollPositions[lastTab] = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-            lastTab = selectedTab
+            lastTabRef.value = selectedTab
 
             val target =
                 if (listState.firstVisibleItemIndex < tabHeaderIndex) {

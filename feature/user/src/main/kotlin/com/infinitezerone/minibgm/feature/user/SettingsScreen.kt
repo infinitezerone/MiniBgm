@@ -38,6 +38,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,10 +95,10 @@ fun SettingsScreen(
         context.launchWebUrl(url)
     }
 
-    var hasNotificationPermission by remember {
-        mutableStateOf(
-            NotificationManagerCompat.from(context).areNotificationsEnabled(),
-        )
+    var hasNotificationPermission by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -454,24 +455,60 @@ fun SettingsScreenContent(
             contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item(key = "settings_sections") {
-                SettingsSection(
-                    isLoggedIn = uiState.isLoggedIn,
-                    activeProfile = uiState.activeProfile,
-                    savedAccountsCount = uiState.savedAccounts.size,
+            item(key = "settings_appearance") {
+                AppearanceSettingsCard(
+                    themeMode = themeMode,
+                    onSelectThemeMode = onSelectThemeMode,
+                    dynamicColor = dynamicColor,
+                    onToggleDynamicColor = onToggleDynamicColor,
+                    amoledDarkMode = amoledDarkMode,
+                    onToggleAmoledDarkMode = onToggleAmoledDarkMode,
+                )
+            }
+
+            if (onPlaybackRulesClick != null) {
+                item(key = "settings_playback") {
+                    PlaybackSettingsCard(
+                        pipEnabled = pipEnabled,
+                        onTogglePipEnabled = onTogglePipEnabled,
+                    )
+                }
+            }
+
+            item(key = "settings_preference") {
+                PreferenceSettingsCard(
+                    showRestrictedContent = showRestrictedContent,
+                    onToggleShowRestrictedContent = onToggleShowRestrictedContent,
+                )
+            }
+
+            item(key = "settings_sync_reminder") {
+                SyncAndReminderSettingsCard(
                     syncInterval = uiState.syncInterval,
                     lastSyncTimestamp = uiState.lastSyncTimestamp,
                     isSyncing = uiState.isSyncing,
+                    onOpenSyncDialog = { showSyncIntervalDialog = true },
+                    onSyncNow = onSyncNow,
+                    onOpenPlaybackRules = onPlaybackRulesClick,
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
+                    hasNotificationPermission = hasNotificationPermission,
                     airingDailySummaryEnabled = airingDailySummaryEnabled,
                     onToggleAiringDailySummary = onToggleAiringDailySummary,
+                    airingReminderHour = airingReminderHour,
+                    onOpenReminderHourDialog = { showReminderHourDialog = true },
                     airingPreAirEnabled = airingPreAirEnabled,
                     onToggleAiringPreAir = onToggleAiringPreAir,
+                    airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
+                    onOpenTimingBottomSheet = { showTimingBottomSheet = true },
                     airingBingeFinaleEnabled = airingBingeFinaleEnabled,
                     onToggleAiringBingeFinale = onToggleAiringBingeFinale,
-                    hasNotificationPermission = hasNotificationPermission,
-                    airingReminderHour = airingReminderHour,
+                    onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
+                )
+            }
+
+            item(key = "settings_ai_storage") {
+                AiAndStorageSettingsCard(
                     aiConfig = uiState.aiConfig,
                     onOpenAiSettingsDialog =
                         if (enableAiConfig) {
@@ -479,29 +516,20 @@ fun SettingsScreenContent(
                         } else {
                             null
                         },
-                    onOpenReminderHourDialog = { showReminderHourDialog = true },
-                    airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
-                    onOpenTimingBottomSheet = { showTimingBottomSheet = true },
-                    onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
-                    amoledDarkMode = amoledDarkMode,
-                    onToggleAmoledDarkMode = onToggleAmoledDarkMode,
-                    themeMode = themeMode,
-                    onSelectThemeMode = onSelectThemeMode,
-                    dynamicColor = dynamicColor,
-                    onToggleDynamicColor = onToggleDynamicColor,
-                    pipEnabled = pipEnabled,
-                    onTogglePipEnabled = onTogglePipEnabled,
-                    showRestrictedContent = showRestrictedContent,
-                    onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-                    onOpenSyncDialog = { showSyncIntervalDialog = true },
-                    onSyncNow = onSyncNow,
-                    onOpenWebUrl = onOpenWebUrl,
                     onClearCache = onClearCache,
                     isClearingCache = isClearingCache,
                     onOpenCrashLog = onOpenCrashLog,
+                )
+            }
+
+            item(key = "settings_about_support") {
+                AboutAndSupportSettingsCard(
+                    isLoggedIn = uiState.isLoggedIn,
+                    activeProfile = uiState.activeProfile,
+                    savedAccountsCount = uiState.savedAccounts.size,
+                    onOpenWebUrl = onOpenWebUrl,
                     onLogoutCurrentClick = { showLogoutCurrentDialog = true },
                     onLogoutAllClick = { showLogoutAllDialog = true },
-                    onOpenPlaybackRules = onPlaybackRulesClick,
                 )
             }
         }

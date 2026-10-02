@@ -141,506 +141,646 @@ internal fun SettingsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Group 0: 外观显示
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "外观显示",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
+        AppearanceSettingsCard(
+            themeMode = themeMode,
+            onSelectThemeMode = onSelectThemeMode,
+            dynamicColor = dynamicColor,
+            onToggleDynamicColor = onToggleDynamicColor,
+            amoledDarkMode = amoledDarkMode,
+            onToggleAmoledDarkMode = onToggleAmoledDarkMode,
+        )
 
-                // 主题模式三选：跟随系统 / 亮色 / 深色
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ThemeMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = themeMode == mode,
-                            onClick = { onSelectThemeMode(mode) },
-                            label = { Text(mode.displayName) },
-                        )
-                    }
-                }
-
-                SettingsItemRow(
-                    icon = Icons.Filled.Palette,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "动态取色 (Material You)",
-                    subtitle = "跟随系统壁纸配色生成主题",
-                    onClick = { onToggleDynamicColor(!dynamicColor) },
-                    trailing = {
-                        Switch(
-                            checked = dynamicColor,
-                            onCheckedChange = onToggleDynamicColor,
-                        )
-                    },
-                )
-
-                SettingsItemRow(
-                    icon = Icons.Filled.DarkMode,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "AMOLED 纯黑模式",
-                    subtitle = "深色模式下使用纯黑表面，更省电更沉浸",
-                    onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
-                    trailing = {
-                        Switch(
-                            checked = amoledDarkMode,
-                            onCheckedChange = onToggleAmoledDarkMode,
-                        )
-                    },
-                )
-            }
+        if (onOpenPlaybackRules != null) {
+            PlaybackSettingsCard(
+                pipEnabled = pipEnabled,
+                onTogglePipEnabled = onTogglePipEnabled,
+            )
         }
 
-        // Group 1: 播放设置 (仅在支持播放源/内置播放器时展示)
-        if (onOpenPlaybackRules != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
+        PreferenceSettingsCard(
+            showRestrictedContent = showRestrictedContent,
+            onToggleShowRestrictedContent = onToggleShowRestrictedContent,
+        )
+
+        SyncAndReminderSettingsCard(
+            syncInterval = syncInterval,
+            lastSyncTimestamp = lastSyncTimestamp,
+            isSyncing = isSyncing,
+            onOpenSyncDialog = onOpenSyncDialog,
+            onSyncNow = onSyncNow,
+            onOpenPlaybackRules = onOpenPlaybackRules,
+            airingReminderEnabled = airingReminderEnabled,
+            onToggleAiringReminder = onToggleAiringReminder,
+            hasNotificationPermission = hasNotificationPermission,
+            airingDailySummaryEnabled = airingDailySummaryEnabled,
+            onToggleAiringDailySummary = onToggleAiringDailySummary,
+            airingReminderHour = airingReminderHour,
+            onOpenReminderHourDialog = onOpenReminderHourDialog,
+            airingPreAirEnabled = airingPreAirEnabled,
+            onToggleAiringPreAir = onToggleAiringPreAir,
+            airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
+            onOpenTimingBottomSheet = onOpenTimingBottomSheet,
+            airingBingeFinaleEnabled = airingBingeFinaleEnabled,
+            onToggleAiringBingeFinale = onToggleAiringBingeFinale,
+            onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
+        )
+
+        AiAndStorageSettingsCard(
+            aiConfig = aiConfig,
+            onOpenAiSettingsDialog = onOpenAiSettingsDialog,
+            onClearCache = onClearCache,
+            isClearingCache = isClearingCache,
+            onOpenCrashLog = onOpenCrashLog,
+        )
+
+        AboutAndSupportSettingsCard(
+            isLoggedIn = isLoggedIn,
+            activeProfile = activeProfile,
+            savedAccountsCount = savedAccountsCount,
+            onOpenWebUrl = onOpenWebUrl,
+            onLogoutCurrentClick = onLogoutCurrentClick,
+            onLogoutAllClick = onLogoutAllClick,
+        )
+    }
+}
+
+@Composable
+internal fun AppearanceSettingsCard(
+    themeMode: ThemeMode,
+    onSelectThemeMode: (ThemeMode) -> Unit,
+    dynamicColor: Boolean,
+    onToggleDynamicColor: (Boolean) -> Unit,
+    amoledDarkMode: Boolean,
+    onToggleAmoledDarkMode: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "外观显示",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            // 主题模式三选：跟随系统 / 亮色 / 深色
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 18.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                    Text(
-                        text = "播放设置",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                ThemeMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = themeMode == mode,
+                        onClick = { onSelectThemeMode(mode) },
+                        label = { Text(mode.displayName) },
+                    )
+                }
+            }
+
+            SettingsItemRow(
+                icon = Icons.Filled.Palette,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "动态取色 (Material You)",
+                subtitle = "跟随系统壁纸配色生成主题",
+                onClick = { onToggleDynamicColor(!dynamicColor) },
+                trailing = {
+                    Switch(
+                        checked = dynamicColor,
+                        onCheckedChange = onToggleDynamicColor,
+                    )
+                },
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.DarkMode,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "AMOLED 纯黑模式",
+                subtitle = "深色模式下使用纯黑表面，更省电更沉浸",
+                onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
+                trailing = {
+                    Switch(
+                        checked = amoledDarkMode,
+                        onCheckedChange = onToggleAmoledDarkMode,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PlaybackSettingsCard(
+    pipEnabled: Boolean,
+    onTogglePipEnabled: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "播放设置",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.PictureInPictureAlt,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "自动画中画",
+                subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
+                onClick = { onTogglePipEnabled(!pipEnabled) },
+                trailing = {
+                    Switch(
+                        checked = pipEnabled,
+                        onCheckedChange = onTogglePipEnabled,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PreferenceSettingsCard(
+    showRestrictedContent: Boolean,
+    onToggleShowRestrictedContent: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "受限内容",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.VisibilityOff,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "显示受限条目内容",
+                subtitle = "",
+                onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
+                trailing = {
+                    Switch(
+                        checked = showRestrictedContent,
+                        onCheckedChange = onToggleShowRestrictedContent,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun SyncAndReminderSettingsCard(
+    syncInterval: SyncInterval,
+    lastSyncTimestamp: Long,
+    isSyncing: Boolean,
+    onOpenSyncDialog: () -> Unit,
+    onSyncNow: () -> Unit,
+    onOpenPlaybackRules: (() -> Unit)?,
+    airingReminderEnabled: Boolean,
+    onToggleAiringReminder: (Boolean) -> Unit,
+    hasNotificationPermission: Boolean,
+    airingDailySummaryEnabled: Boolean,
+    onToggleAiringDailySummary: (Boolean) -> Unit,
+    airingReminderHour: Int,
+    onOpenReminderHourDialog: () -> Unit,
+    airingPreAirEnabled: Boolean,
+    onToggleAiringPreAir: (Boolean) -> Unit,
+    airingNotificationOffsetMinutes: Int,
+    onOpenTimingBottomSheet: () -> Unit,
+    airingBingeFinaleEnabled: Boolean,
+    onToggleAiringBingeFinale: (Boolean) -> Unit,
+    onOpenSystemNotificationSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val lastSyncText =
+        if (lastSyncTimestamp == 0L) {
+            "尚未同步"
+        } else {
+            "已是最新"
+        }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "数据同步与提醒",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.Sync,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "播放源自动同步",
+                subtitle = "周期：${syncInterval.displayName}",
+                onClick = onOpenSyncDialog,
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.CloudQueue,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                title = "检查最新放送源",
+                subtitle = "状态：$lastSyncText · bgm-data",
+                trailing = {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        OutlinedButton(
+                            onClick = onSyncNow,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text("立即检查", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                },
+                onClick = if (!isSyncing) onSyncNow else null,
+            )
+
+            if (onOpenPlaybackRules != null) {
+                SettingsItemRow(
+                    icon = Icons.Filled.PlayCircleOutline,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = "播放源管理",
+                    subtitle = "导入自备片单、维护第三方解析规则",
+                    onClick = onOpenPlaybackRules,
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            val isReminderActive = airingReminderEnabled && hasNotificationPermission
+            val reminderSubtitle =
+                if (!hasNotificationPermission) {
+                    "系统通知未开启，点击开启权限与每日推送"
+                } else {
+                    "支持每日汇总清单与单集开播即时通知"
+                }
+            SettingsItemRow(
+                icon = Icons.Filled.NotificationsActive,
+                iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                title = "追番更新提醒",
+                subtitle = reminderSubtitle,
+                onClick = {
+                    onToggleAiringReminder(!isReminderActive)
+                },
+                trailing = {
+                    Switch(
+                        checked = isReminderActive,
+                        onCheckedChange = onToggleAiringReminder,
+                    )
+                },
+            )
+
+            AnimatedVisibility(
+                visible = isReminderActive,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
+                    // 1. 每日追番更新汇总
                     SettingsItemRow(
-                        icon = Icons.Filled.PictureInPictureAlt,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        title = "自动画中画",
-                        subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
-                        onClick = { onTogglePipEnabled(!pipEnabled) },
+                        icon = Icons.Filled.Schedule,
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        title = "每日更新汇总",
+                        subtitle = if (airingDailySummaryEnabled) "每天 %02d:00 推送今日更新".format(airingReminderHour) else "已关闭",
+                        onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
                         trailing = {
                             Switch(
-                                checked = pipEnabled,
-                                onCheckedChange = onTogglePipEnabled,
+                                checked = airingDailySummaryEnabled,
+                                onCheckedChange = onToggleAiringDailySummary,
                             )
                         },
                     )
-                }
-            }
-        }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "受限内容",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
 
-                SettingsItemRow(
-                    icon = Icons.Filled.VisibilityOff,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "显示受限条目内容",
-                    subtitle = "",
-                    onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
-                    trailing = {
-                        Switch(
-                            checked = showRestrictedContent,
-                            onCheckedChange = onToggleShowRestrictedContent,
-                        )
-                    },
-                )
-            }
-        }
-
-        // Group 2: 数据同步与提醒
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "数据同步与提醒",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
-
-                SettingsItemRow(
-                    icon = Icons.Filled.Sync,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    title = "播放源自动同步",
-                    subtitle = "周期：${syncInterval.displayName}",
-                    onClick = onOpenSyncDialog,
-                )
-
-                SettingsItemRow(
-                    icon = Icons.Filled.CloudQueue,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "检查最新放送源",
-                    subtitle = "状态：$lastSyncText · bgm-data",
-                    trailing = {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            OutlinedButton(
-                                onClick = onSyncNow,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                shape = RoundedCornerShape(8.dp),
-                            ) {
-                                Text("立即检查", style = MaterialTheme.typography.labelSmall)
-                            }
+                    // 2. 新集开播提醒
+                    val timingSubtitle =
+                        when {
+                            airingNotificationOffsetMinutes < 0 -> "提前 ${-airingNotificationOffsetMinutes} 分钟"
+                            airingNotificationOffsetMinutes == 0 -> "准点开播"
+                            airingNotificationOffsetMinutes == 15 -> "延后 15 分钟（适配国内平台）"
+                            else -> "延后 $airingNotificationOffsetMinutes 分钟"
                         }
-                    },
-                    onClick = if (!isSyncing) onSyncNow else null,
-                )
 
-                if (onOpenPlaybackRules != null) {
                     SettingsItemRow(
                         icon = Icons.Filled.PlayCircleOutline,
                         iconTint = MaterialTheme.colorScheme.tertiary,
-                        title = "播放源管理",
-                        subtitle = "导入自备片单、维护第三方解析规则",
-                        onClick = onOpenPlaybackRules,
+                        title = "新集开播提醒",
+                        subtitle = if (airingPreAirEnabled) "每集播出时单独通知" else "已关闭",
+                        onClick = null,
+                        trailing = {
+                            Switch(
+                                checked = airingPreAirEnabled,
+                                onCheckedChange = onToggleAiringPreAir,
+                            )
+                        },
                     )
-                }
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                val isReminderActive = airingReminderEnabled && hasNotificationPermission
-                val reminderSubtitle =
-                    if (!hasNotificationPermission) {
-                        "系统通知未开启，点击开启权限与每日推送"
-                    } else {
-                        "支持每日汇总清单与单集开播即时通知"
-                    }
-                SettingsItemRow(
-                    icon = Icons.Filled.NotificationsActive,
-                    iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    title = "追番更新提醒",
-                    subtitle = reminderSubtitle,
-                    onClick = {
-                        onToggleAiringReminder(!isReminderActive)
-                    },
-                    trailing = {
-                        Switch(
-                            checked = isReminderActive,
-                            onCheckedChange = onToggleAiringReminder,
-                        )
-                    },
-                )
-
-                AnimatedVisibility(
-                    visible = isReminderActive,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Column {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        )
-
-                        // 1. 每日追番更新汇总
+                    if (airingPreAirEnabled) {
                         SettingsItemRow(
                             icon = Icons.Filled.Schedule,
-                            iconTint = MaterialTheme.colorScheme.secondary,
-                            title = "每日更新汇总",
-                            subtitle = if (airingDailySummaryEnabled) "每天 %02d:00 推送今日更新".format(airingReminderHour) else "已关闭",
-                            onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
-                            trailing = {
-                                Switch(
-                                    checked = airingDailySummaryEnabled,
-                                    onCheckedChange = onToggleAiringDailySummary,
-                                )
-                            },
+                            iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                            title = "提醒时间",
+                            subtitle = timingSubtitle,
+                            onClick = onOpenTimingBottomSheet,
                         )
+                    }
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
 
-                        // 2. 新集开播提醒
-                        val timingSubtitle =
-                            when {
-                                airingNotificationOffsetMinutes < 0 -> "提前 ${-airingNotificationOffsetMinutes} 分钟"
-                                airingNotificationOffsetMinutes == 0 -> "准点开播"
-                                airingNotificationOffsetMinutes == 15 -> "延后 15 分钟（适配国内平台）"
-                                else -> "延后 $airingNotificationOffsetMinutes 分钟"
-                            }
-
-                        SettingsItemRow(
-                            icon = Icons.Filled.PlayCircleOutline,
-                            iconTint = MaterialTheme.colorScheme.tertiary,
-                            title = "新集开播提醒",
-                            subtitle = if (airingPreAirEnabled) "每集播出时单独通知" else "已关闭",
-                            onClick = null,
-                            trailing = {
-                                Switch(
-                                    checked = airingPreAirEnabled,
-                                    onCheckedChange = onToggleAiringPreAir,
-                                )
-                            },
-                        )
-
-                        if (airingPreAirEnabled) {
-                            SettingsItemRow(
-                                icon = Icons.Filled.Schedule,
-                                iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
-                                title = "提醒时间",
-                                subtitle = timingSubtitle,
-                                onClick = onOpenTimingBottomSheet,
+                    // 3. 囤番完结提醒
+                    SettingsItemRow(
+                        icon = Icons.Filled.Inventory2,
+                        iconTint = MaterialTheme.colorScheme.tertiary,
+                        title = "囤番完结提醒",
+                        subtitle = if (airingBingeFinaleEnabled) "标记为囤番的条目在全剧完结时提醒开追" else "已关闭（囤番条目完全静默）",
+                        onClick = null,
+                        trailing = {
+                            Switch(
+                                checked = airingBingeFinaleEnabled,
+                                onCheckedChange = onToggleAiringBingeFinale,
                             )
-                        }
+                        },
+                    )
 
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
 
-                        // 3. 囤番完结提醒
-                        SettingsItemRow(
-                            icon = Icons.Filled.Inventory2,
-                            iconTint = MaterialTheme.colorScheme.tertiary,
-                            title = "囤番完结提醒",
-                            subtitle = if (airingBingeFinaleEnabled) "标记为囤番的条目在全剧完结时提醒开追" else "已关闭（囤番条目完全静默）",
-                            onClick = null,
-                            trailing = {
-                                Switch(
-                                    checked = airingBingeFinaleEnabled,
-                                    onCheckedChange = onToggleAiringBingeFinale,
-                                )
-                            },
-                        )
-
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        )
-
-                        // 4. 系统通知渠道设置入口
-                        SettingsItemRow(
-                            icon = Icons.AutoMirrored.Filled.OpenInNew,
-                            iconTint = MaterialTheme.colorScheme.primary,
-                            title = "系统通知管理",
-                            subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
-                            onClick = onOpenSystemNotificationSettings,
-                        )
-                    }
-                }
-            }
-        }
-
-        // Group 2: 智能服务与存储
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "智能服务与存储",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
-
-                val providerDisplay =
-                    when (aiConfig.provider) {
-                        AiConfig.PROVIDER_OLLAMA -> "Ollama / Local"
-                        AiConfig.PROVIDER_GEMINI -> "Gemini"
-                        else -> "Custom OpenAI"
-                    }
-                val modelDisplay =
-                    aiConfig.model.ifBlank {
-                        when (aiConfig.provider) {
-                            AiConfig.PROVIDER_OLLAMA -> "qwen2.5:7b"
-                            AiConfig.PROVIDER_GEMINI -> "gemini-2.5-flash"
-                            else -> "gpt-4o-mini"
-                        }
-                    }
-
-                if (onOpenAiSettingsDialog != null) {
+                    // 4. 系统通知渠道设置入口
                     SettingsItemRow(
-                        icon = Icons.Filled.AutoAwesome,
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "AI 追番助手配置",
-                        subtitle = "$providerDisplay · $modelDisplay",
-                        onClick = onOpenAiSettingsDialog,
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        title = "系统通知管理",
+                        subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
+                        onClick = onOpenSystemNotificationSettings,
                     )
                 }
-
-                SettingsItemRow(
-                    icon = Icons.Filled.CleaningServices,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "清理本地缓存",
-                    subtitle = if (isClearingCache) "正在清理…" else "清理离线网络图片缓存",
-                    onClick = if (isClearingCache) null else onClearCache,
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                SettingsItemRow(
-                    icon = Icons.Filled.BugReport,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "崩溃日志",
-                    subtitle = "崩溃时自动记录堆栈，可导出给开发者",
-                    onClick = onOpenCrashLog,
-                )
             }
         }
+    }
+}
 
-        // Group 3: 关于与系统支持
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.extraLarge,
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-        ) {
-            Column(modifier = Modifier.padding(vertical = 10.dp)) {
-                Text(
-                    text = "关于与支持",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                )
+@Composable
+internal fun AiAndStorageSettingsCard(
+    aiConfig: AiConfig,
+    onOpenAiSettingsDialog: (() -> Unit)?,
+    onClearCache: () -> Unit,
+    isClearingCache: Boolean,
+    onOpenCrashLog: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "智能服务与存储",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
 
+            val providerDisplay =
+                when (aiConfig.provider) {
+                    AiConfig.PROVIDER_OLLAMA -> "Ollama / Local"
+                    AiConfig.PROVIDER_GEMINI -> "Gemini"
+                    else -> "Custom OpenAI"
+                }
+            val modelDisplay =
+                aiConfig.model.ifBlank {
+                    when (aiConfig.provider) {
+                        AiConfig.PROVIDER_OLLAMA -> "qwen2.5:7b"
+                        AiConfig.PROVIDER_GEMINI -> "gemini-2.5-flash"
+                        else -> "gpt-4o-mini"
+                    }
+                }
+
+            if (onOpenAiSettingsDialog != null) {
                 SettingsItemRow(
-                    icon = Icons.Filled.BookmarkBorder,
+                    icon = Icons.Filled.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "MiniBgm 客户端",
-                    subtitle = "v$clientVersion · MIT 开源协议",
-                    trailing = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "打开开源主页",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
+                    title = "AI 追番助手配置",
+                    subtitle = "$providerDisplay · $modelDisplay",
+                    onClick = onOpenAiSettingsDialog,
                 )
 
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 18.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
+            }
 
-                SettingsItemRow(
-                    icon = Icons.Filled.Language,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    title = "访问 Bangumi 官网",
-                    subtitle = "bgm.tv · ACG 动漫数据库与社区",
-                    trailing = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "打开网页",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { onOpenWebUrl(BGM_HOME_URL) },
-                )
+            SettingsItemRow(
+                icon = Icons.Filled.CleaningServices,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                title = "清理本地缓存",
+                subtitle = if (isClearingCache) "正在清理…" else "清理离线网络图片缓存",
+                onClick = if (isClearingCache) null else onClearCache,
+            )
 
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.BugReport,
+                iconTint = MaterialTheme.colorScheme.tertiary,
+                title = "崩溃日志",
+                subtitle = "崩溃时自动记录堆栈，可导出给开发者",
+                onClick = onOpenCrashLog,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AboutAndSupportSettingsCard(
+    isLoggedIn: Boolean,
+    activeProfile: UserProfile?,
+    savedAccountsCount: Int,
+    onOpenWebUrl: (String) -> Unit,
+    onLogoutCurrentClick: () -> Unit,
+    onLogoutAllClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val clientVersion =
+        remember {
+            runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+                .getOrNull()
+                .orEmpty()
+        }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = "关于与支持",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.BookmarkBorder,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "MiniBgm 客户端",
+                subtitle = "v$clientVersion · MIT 开源协议",
+                trailing = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = "打开开源主页",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.Language,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                title = "访问 Bangumi 官网",
+                subtitle = "bgm.tv · ACG 动漫数据库与社区",
+                trailing = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = "打开网页",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = { onOpenWebUrl(BGM_HOME_URL) },
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            SettingsItemRow(
+                icon = Icons.Filled.Info,
+                iconTint = MaterialTheme.colorScheme.tertiary,
+                title = "Bangumi 维基协作指南",
+                subtitle = "条目收录规范与编辑守则",
+                trailing = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = "打开网页",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = { onOpenWebUrl(BGM_WIKI_URL) },
+            )
+
+            if (isLoggedIn) {
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 18.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
 
+                val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
                 SettingsItemRow(
-                    icon = Icons.Filled.Info,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "Bangumi 维基协作指南",
-                    subtitle = "条目收录规范与编辑守则",
-                    trailing = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                            contentDescription = "打开网页",
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { onOpenWebUrl(BGM_WIKI_URL) },
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    title = "退出当前账号",
+                    subtitle = "注销当前登录 (@$usernameText)，保留其他已存账号",
+                    onClick = onLogoutCurrentClick,
                 )
 
-                if (isLoggedIn) {
+                if (savedAccountsCount > 1) {
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 18.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
-                    val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
                     SettingsItemRow(
-                        icon = Icons.AutoMirrored.Filled.Logout,
+                        icon = Icons.Filled.DeleteOutline,
                         iconTint = MaterialTheme.colorScheme.error,
-                        title = "退出当前账号",
-                        subtitle = "注销当前登录 (@$usernameText)，保留其他已存账号",
-                        onClick = onLogoutCurrentClick,
+                        title = "退出所有已存账号",
+                        subtitle = "清除本机全部登录账号与本地缓存",
+                        onClick = onLogoutAllClick,
                     )
-
-                    if (savedAccountsCount > 1) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 18.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                        )
-
-                        SettingsItemRow(
-                            icon = Icons.Filled.DeleteOutline,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            title = "退出所有已存账号",
-                            subtitle = "清除本机全部登录账号与本地缓存",
-                            onClick = onLogoutAllClick,
-                        )
-                    }
                 }
             }
         }

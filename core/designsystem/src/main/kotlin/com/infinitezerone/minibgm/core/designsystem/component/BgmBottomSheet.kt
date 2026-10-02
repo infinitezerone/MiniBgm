@@ -15,7 +15,6 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -145,9 +144,6 @@ fun rememberBgmBottomSheetState(
                 skipHiddenState = skipHiddenState,
             ).also { it.applyMaterial3MotionSpecs() }
         }
-    SideEffect {
-        sheetState.applyMaterial3MotionSpecs()
-    }
     return sheetState
 }
 
@@ -187,11 +183,6 @@ fun BgmModalBottomSheet(
         dragHandle = dragHandle,
         contentWindowInsets = contentWindowInsets,
         properties = properties,
-        content = {
-            SideEffect {
-                sheetState.applyMaterial3MotionSpecs()
-            }
-            content()
-        },
+        content = content,
     )
 }

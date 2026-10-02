@@ -170,7 +170,7 @@ fun BgmNavHost(
                                 onLoginRequest = openLogin,
                                 onOpenTokenPage = openTokenPage,
                                 scrollToTop = userScrollToTop,
-                                metadata = bgmTopLevelTransitionMetadata,
+                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             // 登录接管页与 bgm 网页浏览页：全屏场景（不参与分栏策略）
