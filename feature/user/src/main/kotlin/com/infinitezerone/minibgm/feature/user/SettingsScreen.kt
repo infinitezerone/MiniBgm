@@ -61,6 +61,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import kotlinx.coroutines.launch
@@ -193,6 +194,10 @@ fun SettingsScreen(
         },
         amoledDarkMode = uiState.amoledDarkMode,
         onToggleAmoledDarkMode = viewModel::setAmoledDarkMode,
+        themeMode = uiState.themeMode,
+        onSelectThemeMode = viewModel::setThemeMode,
+        dynamicColor = uiState.dynamicColor,
+        onToggleDynamicColor = viewModel::setDynamicColor,
         pipEnabled = uiState.pipEnabled,
         onTogglePipEnabled = viewModel::setPipEnabled,
         showRestrictedContent = uiState.showRestrictedContent,
@@ -396,6 +401,10 @@ fun SettingsScreenContent(
     onOpenSystemNotificationSettings: () -> Unit = {},
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onSelectThemeMode: (ThemeMode) -> Unit = {},
+    dynamicColor: Boolean = false,
+    onToggleDynamicColor: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
     onTogglePipEnabled: (Boolean) -> Unit = {},
     showRestrictedContent: Boolean = false,
@@ -476,6 +485,10 @@ fun SettingsScreenContent(
                     onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
                     amoledDarkMode = amoledDarkMode,
                     onToggleAmoledDarkMode = onToggleAmoledDarkMode,
+                    themeMode = themeMode,
+                    onSelectThemeMode = onSelectThemeMode,
+                    dynamicColor = dynamicColor,
+                    onToggleDynamicColor = onToggleDynamicColor,
                     pipEnabled = pipEnabled,
                     onTogglePipEnabled = onTogglePipEnabled,
                     showRestrictedContent = showRestrictedContent,

@@ -15,6 +15,7 @@ import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +51,8 @@ data class UserUiState(
     val aiConfig: AiConfig = AiConfig(),
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val dynamicColor: Boolean = false,
     val pipEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
 )
@@ -175,6 +178,8 @@ class UserViewModel(
                 aiConfig = sync.settings.aiConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 amoledDarkMode = sync.settings.amoledDarkMode,
+                themeMode = sync.settings.themeMode,
+                dynamicColor = sync.settings.dynamicColor,
                 pipEnabled = sync.settings.pipEnabled,
                 showRestrictedContent = sync.settings.showRestrictedContent,
             )
@@ -310,6 +315,20 @@ class UserViewModel(
     fun setAmoledDarkMode(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAmoledDarkMode(enabled)
+        }
+    }
+
+    /** 主题模式：跟随系统 / 强制亮色 / 强制深色（由 :app 宿主读取并传给 MiniBgmTheme） */
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            settingsRepository.setThemeMode(mode)
+        }
+    }
+
+    /** Material You 动态取色开关 */
+    fun setDynamicColor(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDynamicColor(enabled)
         }
     }
 

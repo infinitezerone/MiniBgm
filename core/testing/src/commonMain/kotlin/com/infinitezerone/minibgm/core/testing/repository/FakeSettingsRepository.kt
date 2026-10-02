@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -30,6 +31,10 @@ class FakeSettingsRepository(
     var setAiConfigCallCount: Int = 0
         private set
     var setAmoledDarkModeCallCount: Int = 0
+        private set
+    var setThemeModeCallCount: Int = 0
+        private set
+    var setDynamicColorCallCount: Int = 0
         private set
     var setPipEnabledCallCount: Int = 0
         private set
@@ -88,6 +93,16 @@ class FakeSettingsRepository(
     override suspend fun setAmoledDarkMode(enabled: Boolean) {
         setAmoledDarkModeCallCount++
         settingsState.value = settingsState.value.copy(amoledDarkMode = enabled)
+    }
+
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        setThemeModeCallCount++
+        settingsState.value = settingsState.value.copy(themeMode = mode)
+    }
+
+    override suspend fun setDynamicColor(enabled: Boolean) {
+        setDynamicColorCallCount++
+        settingsState.value = settingsState.value.copy(dynamicColor = enabled)
     }
 
     override suspend fun setPipEnabled(enabled: Boolean) {

@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.datastore
 
 import androidx.datastore.core.DataStore
 import com.infinitezerone.minibgm.core.common.UserDataClearable
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 
@@ -50,6 +51,20 @@ class UserPreferencesDataSource(
     suspend fun setDarkMode(isDark: Boolean) {
         dataStore.updateData { current ->
             current.copy(isDarkMode = isDark)
+        }
+    }
+
+    /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
+    suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.updateData { current ->
+            current.copy(themeMode = mode)
+        }
+    }
+
+    /** Material You 动态取色开关 */
+    suspend fun setDynamicColor(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(dynamicColor = enabled)
         }
     }
 

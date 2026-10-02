@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
@@ -47,10 +49,20 @@ class MainActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
         handleIntent(intent)
         setContent {
-            // AMOLED 纯黑偏好由 :app 宿主读取并传给主题（设置页开关落库后在此生效）
+            // 主题模式 / 动态取色 / AMOLED 偏好由 :app 宿主读取并传给主题（设置页落库后在此生效）
             val settings by settingsRepository.settings
                 .collectAsStateWithLifecycle(initialValue = UserSettings())
-            MiniBgmTheme(amoledDark = settings.amoledDarkMode) {
+            val darkTheme =
+                when (settings.themeMode) {
+                    ThemeMode.LIGHT -> false
+                    ThemeMode.DARK -> true
+                    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                }
+            MiniBgmTheme(
+                darkTheme = darkTheme,
+                amoledDark = settings.amoledDarkMode,
+                dynamicColor = settings.dynamicColor,
+            ) {
                 BgmApp(
                     snackbarHostState = snackbarHostState,
                     authRepository = authRepository,

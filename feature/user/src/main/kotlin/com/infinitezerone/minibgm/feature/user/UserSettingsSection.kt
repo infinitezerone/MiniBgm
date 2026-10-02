@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Schedule
@@ -41,6 +42,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +67,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 private const val BGM_HOME_URL = "https://bgm.tv"
@@ -108,6 +111,10 @@ internal fun SettingsSection(
     onOpenPlaybackRules: (() -> Unit)? = null,
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onSelectThemeMode: (ThemeMode) -> Unit = {},
+    dynamicColor: Boolean = false,
+    onToggleDynamicColor: (Boolean) -> Unit = {},
     pipEnabled: Boolean = true,
     onTogglePipEnabled: (Boolean) -> Unit = {},
     showRestrictedContent: Boolean = false,
@@ -150,6 +157,37 @@ internal fun SettingsSection(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                )
+
+                // 主题模式三选：跟随系统 / 亮色 / 深色
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = themeMode == mode,
+                            onClick = { onSelectThemeMode(mode) },
+                            label = { Text(mode.displayName) },
+                        )
+                    }
+                }
+
+                SettingsItemRow(
+                    icon = Icons.Filled.Palette,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = "动态取色 (Material You)",
+                    subtitle = "跟随系统壁纸配色生成主题",
+                    onClick = { onToggleDynamicColor(!dynamicColor) },
+                    trailing = {
+                        Switch(
+                            checked = dynamicColor,
+                            onCheckedChange = onToggleDynamicColor,
+                        )
+                    },
                 )
 
                 SettingsItemRow(

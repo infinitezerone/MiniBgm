@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -42,6 +43,10 @@ data class UserSettings(
     val aiConfig: AiConfig = AiConfig(),
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
+    /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** Material You 动态取色（minSdk 31 恒可用） */
+    val dynamicColor: Boolean = false,
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
@@ -78,6 +83,12 @@ interface SettingsRepository {
 
     /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
     suspend fun setAmoledDarkMode(enabled: Boolean)
+
+    /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
+    suspend fun setThemeMode(mode: ThemeMode)
+
+    /** Material You 动态取色开关 */
+    suspend fun setDynamicColor(enabled: Boolean)
 
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
@@ -197,6 +208,8 @@ class SettingsRepositoryImpl(
                         provider = prefs.aiProvider,
                     ),
                 amoledDarkMode = prefs.amoledDarkMode,
+                themeMode = prefs.themeMode,
+                dynamicColor = prefs.dynamicColor,
                 pipEnabled = prefs.pipEnabled,
                 showRestrictedContent = prefs.showRestrictedContent,
             )
@@ -260,6 +273,14 @@ class SettingsRepositoryImpl(
 
     override suspend fun setAmoledDarkMode(enabled: Boolean) {
         userPreferences.setAmoledDarkMode(enabled)
+    }
+
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        userPreferences.setThemeMode(mode)
+    }
+
+    override suspend fun setDynamicColor(enabled: Boolean) {
+        userPreferences.setDynamicColor(enabled)
     }
 
     override suspend fun setPipEnabled(enabled: Boolean) {

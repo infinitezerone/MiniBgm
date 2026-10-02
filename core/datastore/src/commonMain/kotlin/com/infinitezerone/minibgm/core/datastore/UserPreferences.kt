@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.datastore
 
+import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import kotlinx.serialization.Serializable
 
@@ -15,6 +16,10 @@ data class UserPreferences(
     /** 进行中登录的 PKCE 等价 verifier（其 sha256 指纹作为 OAuth state，见 BgmPkce） */
     val pendingOAuthVerifier: String = "",
     val isDarkMode: Boolean = false,
+    /** 主题模式：跟随系统 / 强制亮色 / 强制深色（默认跟随系统） */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** Material You 动态取色（minSdk 31 恒可用；AMOLED 纯黑档优先级更高） */
+    val dynamicColor: Boolean = false,
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
