@@ -29,10 +29,11 @@ USAGE
 
 plan_only=0
 force_all=0
+explicit_all=0
 cli_modules=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    -a|--all) force_all=1 ;;
+    -a|--all) force_all=1; explicit_all=1 ;;
     -n|--plan|--dry-run) plan_only=1 ;;
     -h|--help) usage; exit 0 ;;
     --) shift; while [ "$#" -gt 0 ]; do cli_modules+=("$1"); shift; done; break ;;
@@ -100,7 +101,7 @@ fi
 # 推上 main 和 release tag（2026-10-01 v0.4.0 发布失败即此因）。触及 crates/ 或
 # 根 Cargo 清单时触发；--all 视为全量验证同样触发。命令与 ci.yml Rust job 逐字一致。
 need_rust=0
-if [ "$force_all" = "1" ]; then
+if [ "$explicit_all" = "1" ]; then
   need_rust=1
 elif [ -n "$paths" ] && printf '%s\n' "$paths" | grep -qE '^(crates/|Cargo\.toml$|Cargo\.lock$)'; then
   need_rust=1
@@ -153,8 +154,8 @@ append_task() {
 append_task ":core:testing:testAndroid"
 for t in "${test_tasks[@]+"${test_tasks[@]}"}"; do append_task "$t"; done
 append_task ":app:assembleDebug"
-if [ "$force_all" = "1" ]; then
-  # 全量验证时与 CI 完全对齐：加入 R8 混淆验证与 CRAP 代码风险度量
+if [ "$explicit_all" = "1" ]; then
+  # 显式全量验证（--all）时与 CI 完全对齐：加入 R8 混淆验证与 CRAP 代码风险度量
   append_task ":app:assembleRelease"
   append_task ":core:testing:crapCheck"
 fi

@@ -18,8 +18,8 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ spotlessApply → 架构红线 → 触及模块测试（含 :app 单测）→ :app:assembleDebug → 结果校验
 ```
 
-- 验证目标是"改动"而非"全仓库"，按改动自动推断：工作副本 `@` 有改动 → 验证工作副本；`@` 干净则退到最近一次提交 `@-`（`jj commit` 之后复跑）；改动触及基础数据层（`:core:model`、`:core:common`、`:core:data`、`:core:network`、`:core:database`、`:core:datastore`）、`build-logic/`、`gradle/`、根构建脚本或版本目录 → 具有向下扩散性，自动提升为全量。都推断不出来时**明确报错**——既不静默放行（假绿），也不静默全量（慢）。
-- `bash tools/jgate --plan` 只打印本次的验证目标、模块与 gradle/Rust 任务（零副作用）；`--all` 强制全量（自动追加 `:app:assembleRelease` 与 `:crapCheck`，与 CI 标准完全闭环）；显式传模块（`bash tools/jgate feature/user sync/work`）则跳过推断。
+- 验证目标是"改动"而非"全仓库"，按改动自动推断：工作副本 `@` 有改动 → 验证工作副本；`@` 干净则退到最近一次提交 `@-`（`jj commit` 之后复跑）；改动触及基础数据层（`:core:model`、`:core:common`、`:core:data`、`:core:network`、`:core:database`、`:core:datastore`）、`build-logic/`、`gradle/`、根构建脚本或版本目录 → 具有向下扩散性，自动提升为全模块单元测试与 Debug 装配（不跑耗时的 Release R8 混淆与 CRAP 度量）。都推断不出来时**明确报错**——既不静默放行（假绿），也不静默全量（慢）。
+- `bash tools/jgate --plan` 只打印本次的验证目标、模块与 gradle/Rust 任务（零副作用）；`--all` 显式全量验证（追加 `:app:assembleRelease` 与 `:core:testing:crapCheck`，与 CI 标准完全闭环，用于 PR 前与发版验证）；显式传模块（`bash tools/jgate feature/user sync/work`）则跳过推断。日常提交与 `jj commit` / `jj git push` 均不跑 release。
 
 - KMP 模块纯 Kotlin 领域逻辑测试位于 `commonTest`（如 `:core:model`、`:core:common`、`:core:ai`）；依赖 Android 运行时/Robolectric 的宿主测试位于 `androidHostTest`（如 `:core:data`、`:core:database`、`:core:datastore`、`:core:testing`）。Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`、`:core:webview`）使用 `testDebugUnitTest`。命名错误或未挂载导致任务 NO-SOURCE 空跑由 jgate 的测试源码与 XML 存在性双向校验拦下。
 - 全量 `allTests testDebugUnitTest` 用于底层跨切面改动、PR 前及 CI 主干；Android-only 模块没有 allTests。
