@@ -468,7 +468,7 @@ fun ScheduleTimelineSingleCard(
 
                 Spacer(modifier = Modifier.weight(1f, fill = false))
 
-                // 行 3：播放操作入口（点击唤起播放源 BottomSheet：内置播放器 / AI找源 / B站 / 蜜柑等）
+                // 行 3：播放操作入口（右下角终点操作，符合大拇指触达与 Z 字视觉动线）
                 if (schedule.isUnmapped) {
                     Text(
                         text = "AniList 在播 · 暂未收录",
@@ -483,6 +483,7 @@ fun ScheduleTimelineSingleCard(
                         },
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.align(Alignment.End),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
