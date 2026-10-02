@@ -14,10 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,6 +30,7 @@ import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 /**
@@ -110,7 +107,7 @@ internal fun UserProfileHero(
                 } else {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.Person,
+                            imageVector = BgmIcons.User,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(40.dp),
@@ -194,7 +191,7 @@ private fun AdminMark(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.WorkspacePremium,
+                imageVector = BgmIcons.WorkspacePremium,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
                 modifier = Modifier.size(11.dp),
@@ -233,7 +230,7 @@ private fun AccountSwitchChip(
                 style = MaterialTheme.typography.labelSmall,
             )
             Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
+                imageVector = BgmIcons.KeyboardArrowDown,
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
             )

@@ -17,27 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.CleaningServices
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PictureInPictureAlt
-import androidx.compose.material.icons.filled.PlayCircleOutline
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -63,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -249,7 +229,7 @@ internal fun AppearanceSettingsCard(
             }
 
             SettingsItemRow(
-                icon = Icons.Filled.Palette,
+                icon = BgmIcons.Palette,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "动态取色 (Material You)",
                 subtitle = "跟随系统壁纸配色生成主题",
@@ -263,7 +243,7 @@ internal fun AppearanceSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.DarkMode,
+                icon = BgmIcons.DarkMode,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "AMOLED 纯黑模式",
                 subtitle = "深色模式下使用纯黑表面，更省电更沉浸",
@@ -303,7 +283,7 @@ internal fun PlaybackSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.PictureInPictureAlt,
+                icon = BgmIcons.PictureInPicture,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "自动画中画",
                 subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
@@ -343,7 +323,7 @@ internal fun PreferenceSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.VisibilityOff,
+                icon = BgmIcons.VisibilityOff,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "显示受限条目内容",
                 subtitle = "",
@@ -408,7 +388,7 @@ internal fun SyncAndReminderSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.Sync,
+                icon = BgmIcons.Sync,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "播放源自动同步",
                 subtitle = "周期：${syncInterval.displayName}",
@@ -416,7 +396,7 @@ internal fun SyncAndReminderSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.CloudQueue,
+                icon = BgmIcons.CloudQueue,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 title = "检查最新放送源",
                 subtitle = "状态：$lastSyncText · bgm-data",
@@ -441,7 +421,7 @@ internal fun SyncAndReminderSettingsCard(
 
             if (onOpenPlaybackRules != null) {
                 SettingsItemRow(
-                    icon = Icons.Filled.PlayCircleOutline,
+                    icon = BgmIcons.PlayCircle,
                     iconTint = MaterialTheme.colorScheme.tertiary,
                     title = "播放源管理",
                     subtitle = "导入自备片单、维护第三方解析规则",
@@ -462,7 +442,7 @@ internal fun SyncAndReminderSettingsCard(
                     "支持每日汇总清单与单集开播即时通知"
                 }
             SettingsItemRow(
-                icon = Icons.Filled.NotificationsActive,
+                icon = BgmIcons.NotificationsActive,
                 iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 title = "追番更新提醒",
                 subtitle = reminderSubtitle,
@@ -490,7 +470,7 @@ internal fun SyncAndReminderSettingsCard(
 
                     // 1. 每日追番更新汇总
                     SettingsItemRow(
-                        icon = Icons.Filled.Schedule,
+                        icon = BgmIcons.Schedule,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         title = "每日更新汇总",
                         subtitle = if (airingDailySummaryEnabled) "每天 %02d:00 推送今日更新".format(airingReminderHour) else "已关闭",
@@ -518,7 +498,7 @@ internal fun SyncAndReminderSettingsCard(
                         }
 
                     SettingsItemRow(
-                        icon = Icons.Filled.PlayCircleOutline,
+                        icon = BgmIcons.PlayCircle,
                         iconTint = MaterialTheme.colorScheme.tertiary,
                         title = "新集开播提醒",
                         subtitle = if (airingPreAirEnabled) "每集播出时单独通知" else "已关闭",
@@ -533,7 +513,7 @@ internal fun SyncAndReminderSettingsCard(
 
                     if (airingPreAirEnabled) {
                         SettingsItemRow(
-                            icon = Icons.Filled.Schedule,
+                            icon = BgmIcons.Schedule,
                             iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
                             title = "提醒时间",
                             subtitle = timingSubtitle,
@@ -548,7 +528,7 @@ internal fun SyncAndReminderSettingsCard(
 
                     // 3. 囤番完结提醒
                     SettingsItemRow(
-                        icon = Icons.Filled.Inventory2,
+                        icon = BgmIcons.Inventory,
                         iconTint = MaterialTheme.colorScheme.tertiary,
                         title = "囤番完结提醒",
                         subtitle = if (airingBingeFinaleEnabled) "标记为囤番的条目在全剧完结时提醒开追" else "已关闭（囤番条目完全静默）",
@@ -568,7 +548,7 @@ internal fun SyncAndReminderSettingsCard(
 
                     // 4. 系统通知渠道设置入口
                     SettingsItemRow(
-                        icon = Icons.AutoMirrored.Filled.OpenInNew,
+                        icon = BgmIcons.OpenInNew,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = "系统通知管理",
                         subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
@@ -623,7 +603,7 @@ internal fun AiAndStorageSettingsCard(
 
             if (onOpenAiSettingsDialog != null) {
                 SettingsItemRow(
-                    icon = Icons.Filled.AutoAwesome,
+                    icon = BgmIcons.Assistant,
                     iconTint = MaterialTheme.colorScheme.primary,
                     title = "AI 追番助手配置",
                     subtitle = "$providerDisplay · $modelDisplay",
@@ -637,7 +617,7 @@ internal fun AiAndStorageSettingsCard(
             }
 
             SettingsItemRow(
-                icon = Icons.Filled.CleaningServices,
+                icon = BgmIcons.CleaningServices,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 title = "清理本地缓存",
                 subtitle = if (isClearingCache) "正在清理…" else "清理离线网络图片缓存",
@@ -650,7 +630,7 @@ internal fun AiAndStorageSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.BugReport,
+                icon = BgmIcons.BugReport,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 title = "崩溃日志",
                 subtitle = "崩溃时自动记录堆栈，可导出给开发者",
@@ -696,13 +676,13 @@ internal fun AboutAndSupportSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.BookmarkBorder,
+                icon = BgmIcons.BookmarkBorder,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = "MiniBgm 客户端",
                 subtitle = "v$clientVersion · MIT 开源协议",
                 trailing = {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = BgmIcons.OpenInNew,
                         contentDescription = "打开开源主页",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -717,13 +697,13 @@ internal fun AboutAndSupportSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.Language,
+                icon = BgmIcons.Language,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 title = "访问 Bangumi 官网",
                 subtitle = "bgm.tv · ACG 动漫数据库与社区",
                 trailing = {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = BgmIcons.OpenInNew,
                         contentDescription = "打开网页",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -738,13 +718,13 @@ internal fun AboutAndSupportSettingsCard(
             )
 
             SettingsItemRow(
-                icon = Icons.Filled.Info,
+                icon = BgmIcons.Info,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 title = "Bangumi 维基协作指南",
                 subtitle = "条目收录规范与编辑守则",
                 trailing = {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = BgmIcons.OpenInNew,
                         contentDescription = "打开网页",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -761,7 +741,7 @@ internal fun AboutAndSupportSettingsCard(
 
                 val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
                 SettingsItemRow(
-                    icon = Icons.AutoMirrored.Filled.Logout,
+                    icon = BgmIcons.Logout,
                     iconTint = MaterialTheme.colorScheme.error,
                     title = "退出当前账号",
                     subtitle = "注销当前登录 (@$usernameText)，保留其他已存账号",
@@ -775,7 +755,7 @@ internal fun AboutAndSupportSettingsCard(
                     )
 
                     SettingsItemRow(
-                        icon = Icons.Filled.DeleteOutline,
+                        icon = BgmIcons.Delete,
                         iconTint = MaterialTheme.colorScheme.error,
                         title = "退出所有已存账号",
                         subtitle = "清除本机全部登录账号与本地缓存",
@@ -933,7 +913,7 @@ private fun SettingsItemRow(
             trailing()
         } else if (onClick != null) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                imageVector = BgmIcons.ArrowForwardIos,
                 contentDescription = null,
                 modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

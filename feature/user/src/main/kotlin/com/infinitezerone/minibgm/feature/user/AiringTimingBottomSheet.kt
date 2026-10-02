@@ -23,11 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -72,6 +67,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -158,7 +154,7 @@ fun AiringTimingBottomSheet(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.Schedule,
+                            imageVector = BgmIcons.Schedule,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(20.dp),
@@ -227,7 +223,7 @@ fun AiringTimingBottomSheet(
                     enabled = selectedOffset > minOffsetMinutes,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Remove,
+                        imageVector = BgmIcons.Remove,
                         contentDescription = "减少 1 分钟",
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -248,7 +244,7 @@ fun AiringTimingBottomSheet(
                     enabled = selectedOffset < maxOffsetMinutes,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = BgmIcons.Add,
                         contentDescription = "增加 1 分钟",
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -365,7 +361,7 @@ private fun TimingHeroCard(
 
             IconButton(onClick = onEditClick) {
                 Icon(
-                    imageVector = Icons.Filled.Edit,
+                    imageVector = BgmIcons.Edit,
                     contentDescription = "手动输入精确分钟",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),

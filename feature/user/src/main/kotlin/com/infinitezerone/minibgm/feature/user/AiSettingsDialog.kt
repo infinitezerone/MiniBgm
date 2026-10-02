@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -32,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 
 private const val DEFAULT_OLLAMA_ENDPOINT = "http://10.0.2.2:11434"
@@ -178,7 +176,7 @@ internal fun AiSettingsDialog(
                     trailingIcon = {
                         IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
                             Icon(
-                                imageVector = if (isApiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
                                 contentDescription = if (isApiKeyVisible) "隐藏 API Key" else "显示 API Key",
                             )
                         }

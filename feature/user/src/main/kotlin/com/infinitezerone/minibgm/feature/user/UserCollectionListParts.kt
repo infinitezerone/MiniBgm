@@ -18,15 +18,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.PlusOne
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,6 +46,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
@@ -372,7 +364,7 @@ internal fun UserCollectionCard(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(14.dp),
@@ -440,7 +432,7 @@ internal fun UserCollectionCard(
                                 modifier = Modifier.size(30.dp),
                             ) {
                                 Icon(
-                                    imageVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
+                                    imageVector = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
                                     contentDescription = if (isBinge) "取消囤番" else "加入囤番",
                                     tint =
                                         if (isBinge) {
@@ -468,7 +460,7 @@ internal fun UserCollectionCard(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Tv,
+                                        imageVector = BgmIcons.Tv,
                                         contentDescription = "播放源",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(14.dp),
@@ -496,7 +488,7 @@ internal fun UserCollectionCard(
                                     )
                                 } else {
                                     Icon(
-                                        imageVector = Icons.Filled.PlusOne,
+                                        imageVector = BgmIcons.PlusOne,
                                         contentDescription = "+1 话",
                                         modifier = Modifier.size(16.dp),
                                     )
@@ -518,7 +510,7 @@ internal fun UserCollectionCard(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.FormatQuote,
+                                imageVector = BgmIcons.FormatQuote,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                                 modifier = Modifier.size(13.dp),
@@ -636,7 +628,7 @@ internal fun EmptyCollectionsView(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.Outlined.SearchOff,
+            imageVector = BgmIcons.SearchOff,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(56.dp),
@@ -669,7 +661,7 @@ internal fun ErrorCollectionsView(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.Filled.ErrorOutline,
+            imageVector = BgmIcons.ErrorOutline,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error,
             modifier = Modifier.size(56.dp),

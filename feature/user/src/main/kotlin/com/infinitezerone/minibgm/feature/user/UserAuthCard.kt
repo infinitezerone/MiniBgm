@@ -13,11 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** Bangumi 官方访问令牌生成页（next.bgm.tv 子域，属 bgm 系域名，可走应用内浏览）。 */
 private const val ACCESS_TOKEN_PAGE_URL = "https://next.bgm.tv/demo/access-token"
@@ -99,7 +95,7 @@ internal fun UnauthenticatedLandingView(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.Person,
+                            imageVector = BgmIcons.User,
                             contentDescription = "未登录",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(44.dp),
@@ -173,7 +169,7 @@ private fun PersonalAccessTokenDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Key,
+                    imageVector = BgmIcons.Key,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
@@ -198,7 +194,7 @@ private fun PersonalAccessTokenDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = BgmIcons.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                     )
@@ -242,7 +238,7 @@ private fun PersonalAccessTokenDialog(
                             enabled = !isLoading,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.ContentPaste,
+                                imageVector = BgmIcons.ContentPaste,
                                 contentDescription = "粘贴",
                             )
                         }

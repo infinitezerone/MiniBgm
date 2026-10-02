@@ -15,12 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.UserProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,7 +107,7 @@ internal fun AccountManagementBottomSheet(
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.PersonAdd,
+                    imageVector = BgmIcons.PersonAdd,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
@@ -132,7 +127,7 @@ internal fun AccountManagementBottomSheet(
                     ),
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    imageVector = BgmIcons.Logout,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
@@ -188,7 +183,7 @@ private fun AccountItemRow(
                     )
                 } else {
                     Icon(
-                        imageVector = Icons.Filled.Person,
+                        imageVector = BgmIcons.User,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(24.dp),
@@ -231,7 +226,7 @@ private fun AccountItemRow(
 
             if (isActive) {
                 Icon(
-                    imageVector = Icons.Filled.CheckCircle,
+                    imageVector = BgmIcons.CheckCircle,
                     contentDescription = "当前活跃账号",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp),
@@ -239,7 +234,7 @@ private fun AccountItemRow(
             } else {
                 IconButton(onClick = onLogoutClick) {
                     Icon(
-                        imageVector = Icons.Filled.DeleteOutline,
+                        imageVector = BgmIcons.Delete,
                         contentDescription = "退出该账号",
                         tint = MaterialTheme.colorScheme.error,
                     )

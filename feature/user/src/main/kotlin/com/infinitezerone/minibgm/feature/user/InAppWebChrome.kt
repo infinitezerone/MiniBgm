@@ -19,12 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
  * 把 WebView 当前的内部地址转回上游公开地址。
@@ -143,7 +138,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    imageVector = BgmIcons.ArrowBack,
                                     contentDescription = "返回上一页",
                                 )
                             }
@@ -153,7 +148,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Close,
+                                    imageVector = BgmIcons.Close,
                                     contentDescription = "关闭",
                                 )
                             }
@@ -166,7 +161,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Close,
+                                    imageVector = BgmIcons.Close,
                                     contentDescription = "关闭",
                                 )
                             }
@@ -177,7 +172,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Refresh,
+                                    imageVector = BgmIcons.Refresh,
                                     contentDescription = "重新加载",
                                 )
                             }
@@ -188,7 +183,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
+                                    imageVector = BgmIcons.ContentCopy,
                                     contentDescription = "复制链接",
                                 )
                             }
@@ -199,7 +194,7 @@ internal fun InAppWebScaffold(
                                 enabled = closeEnabled,
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    imageVector = BgmIcons.OpenInNew,
                                     contentDescription = "用系统浏览器打开",
                                 )
                             }

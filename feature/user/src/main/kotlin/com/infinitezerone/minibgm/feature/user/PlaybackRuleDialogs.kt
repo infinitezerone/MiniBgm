@@ -11,11 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -40,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -60,7 +56,7 @@ internal fun RuleVariablesHintCard() {
             verticalAlignment = Alignment.Top,
         ) {
             Icon(
-                imageVector = Icons.Filled.Info,
+                imageVector = BgmIcons.Info,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp),
@@ -176,7 +172,7 @@ internal fun PlaybackRuleCard(
             ) {
                 TextButton(onClick = onEdit) {
                     Icon(
-                        imageVector = Icons.Filled.Edit,
+                        imageVector = BgmIcons.Edit,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                     )
@@ -186,7 +182,7 @@ internal fun PlaybackRuleCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(onClick = onDelete) {
                     Icon(
-                        imageVector = Icons.Filled.DeleteOutline,
+                        imageVector = BgmIcons.Delete,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp),
@@ -700,7 +696,7 @@ internal fun PlaybackPositionRow(
             )
             IconButton(onClick = onClear) {
                 Icon(
-                    imageVector = Icons.Outlined.Close,
+                    imageVector = BgmIcons.CloseBorder,
                     contentDescription = "清除该续播记录",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

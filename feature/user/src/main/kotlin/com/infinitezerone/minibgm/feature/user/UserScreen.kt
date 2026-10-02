@@ -8,11 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -45,6 +40,7 @@ import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -234,13 +230,13 @@ fun UserScreenContent(
                                     },
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.ManageAccounts,
+                                        imageVector = BgmIcons.ManageAccounts,
                                         contentDescription = "账号管理",
                                     )
                                 }
                             } else {
                                 Icon(
-                                    imageVector = Icons.Filled.ManageAccounts,
+                                    imageVector = BgmIcons.ManageAccounts,
                                     contentDescription = "账号管理",
                                 )
                             }
@@ -249,7 +245,7 @@ fun UserScreenContent(
 
                     IconButton(onClick = onSettingsClick) {
                         Icon(
-                            imageVector = Icons.Outlined.Settings,
+                            imageVector = BgmIcons.SettingsBorder,
                             contentDescription = "设置",
                         )
                     }
@@ -398,7 +394,7 @@ fun UserScreenContent(
             onDismissRequest = { accountToLogout = null },
             icon = {
                 Icon(
-                    imageVector = Icons.Filled.DeleteOutline,
+                    imageVector = BgmIcons.Delete,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )
@@ -437,7 +433,7 @@ fun UserScreenContent(
             onDismissRequest = { showLogoutAllDialog = false },
             icon = {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    imageVector = BgmIcons.Logout,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )

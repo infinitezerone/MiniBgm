@@ -13,11 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -124,7 +120,7 @@ fun PlaybackRulesScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = BgmIcons.ArrowBack,
                             contentDescription = "返回",
                         )
                     }
@@ -132,20 +128,20 @@ fun PlaybackRulesScreen(
                 actions = {
                     IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
                         Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
+                            imageVector = BgmIcons.Assistant,
                             contentDescription = "让 AI 助手找源",
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                     IconButton(onClick = { isImportingPlaylistJson = true }) {
                         Icon(
-                            imageVector = Icons.Filled.ContentPaste,
+                            imageVector = BgmIcons.ContentPaste,
                             contentDescription = "粘贴片单 JSON",
                         )
                     }
                     IconButton(onClick = { playlistPicker.launch(PLAYLIST_MIME_TYPES) }) {
                         Icon(
-                            imageVector = Icons.Filled.FileUpload,
+                            imageVector = BgmIcons.Upload,
                             contentDescription = "从文件导入片单",
                         )
                     }

@@ -14,14 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +38,7 @@ import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -161,7 +154,7 @@ internal fun UserCollectionSourcesBottomSheet(
                     },
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = BgmIcons.Close,
                         contentDescription = "关闭",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -193,7 +186,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 1：哔哩哔哩搜索
                 UserSourceOptionCard(
                     title = "哔哩哔哩搜索",
-                    iconVector = Icons.Filled.Tv,
+                    iconVector = BgmIcons.Tv,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
@@ -208,7 +201,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 2：蜜柑计划
                 UserSourceOptionCard(
                     title = "蜜柑计划",
-                    iconVector = Icons.Filled.Download,
+                    iconVector = BgmIcons.Download,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
@@ -230,7 +223,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                     UserSourceOptionCard(
                         title = if (isBinge) "已设为囤番（完结提醒）" else "设为囤番待看",
-                        iconVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
+                        iconVector = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
                         trailing = {
                             Switch(
                                 checked = isBinge,
@@ -254,7 +247,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 // 选项 3：前往条目详情
                 UserSourceOptionCard(
                     title = "进入条目详情",
-                    iconVector = Icons.Filled.Info,
+                    iconVector = BgmIcons.Info,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
@@ -330,7 +323,7 @@ private fun UserSourceOptionCard(
                 trailing()
             } else {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    imageVector = BgmIcons.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.size(18.dp),
