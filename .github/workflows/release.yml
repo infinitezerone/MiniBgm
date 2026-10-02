@@ -129,9 +129,16 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p release-artifacts
-          APK=app/build/outputs/apk/release/app-release.apk
-          [ -f "$APK" ] || APK=app/build/outputs/apk/release/app-release-unsigned.apk
-          cp "$APK" "release-artifacts/MiniBgm-${{ github.ref_name }}-release.apk"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            [ -f "$apk" ] || continue
+            filename=$(basename "$apk" .apk)
+            suffix="${filename#app-}"
+            cp "$apk" "release-artifacts/MiniBgm-${{ github.ref_name }}-${suffix}.apk"
+          done
+          # 同时保留默认 release.apk 别名（使用 universal 包），确保外部自动更新/下载脚本兼容
+          if [ -f "app/build/outputs/apk/release/app-universal-release.apk" ]; then
+            cp "app/build/outputs/apk/release/app-universal-release.apk" "release-artifacts/MiniBgm-${{ github.ref_name }}-release.apk"
+          fi
           # 混淆 release 的堆栈还原依赖 mapping.txt，必须随版本归档。
           # 原文件 80+ MB（R8 横向类合并后，成员行要写全限定名），gzip 后约 6 MB——15 倍差距。
           # 下载者 gunzip 一次即可，信息不丢。
