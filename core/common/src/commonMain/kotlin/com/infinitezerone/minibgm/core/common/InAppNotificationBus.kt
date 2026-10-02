@@ -19,6 +19,9 @@ data class InAppNotification(
  * 用于在应用前台运行时，以主流应用顶部悬浮横幅形式向用户呈现重要广播（如全剧完结、囤番状态变更）。
  */
 object InAppNotificationBus {
+    @kotlin.concurrent.Volatile
+    var isAppInForeground: Boolean = false
+
     private val _notifications = MutableSharedFlow<InAppNotification>(extraBufferCapacity = 2)
     val notifications: Flow<InAppNotification> = _notifications.asSharedFlow()
 

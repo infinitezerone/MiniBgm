@@ -214,11 +214,6 @@ fun SettingsScreen(
         onPlaybackRulesClick = onPlaybackRulesClick,
         enableAiConfig = enableAiConfig,
         onTestNotification = {
-            val intent =
-                Intent("com.infinitezerone.minibgm.sync.work.action.TEST_NOTIFICATION").apply {
-                    setPackage(context.packageName)
-                }
-            context.sendBroadcast(intent)
             com.infinitezerone.minibgm.core.common.InAppNotificationBus.post(
                 com.infinitezerone.minibgm.core.common.InAppNotification(
                     title = "番剧完结提醒",

@@ -66,6 +66,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        com.infinitezerone.minibgm.core.common.InAppNotificationBus.isAppInForeground = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.infinitezerone.minibgm.core.common.InAppNotificationBus.isAppInForeground = false
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
