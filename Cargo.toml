@@ -8,7 +8,7 @@ resolver = "2"
 # （"profiles for the non root package will be ignored"），此前 lto / codegen-units /
 # strip / panic 全部没有生效，.so 一直是默认 release 配置。
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto = true
 codegen-units = 1
 # 保持 unwind：异步任务里的 panic 只应让该次请求失败（槽位由 nativeStart 的回收逻辑收回），

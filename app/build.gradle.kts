@@ -29,6 +29,9 @@ androidApplication {
         buildConfigField("Boolean", "ENABLE_AI_ASSISTANT", enableAi.toString())
         buildConfigField("Boolean", "ENABLE_INTERNAL_PLAYER", enablePlayer.toString())
         buildConfigField("String", "BUILD_TIER", "\"$tier\"")
+        ndk {
+            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
+        }
     }
 
     signingConfigs {
