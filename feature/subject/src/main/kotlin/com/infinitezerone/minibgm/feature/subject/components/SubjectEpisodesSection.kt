@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,15 +27,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -68,7 +67,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerCo
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.SubjectType
 
-/** 分集/曲目/章节列表头部栏：总数/打卡进度与列表/网格切换 */
+/** 分集/曲目/章节列表头部栏：总数/打卡进度、列表/网格切换与续看播放源通栏卡片 */
 @Composable
 fun EpisodesSectionHeader(
     totalEpisodes: Int,
@@ -100,17 +99,14 @@ fun EpisodesSectionHeader(
             SubjectType.ANIME, SubjectType.REAL -> "已看 $watchedEpisodes / 全 $totalEpisodes 话"
         }
 
-    // 动作 chips 与"标题/进度/视图控制"分两行：全塞一行时元素最多到 5 个，
-    // 363dp 的屏放不下，进度标签会被挤成省略号。
     val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
-    val hasActionChips =
-        (nextUpEpisodeSort != null && onJumpToNextUp != null) ||
-            (isEpisodeLike && (onPlayNext != null || onOpenSources != null))
+    val hasPlaybackEntry = isEpisodeLike && (onPlayNext != null || onOpenSources != null)
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // 第一行：纯净标题与控制栏（标题和进度在左侧充分展开，不被挤压遮挡；右侧仅放排序与网格切换）
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -127,21 +123,30 @@ fun EpisodesSectionHeader(
                     fontWeight = FontWeight.Bold,
                 )
                 if (totalEpisodes > 0) {
-                    Text(
-                        text = progressLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ) {
+                        Text(
+                            text = progressLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (onToggleSort != null) {
-                    IconButton(onClick = onToggleSort) {
+                    IconButton(
+                        onClick = onToggleSort,
+                        modifier = Modifier.size(36.dp),
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.SwapVert,
                             contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
@@ -151,101 +156,158 @@ fun EpisodesSectionHeader(
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
 
-                IconButton(onClick = onToggleView) {
+                IconButton(
+                    onClick = onToggleView,
+                    modifier = Modifier.size(36.dp),
+                ) {
                     Icon(
                         imageVector = if (isGridView) Icons.Filled.FormatListNumbered else Icons.Filled.GridView,
                         contentDescription = if (isGridView) "切换为列表视图" else "切换为网格视图",
                         tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
         }
 
-        if (hasActionChips) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+        // 第二行：续看与播放源通栏卡片
+        if (hasPlaybackEntry) {
+            Card(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(BgmShapes.medium)
+                        .clickable {
+                            onOpenSources?.invoke() ?: onPlayNext?.invoke() ?: Unit
+                        },
+                shape = BgmShapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
             ) {
-                if (nextUpEpisodeSort != null && onJumpToNextUp != null) {
-                    Surface(
-                        onClick = onJumpToNextUp,
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    // 左侧：续看分集与状态标签
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f, fill = false),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MyLocation,
-                                contentDescription = null,
-                                modifier = Modifier.size(13.dp),
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                    }
-                }
-                if (onPlayNext != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
-                    Surface(
-                        onClick = onPlayNext,
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
-                            Spacer(modifier = Modifier.width(3.dp))
+                        }
+
+                        if (nextUpEpisodeSort != null) {
                             Text(
-                                text = "播放下一集",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "续看第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = statusDoingContainerColor(),
+                            ) {
+                                Text(
+                                    text = "待看",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = onStatusDoingContainerColor(),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "播放来源与规则",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
-                }
-                if (onOpenSources != null && (subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL)) {
-                    Surface(
-                        onClick = onOpenSources,
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+
+                    // 右侧：播放源 / 播放下一集
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.CloudQueue,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "播放源",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
+                        if (onOpenSources != null) {
+                            Surface(
+                                onClick = onOpenSources,
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Tv,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                    Text(
+                                        text = "播放源",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
+                            }
+                        }
+
+                        if (onPlayNext != null) {
+                            Surface(
+                                onClick = onPlayNext,
+                                shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primary,
-                            )
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlayArrow,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                    Text(
+                                        text = "播放",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -333,6 +395,7 @@ fun EpisodeListItem(
     modifier: Modifier = Modifier,
     isNextToWatch: Boolean = false,
     onPlayClick: (() -> Unit)? = null,
+    onOpenSources: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
     val isFuture = remember(episode.airdate) { isEpisodeFutureAir(episode) }
@@ -651,7 +714,7 @@ fun EpisodeListItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // 仅当分集已放送时展示播放入口，避免对未播分集展示虚假播放按钮
-                if (!isFuture && onPlayClick != null) {
+                if (!isFuture && (onPlayClick != null || onOpenSources != null)) {
                     val epNum = if (episode.ep > 0f) episode.ep else episode.sort
                     val playDescription =
                         if (episode.type == 0) {
@@ -660,27 +723,30 @@ fun EpisodeListItem(
                             val group = EpisodeGroup.fromType(episode.type)
                             "播放${group.label} ${episode.sort.toInt()}"
                         }
-                    FilledTonalIconButton(
-                        onClick = onPlayClick,
-                        modifier = Modifier.size(36.dp),
-                        colors =
-                            if (isNextToWatch) {
-                                IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            } else {
-                                IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    contentColor = MaterialTheme.colorScheme.primary,
-                                )
-                            },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = playDescription,
-                            modifier = Modifier.size(18.dp),
-                        )
+                    val handleAction = onPlayClick ?: onOpenSources
+                    if (handleAction != null) {
+                        FilledTonalIconButton(
+                            onClick = handleAction,
+                            modifier = Modifier.size(36.dp),
+                            colors =
+                                if (isNextToWatch) {
+                                    IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                } else {
+                                    IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                    )
+                                },
+                        ) {
+                            Icon(
+                                imageVector = if (onPlayClick != null) Icons.Filled.PlayArrow else Icons.Filled.Tv,
+                                contentDescription = playDescription,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                 }
 

@@ -60,6 +60,7 @@ internal fun SubjectDetailOverlays(
     onSelectEpisodeForDetail: (Episode) -> Unit,
     onBuildPlayerRoute: (Episode) -> PlayerRoute,
     onPlayClick: ((PlayerRoute) -> Unit)?,
+    onOpenSourcesForEpisode: ((Episode) -> Unit)? = null,
     onBatchMarkRequest: (Episode) -> Unit,
     isLoggedIn: Boolean,
     haptic: HapticFeedback,
@@ -207,6 +208,12 @@ internal fun SubjectDetailOverlays(
             onPlayClick =
                 if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) && onPlayClick != null) {
                     { onPlayClick(onBuildPlayerRoute(episode)) }
+                } else {
+                    null
+                },
+            onOpenSources =
+                if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) && onOpenSourcesForEpisode != null) {
+                    { onOpenSourcesForEpisode(episode) }
                 } else {
                     null
                 },

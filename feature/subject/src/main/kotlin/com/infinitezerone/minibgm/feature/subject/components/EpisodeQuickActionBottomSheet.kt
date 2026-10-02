@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +57,7 @@ fun EpisodeQuickActionBottomSheet(
     onToggleWatched: () -> Unit,
     onSelectEpisodeForDetail: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
+    onOpenSources: (() -> Unit)? = null,
     onBatchMark: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -223,22 +225,40 @@ fun EpisodeQuickActionBottomSheet(
                     Text(text = if (isWatched) "取消打卡" else "标记已看")
                 }
 
-                // 2. 播放（若可用）
-                if (onPlayClick != null && !isFuture) {
-                    FilledTonalButton(
-                        onClick = {
-                            onPlayClick()
-                            onDismiss()
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "播放本集")
+                // 2. 播放 / 播放源（若可用）
+                if (!isFuture) {
+                    if (onPlayClick != null) {
+                        FilledTonalButton(
+                            onClick = {
+                                onPlayClick()
+                                onDismiss()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "播放本集")
+                        }
+                    } else if (onOpenSources != null) {
+                        FilledTonalButton(
+                            onClick = {
+                                onDismiss()
+                                onOpenSources()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Tv,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "播放源")
+                        }
                     }
                 }
             }

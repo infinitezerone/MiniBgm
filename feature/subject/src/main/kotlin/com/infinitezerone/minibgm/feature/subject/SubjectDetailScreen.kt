@@ -563,6 +563,10 @@ fun SubjectDetailScreen(
                                         selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
                                         showSourcesBottomSheet = true
                                     },
+                                    onOpenEpisodeSources = { episode ->
+                                        selectedEpisodeForSources = episode
+                                        showSourcesBottomSheet = true
+                                    },
                                     onRetryEpisodes = viewModel::retryLoadEpisodes,
                                     modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                                 )
@@ -629,6 +633,10 @@ fun SubjectDetailScreen(
         onSelectEpisodeForDetail = onSelectEpisodeForDetail,
         onBuildPlayerRoute = viewModel::buildPlayerRoute,
         onPlayClick = onPlayClick,
+        onOpenSourcesForEpisode = { episode ->
+            selectedEpisodeForSources = episode
+            showSourcesBottomSheet = true
+        },
         onBatchMarkRequest = { episode -> batchMarkTargetEpisode = episode },
         isLoggedIn = uiState.isLoggedIn,
         haptic = haptic,

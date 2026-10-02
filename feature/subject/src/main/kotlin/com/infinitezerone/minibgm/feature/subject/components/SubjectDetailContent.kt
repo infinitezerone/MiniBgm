@@ -117,6 +117,7 @@ internal fun SubjectDetailContent(
     onPlayEpisode: ((Episode) -> Unit)? = null,
     onPlayNextEpisode: (() -> Unit)? = null,
     onOpenSources: (() -> Unit)? = null,
+    onOpenEpisodeSources: ((Episode) -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
     onEpisodeClickForQuickAction: ((Episode) -> Unit)? = null,
     onRetryEpisodes: () -> Unit = {},
@@ -418,6 +419,14 @@ internal fun SubjectDetailContent(
                                             onPlayEpisode != null
                                         ) {
                                             { onPlayEpisode(episode) }
+                                        } else {
+                                            null
+                                        },
+                                    onOpenSources =
+                                        if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) &&
+                                            onOpenEpisodeSources != null
+                                        ) {
+                                            { onOpenEpisodeSources(episode) }
                                         } else {
                                             null
                                         },
