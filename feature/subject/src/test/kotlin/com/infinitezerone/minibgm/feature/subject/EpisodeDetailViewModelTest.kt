@@ -330,6 +330,90 @@ class EpisodeDetailViewModelTest {
         }
 
     @Test
+    fun toggleCommentReaction_optimisticallyUpdatesCommentWithoutRefresh() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+                )
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = authRepository,
+                )
+            advanceUntilIdle()
+            val callsAfterInit = communityRepository.getEpisodeCommentsCallCount
+
+            val reaction =
+                CommentReaction(value = 141, users = listOf(CommentReactionUser(id = 1L, username = "u1", nickname = "u1")))
+            viewModel.toggleCommentReaction(sampleComment, reaction)
+            advanceUntilIdle()
+
+            val updated =
+                viewModel.uiState.value.comments
+                    .single { it.id == sampleComment.id }
+            assertEquals(1, updated.reactions.size)
+            assertEquals(141, updated.reactions.single().value)
+            assertTrue(
+                updated.reactions
+                    .single()
+                    .users
+                    .any { it.id == loggedInUserId },
+            )
+            // 成功后不整流刷新：本地口径即真值
+            assertEquals(callsAfterInit, communityRepository.getEpisodeCommentsCallCount)
+        }
+
+    @Test
+    fun toggleCommentReaction_optimisticAdd_rollsBackOnError() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    setEpisodeComments(episodeId, listOf(sampleComment))
+                    setLikeResult =
+                        com.infinitezerone.minibgm.core.common.AppResult
+                            .Error(IllegalStateException("boom"), "网络异常")
+                }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+                )
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = authRepository,
+                )
+            advanceUntilIdle()
+
+            val reaction =
+                CommentReaction(value = 141, users = listOf(CommentReactionUser(id = 1L, username = "u1", nickname = "u1")))
+            viewModel.toggleCommentReaction(sampleComment, reaction)
+            advanceUntilIdle()
+
+            val reverted =
+                viewModel.uiState.value.comments
+                    .single { it.id == sampleComment.id }
+            assertTrue(reverted.reactions.isEmpty())
+            val event = viewModel.events.first()
+            assertTrue(event is EpisodeDetailUiEvent.ShowSnackbar && event.message == "网络异常")
+        }
+
+    @Test
     fun toggleCommentReaction_notLoggedIn_emitsLoginPromptWithoutRepoCall() =
         runTest {
             val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }

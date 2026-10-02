@@ -249,4 +249,99 @@ class TopicDetailViewModelTest {
 
             assertEquals(CommunityLikeTarget.GROUP_POST, communityRepository.setLikeCalls.single().first)
         }
+
+    @Test
+    fun toggleReaction_optimisticallyUpdatesFloorWithoutRefresh() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+            val callsAfterInit = communityRepository.getTopicDetailCallCount
+
+            val reaction =
+                CommentReaction(
+                    value = 141,
+                    users = listOf(CommentReactionUser(id = 489240L, username = "other", nickname = "别人")),
+                )
+            viewModel.toggleReaction(sampleTopicDetail.floorReplies.first(), reaction)
+            advanceUntilIdle()
+
+            val floor =
+                viewModel.uiState.value.topicDetail!!
+                    .floorReplies
+                    .single { it.id == 1002L }
+            assertEquals(1, floor.reactions.size)
+            assertEquals(141, floor.reactions.single().value)
+            assertTrue(
+                floor.reactions
+                    .single()
+                    .users
+                    .any { it.id == loggedInUserId },
+            )
+            // 兄弟楼层与楼中楼不受影响；成功后不整流刷新
+            assertTrue(
+                viewModel.uiState.value.topicDetail!!
+                    .floorReplies
+                    .last()
+                    .replies
+                    .single()
+                    .reactions
+                    .isEmpty(),
+            )
+            assertEquals(callsAfterInit, communityRepository.getTopicDetailCallCount)
+        }
+
+    @Test
+    fun toggleReaction_nestedReply_updatesRecursively() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+
+            val nestedReply =
+                sampleTopicDetail.floorReplies
+                    .last()
+                    .replies
+                    .single()
+            viewModel.toggleReaction(nestedReply, CommentReaction(value = 6, users = emptyList()))
+            advanceUntilIdle()
+
+            val updatedNested =
+                viewModel.uiState.value.topicDetail!!
+                    .floorReplies
+                    .last()
+                    .replies
+                    .single { it.id == nestedReply.id }
+            assertEquals(1, updatedNested.reactions.size)
+            assertEquals(6, updatedNested.reactions.single().value)
+            assertTrue(
+                updatedNested.reactions
+                    .single()
+                    .users
+                    .any { it.id == loggedInUserId },
+            )
+        }
+
+    @Test
+    fun toggleReaction_optimisticAdd_rollsBackOnError() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    setTopicDetail(sampleTopicId, sampleTopicDetail)
+                    setLikeResult = AppResult.Error(IllegalStateException("boom"), "网络异常")
+                }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+
+            viewModel.toggleReaction(sampleTopicDetail.floorReplies.first(), CommentReaction(value = 141))
+            advanceUntilIdle()
+
+            val floor =
+                viewModel.uiState.value.topicDetail!!
+                    .floorReplies
+                    .single { it.id == 1002L }
+            assertTrue(floor.reactions.isEmpty())
+            val event = viewModel.events.first()
+            assertTrue(event is TopicDetailUiEvent.ShowSnackbar && event.message == "网络异常")
+        }
 }

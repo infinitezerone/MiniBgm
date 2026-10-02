@@ -96,7 +96,7 @@ class TopicDetailViewModel(
     /**
      * 切换自己对某楼层某条表情表态的状态：
      * 未登录提示登录；已在该类型表态过 → 取消；否则以该表情类型加入。
-     * 成功后刷新楼层以同步反应计数。
+     * 本地乐观回显（经状态流声明式下发，含楼中楼递归），提交失败按原楼层树回滚；成功不整流刷新。
      */
     fun toggleReaction(
         reply: TopicReply,
@@ -109,6 +109,16 @@ class TopicDetailViewModel(
         }
         val target = if (type == "group") CommunityLikeTarget.GROUP_POST else CommunityLikeTarget.SUBJECT_POST
         val reacted = reaction.users.any { it.id == userId }
+        val previousDetail = _uiState.value.topicDetail
+        _uiState.update { state ->
+            val detail = state.topicDetail ?: return@update state
+            state.copy(
+                topicDetail =
+                    detail.copy(
+                        replies = adjustTopicReplyReactions(detail.replies, reply.id, reaction.value, userId, removing = reacted),
+                    ),
+            )
+        }
         viewModelScope.launch {
             val result =
                 if (reacted) {
@@ -119,9 +129,11 @@ class TopicDetailViewModel(
             when (result) {
                 is AppResult.Success -> {
                     _events.trySend(TopicDetailUiEvent.ShowSnackbar(if (reacted) "已取消表态" else "已表态"))
-                    refresh()
                 }
-                is AppResult.Error -> _events.trySend(TopicDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                is AppResult.Error -> {
+                    _uiState.update { it.copy(topicDetail = previousDetail) }
+                    _events.trySend(TopicDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                }
                 is AppResult.Loading -> Unit
             }
         }

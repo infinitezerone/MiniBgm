@@ -393,7 +393,8 @@ class EpisodeDetailViewModel(
 
     /**
      * 切换自己对某条吐槽某条表情表态的状态：
-     * 未登录提示登录；已在该类型表态过 → 取消；否则以该表情类型加入。成功后刷新吐槽流。
+     * 未登录提示登录；已在该类型表态过 → 取消；否则以该表情类型加入。
+     * 本地乐观回显（经状态流声明式下发），提交失败按原列表回滚；成功不整流刷新。
      */
     fun toggleCommentReaction(
         comment: EpisodeComment,
@@ -405,6 +406,19 @@ class EpisodeDetailViewModel(
             return
         }
         val reacted = reaction.users.any { it.id == userId }
+        val previousComments = _uiState.value.comments
+        _uiState.update { state ->
+            state.copy(
+                comments =
+                    state.comments.map { c ->
+                        if (c.id == comment.id) {
+                            c.copy(reactions = adjustReactions(c.reactions, reaction.value, userId, removing = reacted))
+                        } else {
+                            c
+                        }
+                    },
+            )
+        }
         viewModelScope.launch {
             val result =
                 if (reacted) {
@@ -415,9 +429,11 @@ class EpisodeDetailViewModel(
             when (result) {
                 is AppResult.Success -> {
                     _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(if (reacted) "已取消表态" else "已表态"))
-                    refresh()
                 }
-                is AppResult.Error -> _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                is AppResult.Error -> {
+                    _uiState.update { it.copy(comments = previousComments) }
+                    _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                }
                 is AppResult.Loading -> Unit
             }
         }
