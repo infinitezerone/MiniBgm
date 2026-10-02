@@ -81,7 +81,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-release-
 
       - name: Install cargo-ndk
-        run: cargo install cargo-ndk --locked
+        run: which cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --locked
 
       - name: Install Android NDK
         run: |
