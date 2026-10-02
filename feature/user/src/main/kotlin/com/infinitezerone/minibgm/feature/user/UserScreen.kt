@@ -283,7 +283,12 @@ fun UserScreenContent(
                             )
                         }
 
-                        // 2. 吸顶分类 Tab（带数字标签，一触即达且吸顶）：在看 / 想看 / 看过 / 搁置 / 抛弃
+                        // 2. 通栏数字带：在看集数 / 本月打卡（本地聚合，Tab 计数之外的第二视角）
+                        item(key = "tracking_stats_band") {
+                            TrackingStatsBand(footprint = uiState.trackingFootprint)
+                        }
+
+                        // 3. 吸顶分类 Tab（带数字标签，一触即达且吸顶）：在看 / 想看 / 看过 / 搁置 / 抛弃
                         stickyHeader(key = "collection_type_tabs") {
                             CollectionTypeTabs(
                                 selectedType = collectionsState.selectedType,
@@ -292,7 +297,7 @@ fun UserScreenContent(
                             )
                         }
 
-                        // 3. 条目类别与连载/囤番多维状态筛选
+                        // 4. 条目类别与连载/囤番多维状态筛选
                         if (filterIsLoading || hasFilterableList) {
                             item(key = "subject_filter") {
                                 SubjectFilterRow(
@@ -313,7 +318,7 @@ fun UserScreenContent(
                             }
                         }
 
-                        // 4. 追番收藏列表（直接呈现，首屏即可见）
+                        // 5. 追番收藏列表（直接呈现，首屏即可见）
                         collectionSection(
                             state = collectionsState,
                             onSubjectClick = onSubjectClick,
