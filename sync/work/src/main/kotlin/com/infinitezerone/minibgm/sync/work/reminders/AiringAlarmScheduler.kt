@@ -200,6 +200,7 @@ class AiringAlarmScheduler(
     companion object {
         const val ACTION_AIRING_PRE_AIR = "com.infinitezerone.minibgm.sync.work.action.AIRING_PRE_AIR"
         const val ACTION_AIRING_DAILY_SUMMARY = "com.infinitezerone.minibgm.sync.work.action.AIRING_DAILY_SUMMARY"
+        const val ACTION_TEST_NOTIFICATION = "com.infinitezerone.minibgm.sync.work.action.TEST_NOTIFICATION"
 
         private const val REQUEST_CODE_PRE_AIR = 47101
         private const val REQUEST_CODE_DAILY_SUMMARY = 47102

@@ -108,6 +108,7 @@ internal fun SettingsSection(
     onTogglePipEnabled: (Boolean) -> Unit = {},
     showRestrictedContent: Boolean = false,
     onToggleShowRestrictedContent: (Boolean) -> Unit = {},
+    onTestNotification: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -397,6 +398,20 @@ internal fun SettingsSection(
                             title = "系统通知管理",
                             subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
                             onClick = onOpenSystemNotificationSettings,
+                        )
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 18.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        )
+
+                        // 4. 测试横幅与完结通知效果
+                        SettingsItemRow(
+                            icon = Icons.Filled.NotificationsActive,
+                            iconTint = MaterialTheme.colorScheme.secondary,
+                            title = "测试横幅提醒",
+                            subtitle = "点击立即模拟一条「全剧完结」通知横幅效果",
+                            onClick = onTestNotification,
                         )
                     }
                 }

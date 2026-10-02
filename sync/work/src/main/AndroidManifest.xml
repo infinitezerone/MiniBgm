@@ -7,7 +7,11 @@
     <application>
         <receiver
             android:name=".reminders.AiringAlarmReceiver"
-            android:exported="false" />
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.infinitezerone.minibgm.sync.work.action.TEST_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".reminders.AiringBootReceiver"

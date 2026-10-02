@@ -49,12 +49,34 @@ class AiringAlarmReceiver :
                 when (action) {
                     AiringAlarmScheduler.ACTION_AIRING_PRE_AIR -> handlePreAir(context)
                     AiringAlarmScheduler.ACTION_AIRING_DAILY_SUMMARY -> handleDailySummary(context)
+                    AiringAlarmScheduler.ACTION_TEST_NOTIFICATION -> handleTestNotification(context)
                 }
             } catch (e: Throwable) {
                 log.e(e) { "[ALARM_RECEIVER:ERROR] failed processing alarm action: $action" }
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    private fun handleTestNotification(context: Context) {
+        val notifier = AiringReminderNotifier(context)
+        val testItem =
+            com.infinitezerone.minibgm.core.model.UpcomingAiring(
+                subjectId = 398061L,
+                title = "葬送のフリーレン",
+                titleCn = "葬送的芙莉莲",
+                episode = 28,
+                airAtUtc = "",
+                kind = "anime",
+                totalEpisodes = 28,
+            )
+        runCatching {
+            notifier.notifyImminent(listOf(testItem))
+        }.onSuccess {
+            log.i { "[ALARM_RECEIVER:TEST:SUCCESS] sent test notification for 《${testItem.displayName}》" }
+        }.onFailure { e ->
+            log.e(e) { "[ALARM_RECEIVER:TEST:FAILED] failed to send test notification" }
         }
     }
 
