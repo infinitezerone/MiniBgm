@@ -101,9 +101,11 @@ class EchNativePlugin : Plugin<Project> {
 
         // 只挂到真正消费 jniLibs 的打包任务上：preBuild 是 AGP 打包链的共同祖先，
         // 但 lint / 单元测试不应被拖进 Rust 工具链依赖，故用后缀匹配而不是 preBuild 兜底。
-        target.tasks
-            .matching { it.name.endsWith("JniLibFolders") || it.name.endsWith("NativeLibs") }
-            .configureEach { dependsOn(buildEchNative) }
+        target.tasks.configureEach {
+            if (name.endsWith("JniLibFolders") || name.endsWith("NativeLibs")) {
+                dependsOn(buildEchNative)
+            }
+        }
     }
 }
 

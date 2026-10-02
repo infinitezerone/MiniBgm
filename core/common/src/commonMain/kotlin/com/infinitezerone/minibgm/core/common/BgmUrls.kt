@@ -24,9 +24,12 @@ fun isBgmDomain(hostOrUrl: String): Boolean {
             hostOrUrl.substringBefore('/').substringBefore(':')
         }.trim().lowercase()
 
-    return host == "bgm.tv" || host.endsWith(".bgm.tv") ||
-        host == "bangumi.tv" || host.endsWith(".bangumi.tv") ||
-        host == "chii.in" || host.endsWith(".chii.in")
+    return host == "bgm.tv" ||
+        host.endsWith(".bgm.tv") ||
+        host == "bangumi.tv" ||
+        host.endsWith(".bangumi.tv") ||
+        host == "chii.in" ||
+        host.endsWith(".chii.in")
 }
 
 /** 属性化访问糖 */

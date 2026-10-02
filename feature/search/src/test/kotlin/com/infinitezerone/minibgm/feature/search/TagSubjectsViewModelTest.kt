@@ -11,7 +11,6 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -152,15 +151,7 @@ class TagSubjectsViewModelTest {
             val releaseLoadMore = CompletableDeferred<Unit>()
             var lastRequest: SearchSubjectsRequest? = null
             val searchRepo =
-                object : SearchRepository {
-                    override suspend fun searchSubjects(
-                        query: String,
-                        type: Int,
-                        sort: String?,
-                        limit: Int,
-                        offset: Int,
-                    ) = fake.searchSubjects(query, type, sort, limit, offset)
-
+                object : SearchRepository by fake {
                     override suspend fun searchSubjectsAdvanced(
                         request: SearchSubjectsRequest,
                         limit: Int,
@@ -185,14 +176,6 @@ class TagSubjectsViewModelTest {
                             )
                         }
                     }
-
-                    override fun getSearchHistory(): Flow<List<String>> = fake.getSearchHistory()
-
-                    override suspend fun addSearchHistory(query: String) = fake.addSearchHistory(query)
-
-                    override suspend fun removeSearchHistory(query: String) = fake.removeSearchHistory(query)
-
-                    override suspend fun clearSearchHistory() = fake.clearSearchHistory()
                 }
 
             val viewModel = createViewModel(searchRepo = searchRepo)

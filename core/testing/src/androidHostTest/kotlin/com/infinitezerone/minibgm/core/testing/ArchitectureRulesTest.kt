@@ -24,6 +24,8 @@ import kotlin.test.fail
  * 10. AI 能力边界：只有 :feature:assistant 可依赖 :core:ai，其他页面须走 AssistantRoute 预填交接
  * 11. 排期单一真源：名单与播出时间只能来自 AniList 周排期（bangumi-data 仅作按需映射/平台表），
  *     不得回退到官方日历、bangumi-data 固定窗口或算术预测事件
+ *
+ * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
 class ArchitectureRulesTest {
     private val projectRoot: File by lazy {
@@ -40,14 +42,10 @@ class ArchitectureRulesTest {
         assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
 
         val violations = mutableListOf<String>()
-
-        // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）。
-        // 依赖当前是 implementation 封装的，这类 import 应当直接编译不过；
-        // 保留本检查是为了在 :core:data 未来意外改用 api 暴露底层库时第一时间报警
         val forbiddenPackagePrefixes =
             listOf(
-                "import com.infinitezerone.minibgm.core.network",
-                "import com.infinitezerone.minibgm.core.database",
+                "com.infinitezerone.minibgm.core.network",
+                "com.infinitezerone.minibgm.core.database",
             )
 
         featureDir
@@ -55,11 +53,11 @@ class ArchitectureRulesTest {
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    if (forbiddenPackagePrefixes.any { trimmed.startsWith(it) }) {
-                        violations.add("$relPath:${index + 1} 违规直接引入底层库或协议 -> $trimmed")
+                scanner.imports.forEach { imp ->
+                    if (forbiddenPackagePrefixes.any { imp.path.startsWith(it) }) {
+                        violations.add("$relPath:${imp.lineNumber} 违规直接引入底层库或协议 -> import ${imp.path}")
                     }
                 }
             }
@@ -78,18 +76,18 @@ class ArchitectureRulesTest {
         assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
 
         val violations = mutableListOf<String>()
+        val forbiddenPrefix = "com.infinitezerone.minibgm.core.datastore"
 
-        // 源码 import 检查（build 脚本依赖声明由配置期 ModuleBoundaryConventionPlugin 断言）
         featureDir
             .walkTopDown()
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    if (trimmed.startsWith("import com.infinitezerone.minibgm.core.datastore")) {
-                        violations.add("$relPath:${index + 1} 违规直接引入 datastore -> $trimmed")
+                scanner.imports.forEach { imp ->
+                    if (imp.path.startsWith(forbiddenPrefix)) {
+                        violations.add("$relPath:${imp.lineNumber} 违规直接引入 datastore -> import ${imp.path}")
                     }
                 }
             }
@@ -110,9 +108,9 @@ class ArchitectureRulesTest {
         val violations = mutableListOf<String>()
         val forbiddenPrefixes =
             listOf(
-                "import android.",
-                "import androidx.",
-                "import com.google.android.",
+                "android.",
+                "androidx.",
+                "com.google.android.",
             )
 
         modelDir
@@ -121,11 +119,11 @@ class ArchitectureRulesTest {
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    if (forbiddenPrefixes.any { trimmed.startsWith(it) }) {
-                        violations.add("$relPath:${index + 1} 包含平台/UI依赖 -> $trimmed")
+                scanner.imports.forEach { imp ->
+                    if (forbiddenPrefixes.any { imp.path.startsWith(it) }) {
+                        violations.add("$relPath:${imp.lineNumber} 包含平台/UI依赖 -> import ${imp.path}")
                     }
                 }
             }
@@ -150,16 +148,10 @@ class ArchitectureRulesTest {
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.name.endsWith("ViewModel.kt") }
             .forEach { vmFile ->
+                val scanner = KotlinSourceScanner.fromFile(vmFile)
                 val relPath = vmFile.relativeTo(projectRoot).path
-                vmFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    val isProperty = trimmed.startsWith("val ") || trimmed.startsWith("var ")
-                    val isPublic = !trimmed.startsWith("private ")
-                    if (isProperty && isPublic) {
-                        if (trimmed.contains("MutableStateFlow") || trimmed.contains(": MutableStateFlow")) {
-                            violations.add("$relPath:${index + 1} 暴露了可变状态流 -> $trimmed")
-                        }
-                    }
+                scanner.findExposedMutableStateFlows().forEach { match ->
+                    violations.add("$relPath:${match.lineNumber} 暴露了可变状态流 -> ${match.lineContent}")
                 }
             }
 
@@ -201,11 +193,10 @@ class ArchitectureRulesTest {
         assertTrue(featureDir.isDirectory, "feature 目录未找到")
 
         val violations = mutableListOf<String>()
-        // 即便 :core:data 以 api 暴露传递依赖，UI 层也不得直接触碰传输/存储框架
         val forbiddenImportPrefixes =
             listOf(
-                "import io.ktor",
-                "import androidx.room",
+                "io.ktor",
+                "androidx.room",
             )
 
         featureDir
@@ -213,11 +204,11 @@ class ArchitectureRulesTest {
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    if (forbiddenImportPrefixes.any { trimmed.startsWith(it) }) {
-                        violations.add("$relPath:${index + 1} 违规引入传输/存储框架 -> $trimmed")
+                scanner.imports.forEach { imp ->
+                    if (forbiddenImportPrefixes.any { imp.path.startsWith(it) }) {
+                        violations.add("$relPath:${imp.lineNumber} 违规引入传输/存储框架 -> import ${imp.path}")
                     }
                 }
             }
@@ -236,18 +227,17 @@ class ArchitectureRulesTest {
         assertTrue(featureDir.isDirectory, "feature 目录未找到")
 
         val violations = mutableListOf<String>()
-        val forbiddenColorPattern = Regex("""Color\(0x""")
+        val forbiddenColorPattern = Regex("""\bColor\(0x[0-9a-fA-F]+""")
 
         featureDir
             .walkTopDown()
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    if (forbiddenColorPattern.containsMatchIn(line)) {
-                        violations.add("$relPath:${index + 1} 硬编码颜色 -> ${line.trim()}")
-                    }
+                scanner.findMatches(forbiddenColorPattern).forEach { match ->
+                    violations.add("$relPath:${match.lineNumber} 硬编码颜色 -> ${match.lineContent}")
                 }
             }
 
@@ -268,7 +258,6 @@ class ArchitectureRulesTest {
         val forbiddenTokens =
             listOf(
                 "HttpURLConnection" to "手写 HttpURLConnection 裸网络连接",
-                "import java.net." to "直接引入 java.net.* 底层网络传输类",
                 "java.net.URL" to "直接使用 java.net.URL",
                 "java.net.Socket" to "直接使用 java.net.Socket",
                 ".cacheDir" to "私自操作 context.cacheDir 磁盘缓存",
@@ -281,14 +270,20 @@ class ArchitectureRulesTest {
             .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
             .filter { it.isFile && it.extension == "kt" }
             .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
                 val relPath = sourceFile.relativeTo(projectRoot).path
-                sourceFile.readLines().forEachIndexed { index, line ->
-                    val trimmed = line.trim()
-                    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return@forEachIndexed
-                    for ((token, reason) in forbiddenTokens) {
-                        if (line.contains(token)) {
-                            violations.add("$relPath:${index + 1} $reason -> $trimmed")
-                        }
+
+                // import 级别检查
+                scanner.imports.forEach { imp ->
+                    if (imp.path.startsWith("java.net.")) {
+                        violations.add("$relPath:${imp.lineNumber} 直接引入 java.net.* 底层网络传输类 -> import ${imp.path}")
+                    }
+                }
+
+                // 代码 Token 级别检查（自动免疫注释与字符串）
+                for ((token, reason) in forbiddenTokens) {
+                    scanner.containsToken(token).forEach { match ->
+                        violations.add("$relPath:${match.lineNumber} $reason -> ${match.lineContent}")
                     }
                 }
             }
@@ -332,17 +327,12 @@ class ArchitectureRulesTest {
                 }.forEach { sourceFile ->
                     val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
                     if (relPath in whitelist) return@forEach
-                    sourceFile.readLines().forEachIndexed { index, line ->
-                        val trimmed = line.trim()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
-                            return@forEachIndexed
-                        }
-                        if (pattern.containsMatchIn(trimmed)) {
-                            violations.add(
-                                "$relPath:${index + 1} 手写 Json 实例 -> $trimmed（请引用作用域内的共享实例，" +
-                                    "或把本文件加入本测试的白名单并说明理由）",
-                            )
-                        }
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    scanner.findMatches(pattern).forEach { match ->
+                        violations.add(
+                            "$relPath:${match.lineNumber} 手写 Json 实例 -> ${match.lineContent}（请引用作用域内的共享实例，" +
+                                "或把本文件加入本测试的白名单并说明理由）",
+                        )
                     }
                 }
         }
@@ -367,10 +357,9 @@ class ArchitectureRulesTest {
                 "否则编译不过，杜绝静默落入 push 兜底分支造成返回栈堆叠",
         )
 
-        // 路由式声明（行尾 `: NavKey` 的 class/object）只允许出现在 BgmRoutes.kt 的 sealed 接口上；
-        // 其他文件直接实现 NavKey 会绕过编译期穷尽检查
-        val declarationTail = Regex("""^\s*\)?\s*:\s*NavKey\s*$""")
-        val declarationInline = Regex("""^(data\s+)?(object|class)\s+\w+.*:\s*NavKey\s*$""")
+        // 路由式声明（实现 NavKey 的 class/object）只允许出现在 BgmRoutes.kt
+        // 脱敏后匹配，避免注释或字符串中的说明误伤，同时严格区分构造函数参数类型与类继承超类
+        val navKeyPattern = Regex("""\b(class|object)\s+\w+(?:\s*\([^)]*\))?\s*:\s*(?:[^,{}\n]*,\s*)*NavKey\b""")
         val violations = mutableListOf<String>()
         listOf("core", "feature", "app", "sync").forEach { dirName ->
             val dir = File(projectRoot, dirName)
@@ -384,15 +373,10 @@ class ArchitectureRulesTest {
                         it != routesFile &&
                         !it.path.replace(File.separatorChar, '/').contains("/build/")
                 }.forEach { sourceFile ->
-                    val relPath = sourceFile.relativeTo(projectRoot).path
-                    sourceFile.readLines().forEachIndexed { index, line ->
-                        val trimmed = line.trim()
-                        if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) {
-                            return@forEachIndexed
-                        }
-                        if (declarationTail.matches(trimmed) || declarationInline.matches(trimmed)) {
-                            violations.add("$relPath:${index + 1} 直接实现 NavKey（路由必须声明在 BgmRoutes.kt 并实现 BgmRoute）-> $trimmed")
-                        }
+                    val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    scanner.findMatches(navKeyPattern).forEach { match ->
+                        violations.add("$relPath:${match.lineNumber} 直接实现 NavKey（路由必须声明在 BgmRoutes.kt 并实现 BgmRoute）-> ${match.lineContent}")
                     }
                 }
         }
@@ -422,10 +406,11 @@ class ArchitectureRulesTest {
                         .replace(File.separatorChar, '/')
                         .let { !it.contains("/build/") && !it.startsWith("feature/assistant/") }
             }.forEach { file ->
-                val relPath = file.relativeTo(projectRoot).path
-                file.readLines().forEachIndexed { index, line ->
-                    if (line.contains("import com.infinitezerone.minibgm.core.ai.")) {
-                        violations.add("$relPath:${index + 1} 直接调用智能体 -> $line")
+                val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                val scanner = KotlinSourceScanner.fromFile(file)
+                scanner.imports.forEach { imp ->
+                    if (imp.path.startsWith("com.infinitezerone.minibgm.core.ai.")) {
+                        violations.add("$relPath:${imp.lineNumber} 直接调用智能体 -> import ${imp.path}")
                     }
                 }
             }
@@ -459,13 +444,10 @@ class ArchitectureRulesTest {
                 "AirEventKind.PREDICTED" to "禁止生成算术预测事件（PREDICTED）",
             )
         val violations = mutableListOf<String>()
-        repoFile.readLines().forEachIndexed { index, line ->
-            val trimmed = line.trim()
-            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
-            forbidden.forEach { (needle, reason) ->
-                if (trimmed.contains(needle)) {
-                    violations.add("${repoFile.name}:${index + 1} $reason -> $trimmed")
-                }
+        val scanner = KotlinSourceScanner.fromFile(repoFile)
+        for ((needle, reason) in forbidden) {
+            scanner.containsToken(needle).forEach { match ->
+                violations.add("${repoFile.name}:${match.lineNumber} $reason -> ${match.lineContent}")
             }
         }
 

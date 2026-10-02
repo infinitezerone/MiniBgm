@@ -305,6 +305,9 @@ impl EchHttpClient {
         }
     }
 
+    /// 经由既有 h2 连接池条目发起一次发送尝试；参数与单次尝试的决策上下文一一对应，
+    /// 收拢成结构体只是把同一份契约换个位置，故显式放行 clippy 的参数个数检查。
+    #[allow(clippy::too_many_arguments)]
     async fn try_send_via_pooled_entry(
         entry: &mut Http2ConnectionEntry,
         method: &str,
@@ -1284,29 +1287,25 @@ mod tests {
         assert_ne!(key_ech, key_std);
         assert_ne!(key_ech, key_other_port);
 
-        let client = EchHttpClient::new().unwrap();
-        {
-            let mut pool = client.h2_pool.write().unwrap();
-            // 验证 retain 逻辑按 host 清理
-            let mut dummy_map = HashMap::new();
-            dummy_map.insert(key_ech.clone(), ());
-            dummy_map.insert(key_std.clone(), ());
-            dummy_map.insert(
-                PoolKey {
-                    host: "example.com".to_owned(),
-                    port: 443,
-                    is_ech: true,
-                },
-                (),
-            );
-            dummy_map.retain(|k, _| k.host != "api.bgm.tv");
-            assert_eq!(dummy_map.len(), 1);
-            assert!(dummy_map.contains_key(&PoolKey {
+        // 验证 retain 逻辑按 host 清理（与连接池清理同构）：这里只测键的清理语义，
+        // 真实池条目构造依赖完整连接，故在本地 HashMap 上复现 retain 谓词
+        let mut dummy_map = HashMap::new();
+        dummy_map.insert(key_ech.clone(), ());
+        dummy_map.insert(key_std.clone(), ());
+        dummy_map.insert(
+            PoolKey {
                 host: "example.com".to_owned(),
                 port: 443,
                 is_ech: true,
-            }));
-            let _ = pool;
-        }
+            },
+            (),
+        );
+        dummy_map.retain(|k, _| k.host != "api.bgm.tv");
+        assert_eq!(dummy_map.len(), 1);
+        assert!(dummy_map.contains_key(&PoolKey {
+            host: "example.com".to_owned(),
+            port: 443,
+            is_ech: true,
+        }));
     }
 }
