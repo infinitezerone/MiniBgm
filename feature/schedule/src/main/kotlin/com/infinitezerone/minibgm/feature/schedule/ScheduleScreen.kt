@@ -1,9 +1,15 @@
 package com.infinitezerone.minibgm.feature.schedule
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,26 +22,32 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,6 +112,14 @@ fun ScheduleScreen(
         )
 
     val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
+
+    // 「回到今天」：仅在滑离今天页时出现，一键同时回到今天页与列表顶部
+    val showBackToToday by remember {
+        derivedStateOf { pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX }
+    }
+
+    // 登录引导横幅：核心循环（打卡/收藏/个人页）依赖登录，未登录时给一次轻量主动引导
+    var loginBannerDismissed by rememberSaveable { mutableStateOf(false) }
 
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     LaunchedEffect(scrollToTop) {
@@ -177,6 +197,23 @@ fun ScheduleScreen(
                     }
                 }
 
+            // 登录引导横幅：核心循环（打卡/收藏/个人页）依赖登录，未登录时给一次轻量主动引导
+            AnimatedVisibility(visible = !uiState.isLoggedIn && !loginBannerDismissed) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ScheduleLoginNudgeBanner(
+                        onLogin = {
+                            loginBannerDismissed = true
+                            viewModel.promptLogin()
+                        },
+                        onDismiss = { loginBannerDismissed = true },
+                        modifier = Modifier.widthIn(max = 840.dp),
+                    )
+                }
+            }
+
             // 顶部星期胶囊导航（指示器 + 快速点击锚点）
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -221,67 +258,92 @@ fun ScheduleScreen(
                 )
             }
 
-            // 主体：左右手势丝滑翻页的 HorizontalPager
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
-                onRefresh = { viewModel.refresh(force = true) },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                when {
-                    !uiState.hasSchedules && uiState.isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
-                            ScheduleTimelineSkeleton(
-                                modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
-                            )
+            // 主体：左右手势丝滑翻页的 HorizontalPager（叠加「回到今天」浮钮）
+            Box(modifier = Modifier.fillMaxSize()) {
+                PullToRefreshBox(
+                    isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
+                    onRefresh = { viewModel.refresh(force = true) },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    when {
+                        !uiState.hasSchedules && uiState.isLoading -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.TopCenter,
+                            ) {
+                                ScheduleTimelineSkeleton(
+                                    modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+                                )
+                            }
+                        }
+
+                        !uiState.hasSchedules && uiState.error != null -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                ScheduleErrorState(
+                                    errorMessage = uiState.error ?: "网络连接异常",
+                                    onRetry = viewModel::refresh,
+                                    modifier = Modifier.widthIn(max = 840.dp),
+                                )
+                            }
+                        }
+
+                        else -> {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize(),
+                                key = { page -> page },
+                            ) { page ->
+                                val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
+                                val timeGrouped =
+                                    remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                        uiState.getTimeGroupedSchedulesForPage(page)
+                                    }
+                                val allDaySchedules =
+                                    remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                        uiState.getAllDaySchedulesForPage(page)
+                                    }
+                                val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
+
+                                DayScheduleList(
+                                    pageIndex = page,
+                                    isTodayPage = isTodayPage,
+                                    timeGrouped = timeGrouped,
+                                    allDaySchedules = allDaySchedules,
+                                    uiState = uiState,
+                                    onSubjectClick = onSubjectClick,
+                                    onShowSources = { selectedScheduleForSources = it },
+                                    onSwitchToAll = viewModel::toggleOnlyWatching,
+                                    listState = listState,
+                                )
+                            }
                         }
                     }
+                }
 
-                    !uiState.hasSchedules && uiState.error != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            ScheduleErrorState(
-                                errorMessage = uiState.error ?: "网络连接异常",
-                                onRetry = viewModel::refresh,
-                                modifier = Modifier.widthIn(max = 840.dp),
-                            )
-                        }
-                    }
-
-                    else -> {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier.fillMaxSize(),
-                            key = { page -> page },
-                        ) { page ->
-                            val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
-                            val timeGrouped =
-                                remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                    uiState.getTimeGroupedSchedulesForPage(page)
-                                }
-                            val allDaySchedules =
-                                remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                    uiState.getAllDaySchedulesForPage(page)
-                                }
-                            val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
-
-                            DayScheduleList(
-                                pageIndex = page,
-                                isTodayPage = isTodayPage,
-                                timeGrouped = timeGrouped,
-                                allDaySchedules = allDaySchedules,
-                                uiState = uiState,
-                                onSubjectClick = onSubjectClick,
-                                onShowSources = { selectedScheduleForSources = it },
-                                onSwitchToAll = viewModel::toggleOnlyWatching,
-                                listState = listState,
-                            )
-                        }
-                    }
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showBackToToday,
+                    enter = fadeIn() + slideInVertically { it / 2 },
+                    exit = fadeOut() + slideOutVertically { it / 2 },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp),
+                ) {
+                    ExtendedFloatingActionButton(
+                        text = { Text(text = "回到今天") },
+                        icon = { Icon(imageVector = Icons.Filled.Today, contentDescription = null) },
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
+                                pageListStates
+                                    .getOrNull(ScheduleViewModel.TODAY_PAGE_INDEX)
+                                    ?.animateScrollToItem(0)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -445,6 +507,45 @@ private fun DayScheduleList(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 登录引导横幅：低侵入的一次性引导，登录动作走既有登录弹窗与登录路由 */
+@Composable
+private fun ScheduleLoginNudgeBanner(
+    onLogin: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        ) {
+            Text(
+                text = "登录 Bangumi，开启追番打卡",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onLogin) {
+                Text(text = "登录")
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "关闭引导",
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }
