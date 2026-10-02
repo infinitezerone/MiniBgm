@@ -186,7 +186,6 @@ fun ScheduleSourcesBottomSheet(
 
                     ScheduleSourceCard(
                         title = "用内置播放器播放",
-                        subtitle = "按追番进度自动定位下一集 · 多源嗅探 · 连播",
                         iconVector = Icons.Filled.PlayCircleOutline,
                         onClick = {
                             coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -208,7 +207,6 @@ fun ScheduleSourcesBottomSheet(
 
                     ScheduleSourceCard(
                         title = "让 AI 助手找源",
-                        subtitle = "解析可播放地址与集数，结果在助手会话中展示",
                         iconVector = Icons.Filled.AutoAwesome,
                         onClick = {
                             coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -230,7 +228,6 @@ fun ScheduleSourcesBottomSheet(
                 // 源 1：哔哩哔哩 (Bilibili 搜索)
                 ScheduleSourceCard(
                     title = "哔哩哔哩搜索",
-                    subtitle = "唤起 B 站客户端搜索番剧（正版及二创熟肉）",
                     iconVector = Icons.Filled.Tv,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -246,7 +243,6 @@ fun ScheduleSourcesBottomSheet(
                 // 源 2：蜜柑计划 (Mikan)
                 ScheduleSourceCard(
                     title = "蜜柑计划",
-                    subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
                     iconVector = Icons.Filled.Download,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -304,7 +300,6 @@ fun ScheduleSourcesBottomSheet(
                             otherLinks.forEach { siteLink ->
                                 ScheduleSourceCard(
                                     title = siteLink.displayName,
-                                    subtitle = "打开外部播放渠道",
                                     iconVector = Icons.Filled.PlayCircleOutline,
                                     onClick = {
                                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -325,7 +320,6 @@ fun ScheduleSourcesBottomSheet(
 @Composable
 private fun ScheduleSourceCard(
     title: String,
-    subtitle: String,
     iconVector: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -356,20 +350,13 @@ private fun ScheduleSourceCard(
                 }
             }
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.OpenInNew,
