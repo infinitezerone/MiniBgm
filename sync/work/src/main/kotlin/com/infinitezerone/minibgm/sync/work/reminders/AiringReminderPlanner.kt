@@ -12,13 +12,12 @@ object AiringReminderPlanner {
     /**
      * 单集提醒的迟到容错窗口（分钟）。
      *
-     * 必须与 Android 对不定时闹钟的调度窗口对齐：`setAndAllowWhileIdle` 在 API 31+
-     * 上由系统给出最长 1 小时的投递窗口（实测 `dumpsys alarm` 的 `windowLength=3600000`），
-     * 即唤醒时刻可在预约点之后任意漂移。若容错窗口小于该值，系统稍晚唤醒就会让提醒
-     * 在 [pickPreAir] / [nextAiringSchedule] 里被判定为过期而静默丢弃——宁可晚到，
-     * 不可漏报。
+     * 设为 12 小时（720 分钟）：国产定制系统（如 ColorOS、HyperOS、OriginOS）在手机长期待机
+     * 或夜间极度省电时可能严重推迟非白名单应用的闹钟与广播（可达数小时）。
+     * 只要是在当日开播且尚未通知过的剧集，在设备唤醒后均应补发「已开播」提醒，
+     * 杜绝因系统调度延迟将未通知的更新直接当成过期垃圾静默丢弃。
      */
-    const val PRE_AIR_GRACE_MINUTES = 60L
+    const val PRE_AIR_GRACE_MINUTES = 720L
 
     /**
      * 拉取候选开播事件所需的回看时长（小时，向上取整）。

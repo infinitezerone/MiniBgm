@@ -224,9 +224,8 @@ class AiringReminderPlannerTest {
 
     @Test
     fun pickPreAir_picksLateArrivalWithinAlignedGraceWindow() {
-        // 回归：容错窗口与 setAndAllowWhileIdle 的 1 小时调度窗口对齐后，
-        // 系统晚唤醒 45 分钟仍应补发「现已开播」，而不是静默丢弃
-        val item = airingAt(-45)
+        // 回归：容错窗口放大到 12 小时后，系统（如 ColorOS/HyperOS）息屏深度休眠延误数小时仍应补发「现已开播」
+        val item = airingAt(-160)
         val planned = pickPreAir(item)
 
         assertEquals(1, planned.size)
@@ -235,8 +234,8 @@ class AiringReminderPlannerTest {
 
     @Test
     fun pickPreAir_skipsBeyondGraceWindow() {
-        // 超出容错窗口（已过去 61 分钟），不再打扰用户
-        val planned = pickPreAir(airingAt(-61))
+        // 超出容错窗口（已过去超过 12 小时），不再打扰用户
+        val planned = pickPreAir(airingAt(-721))
 
         assertTrue(planned.isEmpty())
     }
@@ -244,11 +243,11 @@ class AiringReminderPlannerTest {
     @Test
     fun preAirLookbackHours_coversGraceWindowAndDelayOffset() {
         // 回看窗口必须同时覆盖容错窗口与源延迟偏移，否则条目在进入容错判定前就被 SQL 排除
-        assertEquals(1L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 0L))
-        assertEquals(2L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 15L))
-        assertEquals(3L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 120L))
+        assertEquals(12L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 0L))
+        assertEquals(13L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 15L))
+        assertEquals(14L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = 120L))
         // 负值（提前提醒）不应让回看窗口缩到容错区间以下
-        assertEquals(1L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = -60L))
+        assertEquals(12L, AiringReminderPlanner.preAirLookbackHours(airDelayOffsetMinutes = -60L))
     }
 
     @Test
@@ -275,7 +274,7 @@ class AiringReminderPlannerTest {
     fun nextAiringSchedule_picksNearestFutureEpisode() {
         val ep1 = airingAt(30)
         val ep2 = airingAt(10)
-        val ep3 = airingAt(-90) // 超出容错窗口，已过期
+        val ep3 = airingAt(-750) // 超出 12 小时容错窗口，已过期
 
         val next =
             AiringReminderPlanner.nextAiringSchedule(
@@ -295,7 +294,7 @@ class AiringReminderPlannerTest {
         // 回归：App 在开播后重新核准（冷启动 / 重装 / 开机 / 改时区）时，
         // 容错窗口内刚错过的剧集必须仍被选为「立即触发」——这是配合查询侧
         // lookback 把漏掉的提醒补回来的关键一环
-        val late = airingAt(-45)
+        val late = airingAt(-160)
 
         val next =
             AiringReminderPlanner.nextAiringSchedule(
@@ -316,7 +315,7 @@ class AiringReminderPlannerTest {
                 notifiedKeys = emptyList(),
                 nowEpochMillis = nowEpochMillis,
                 leadMinutes = 0L,
-                upcoming = listOf(airingAt(-61)),
+                upcoming = listOf(airingAt(-721)),
             )
 
         assertEquals(null, next)
