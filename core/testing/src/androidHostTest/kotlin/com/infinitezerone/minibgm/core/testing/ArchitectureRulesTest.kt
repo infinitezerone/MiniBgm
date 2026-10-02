@@ -26,6 +26,8 @@ import kotlin.test.fail
  *     不得回退到官方日历、bangumi-data 固定窗口或算术预测事件
  * 12. 形状令牌收口：app/feature 源码中 RoundedCornerShape 的 dp 字面量只允许 BgmShapes 阶梯
  *     （4/8/12/16/24）；off-ladder 野值（6/10/14 等）一律改用阶梯值，防止圆角体系再次漂移
+ * 13. 图标令牌收口：feature 与 app 源码严禁直接 import androidx.compose.material.icons.*，
+ *     所有图标必须统一经 :core:designsystem 的 BgmIcons 引用
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -492,6 +494,39 @@ class ArchitectureRulesTest {
             fail(
                 "违反形状令牌收口（RoundedCornerShape 的 dp 字面量仅允许 BgmShapes 阶梯 4/8/12/16/24，" +
                     "圆角应表达 MaterialTheme.shapes.* 或阶梯内的字面量）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun feature_and_app_sources_never_import_raw_material_icons() {
+        val violations = mutableListOf<String>()
+        val forbiddenPrefix = "androidx.compose.material.icons"
+
+        for (dir in listOf("feature", "app")) {
+            val rootDir = File(projectRoot, dir)
+            if (!rootDir.isDirectory) continue
+            rootDir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { sourceFile ->
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    val relPath = sourceFile.relativeTo(projectRoot).path
+                    scanner.imports.forEach { imp ->
+                        if (imp.path.startsWith(forbiddenPrefix)) {
+                            violations.add(
+                                "$relPath:${imp.lineNumber} 违规直接引入 raw Material Icons -> import ${imp.path}，请改用 BgmIcons.*",
+                            )
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反图标令牌收口（feature 与 app 源码严禁直接引入 androidx.compose.material.icons，所有图标必须统一经 :core:designsystem 的 BgmIcons 访问）：\n" +
                     violations.joinToString("\n"),
             )
         }
