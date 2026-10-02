@@ -17,11 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.PlayCircleOutline
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -40,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import java.util.Locale
 
 /**
@@ -234,7 +230,7 @@ internal fun PlayerSourceSelector(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Settings,
+                        imageVector = BgmIcons.Settings,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
                     )
@@ -267,7 +263,7 @@ internal fun PlayerSourceSelector(
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = if (source.isDirect) Icons.Filled.CloudQueue else Icons.Filled.TravelExplore,
+                            imageVector = if (source.isDirect) BgmIcons.CloudQueue else BgmIcons.TravelExplore,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                         )
@@ -455,7 +451,7 @@ internal fun PlayerEmptyView(
             modifier = Modifier.padding(24.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.PlayCircleOutline,
+                imageVector = BgmIcons.PlayCircle,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.size(64.dp),

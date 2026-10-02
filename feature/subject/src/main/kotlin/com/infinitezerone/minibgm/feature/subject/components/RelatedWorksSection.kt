@@ -16,9 +16,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -42,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
@@ -148,7 +146,7 @@ fun RelatedWorksSection(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Icon(
-                            imageVector = if (isGridView) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
+                            imageVector = if (isGridView) BgmIcons.ViewCarousel else BgmIcons.GridView,
                             contentDescription = null,
                             modifier = Modifier.size(15.dp),
                             tint = toggleContentColor,
@@ -255,7 +253,7 @@ fun RelatedWorksSection(
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
-                                            imageVector = Icons.Filled.GridView,
+                                            imageVector = BgmIcons.GridView,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(18.dp),

@@ -21,15 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -60,6 +51,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
@@ -262,7 +254,7 @@ fun RelationsSection(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Icon(
-                            imageVector = if (isGridView) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
+                            imageVector = if (isGridView) BgmIcons.ViewCarousel else BgmIcons.GridView,
                             contentDescription = null,
                             modifier = Modifier.size(15.dp),
                             tint =
@@ -413,7 +405,7 @@ fun MainStoryTimeline(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.ViewCarousel,
+                imageVector = BgmIcons.ViewCarousel,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.primary,
@@ -460,7 +452,7 @@ fun MainStoryTimeline(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    imageVector = BgmIcons.ArrowForward,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(13.dp),
@@ -567,7 +559,7 @@ private fun TimelineNodeCard(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Star,
+                        imageVector = BgmIcons.Star,
                         contentDescription = null,
                         tint = RatingGold,
                         modifier = Modifier.size(12.dp),
@@ -656,7 +648,7 @@ private fun RelationCard(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Star,
+                        imageVector = BgmIcons.Star,
                         contentDescription = null,
                         tint = RatingGold,
                         modifier = Modifier.size(12.dp),
@@ -774,7 +766,7 @@ private fun CharacterCard(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Filled.ZoomIn,
+                            imageVector = BgmIcons.ZoomIn,
                             contentDescription = "查看全身立绘",
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(15.dp),
@@ -941,7 +933,7 @@ fun StaffSection(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Icon(
-                            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp),
@@ -974,7 +966,7 @@ fun CharacterImagePreviewDialog(
                     modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = BgmIcons.Close,
                         contentDescription = "关闭",
                         tint = Color.White,
                     )

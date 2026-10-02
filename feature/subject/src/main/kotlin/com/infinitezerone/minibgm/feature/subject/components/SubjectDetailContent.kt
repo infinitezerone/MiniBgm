@@ -15,9 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -39,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
@@ -332,7 +330,7 @@ internal fun SubjectDetailContent(
                                         verticalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.Warning,
+                                            imageVector = BgmIcons.Warning,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(36.dp),
@@ -354,7 +352,7 @@ internal fun SubjectDetailContent(
                                             modifier = Modifier.padding(top = 4.dp),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.Refresh,
+                                                imageVector = BgmIcons.Refresh,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(16.dp),
                                             )

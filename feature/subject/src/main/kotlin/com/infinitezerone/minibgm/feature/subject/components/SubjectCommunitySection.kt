@@ -12,12 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -79,7 +74,7 @@ fun SubjectCommunitySection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.ChatBubbleOutline,
+                    imageVector = BgmIcons.ChatBubbleOutline,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
@@ -165,7 +160,7 @@ fun SubjectCommunitySection(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Icon(
-                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    imageVector = BgmIcons.KeyboardArrowDown,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(16.dp),
@@ -203,7 +198,7 @@ fun SubjectCommunitySection(
                                             fontWeight = FontWeight.SemiBold,
                                         )
                                         Icon(
-                                            imageVector = Icons.Filled.KeyboardArrowDown,
+                                            imageVector = BgmIcons.KeyboardArrowDown,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(16.dp),
@@ -241,7 +236,7 @@ fun SubjectCommunitySection(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Icon(
-                                    imageVector = Icons.Filled.KeyboardArrowUp,
+                                    imageVector = BgmIcons.KeyboardArrowUp,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(14.dp),
@@ -261,7 +256,7 @@ fun SubjectCommunitySection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Forum,
+                    imageVector = BgmIcons.Forum,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.size(20.dp),
@@ -375,7 +370,7 @@ fun SubjectCommentItem(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = RatingGold,
                                 modifier = Modifier.size(10.dp),

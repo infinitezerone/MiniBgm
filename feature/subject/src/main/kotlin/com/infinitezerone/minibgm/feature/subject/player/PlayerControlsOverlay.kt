@@ -20,20 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Forward10
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PictureInPictureAlt
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -54,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -144,7 +131,7 @@ internal fun PlayerControlsOverlay(
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(
-                        imageVector = if (isLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                        imageVector = if (isLocked) BgmIcons.Lock else BgmIcons.LockOpen,
                         contentDescription = if (isLocked) "解锁屏幕" else "锁定屏幕",
                         tint = if (isLocked) MaterialTheme.colorScheme.primary else Color.White,
                         modifier = Modifier.size(22.dp),
@@ -187,7 +174,7 @@ internal fun PlayerControlsOverlay(
         ) {
             IconButton(onClick = onBackClick) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = BgmIcons.ArrowBack,
                     contentDescription = "返回",
                     tint = Color.White,
                 )
@@ -218,7 +205,7 @@ internal fun PlayerControlsOverlay(
             if (showPipButton) {
                 IconButton(onClick = onEnterPip) {
                     Icon(
-                        imageVector = Icons.Filled.PictureInPictureAlt,
+                        imageVector = BgmIcons.PictureInPicture,
                         contentDescription = "画中画",
                         tint = Color.White,
                     )
@@ -247,7 +234,7 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(44.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Replay10,
+                            imageVector = BgmIcons.Replay10,
                             contentDescription = "快退 10 秒",
                             tint = Color.White,
                             modifier = Modifier.size(28.dp),
@@ -265,9 +252,9 @@ internal fun PlayerControlsOverlay(
                         ) {
                             val icon =
                                 when {
-                                    isEnded -> Icons.Filled.Replay
-                                    isPlaying -> Icons.Filled.Pause
-                                    else -> Icons.Filled.PlayArrow
+                                    isEnded -> BgmIcons.Replay
+                                    isPlaying -> BgmIcons.Pause
+                                    else -> BgmIcons.Play
                                 }
                             Icon(
                                 imageVector = icon,
@@ -283,7 +270,7 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(44.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Forward10,
+                            imageVector = BgmIcons.Forward10,
                             contentDescription = "快进 10 秒",
                             tint = Color.White,
                             modifier = Modifier.size(28.dp),
@@ -347,7 +334,7 @@ internal fun PlayerControlsOverlay(
                     modifier = Modifier.size(32.dp),
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        imageVector = if (isPlaying) BgmIcons.Pause else BgmIcons.Play,
                         contentDescription = if (isPlaying) "暂停" else "播放",
                         tint = Color.White,
                         modifier = Modifier.size(24.dp),
@@ -406,7 +393,7 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(32.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
+                            imageVector = BgmIcons.List,
                             contentDescription = "选集",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp),
@@ -423,9 +410,9 @@ internal fun PlayerControlsOverlay(
                     Icon(
                         imageVector =
                             if (isLandscape) {
-                                Icons.Filled.FullscreenExit
+                                BgmIcons.FullscreenExit
                             } else {
-                                Icons.Filled.Fullscreen
+                                BgmIcons.Fullscreen
                             },
                         contentDescription = if (isLandscape) "退出全屏" else "全屏播放",
                         tint = Color.White,
@@ -491,7 +478,7 @@ private fun BoxScope.PlayerErrorState(
                 .padding(if (isLandscape) 16.dp else 4.dp),
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            imageVector = BgmIcons.ArrowBack,
             contentDescription = "返回",
             tint = Color.White,
         )
@@ -503,7 +490,7 @@ private fun BoxScope.PlayerErrorState(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Icon(
-            imageVector = Icons.Filled.Warning,
+            imageVector = BgmIcons.Warning,
             contentDescription = null,
             tint = Color.White.copy(alpha = 0.85f),
             modifier = Modifier.size(40.dp),

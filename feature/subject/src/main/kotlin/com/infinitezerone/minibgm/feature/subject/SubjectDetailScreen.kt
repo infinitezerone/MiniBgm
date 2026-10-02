@@ -13,11 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -56,6 +51,7 @@ import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientBlurBackdrop
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.Rating
@@ -337,7 +333,7 @@ fun SubjectDetailScreen(
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                imageVector = BgmIcons.ArrowBack,
                                 contentDescription = "返回",
                             )
                         }
@@ -349,7 +345,7 @@ fun SubjectDetailScreen(
                             },
                         ) {
                             Icon(
-                                imageVector = Icons.Outlined.OpenInBrowser,
+                                imageVector = BgmIcons.OpenInBrowser,
                                 contentDescription = "在浏览器中打开",
                             )
                         }
@@ -367,7 +363,7 @@ fun SubjectDetailScreen(
                             },
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Share,
+                                imageVector = BgmIcons.Share,
                                 contentDescription = "分享",
                             )
                         }
@@ -426,7 +422,7 @@ fun SubjectDetailScreen(
                                         verticalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.ErrorOutline,
+                                            imageVector = BgmIcons.ErrorOutline,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(48.dp),

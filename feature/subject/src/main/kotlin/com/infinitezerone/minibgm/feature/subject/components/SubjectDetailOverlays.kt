@@ -1,8 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -18,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
@@ -143,7 +142,7 @@ internal fun SubjectDetailOverlays(
             onDismissRequest = onDismissLoginPrompt,
             icon = {
                 Icon(
-                    imageVector = Icons.Outlined.AccountCircle,
+                    imageVector = BgmIcons.AccountCircle,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp),

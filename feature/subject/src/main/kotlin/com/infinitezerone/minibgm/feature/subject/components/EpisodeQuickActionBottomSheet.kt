@@ -9,15 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusAiringContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
@@ -144,7 +136,7 @@ fun EpisodeQuickActionBottomSheet(
                 if (episode.airdate.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
-                            imageVector = Icons.Filled.DateRange,
+                            imageVector = BgmIcons.DateRange,
                             contentDescription = null,
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -159,7 +151,7 @@ fun EpisodeQuickActionBottomSheet(
                 if (episode.duration.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
-                            imageVector = Icons.Filled.Schedule,
+                            imageVector = BgmIcons.Schedule,
                             contentDescription = null,
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -174,7 +166,7 @@ fun EpisodeQuickActionBottomSheet(
                 if (episode.comment > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
-                            imageVector = Icons.Filled.ChatBubbleOutline,
+                            imageVector = BgmIcons.ChatBubbleOutline,
                             contentDescription = null,
                             modifier = Modifier.size(13.dp),
                             tint = MaterialTheme.colorScheme.primary,
@@ -217,7 +209,7 @@ fun EpisodeQuickActionBottomSheet(
                         },
                 ) {
                     Icon(
-                        imageVector = if (isWatched) Icons.Filled.Check else Icons.Outlined.Check,
+                        imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
@@ -236,7 +228,7 @@ fun EpisodeQuickActionBottomSheet(
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = BgmIcons.Play,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -252,7 +244,7 @@ fun EpisodeQuickActionBottomSheet(
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Tv,
+                                imageVector = BgmIcons.Tv,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -276,7 +268,7 @@ fun EpisodeQuickActionBottomSheet(
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.ChatBubbleOutline,
+                        imageVector = BgmIcons.ChatBubbleOutline,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                     )
@@ -293,7 +285,7 @@ fun EpisodeQuickActionBottomSheet(
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.FormatListNumbered,
+                            imageVector = BgmIcons.FormatListNumbered,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                         )

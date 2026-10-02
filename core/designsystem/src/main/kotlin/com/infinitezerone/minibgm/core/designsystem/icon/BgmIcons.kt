@@ -271,4 +271,11 @@ object BgmIcons {
     val Palette: ImageVector = Icons.Filled.Palette
     val Language: ImageVector = Icons.Filled.Language
     val ZoomIn: ImageVector = Icons.Filled.ZoomIn
+
+    // ---- 9. 兼容性别名 ----
+    val PlayArrow: ImageVector = Play
+    val PlayCircleOutline: ImageVector = PlayCircle
+    val AutoAwesome: ImageVector = Assistant
+    val LocalFireDepartment: ImageVector = Trending
+    val PictureInPictureAlt: ImageVector = PictureInPicture
 }

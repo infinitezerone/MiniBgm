@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.TopicMainPostCard
 import com.infinitezerone.minibgm.feature.subject.components.TopicReplyCard
@@ -118,7 +116,7 @@ fun TopicDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = BgmIcons.ArrowBack,
                             contentDescription = "返回",
                         )
                     }
@@ -126,7 +124,7 @@ fun TopicDetailScreen(
                 actions = {
                     IconButton(onClick = { context.launchWebUrl(topicWebUrl) }) {
                         Icon(
-                            imageVector = Icons.Outlined.OpenInBrowser,
+                            imageVector = BgmIcons.OpenInBrowser,
                             contentDescription = "在浏览器中打开",
                         )
                     }

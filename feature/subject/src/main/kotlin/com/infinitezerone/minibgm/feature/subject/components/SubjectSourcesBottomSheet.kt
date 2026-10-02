@@ -13,15 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.PlayCircleOutline
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -45,6 +36,7 @@ import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
@@ -156,7 +148,7 @@ fun SubjectSourcesBottomSheet(
                                         "${playlist.entries.size} 条 · 在具体分集的播放入口中选择",
                                         if (hasFailure) "存在上次播放失败的条目" else null,
                                     ),
-                                iconVector = Icons.Filled.PlayCircleOutline,
+                                iconVector = BgmIcons.PlayCircle,
                                 iconTint =
                                     if (hasFailure) {
                                         MaterialTheme.colorScheme.error
@@ -175,7 +167,7 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "一体化视频播放器",
                             subtitle = "多源嗅探 · 分集选集 · 自动连播",
-                            iconVector = Icons.Filled.PlayCircleOutline,
+                            iconVector = BgmIcons.PlayCircle,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = {
                                 runAfterDismiss {
@@ -197,7 +189,7 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "让 AI 助手找源",
                             subtitle = "解析可播放地址与集数，结果在助手会话中展示",
-                            iconVector = Icons.Filled.AutoAwesome,
+                            iconVector = BgmIcons.AutoAwesome,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = { runAfterDismiss(onAiSourceSearch) },
                         )
@@ -208,12 +200,12 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "播放源管理",
                             subtitle = "导入自备片单 / 维护解析规则",
-                            iconVector = Icons.Filled.Settings,
+                            iconVector = BgmIcons.Settings,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = { onManageRules() },
                             trailingContent = {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    imageVector = BgmIcons.OpenInNew,
                                     contentDescription = "管理规则",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(18.dp),
@@ -228,7 +220,7 @@ fun SubjectSourcesBottomSheet(
                     EpisodeSourceActionCard(
                         title = "哔哩哔哩",
                         subtitle = "打开 B 站客户端/网页搜索",
-                        iconVector = Icons.Filled.Tv,
+                        iconVector = BgmIcons.Tv,
                         onClick = {
                             runAfterDismiss {
                                 onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
@@ -239,7 +231,7 @@ fun SubjectSourcesBottomSheet(
                     EpisodeSourceActionCard(
                         title = "蜜柑计划",
                         subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
-                        iconVector = Icons.Filled.Download,
+                        iconVector = BgmIcons.Download,
                         onClick = {
                             runAfterDismiss {
                                 onOpenUrl(mikanUrl)
@@ -393,9 +385,9 @@ fun SubjectSourcesBottomSheet(
                                     ),
                                 iconVector =
                                     if (onInternalPlayClick != null || isMedia) {
-                                        Icons.Filled.PlayCircleOutline
+                                        BgmIcons.PlayCircle
                                     } else {
-                                        Icons.AutoMirrored.Filled.OpenInNew
+                                        BgmIcons.OpenInNew
                                     },
                                 iconTint =
                                     when {
@@ -406,9 +398,9 @@ fun SubjectSourcesBottomSheet(
                                 trailingContent = {
                                     val trailingIcon =
                                         if (onInternalPlayClick != null || isMedia) {
-                                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                            BgmIcons.KeyboardArrowRight
                                         } else {
-                                            Icons.AutoMirrored.Filled.OpenInNew
+                                            BgmIcons.OpenInNew
                                         }
                                     Icon(
                                         imageVector = trailingIcon,
@@ -444,11 +436,11 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "应用内播放",
                             subtitle = "尝试在应用内解析并播放该分集",
-                            iconVector = Icons.Filled.PlayCircleOutline,
+                            iconVector = BgmIcons.PlayCircle,
                             iconTint = MaterialTheme.colorScheme.primary,
                             trailingContent = {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    imageVector = BgmIcons.KeyboardArrowRight,
                                     contentDescription = "开始播放",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(20.dp),
@@ -476,7 +468,7 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "播放源管理",
                             subtitle = "导入自备片单 / 维护解析规则",
-                            iconVector = Icons.Filled.Settings,
+                            iconVector = BgmIcons.Settings,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = {
                                 runAfterDismiss {
@@ -485,7 +477,7 @@ fun SubjectSourcesBottomSheet(
                             },
                             trailingContent = {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    imageVector = BgmIcons.OpenInNew,
                                     contentDescription = "管理规则",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(18.dp),
@@ -502,7 +494,7 @@ fun SubjectSourcesBottomSheet(
                         EpisodeSourceActionCard(
                             title = "让 AI 助手找源",
                             subtitle = "解析可播放地址与集数，结果在助手会话中展示",
-                            iconVector = Icons.Filled.AutoAwesome,
+                            iconVector = BgmIcons.AutoAwesome,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = { runAfterDismiss(onAiSourceSearch) },
                         )
@@ -514,7 +506,7 @@ fun SubjectSourcesBottomSheet(
                     EpisodeSourceActionCard(
                         title = "哔哩哔哩",
                         subtitle = "在 B 站中搜索当前分集",
-                        iconVector = Icons.Filled.Tv,
+                        iconVector = BgmIcons.Tv,
                         onClick = {
                             runAfterDismiss {
                                 onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
@@ -525,7 +517,7 @@ fun SubjectSourcesBottomSheet(
                     EpisodeSourceActionCard(
                         title = "蜜柑计划",
                         subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
-                        iconVector = Icons.Filled.Download,
+                        iconVector = BgmIcons.Download,
                         onClick = {
                             runAfterDismiss {
                                 onOpenUrl(mikanUrl)
@@ -545,7 +537,7 @@ fun SubjectSourcesBottomSheet(
                                 } else {
                                     "未检测到 ${target.appName}，安装后可用 · 外部播放无法携带 Referer 等请求头"
                                 },
-                            iconVector = Icons.Filled.PlayCircleOutline,
+                            iconVector = BgmIcons.PlayCircle,
                             iconTint =
                                 if (installed) {
                                     MaterialTheme.colorScheme.primary
@@ -625,7 +617,7 @@ private fun SourcesSheetHeader(
 
         IconButton(onClick = onClose) {
             Icon(
-                imageVector = Icons.Filled.Close,
+                imageVector = BgmIcons.Close,
                 contentDescription = "关闭",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -687,9 +679,9 @@ internal fun PlaylistSourceSection(
                     ),
                 iconVector =
                     if (entry.kind == PlaylistEntryKind.DIRECT) {
-                        Icons.Filled.PlayCircleOutline
+                        BgmIcons.PlayCircle
                     } else {
-                        Icons.AutoMirrored.Filled.OpenInNew
+                        BgmIcons.OpenInNew
                     },
                 iconTint =
                     when {
@@ -757,7 +749,7 @@ internal fun EpisodeSourceActionCard(
     iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     trailingContent: @Composable () -> Unit = {
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            imageVector = BgmIcons.OpenInNew,
             contentDescription = "打开",
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(18.dp),

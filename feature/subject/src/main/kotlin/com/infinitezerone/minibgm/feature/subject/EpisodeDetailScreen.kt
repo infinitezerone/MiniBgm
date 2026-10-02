@@ -18,17 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
@@ -167,7 +157,7 @@ fun EpisodeDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = BgmIcons.ArrowBack,
                             contentDescription = "返回",
                         )
                     }
@@ -181,7 +171,7 @@ fun EpisodeDetailScreen(
                             },
                         ) {
                             Icon(
-                                imageVector = if (uiState.isWatched) Icons.Filled.Check else Icons.Outlined.Check,
+                                imageVector = if (uiState.isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
                                 contentDescription = if (uiState.isWatched) "已看过" else "未看过",
                                 tint =
                                     if (uiState.isWatched) {
@@ -289,7 +279,7 @@ fun EpisodeDetailScreen(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.DateRange,
+                                                imageVector = BgmIcons.DateRange,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(14.dp),
@@ -314,7 +304,7 @@ fun EpisodeDetailScreen(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.Schedule,
+                                                imageVector = BgmIcons.Schedule,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(14.dp),
@@ -345,7 +335,7 @@ fun EpisodeDetailScreen(
                                             modifier = Modifier.weight(1f),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Filled.PlayArrow,
+                                                imageVector = BgmIcons.Play,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp),
                                             )
@@ -358,7 +348,7 @@ fun EpisodeDetailScreen(
                                         modifier = Modifier.weight(1f),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.CloudQueue,
+                                            imageVector = BgmIcons.CloudQueue,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp),
                                         )
@@ -376,7 +366,7 @@ fun EpisodeDetailScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.Check,
+                                            imageVector = BgmIcons.Check,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp),
                                         )
@@ -398,7 +388,7 @@ fun EpisodeDetailScreen(
                                                 modifier = Modifier.weight(1f),
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Outlined.Check,
+                                                    imageVector = BgmIcons.CheckBorder,
                                                     contentDescription = null,
                                                     modifier = Modifier.size(18.dp),
                                                 )
@@ -413,7 +403,7 @@ fun EpisodeDetailScreen(
                                                 modifier = Modifier.weight(1f),
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Check,
+                                                    imageVector = BgmIcons.Check,
                                                     contentDescription = null,
                                                     modifier = Modifier.size(18.dp),
                                                 )
@@ -430,7 +420,7 @@ fun EpisodeDetailScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Outlined.Check,
+                                                imageVector = BgmIcons.CheckBorder,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp),
                                             )
@@ -549,7 +539,7 @@ fun EpisodeDetailScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Warning,
+                                        imageVector = BgmIcons.Warning,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(36.dp),
@@ -571,7 +561,7 @@ fun EpisodeDetailScreen(
                                         modifier = Modifier.padding(top = 4.dp),
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Filled.Refresh,
+                                            imageVector = BgmIcons.Refresh,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                         )
@@ -684,7 +674,7 @@ fun EpisodeDetailScreen(
             onDismissRequest = viewModel::dismissLoginPrompt,
             icon = {
                 Icon(
-                    imageVector = Icons.Outlined.AccountCircle,
+                    imageVector = BgmIcons.AccountCircle,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp),

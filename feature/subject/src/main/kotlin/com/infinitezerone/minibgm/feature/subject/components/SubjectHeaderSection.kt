@@ -16,15 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -47,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -192,7 +184,7 @@ fun SubjectHeaderCard(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Star,
+                                        imageVector = BgmIcons.Star,
                                         contentDescription = null,
                                         tint = RatingGold,
                                         modifier = Modifier.size(13.dp),
@@ -267,7 +259,7 @@ fun SubjectHeaderCard(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Icon(
-                        imageVector = if (isSummaryExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp),
@@ -342,7 +334,7 @@ fun SubjectPersonalProgressCard(
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Bookmark,
+                        imageVector = BgmIcons.Bookmark,
                         contentDescription = null,
                         tint = if (collection != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
@@ -373,7 +365,7 @@ fun SubjectPersonalProgressCard(
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Edit,
+                        imageVector = BgmIcons.Edit,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
                     )
@@ -421,7 +413,7 @@ fun SubjectPersonalProgressCard(
                             ) {
                                 if (isSelected) {
                                     Icon(
-                                        imageVector = Icons.Filled.Check,
+                                        imageVector = BgmIcons.Check,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(13.dp),
@@ -521,7 +513,7 @@ fun SubjectPersonalProgressCard(
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Add,
+                            imageVector = BgmIcons.Add,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
                         )
@@ -540,7 +532,7 @@ fun SubjectPersonalProgressCard(
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = BgmIcons.Play,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )

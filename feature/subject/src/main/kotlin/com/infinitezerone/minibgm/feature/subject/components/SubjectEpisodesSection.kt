@@ -24,18 +24,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
@@ -56,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusAiringContainerColor
@@ -148,7 +137,7 @@ fun EpisodesSectionHeader(
                         modifier = Modifier.size(36.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.SwapVert,
+                            imageVector = BgmIcons.SwapVert,
                             contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
                             tint =
                                 if (episodeSortDescending) {
@@ -166,7 +155,7 @@ fun EpisodesSectionHeader(
                     modifier = Modifier.size(36.dp),
                 ) {
                     Icon(
-                        imageVector = if (isGridView) Icons.Filled.FormatListNumbered else Icons.Filled.GridView,
+                        imageVector = if (isGridView) BgmIcons.FormatListNumbered else BgmIcons.GridView,
                         contentDescription = if (isGridView) "切换为列表视图" else "切换为网格视图",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
@@ -215,7 +204,7 @@ fun EpisodesSectionHeader(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.PlayArrow,
+                                imageVector = BgmIcons.Play,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -268,7 +257,7 @@ fun EpisodesSectionHeader(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Tv,
+                                        imageVector = BgmIcons.Tv,
                                         contentDescription = null,
                                         modifier = Modifier.size(13.dp),
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -295,7 +284,7 @@ fun EpisodesSectionHeader(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.PlayArrow,
+                                        imageVector = BgmIcons.Play,
                                         contentDescription = null,
                                         modifier = Modifier.size(13.dp),
                                         tint = MaterialTheme.colorScheme.onPrimary,
@@ -371,7 +360,7 @@ fun EpisodeGroupFilterChips(
                     if (isSelected) {
                         {
                             Icon(
-                                imageVector = Icons.Filled.Check,
+                                imageVector = BgmIcons.Check,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )
@@ -486,7 +475,7 @@ fun EpisodeListItem(
                             )
                             if (isWatched) {
                                 Icon(
-                                    imageVector = Icons.Filled.Check,
+                                    imageVector = BgmIcons.Check,
                                     contentDescription = null,
                                     tint = badgeContentColor,
                                     modifier = Modifier.size(11.dp),
@@ -631,7 +620,7 @@ fun EpisodeListItem(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.DateRange,
+                                imageVector = BgmIcons.DateRange,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
                                 tint =
@@ -661,7 +650,7 @@ fun EpisodeListItem(
                             horizontalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Schedule,
+                                imageVector = BgmIcons.Schedule,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -691,7 +680,7 @@ fun EpisodeListItem(
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             ) {
                                 Icon(
-                                    imageVector = if (isHot) Icons.Filled.LocalFireDepartment else Icons.Filled.ChatBubbleOutline,
+                                    imageVector = if (isHot) BgmIcons.LocalFireDepartment else BgmIcons.ChatBubbleOutline,
                                     contentDescription = null,
                                     tint = if (isHot) WishOrange else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(11.dp),
@@ -742,7 +731,7 @@ fun EpisodeListItem(
                                 },
                         ) {
                             Icon(
-                                imageVector = if (onPlayClick != null) Icons.Filled.PlayArrow else Icons.Filled.Tv,
+                                imageVector = if (onPlayClick != null) BgmIcons.Play else BgmIcons.Tv,
                                 contentDescription = playDescription,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -767,7 +756,7 @@ fun EpisodeListItem(
                         },
                 ) {
                     Icon(
-                        imageVector = if (isWatched) Icons.Filled.Check else Icons.Outlined.Check,
+                        imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
                         contentDescription = if (isWatched) "已看过，点击取消打卡" else "未看，点击标记为已看",
                         modifier = Modifier.size(18.dp),
                     )
@@ -877,7 +866,7 @@ fun EpisodeGrid(
                             )
                             if (isWatched) {
                                 Icon(
-                                    imageVector = Icons.Filled.Check,
+                                    imageVector = BgmIcons.Check,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(12.dp),
@@ -893,7 +882,7 @@ fun EpisodeGrid(
                                         .padding(3.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.PlayArrow,
+                                    imageVector = BgmIcons.Play,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(10.dp),

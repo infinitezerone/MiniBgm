@@ -24,12 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeMute
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.BrightnessLow
-import androidx.compose.material.icons.filled.FastForward
-import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -52,6 +46,7 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -457,14 +452,14 @@ internal fun PlayerGestureDetector(
                 when (val state = hudState) {
                     is GestureHudState.Brightness -> {
                         SideCapsuleIndicator(
-                            icon = Icons.Filled.BrightnessLow,
+                            icon = BgmIcons.BrightnessLow,
                             percent = state.percent,
                             modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp),
                         )
                     }
                     is GestureHudState.Volume -> {
                         SideCapsuleIndicator(
-                            icon = if (state.percent == 0) Icons.AutoMirrored.Filled.VolumeMute else Icons.AutoMirrored.Filled.VolumeUp,
+                            icon = if (state.percent == 0) BgmIcons.VolumeMute else BgmIcons.VolumeUp,
                             percent = state.percent,
                             modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp),
                         )
@@ -571,7 +566,7 @@ private fun SeekFeedbackCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(
-                    imageVector = if (deltaMs >= 0) Icons.Filled.FastForward else Icons.Filled.FastRewind,
+                    imageVector = if (deltaMs >= 0) BgmIcons.FastForward else BgmIcons.FastRewind,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp),
@@ -614,7 +609,7 @@ private fun FastForwardChip(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.FastForward,
+                imageVector = BgmIcons.FastForward,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),

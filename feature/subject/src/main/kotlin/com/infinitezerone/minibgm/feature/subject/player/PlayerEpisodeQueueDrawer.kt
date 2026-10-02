@@ -15,8 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 
 /**
@@ -110,7 +109,7 @@ internal fun PlayerEpisodeQueueDrawer(
                 Spacer(modifier = Modifier.width(4.dp))
                 IconButton(onClick = onClose) {
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        imageVector = BgmIcons.Close,
                         contentDescription = "关闭选集面板",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

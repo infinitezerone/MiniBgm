@@ -16,10 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDoingContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDroppedContainerColor
@@ -142,7 +139,7 @@ private fun RatingDistributionSection(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Star,
+                    imageVector = BgmIcons.Star,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp),
@@ -406,7 +403,7 @@ private fun TagsSection(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Icon(
-                            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary,
@@ -467,7 +464,7 @@ private fun TagsSection(
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                         Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            imageVector = BgmIcons.KeyboardArrowDown,
                             contentDescription = null,
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,

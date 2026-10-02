@@ -16,11 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +39,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
@@ -112,7 +108,7 @@ fun CharacterDetailBottomSheet(
                     modifier = Modifier.size(32.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = BgmIcons.Close,
                         contentDescription = "关闭",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp),
@@ -246,7 +242,7 @@ fun CharacterDetailBottomSheet(
                             )
                         }
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            imageVector = BgmIcons.KeyboardArrowRight,
                             contentDescription = "查看声优详情",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
                             modifier = Modifier.size(18.dp),
@@ -304,9 +300,9 @@ fun CharacterDetailBottomSheet(
                                 Icon(
                                     imageVector =
                                         if (isSummaryExpanded) {
-                                            Icons.Filled.KeyboardArrowUp
+                                            BgmIcons.KeyboardArrowUp
                                         } else {
-                                            Icons.Filled.KeyboardArrowDown
+                                            BgmIcons.KeyboardArrowDown
                                         },
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,

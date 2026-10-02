@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicReply
 
@@ -133,7 +132,7 @@ fun TopicReplyCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Favorite,
+                                    imageVector = BgmIcons.Favorite,
                                     contentDescription = null,
                                     tint =
                                         if (mine) {
