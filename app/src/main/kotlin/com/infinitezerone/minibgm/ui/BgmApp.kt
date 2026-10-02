@@ -32,12 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.infinitezerone.minibgm.core.common.InAppNotification
-import com.infinitezerone.minibgm.core.common.InAppNotificationBus
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
-import com.infinitezerone.minibgm.core.designsystem.component.InAppNotificationBanner
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
@@ -68,13 +65,6 @@ fun BgmApp(
     val isAuthenticating by authRepository.isAuthenticating.collectAsStateWithLifecycle()
     val isOnline by networkMonitor.isOnline.collectAsStateWithLifecycle(initialValue = true)
     var wasOffline by remember { mutableStateOf(false) }
-
-    var activeInAppNotification by remember { mutableStateOf<InAppNotification?>(null) }
-    LaunchedEffect(Unit) {
-        InAppNotificationBus.notifications.collect { notification ->
-            activeInAppNotification = notification
-        }
-    }
 
     LaunchedEffect(isOnline) {
         if (!isOnline) {
@@ -157,118 +147,100 @@ fun BgmApp(
             label = "app_snackbar_bottom_padding",
         )
 
-        Box(modifier = modifier.fillMaxSize()) {
-            Scaffold(
-                snackbarHost = {
-                    if (activity?.isInPictureInPictureMode != true) {
-                        SnackbarHost(
-                            hostState = snackbarHostState,
-                            modifier =
-                                Modifier
-                                    .navigationBarsPadding()
-                                    .padding(bottom = snackbarBottomPadding),
-                        )
-                    }
-                },
-                contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                modifier = Modifier.fillMaxSize(),
-            ) { innerPadding ->
-                if (isWideScreen) {
-                    // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
-                    Row(
+        Scaffold(
+            snackbarHost = {
+                if (activity?.isInPictureInPictureMode != true) {
+                    SnackbarHost(
+                        hostState = snackbarHostState,
                         modifier =
                             Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding),
-                    ) {
-                        BgmNavigationRail(
-                            currentDestination = navState.currentTopLevelKey,
-                            onDestinationSelected = { route -> navState.navigateTo(route) },
-                        )
-                        Box(
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                        ) {
-                            BgmNavHost(
-                                navState = navState,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-
-                            if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
-                                OAuthProcessingDialog()
-                            }
-                        }
-                    }
-                } else {
-                    // 手机端：居中悬浮胶囊底栏（二级页面自动下沉隐藏，返回顶层平滑升起）
+                                .navigationBarsPadding()
+                                .padding(bottom = snackbarBottomPadding),
+                    )
+                }
+            },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = modifier.fillMaxSize(),
+        ) { innerPadding ->
+            if (isWideScreen) {
+                // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                ) {
+                    BgmNavigationRail(
+                        currentDestination = navState.currentTopLevelKey,
+                        onDestinationSelected = { route -> navState.navigateTo(route) },
+                    )
                     Box(
                         modifier =
                             Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding),
+                                .weight(1f)
+                                .fillMaxHeight(),
                     ) {
                         BgmNavHost(
                             navState = navState,
                             modifier = Modifier.fillMaxSize(),
                         )
 
-                        AnimatedVisibility(
-                            visible = isTopLevel,
-                            enter =
-                                slideInVertically(
-                                    initialOffsetY = { it * 2 },
-                                    animationSpec =
-                                        spring(
-                                            dampingRatio = 0.82f,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
-                                ) + fadeIn(animationSpec = tween(200)),
-                            exit =
-                                slideOutVertically(
-                                    targetOffsetY = { it * 2 },
-                                    animationSpec =
-                                        spring(
-                                            dampingRatio = 0.82f,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
-                                ) + fadeOut(animationSpec = tween(150)),
-                            modifier =
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .navigationBarsPadding()
-                                    .padding(bottom = 12.dp),
-                        ) {
-                            BgmFloatingNavigationBar(
-                                currentDestination = navState.currentTopLevelKey,
-                                onDestinationSelected = { route -> navState.navigateTo(route) },
-                                isVertical = false,
-                            )
-                        }
-
                         if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
                             OAuthProcessingDialog()
                         }
                     }
                 }
-            }
+            } else {
+                // 手机端：居中悬浮胶囊底栏（二级页面自动下沉隐藏，返回顶层平滑升起）
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                ) {
+                    BgmNavHost(
+                        navState = navState,
+                        modifier = Modifier.fillMaxSize(),
+                    )
 
-            InAppNotificationBanner(
-                visible = activeInAppNotification != null,
-                title = activeInAppNotification?.title.orEmpty(),
-                message = activeInAppNotification?.message.orEmpty(),
-                coverUrl = activeInAppNotification?.coverUrl.orEmpty(),
-                onDismiss = { activeInAppNotification = null },
-                onClick = {
-                    val subId = activeInAppNotification?.subjectId ?: 0L
-                    if (subId > 0L) {
-                        navState.navigateTo(SubjectDetailRoute(subId))
+                    AnimatedVisibility(
+                        visible = isTopLevel,
+                        enter =
+                            slideInVertically(
+                                initialOffsetY = { it * 2 },
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.82f,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                            ) + fadeIn(animationSpec = tween(200)),
+                        exit =
+                            slideOutVertically(
+                                targetOffsetY = { it * 2 },
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = 0.82f,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                            ) + fadeOut(animationSpec = tween(150)),
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(bottom = 12.dp),
+                    ) {
+                        BgmFloatingNavigationBar(
+                            currentDestination = navState.currentTopLevelKey,
+                            onDestinationSelected = { route -> navState.navigateTo(route) },
+                            isVertical = false,
+                        )
                     }
-                    activeInAppNotification = null
-                },
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
+
+                    if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
+                        OAuthProcessingDialog()
+                    }
+                }
+            }
         }
     }
 }

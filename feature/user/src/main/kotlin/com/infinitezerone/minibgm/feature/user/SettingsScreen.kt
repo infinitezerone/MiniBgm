@@ -213,15 +213,6 @@ fun SettingsScreen(
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
         enableAiConfig = enableAiConfig,
-        onTestNotification = {
-            com.infinitezerone.minibgm.core.common.InAppNotificationBus.post(
-                com.infinitezerone.minibgm.core.common.InAppNotification(
-                    title = "番剧完结提醒",
-                    message = "🎬《葬送的芙莉莲》全剧完结！共 28 话现已全部放送完毕，可以一口气爽快开刷了～",
-                    subjectId = 398061L,
-                ),
-            )
-        },
         snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
@@ -403,7 +394,6 @@ fun SettingsScreenContent(
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
-    onTestNotification: () -> Unit = {},
 ) {
     var showLogoutAllDialog by remember { mutableStateOf(false) }
     var showLogoutCurrentDialog by remember { mutableStateOf(false) }
@@ -471,7 +461,6 @@ fun SettingsScreenContent(
                     onTogglePipEnabled = onTogglePipEnabled,
                     showRestrictedContent = showRestrictedContent,
                     onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-                    onTestNotification = onTestNotification,
                     onOpenSyncDialog = { showSyncIntervalDialog = true },
                     onSyncNow = onSyncNow,
                     onOpenWebUrl = onOpenWebUrl,

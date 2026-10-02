@@ -35,39 +35,28 @@ class AiringReminderNotifier(
     /** 每日汇总通知（固定 ID，点击跳转时刻表） */
     fun notify(upcoming: List<UpcomingAiring>) {
         if (upcoming.isEmpty()) return
+        createNotificationChannels(context)
+        val manager = NotificationManagerCompat.from(context)
 
         val listText =
             upcoming.joinToString("\n") { item ->
                 context.getString(R.string.airing_reminder_item, item.displayName, item.episode)
             }
-        val title = context.getString(R.string.airing_reminder_title, upcoming.size)
+        val notification =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification_airing)
+                .setContentTitle(context.getString(R.string.airing_reminder_title, upcoming.size))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
+                .setContentIntent(launchScheduleIntent())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setVibrate(VIBRATION_PATTERN)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setAutoCancel(true)
+                .build()
 
-        if (com.infinitezerone.minibgm.core.common.InAppNotificationBus.isAppInForeground) {
-            // 用户正在前台使用 App：展示应用内顶部胶囊横幅，不打扰系统通知栏
-            com.infinitezerone.minibgm.core.common.InAppNotificationBus.post(
-                title = title,
-                message = listText,
-            )
-        } else {
-            // 应用处于后台或息屏状态：发送系统通知
-            createNotificationChannels(context)
-            val manager = NotificationManagerCompat.from(context)
-            val notification =
-                NotificationCompat
-                    .Builder(context, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_notification_airing)
-                    .setContentTitle(title)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
-                    .setContentIntent(launchScheduleIntent())
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .setDefaults(NotificationCompat.DEFAULT_ALL)
-                    .setVibrate(VIBRATION_PATTERN)
-                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .setAutoCancel(true)
-                    .build()
-
-            post(manager, NOTIFICATION_ID, notification)
-        }
+        post(manager, NOTIFICATION_ID, notification)
     }
 
     /**
@@ -80,11 +69,7 @@ class AiringReminderNotifier(
         isAlreadyStarted: Boolean = false,
     ) {
         if (upcoming.isEmpty()) return
-
-        val inForeground = com.infinitezerone.minibgm.core.common.InAppNotificationBus.isAppInForeground
-        if (!inForeground) {
-            createNotificationChannels(context)
-        }
+        createNotificationChannels(context)
         val manager = NotificationManagerCompat.from(context)
 
         for (item in upcoming) {
@@ -106,33 +91,22 @@ class AiringReminderNotifier(
                     context.getString(R.string.airing_pre_air_item, item.displayName, item.episode)
                 }
 
-            if (inForeground) {
-                // 应用处于前台：仅展示顶部应用内胶囊横幅，不打扰系统通知栏，避免双重弹窗与重复震动
-                com.infinitezerone.minibgm.core.common.InAppNotificationBus.post(
-                    title = contentTitle,
-                    message = itemText,
-                    subjectId = item.subjectId,
-                    coverUrl = item.coverUrl,
-                )
-            } else {
-                // 应用处于后台或息屏状态：发送系统通知
-                val notification =
-                    NotificationCompat
-                        .Builder(context, PRE_AIR_CHANNEL_ID)
-                        .setSmallIcon(R.drawable.ic_notification_airing)
-                        .setContentTitle(contentTitle)
-                        .setContentText(itemText)
-                        .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
-                        .setContentIntent(launchSubjectIntent(item.subjectId))
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setDefaults(NotificationCompat.DEFAULT_ALL)
-                        .setVibrate(VIBRATION_PATTERN)
-                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                        .setAutoCancel(true)
-                        .build()
+            val notification =
+                NotificationCompat
+                    .Builder(context, PRE_AIR_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_notification_airing)
+                    .setContentTitle(contentTitle)
+                    .setContentText(itemText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
+                    .setContentIntent(launchSubjectIntent(item.subjectId))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setDefaults(NotificationCompat.DEFAULT_ALL)
+                    .setVibrate(VIBRATION_PATTERN)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setAutoCancel(true)
+                    .build()
 
-                post(manager, notificationIdForSubject(item.subjectId), notification)
-            }
+            post(manager, notificationIdForSubject(item.subjectId), notification)
         }
     }
 
