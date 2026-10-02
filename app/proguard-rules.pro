@@ -24,3 +24,16 @@
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
 
+# Rust ECH 原生库（crates/minibgm-ech / libminibgm_ech.so）JNI 桥接
+# EchNativeResponse 由 Rust make_response 反射构造，EchNativeClient 提供 JNI 导出符号。
+# 若无显式保留，R8 静态分析会因 Kotlin 侧无 new 构造调用而将 EchNativeResponse 削减为 abstract
+# 并移除构造器与字段，导致 JNI 实例化失败，造成 release 包全量网络请求中断。
+-keep class com.infinitezerone.minibgm.core.network.ech.EchNativeResponse {
+    <init>(...);
+    *;
+}
+-keep class com.infinitezerone.minibgm.core.network.ech.EchNativeClient {
+    native <methods>;
+    *;
+}
+
