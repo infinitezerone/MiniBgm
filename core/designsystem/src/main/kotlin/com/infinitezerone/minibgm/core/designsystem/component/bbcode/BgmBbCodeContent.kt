@@ -21,9 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BrokenImage
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -66,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
  * Bangumi 专用 BBCode 富文本渲染组件
@@ -292,7 +290,7 @@ private fun BgmBbCodeImage(
                         modifier = Modifier.padding(12.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.BrokenImage,
+                            imageVector = BgmIcons.BrokenImage,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -340,7 +338,7 @@ private fun BgmBbCodeImage(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VisibilityOff,
+                            imageVector = BgmIcons.VisibilityOff,
                             contentDescription = null,
                             modifier = Modifier.size(28.dp),
                             tint = Color.White.copy(alpha = 0.9f),
@@ -397,7 +395,7 @@ private fun BgmBbCodeImage(
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VisibilityOff,
+                            imageVector = BgmIcons.VisibilityOff,
                             contentDescription = "重新隐藏",
                             modifier = Modifier.size(13.dp),
                         )

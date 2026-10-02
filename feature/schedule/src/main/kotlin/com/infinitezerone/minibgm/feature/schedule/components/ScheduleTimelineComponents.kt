@@ -20,13 +20,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -50,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
@@ -375,7 +369,7 @@ fun ScheduleTimelineSingleCard(
                         modifier = Modifier.align(Alignment.TopEnd),
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Bookmark,
+                            imageVector = BgmIcons.Bookmark,
                             contentDescription = "已在追",
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(3.dp).size(10.dp),
@@ -396,7 +390,7 @@ fun ScheduleTimelineSingleCard(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Star,
+                                imageVector = BgmIcons.Star,
                                 contentDescription = null,
                                 tint = RatingGold,
                                 modifier = Modifier.size(9.dp),
@@ -489,7 +483,7 @@ fun ScheduleTimelineSingleCard(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.PlayArrow,
+                                    imageVector = BgmIcons.Play,
                                     contentDescription = "播放",
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(15.dp),
@@ -540,7 +534,7 @@ fun ScheduleUntimedSection(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CloudQueue,
+                            imageVector = BgmIcons.CloudQueue,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp),
@@ -563,7 +557,7 @@ fun ScheduleUntimedSection(
                     }
 
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                         contentDescription = if (isExpanded) "折叠" else "展开",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

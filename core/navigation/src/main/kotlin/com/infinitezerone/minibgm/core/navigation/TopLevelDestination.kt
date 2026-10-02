@@ -1,14 +1,8 @@
 package com.infinitezerone.minibgm.core.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
  * 底部导航栏顶层 Tab 配置枚举；route 为各顶层 Tab 声明的 NavKey
@@ -20,20 +14,20 @@ enum class TopLevelDestination(
     val route: NavKey,
 ) {
     SCHEDULE(
-        selectedIcon = Icons.Filled.CalendarMonth,
-        unselectedIcon = Icons.Outlined.CalendarMonth,
+        selectedIcon = BgmIcons.Calendar,
+        unselectedIcon = BgmIcons.CalendarBorder,
         labelText = "放送",
         route = ScheduleRoute,
     ),
     EXPLORE(
-        selectedIcon = Icons.Filled.Explore,
-        unselectedIcon = Icons.Outlined.Explore,
+        selectedIcon = BgmIcons.Explore,
+        unselectedIcon = BgmIcons.ExploreBorder,
         labelText = "探索",
         route = ExploreRoute,
     ),
     USER(
-        selectedIcon = Icons.Filled.Person,
-        unselectedIcon = Icons.Outlined.Person,
+        selectedIcon = BgmIcons.User,
+        unselectedIcon = BgmIcons.UserBorder,
         labelText = "我的",
         route = UserRoute,
     ),

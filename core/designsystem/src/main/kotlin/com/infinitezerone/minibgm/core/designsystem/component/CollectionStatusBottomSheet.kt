@@ -12,13 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -44,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.Tag
@@ -155,7 +149,7 @@ fun CollectionStatusBottomSheet(
                                 if (isSelected) {
                                     {
                                         Icon(
-                                            imageVector = Icons.Filled.Check,
+                                            imageVector = BgmIcons.Check,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                         )
@@ -204,7 +198,7 @@ fun CollectionStatusBottomSheet(
                             onClick = { if (epStatus > 0) epStatus-- },
                             enabled = epStatus > 0,
                         ) {
-                            Icon(imageVector = Icons.Filled.Remove, contentDescription = "减一集")
+                            Icon(imageVector = BgmIcons.Remove, contentDescription = "减一集")
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
@@ -233,7 +227,7 @@ fun CollectionStatusBottomSheet(
                             },
                             enabled = totalEpisodes <= 0 || epStatus < totalEpisodes,
                         ) {
-                            Icon(imageVector = Icons.Filled.Add, contentDescription = "加一集")
+                            Icon(imageVector = BgmIcons.Add, contentDescription = "加一集")
                         }
                     }
                 }
@@ -270,7 +264,7 @@ fun CollectionStatusBottomSheet(
                             modifier = Modifier.size(32.dp),
                         ) {
                             Icon(
-                                imageVector = if (star <= rating) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                imageVector = if (star <= rating) BgmIcons.Star else BgmIcons.StarBorder,
                                 contentDescription = "$star 分",
                                 tint = if (star <= rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                                 modifier = Modifier.size(22.dp),
@@ -350,7 +344,7 @@ fun CollectionStatusBottomSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Lock,
+                        imageVector = BgmIcons.Lock,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp),

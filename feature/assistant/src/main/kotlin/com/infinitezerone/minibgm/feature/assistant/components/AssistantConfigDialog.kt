@@ -27,22 +27,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -78,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import kotlinx.coroutines.launch
@@ -656,7 +641,7 @@ fun AssistantConfigDialog(
                     )
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Filled.Close, contentDescription = "关闭")
+                    Icon(imageVector = BgmIcons.Close, contentDescription = "关闭")
                 }
             }
 
@@ -692,7 +677,7 @@ fun AssistantConfigDialog(
                                 if (isSelected) {
                                     {
                                         Icon(
-                                            imageVector = Icons.Filled.Check,
+                                            imageVector = BgmIcons.Check,
                                             contentDescription = null,
                                             modifier = Modifier.size(16.dp),
                                         )
@@ -725,7 +710,7 @@ fun AssistantConfigDialog(
                             applyPreset(PROVIDER_PRESETS.first())
                         },
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(BgmIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("新建方案")
                     }
@@ -767,7 +752,7 @@ fun AssistantConfigDialog(
                                 profileName = if (profileName.isNotBlank()) "$profileName (副本)" else ""
                             }) {
                                 Icon(
-                                    imageVector = Icons.Filled.Add,
+                                    imageVector = BgmIcons.Add,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                 )
@@ -777,7 +762,7 @@ fun AssistantConfigDialog(
                             Spacer(modifier = Modifier.width(4.dp))
                             TextButton(onClick = { showDeleteConfirmDialog = true }) {
                                 Icon(
-                                    imageVector = Icons.Filled.DeleteOutline,
+                                    imageVector = BgmIcons.Delete,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(16.dp),
@@ -825,7 +810,7 @@ fun AssistantConfigDialog(
                                 availableRemoteModels = emptyList()
                                 diagnosticState = ConnectionDiagnosticState.Idle
                             }) {
-                                Icon(Icons.Filled.Clear, contentDescription = "清空端点")
+                                Icon(BgmIcons.Clear, contentDescription = "清空端点")
                             }
                         }
                     },
@@ -856,11 +841,11 @@ fun AssistantConfigDialog(
                                     onApiKeyUpdated(pasted)
                                 }
                             }) {
-                                Icon(Icons.Filled.ContentPaste, contentDescription = "粘贴剪贴板内容")
+                                Icon(BgmIcons.ContentPaste, contentDescription = "粘贴剪贴板内容")
                             }
                             IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
                                 Icon(
-                                    imageVector = if (isApiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
                                     contentDescription = if (isApiKeyVisible) "隐藏密钥" else "显示明文",
                                 )
                             }
@@ -902,7 +887,7 @@ fun AssistantConfigDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.ErrorOutline,
+                                        imageVector = BgmIcons.ErrorOutline,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(16.dp),
@@ -951,7 +936,7 @@ fun AssistantConfigDialog(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.CheckCircle,
+                                    imageVector = BgmIcons.CheckCircle,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp),
@@ -996,7 +981,7 @@ fun AssistantConfigDialog(
                                 verticalAlignment = Alignment.Top,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.ErrorOutline,
+                                    imageVector = BgmIcons.ErrorOutline,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(20.dp),
@@ -1042,7 +1027,7 @@ fun AssistantConfigDialog(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("测试中")
                     } else {
-                        Icon(imageVector = Icons.Filled.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = BgmIcons.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("测试连接")
                     }
@@ -1150,7 +1135,7 @@ private fun ModelSelectorCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.SmartToy,
+                    imageVector = BgmIcons.AssistantBorder,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
@@ -1197,7 +1182,7 @@ private fun ModelSelectorCard(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
-                            imageVector = Icons.Filled.Refresh,
+                            imageVector = BgmIcons.Refresh,
                             contentDescription = "同步可用模型",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
@@ -1206,7 +1191,7 @@ private fun ModelSelectorCard(
                 }
                 // 展开指示图标
                 Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    imageVector = BgmIcons.KeyboardArrowDown,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
@@ -1289,12 +1274,12 @@ private fun ModelPickerDialog(
                     onValueChange = { searchQuery = it },
                     placeholder = { Text("搜索模型名称...") },
                     leadingIcon = {
-                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(BgmIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Clear, contentDescription = "清除搜索")
+                                Icon(BgmIcons.Clear, contentDescription = "清除搜索")
                             }
                         }
                     },
@@ -1344,7 +1329,7 @@ private fun ModelPickerDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Add,
+                                imageVector = BgmIcons.Add,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp),
@@ -1519,7 +1504,7 @@ private fun ModelPickerItem(
             }
             if (isSelected) {
                 Icon(
-                    imageVector = Icons.Filled.Check,
+                    imageVector = BgmIcons.Check,
                     contentDescription = "当前使用",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp),

@@ -18,15 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.PlayCircleOutline
-import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -51,6 +42,7 @@ import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
@@ -154,7 +146,7 @@ fun ScheduleSourcesBottomSheet(
                     },
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
+                        imageVector = BgmIcons.Close,
                         contentDescription = "关闭",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -186,7 +178,7 @@ fun ScheduleSourcesBottomSheet(
 
                     ScheduleSourceCard(
                         title = "用内置播放器播放",
-                        iconVector = Icons.Filled.PlayCircleOutline,
+                        iconVector = BgmIcons.PlayCircle,
                         onClick = {
                             coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                                 onDismissRequest()
@@ -207,7 +199,7 @@ fun ScheduleSourcesBottomSheet(
 
                     ScheduleSourceCard(
                         title = "让 AI 助手找源",
-                        iconVector = Icons.Filled.AutoAwesome,
+                        iconVector = BgmIcons.Assistant,
                         onClick = {
                             coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                                 onDismissRequest()
@@ -228,7 +220,7 @@ fun ScheduleSourcesBottomSheet(
                 // 源 1：哔哩哔哩 (Bilibili 搜索)
                 ScheduleSourceCard(
                     title = "哔哩哔哩搜索",
-                    iconVector = Icons.Filled.Tv,
+                    iconVector = BgmIcons.Tv,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
@@ -243,7 +235,7 @@ fun ScheduleSourcesBottomSheet(
                 // 源 2：蜜柑计划 (Mikan)
                 ScheduleSourceCard(
                     title = "蜜柑计划",
-                    iconVector = Icons.Filled.Download,
+                    iconVector = BgmIcons.Download,
                     onClick = {
                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                             onDismissRequest()
@@ -277,9 +269,9 @@ fun ScheduleSourcesBottomSheet(
                             Icon(
                                 imageVector =
                                     if (isOtherExpanded) {
-                                        Icons.Filled.KeyboardArrowUp
+                                        BgmIcons.KeyboardArrowUp
                                     } else {
-                                        Icons.Filled.KeyboardArrowDown
+                                        BgmIcons.KeyboardArrowDown
                                     },
                                 contentDescription = if (isOtherExpanded) "收起" else "展开",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -300,7 +292,7 @@ fun ScheduleSourcesBottomSheet(
                             otherLinks.forEach { siteLink ->
                                 ScheduleSourceCard(
                                     title = siteLink.displayName,
-                                    iconVector = Icons.Filled.PlayCircleOutline,
+                                    iconVector = BgmIcons.PlayCircle,
                                     onClick = {
                                         coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
                                             onDismissRequest()
@@ -359,7 +351,7 @@ private fun ScheduleSourceCard(
             )
 
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                imageVector = BgmIcons.OpenInNew,
                 contentDescription = "打开",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.size(18.dp),

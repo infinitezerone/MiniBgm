@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -25,6 +22,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
@@ -119,7 +117,7 @@ private fun PlayableSourceRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(
-            imageVector = if (playable) Icons.Filled.PlayArrow else Icons.AutoMirrored.Filled.OpenInNew,
+            imageVector = if (playable) BgmIcons.Play else BgmIcons.OpenInNew,
             contentDescription = if (playable) "播放" else "外部打开",
             tint =
                 when {

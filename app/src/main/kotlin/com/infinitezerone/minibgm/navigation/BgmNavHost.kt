@@ -3,9 +3,6 @@ package com.infinitezerone.minibgm.navigation
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
 import androidx.compose.runtime.Composable
@@ -17,6 +14,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import coil3.ImageLoader
 import com.infinitezerone.minibgm.BuildConfig
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
@@ -86,13 +84,13 @@ fun BgmNavHost(
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
         if (navState.currentKey is SearchRoute) {
             BgmDetailPlaceholder(
-                icon = Icons.Outlined.Search,
+                icon = BgmIcons.SearchBorder,
                 title = "搜索并查看作品详情",
                 subtitle = "在左侧输入关键词或轻点历史记录\n选择任意条目即可在此处即时展开海报与讨论",
             )
         } else {
             BgmDetailPlaceholder(
-                icon = Icons.Outlined.Tv,
+                icon = BgmIcons.TvBorder,
                 title = "选择作品查看详情",
                 subtitle = "在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽",
             )

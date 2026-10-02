@@ -34,22 +34,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.outlined.ChatBubble
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -98,6 +82,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomShee
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -258,7 +243,7 @@ fun AssistantScreenContent(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
+                            imageVector = BgmIcons.Assistant,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
@@ -274,7 +259,7 @@ fun AssistantScreenContent(
                     if (onBackClick != null) {
                         IconButton(onClick = onBackClick) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                imageVector = BgmIcons.ArrowBack,
                                 contentDescription = "返回",
                             )
                         }
@@ -283,20 +268,20 @@ fun AssistantScreenContent(
                 actions = {
                     IconButton(onClick = { onToggleSessionSwitcher(true) }) {
                         Icon(
-                            imageVector = Icons.Filled.ChatBubble,
+                            imageVector = BgmIcons.ChatBubble,
                             contentDescription = "会话列表",
                         )
                     }
                     IconButton(onClick = { onToggleConfigDialog(true) }) {
                         Icon(
-                            imageVector = Icons.Filled.Settings,
+                            imageVector = BgmIcons.Settings,
                             contentDescription = "AI 设置",
                         )
                     }
                     if (uiState.messages.isNotEmpty()) {
                         IconButton(onClick = { showDeleteCurrentSessionDialog = true }) {
                             Icon(
-                                imageVector = Icons.Outlined.Delete,
+                                imageVector = BgmIcons.DeleteBorder,
                                 contentDescription = "删除当前会话",
                             )
                         }
@@ -418,7 +403,7 @@ fun AssistantScreenContent(
                                         .background(MaterialTheme.colorScheme.errorContainer),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Stop,
+                                    imageVector = BgmIcons.Stop,
                                     contentDescription = "停止生成",
                                     tint = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.size(18.dp),
@@ -446,7 +431,7 @@ fun AssistantScreenContent(
                                         ),
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    imageVector = BgmIcons.Send,
                                     contentDescription = "发送",
                                     tint =
                                         if (canSend) {
@@ -619,7 +604,7 @@ private fun SessionSwitcherSheet(
                 )
                 TextButton(onClick = onCreate, enabled = true) {
                     Icon(
-                        imageVector = Icons.Filled.Add,
+                        imageVector = BgmIcons.Add,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
@@ -646,7 +631,7 @@ private fun SessionSwitcherSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
-                        imageVector = if (session.id == activeSessionId) Icons.Filled.ChatBubble else Icons.Outlined.ChatBubble,
+                        imageVector = if (session.id == activeSessionId) BgmIcons.ChatBubble else BgmIcons.ChatBubbleBorder,
                         contentDescription = null,
                         tint =
                             if (session.id == activeSessionId) {
@@ -676,14 +661,14 @@ private fun SessionSwitcherSheet(
                         renameText = session.title
                     }) {
                         Icon(
-                            imageVector = Icons.Outlined.Edit,
+                            imageVector = BgmIcons.EditBorder,
                             contentDescription = "重命名会话",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     IconButton(onClick = { deletingSession = session }) {
                         Icon(
-                            imageVector = Icons.Outlined.Delete,
+                            imageVector = BgmIcons.DeleteBorder,
                             contentDescription = "删除会话",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -769,7 +754,7 @@ private fun EmptyAssistantGuide(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Outlined.SmartToy,
+                imageVector = BgmIcons.AssistantBorder,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(36.dp),
@@ -874,7 +859,7 @@ private fun ChatMessageItem(
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Icon(
-                            imageVector = if (isThinkingExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            imageVector = if (isThinkingExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp),
@@ -960,7 +945,7 @@ private fun ChatMessageItem(
                     modifier = Modifier.size(28.dp),
                 ) {
                     Icon(
-                        imageVector = if (copied) Icons.Filled.Check else Icons.Outlined.ContentCopy,
+                        imageVector = if (copied) BgmIcons.Check else BgmIcons.ContentCopy,
                         contentDescription = "复制回答",
                         tint =
                             if (copied) {

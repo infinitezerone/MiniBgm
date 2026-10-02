@@ -12,9 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 @Composable
 fun ScheduleDayEmptyNote(
@@ -92,7 +90,7 @@ fun OfflineCacheBanner(
             )
             IconButton(onClick = onRetry, modifier = Modifier.size(24.dp)) {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = BgmIcons.Refresh,
                     contentDescription = "重试",
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.size(16.dp),
@@ -120,7 +118,7 @@ fun ScheduleErrorState(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Icon(
-                imageVector = Icons.Filled.CloudOff,
+                imageVector = BgmIcons.CloudOff,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(48.dp),
@@ -139,7 +137,7 @@ fun ScheduleErrorState(
             Spacer(modifier = Modifier.height(4.dp))
             Button(onClick = onRetry) {
                 Icon(
-                    imageVector = Icons.Filled.Refresh,
+                    imageVector = BgmIcons.Refresh,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )

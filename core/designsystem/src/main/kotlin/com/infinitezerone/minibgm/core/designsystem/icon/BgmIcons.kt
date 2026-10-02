@@ -139,6 +139,7 @@ object BgmIcons {
     val KeyboardArrowDown: ImageVector = Icons.Filled.KeyboardArrowDown
     val KeyboardArrowUp: ImageVector = Icons.Filled.KeyboardArrowUp
     val Close: ImageVector = Icons.Filled.Close
+    val CloseBorder: ImageVector = Icons.Outlined.Close
     val Clear: ImageVector = Icons.Filled.Clear
     val Cancel: ImageVector = Icons.Filled.Cancel
 
@@ -187,8 +188,10 @@ object BgmIcons {
     val Inventory: ImageVector = Icons.Filled.Inventory2
     val InventoryBorder: ImageVector = Icons.Outlined.Inventory2
     val Check: ImageVector = Icons.Filled.Check
+    val CheckBorder: ImageVector = Icons.Outlined.Check
     val CheckCircle: ImageVector = Icons.Filled.CheckCircle
     val Add: ImageVector = Icons.Filled.Add
+    val AddBorder: ImageVector = Icons.Outlined.Add
     val Remove: ImageVector = Icons.Filled.Remove
     val PlusOne: ImageVector = Icons.Filled.PlusOne
     val WorkspacePremium: ImageVector = Icons.Filled.WorkspacePremium

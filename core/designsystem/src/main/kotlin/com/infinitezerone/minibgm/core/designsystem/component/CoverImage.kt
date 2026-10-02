@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -23,6 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.ambient.toDominantColor
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 
 /**
@@ -55,8 +53,8 @@ fun CoverImage(
     val trimmedUrl = remember(url) { url.trim() }
     val resolvedIcon: ImageVector? =
         fallbackIcon ?: when (placeholder) {
-            CoverPlaceholder.Subject -> Icons.Filled.Movie
-            CoverPlaceholder.Person -> Icons.Filled.Person
+            CoverPlaceholder.Subject -> BgmIcons.Movie
+            CoverPlaceholder.Person -> BgmIcons.User
             CoverPlaceholder.None -> null
         }
 

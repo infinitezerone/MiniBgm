@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,12 +21,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** 平板或折叠屏展开双联场景下，右侧详情面板尚未选择条目时的占位组件。 */
 @Composable
 fun BgmDetailPlaceholder(
     modifier: Modifier = Modifier,
-    icon: ImageVector = Icons.Outlined.Tv,
+    icon: ImageVector = BgmIcons.TvBorder,
     title: String = "选择作品查看详情",
     subtitle: String = "在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽",
 ) {

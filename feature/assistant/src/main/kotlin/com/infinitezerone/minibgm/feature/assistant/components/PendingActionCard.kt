@@ -14,12 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.feature.assistant.ActionStatus
@@ -130,7 +125,7 @@ fun PendingActionCard(
                     ActionStatus.SUCCESS -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Filled.CheckCircle,
+                                imageVector = BgmIcons.CheckCircle,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp),
@@ -147,7 +142,7 @@ fun PendingActionCard(
                     ActionStatus.REJECTED -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Filled.Cancel,
+                                imageVector = BgmIcons.Cancel,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(16.dp),
@@ -163,7 +158,7 @@ fun PendingActionCard(
                     ActionStatus.FAILED -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Filled.ErrorOutline,
+                                imageVector = BgmIcons.ErrorOutline,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(16.dp),
@@ -194,7 +189,7 @@ fun PendingActionCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Filled.CheckCircle,
+                                imageVector = BgmIcons.CheckCircle,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.size(22.dp),
@@ -320,7 +315,7 @@ fun PendingActionCard(
                             modifier = Modifier.height(32.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Close,
+                                imageVector = BgmIcons.Close,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp),
                             )
@@ -334,7 +329,7 @@ fun PendingActionCard(
                             modifier = Modifier.height(32.dp),
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Check,
+                                imageVector = BgmIcons.Check,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp),
                             )

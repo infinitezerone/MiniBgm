@@ -20,12 +20,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -158,14 +153,14 @@ fun ScheduleScreen(
                     if (onAssistantClick != null) {
                         IconButton(onClick = onAssistantClick) {
                             Icon(
-                                imageVector = Icons.Filled.AutoAwesome,
+                                imageVector = BgmIcons.Assistant,
                                 contentDescription = "AI 追番助手",
                             )
                         }
                     }
                     IconButton(onClick = onSearchClick) {
                         Icon(
-                            imageVector = Icons.Filled.Search,
+                            imageVector = BgmIcons.Search,
                             contentDescription = "搜索条目",
                         )
                     }
@@ -334,7 +329,7 @@ fun ScheduleScreen(
                 ) {
                     ExtendedFloatingActionButton(
                         text = { Text(text = "回到今天") },
-                        icon = { Icon(imageVector = Icons.Filled.Today, contentDescription = null) },
+                        icon = { Icon(imageVector = BgmIcons.Today, contentDescription = null) },
                         onClick = {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
@@ -404,7 +399,7 @@ fun ScheduleScreen(
             onDismissRequest = viewModel::dismissLoginPrompt,
             icon = {
                 Icon(
-                    imageVector = Icons.Outlined.AccountCircle,
+                    imageVector = BgmIcons.AccountCircle,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(36.dp),
@@ -542,7 +537,7 @@ private fun ScheduleLoginNudgeBanner(
             }
             IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    imageVector = Icons.Filled.Close,
+                    imageVector = BgmIcons.Close,
                     contentDescription = "关闭引导",
                     modifier = Modifier.size(16.dp),
                 )
