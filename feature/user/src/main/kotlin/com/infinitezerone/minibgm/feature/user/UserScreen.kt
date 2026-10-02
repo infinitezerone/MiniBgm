@@ -319,7 +319,6 @@ fun UserScreenContent(
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
                             onPlayClick = { selectedCollectionForSources = it },
-                            onToggleBinge = onToggleBinge,
                             onRefresh = onRefresh,
                             onRetry = onRetryCollections,
                             onLoadMore = onLoadMore,
@@ -488,7 +487,6 @@ private fun LazyListScope.collectionSection(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
     onPlayClick: (UserCollection) -> Unit,
-    onToggleBinge: (Long) -> Unit,
     onRefresh: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: (CollectionType) -> Unit,
@@ -542,7 +540,6 @@ private fun LazyListScope.collectionSection(
                     onSubjectClick = onSubjectClick,
                     onIncrementProgress = { onIncrementProgress(item) },
                     onPlayClick = { onPlayClick(item) },
-                    onToggleBinge = { onToggleBinge(item.subjectId) },
                     modifier =
                         Modifier.padding(
                             start = 16.dp,

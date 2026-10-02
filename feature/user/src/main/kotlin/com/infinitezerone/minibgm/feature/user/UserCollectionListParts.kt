@@ -421,7 +421,6 @@ internal fun UserCollectionCard(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
     onPlayClick: (() -> Unit)? = null,
-    onToggleBinge: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current

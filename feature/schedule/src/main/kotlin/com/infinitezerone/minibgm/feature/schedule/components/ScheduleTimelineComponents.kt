@@ -44,7 +44,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,10 +96,8 @@ fun TimelineSlotRow(
     isToday: Boolean,
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
-    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     val airStatus = getAirStatus(time, isToday = isToday)
     val jstTime = schedules.firstOrNull()?.timeJst
@@ -184,9 +181,7 @@ fun TimelineSlotRow(
                     schedule = singleSchedule,
                     isWatching = watchingSubjectIds.contains(singleSchedule.bgmId),
                     onSubjectClick = onSubjectClick,
-                    onToggleWatching = onToggleWatching,
                     onShowSources = onShowSources,
-                    onOpenUrl = onOpenUrl,
                 )
             }
         }
@@ -292,12 +287,9 @@ fun ScheduleTimelineSingleCard(
     schedule: AirSchedule,
     isWatching: Boolean,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
-    onOpenUrl: ((String) -> Unit)? = null,
 ) {
-    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val displayName = schedule.titleCn.ifBlank { schedule.title }
     val score = schedule.ratingScore
@@ -522,10 +514,8 @@ fun ScheduleUntimedSection(
     schedules: List<AirSchedule>,
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onToggleWatching: (Long) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
-    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     var isExpanded by remember { mutableStateOf(true) }
 
@@ -593,9 +583,7 @@ fun ScheduleUntimedSection(
                             schedule = schedule,
                             isWatching = watchingSubjectIds.contains(schedule.bgmId),
                             onSubjectClick = onSubjectClick,
-                            onToggleWatching = onToggleWatching,
                             onShowSources = onShowSources,
-                            onOpenUrl = onOpenUrl,
                         )
                     }
                 }
