@@ -604,4 +604,34 @@ class ExploreViewModelTest {
             assertEquals(3L, comment?.id)
             assertEquals("制作水准极高，对原作氛围的还原无可挑剔。", comment?.comment)
         }
+
+    @Test
+    fun onSortSelect_persistsSortPreferenceToRepository() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            viewModel.onSortSelect(ExploreSort.HEAT)
+            advanceUntilIdle()
+
+            assertEquals("heat", searchRepository.exploreSortPreference)
+            assertEquals(1, searchRepository.setExploreSortPreferenceCallCount)
+        }
+
+    @Test
+    fun initialLoad_restoresPersistedSortPreference() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.exploreSortPreference = "score"
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            assertEquals(ExploreSort.SCORE, viewModel.uiState.value.selectedSort)
+            assertNull(viewModel.uiState.value.selectedMood)
+        }
 }

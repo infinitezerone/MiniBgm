@@ -146,8 +146,15 @@ class ExploreViewModel(
         )
 
     init {
-        if (autoStart) {
-            loadIfNeeded()
+        viewModelScope.launch {
+            val savedKey = searchRepository.getExploreSortPreference()
+            val savedSort = ExploreSort.entries.firstOrNull { it.sortKey == savedKey }
+            if (savedSort != null && savedSort != ExploreSort.RANK && exploreQuery.value.mood == ExploreMood.MASTERPIECE) {
+                exploreQuery.value = exploreQuery.value.copy(sort = savedSort, mood = null)
+            }
+            if (autoStart) {
+                loadIfNeeded()
+            }
         }
 
         startTrigger
@@ -348,6 +355,9 @@ class ExploreViewModel(
     fun onSortSelect(sort: ExploreSort) {
         if (exploreQuery.value.sort == sort) return
         setQuery { it.copy(sort = sort, mood = null) }
+        viewModelScope.launch {
+            searchRepository.setExploreSortPreference(sort.sortKey)
+        }
     }
 
     fun toggleWish(subjectId: Long) {

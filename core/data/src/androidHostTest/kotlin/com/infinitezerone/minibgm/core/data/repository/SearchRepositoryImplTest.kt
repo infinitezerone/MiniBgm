@@ -235,4 +235,28 @@ class SearchRepositoryImplTest {
             val empty = repo.getSearchHistory().first()
             assertTrue(empty.isEmpty())
         }
+
+    @Test
+    fun exploreSortPreference_getAndSet() =
+        runTest {
+            val fakeApi = FakeApiService()
+            val userPrefs = createTestUserPreferencesDataSource()
+            val repo = SearchRepositoryImpl(fakeApi, userPrefs)
+
+            assertEquals("rank", repo.getExploreSortPreference())
+            repo.setExploreSortPreference("score")
+            assertEquals("score", repo.getExploreSortPreference())
+        }
+
+    @Test
+    fun blockedSubjectTags_getAndSet() =
+        runTest {
+            val fakeApi = FakeApiService()
+            val userPrefs = createTestUserPreferencesDataSource()
+            val repo = SearchRepositoryImpl(fakeApi, userPrefs)
+
+            assertTrue(repo.getBlockedSubjectTags().first().isEmpty())
+            repo.setBlockedSubjectTags(listOf("耽美", "后宫"))
+            assertEquals(listOf("耽美", "后宫"), repo.getBlockedSubjectTags().first())
+        }
 }

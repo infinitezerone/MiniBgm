@@ -486,6 +486,10 @@ internal fun SubjectDetailContent(
                             RelationsSection(
                                 relations = uiState.relations,
                                 onSubjectClick = onSubjectClick,
+                                currentSubjectId = displaySubject.id,
+                                currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
+                                currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
+                                currentSubjectScore = displaySubject.rating?.score ?: 0.0,
                             )
                         }
                     }

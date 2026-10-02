@@ -380,7 +380,21 @@ fun ScheduleTimelineSingleCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(top = 2.dp),
                     ) {
-                        if (schedule.nextEpisodeNumber > 0) {
+                        if (schedule.nextEpisodeNumber == 1) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                            ) {
+                                Text(
+                                    text = "首播 · 第 1 话",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp),
+                                )
+                            }
+                        } else if (schedule.nextEpisodeNumber > 1) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),

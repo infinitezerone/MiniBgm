@@ -49,6 +49,10 @@ data class UserPreferences(
     val showRestrictedContent: Boolean = false,
     /** 本地最近搜索历史词条列表（按最近使用降序，最多 20 条） */
     val searchHistory: List<String> = emptyList(),
+    /** 探索发现页排序偏好（heat / score / rank） */
+    val exploreSortPreference: String = "rank",
+    /** 题材标签排除黑名单 */
+    val blockedSubjectTags: List<String> = emptyList(),
     /** 开播提醒延迟偏移 (分钟) */
     val airDelayOffsetMinutes: Int = 0,
     /** AI 服务配置：端点地址（如本地 Ollama http://10.0.2.2:11434/v1 或兼容 OpenAI 协议的云端端点） */

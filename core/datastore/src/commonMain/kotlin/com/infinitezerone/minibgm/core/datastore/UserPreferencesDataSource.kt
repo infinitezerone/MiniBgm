@@ -196,6 +196,20 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新探索发现页排序偏好（heat / score / rank） */
+    suspend fun setExploreSortPreference(sortKey: String) {
+        dataStore.updateData { current ->
+            current.copy(exploreSortPreference = sortKey)
+        }
+    }
+
+    /** 更新题材标签排除黑名单 */
+    suspend fun setBlockedSubjectTags(tags: List<String>) {
+        dataStore.updateData { current ->
+            current.copy(blockedSubjectTags = tags)
+        }
+    }
+
     /** 更新 AI 服务配置（不含密钥；密钥走 SecureSecretStore 加密存储） */
     suspend fun setAiConfig(
         endpoint: String,

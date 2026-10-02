@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,9 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -117,18 +120,84 @@ enum class RelationCategory(
     }
 }
 
+/** 主线系列时间轴条目模型 */
+data class TimelineStoryNode(
+    val id: Long,
+    val name: String,
+    val relationLabel: String,
+    val coverUrl: String?,
+    val score: Double,
+    val isCurrent: Boolean,
+)
+
 /** 关联作品区域：支持按正传/续作、原声音乐、改编原著等细粒度分类过滤，支持横滑与海报墙视图切换 */
 @Composable
 fun RelationsSection(
     relations: List<SubjectRelation>,
     onSubjectClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    currentSubjectId: Long? = null,
+    currentSubjectName: String = "",
+    currentSubjectCover: String? = null,
+    currentSubjectScore: Double = 0.0,
 ) {
     if (relations.isEmpty()) return
 
     val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var isGridView by rememberSaveable { mutableStateOf(false) }
+
+    val mainStoryTimelineNodes =
+        remember(uniqueRelations, currentSubjectId, currentSubjectName, currentSubjectCover, currentSubjectScore) {
+            if (currentSubjectId == null) return@remember emptyList()
+            val prequels =
+                uniqueRelations
+                    .filter { it.relation in setOf("前传", "前传原著") || it.relation.startsWith("前传") }
+                    .sortedBy { it.id }
+            val sequels =
+                uniqueRelations
+                    .filter { it.relation in setOf("续集", "续作") || it.relation.startsWith("续集") || it.relation.startsWith("续作") }
+                    .sortedBy { it.id }
+
+            if (prequels.isEmpty() && sequels.isEmpty()) return@remember emptyList()
+
+            val list = mutableListOf<TimelineStoryNode>()
+            prequels.forEach {
+                list.add(
+                    TimelineStoryNode(
+                        id = it.id,
+                        name = it.displayName,
+                        relationLabel = it.relation,
+                        coverUrl = it.images?.common ?: it.images?.large ?: it.images?.medium,
+                        score = it.score,
+                        isCurrent = false,
+                    ),
+                )
+            }
+            list.add(
+                TimelineStoryNode(
+                    id = currentSubjectId,
+                    name = currentSubjectName,
+                    relationLabel = "本作",
+                    coverUrl = currentSubjectCover,
+                    score = currentSubjectScore,
+                    isCurrent = true,
+                ),
+            )
+            sequels.forEach {
+                list.add(
+                    TimelineStoryNode(
+                        id = it.id,
+                        name = it.displayName,
+                        relationLabel = it.relation,
+                        coverUrl = it.images?.common ?: it.images?.large ?: it.images?.medium,
+                        score = it.score,
+                        isCurrent = false,
+                    ),
+                )
+            }
+            list
+        }
 
     // 统计各分类实际包含的作品数量
     val categoryCounts =
@@ -217,7 +286,15 @@ fun RelationsSection(
             }
         }
 
-        // 2. 细粒度分类过滤 Chips（仅在分类数 >= 2 或条目总数 > 3 时展示）
+        // 2. 主线系列观影顺序时间轴（仅在有前传/续集且处于全部分类或正传分类时高亮展示）
+        if ((selectedCategory == null || selectedCategory == RelationCategory.MAIN_STORY.name) && mainStoryTimelineNodes.isNotEmpty()) {
+            MainStoryTimeline(
+                nodes = mainStoryTimelineNodes,
+                onSubjectClick = onSubjectClick,
+            )
+        }
+
+        // 3. 细粒度分类过滤 Chips（仅在分类数 >= 2 或条目总数 > 3 时展示）
         if (availableCategories.size >= 2 || uniqueRelations.size > 3) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -311,6 +388,197 @@ fun RelationsSection(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 主线系列观影顺序时间轴：前传 -> 本作(当前) -> 续作 连线时间轨 */
+@Composable
+fun MainStoryTimeline(
+    nodes: List<TimelineStoryNode>,
+    onSubjectClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (nodes.size < 2) return
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ViewCarousel,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = "主线系列观影顺序 (${nodes.size})",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "前传 · 本作 · 续作",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            itemsIndexed(items = nodes, key = { index, node -> "${node.id}_${node.relationLabel}_$index" }) { index, node ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TimelineNodeCard(
+                        node = node,
+                        index = index + 1,
+                        onClick = {
+                            if (!node.isCurrent) {
+                                onSubjectClick(node.id)
+                            }
+                        },
+                    )
+
+                    if (index < nodes.lastIndex) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.size(22.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineNodeCard(
+    node: TimelineStoryNode,
+    index: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cardBorder =
+        if (node.isCurrent) {
+            BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        }
+
+    val cardColor =
+        if (node.isCurrent) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        }
+
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        border = cardBorder,
+        modifier = modifier.width(130.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(105.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+            ) {
+                CoverImage(
+                    url = node.coverUrl.orEmpty(),
+                    contentDescription = node.name,
+                    aspectRatio = 0.7f,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(topStart = 0.dp, bottomEnd = 8.dp),
+                    color =
+                        if (node.isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.9f)
+                        },
+                    modifier = Modifier.align(Alignment.TopStart),
+                ) {
+                    Text(
+                        text = if (node.isCurrent) "当前 · 本作" else "$index. ${node.relationLabel}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.82f,
+                        fontWeight = FontWeight.Bold,
+                        color =
+                            if (node.isCurrent) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            Text(
+                text = node.name,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (node.isCurrent) FontWeight.Bold else FontWeight.Medium,
+                color =
+                    if (node.isCurrent) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.height(34.dp),
+            )
+
+            if (node.score > 0.0) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        tint = RatingGold,
+                        modifier = Modifier.size(12.dp),
+                    )
+                    Text(
+                        text = String.format(java.util.Locale.US, "%.1f", node.score),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(14.dp))
             }
         }
     }

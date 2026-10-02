@@ -74,6 +74,25 @@ class FakeSearchRepository : SearchRepository {
         _searchHistory.value = emptyList()
     }
 
+    var exploreSortPreference: String = "rank"
+    var setExploreSortPreferenceCallCount: Int = 0
+        private set
+
+    override suspend fun getExploreSortPreference(): String = exploreSortPreference
+
+    override suspend fun setExploreSortPreference(sortKey: String) {
+        setExploreSortPreferenceCallCount++
+        exploreSortPreference = sortKey
+    }
+
+    private val _blockedSubjectTags = MutableStateFlow<List<String>>(emptyList())
+
+    override fun getBlockedSubjectTags(): Flow<List<String>> = _blockedSubjectTags.asStateFlow()
+
+    override suspend fun setBlockedSubjectTags(tags: List<String>) {
+        _blockedSubjectTags.value = tags
+    }
+
     var lastSort: String? = null
         private set
 

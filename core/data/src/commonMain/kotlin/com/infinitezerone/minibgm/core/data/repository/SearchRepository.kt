@@ -49,6 +49,18 @@ interface SearchRepository {
 
     /** 清空所有搜索历史 */
     suspend fun clearSearchHistory()
+
+    /** 获取探索流排序偏好（heat / score / rank，默认 rank） */
+    suspend fun getExploreSortPreference(): String
+
+    /** 设置探索流排序偏好 */
+    suspend fun setExploreSortPreference(sortKey: String)
+
+    /** 观察题材标签排除黑名单 */
+    fun getBlockedSubjectTags(): Flow<List<String>>
+
+    /** 更新题材标签排除黑名单 */
+    suspend fun setBlockedSubjectTags(tags: List<String>)
 }
 
 class SearchRepositoryImpl(
@@ -72,6 +84,22 @@ class SearchRepositoryImpl(
     override suspend fun clearSearchHistory() {
         withContext(NonCancellable) {
             userPreferences.clearSearchHistory()
+        }
+    }
+
+    override suspend fun getExploreSortPreference(): String = userPreferences.userPreferences.firstOrNull()?.exploreSortPreference ?: "rank"
+
+    override suspend fun setExploreSortPreference(sortKey: String) {
+        withContext(NonCancellable) {
+            userPreferences.setExploreSortPreference(sortKey)
+        }
+    }
+
+    override fun getBlockedSubjectTags(): Flow<List<String>> = userPreferences.userPreferences.map { it.blockedSubjectTags }
+
+    override suspend fun setBlockedSubjectTags(tags: List<String>) {
+        withContext(NonCancellable) {
+            userPreferences.setBlockedSubjectTags(tags)
         }
     }
 
