@@ -120,6 +120,12 @@ interface CollectionRepository : UserDataClearable {
      * 本地无数据即表现为「没有在追的番」，故会话建立时必须先执行本同步。
      */
     suspend fun syncWatchingCollections(force: Boolean = false): AppResult<Unit>
+
+    /** 观察当前标记为囤番（待全剧终开刷）的条目 ID 集合 */
+    fun getBingeSubjectIdsStream(): Flow<Set<Long>>
+
+    /** 切换条目的囤番状态 */
+    suspend fun toggleBingeSubject(subjectId: Long)
 }
 
 /**
@@ -729,6 +735,13 @@ class CollectionRepositoryImpl(
             clearCountsCache()
             userCollectionDao.clearAll()
         }
+
+    override fun getBingeSubjectIdsStream(): Flow<Set<Long>> =
+        userPreferences?.userPreferences?.map { it.bingeSubjectIds } ?: flowOf(emptySet())
+
+    override suspend fun toggleBingeSubject(subjectId: Long) {
+        userPreferences?.toggleBingeSubject(subjectId)
+    }
 
     private companion object {
         const val COLLECTIONS_SYNC_THROTTLE_MILLIS = 6L * 60L * 60L * 1000L // 6 小时节流

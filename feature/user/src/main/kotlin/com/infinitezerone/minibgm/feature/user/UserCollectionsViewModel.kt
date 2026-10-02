@@ -42,6 +42,8 @@ data class UserCollectionsUiState(
     val activeProfile: UserProfile? = null,
     val selectedType: CollectionType = CollectionType.DOING,
     val selectedSubjectFilter: CollectionSubjectFilter = CollectionSubjectFilter.ALL,
+    val selectedAirFilter: CollectionAirFilter = CollectionAirFilter.ALL,
+    val bingeSubjectIds: Set<Long> = emptySet(),
     val collectionsByType: Map<CollectionType, List<UserCollection>> = emptyMap(),
     val loadingTypes: Set<CollectionType> = emptySet(),
     val loadingMoreTypes: Set<CollectionType> = emptySet(),
@@ -49,9 +51,21 @@ data class UserCollectionsUiState(
     val errorByType: Map<CollectionType, String?> = emptyMap(),
     val updatingSubjectIds: Set<Long> = emptySet(),
 ) {
-    /** 当前选中分类的收藏列表（严格隔离，保证切换分类时绝不串台显示上一个 Tab 的内容） */
+    /** 当前选中分类的原始收藏列表 */
     val collections: List<UserCollection>
         get() = collectionsByType[selectedType].orEmpty()
+
+    /** 经连载/完结/囤番多维过滤后的当前视图收藏列表 */
+    val visibleCollections: List<UserCollection>
+        get() {
+            val list = collectionsByType[selectedType].orEmpty()
+            return when (selectedAirFilter) {
+                CollectionAirFilter.ALL -> list
+                CollectionAirFilter.AIRING -> list.filter { !it.isFinished() }
+                CollectionAirFilter.FINISHED -> list.filter { it.isFinished() }
+                CollectionAirFilter.BINGE -> list.filter { bingeSubjectIds.contains(it.subjectId) }
+            }
+        }
 
     /** 当前选中分类是否正在加载中 */
     val isCurrentTabLoading: Boolean
@@ -129,6 +143,11 @@ class UserCollectionsViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            collectionRepository.getBingeSubjectIdsStream().collect { ids ->
+                _uiState.update { it.copy(bingeSubjectIds = ids) }
+            }
+        }
     }
 
     fun setInitialType(type: CollectionType) {
@@ -136,6 +155,16 @@ class UserCollectionsViewModel(
         isInitialized = true
         _uiState.update { it.copy(selectedType = type) }
         loadCollectionsForType(type, isRefresh = false)
+    }
+
+    fun selectAirFilter(filter: CollectionAirFilter) {
+        _uiState.update { it.copy(selectedAirFilter = filter) }
+    }
+
+    fun toggleBingeSubject(subjectId: Long) {
+        viewModelScope.launch {
+            collectionRepository.toggleBingeSubject(subjectId)
+        }
     }
 
     fun selectType(type: CollectionType) {

@@ -109,6 +109,8 @@ fun UserScreen(
         onLogoutAll = viewModel::logoutAll,
         onSelectCollectionType = collectionsViewModel::selectType,
         onSelectSubjectFilter = collectionsViewModel::selectSubjectFilter,
+        onSelectAirFilter = collectionsViewModel::selectAirFilter,
+        onToggleBinge = collectionsViewModel::toggleBingeSubject,
         onLoadMore = collectionsViewModel::loadMore,
         onIncrementProgress = collectionsViewModel::incrementEpisodeProgress,
         onSubjectClick = onSubjectClick,
@@ -134,6 +136,8 @@ fun UserScreenContent(
     onLogoutAll: () -> Unit,
     onSelectCollectionType: (CollectionType) -> Unit,
     onSelectSubjectFilter: (CollectionSubjectFilter) -> Unit,
+    onSelectAirFilter: (CollectionAirFilter) -> Unit = {},
+    onToggleBinge: (Long) -> Unit = {},
     onLoadMore: (CollectionType) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
@@ -259,13 +263,12 @@ fun UserScreenContent(
                     val hasFilterableList =
                         collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
 
-                    val archivesIndex = 4
-
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 96.dp),
                     ) {
+                        // 1. 沉浸式身份头部
                         item(key = "profile_hero") {
                             UserProfileHero(
                                 profile = uiState.activeProfile,
@@ -274,45 +277,16 @@ fun UserScreenContent(
                             )
                         }
 
-                        // 黄金三维统计岛屿：看过 / 在追 / 想看
-                        item(key = "user_stats_island") {
-                            UserStatsIsland(
-                                counts = uiState.collectionCounts,
-                                onSelectType = { type ->
-                                    onSelectCollectionType(type)
-                                    coroutineScope.launch { listState.animateScrollToItem(archivesIndex) }
-                                },
-                            )
-                        }
-
-                        // 追番基因卡片（Taste DNA）
-                        item(key = "taste_dna") {
-                            TasteDnaCard(counts = uiState.collectionCounts)
-                        }
-
-                        // 近期高光橱窗（Showcase）
-                        val highlightCandidates =
-                            collectionsState.collectionsByType[CollectionType.COLLECT]
-                                ?: collectionsState.collectionsByType[CollectionType.DOING]
-                                ?: collectionsState.collections
-                        if (highlightCandidates.isNotEmpty()) {
-                            item(key = "recent_highlights") {
-                                RecentHighlightsShowcase(
-                                    collections = highlightCandidates,
-                                    onSubjectClick = onSubjectClick,
-                                )
-                            }
-                        }
-
-                        // 收藏档案馆矩阵（2x2 磁贴卡片替代枯燥吸顶 Tab）
-                        item(key = "collection_archives") {
-                            CollectionArchivesGrid(
+                        // 2. 吸顶分类 Tab（带数字标签，一触即达且吸顶）：在看 / 想看 / 看过 / 搁置 / 抛弃
+                        stickyHeader(key = "collection_type_tabs") {
+                            CollectionTypeTabs(
                                 selectedType = collectionsState.selectedType,
                                 counts = uiState.collectionCounts,
                                 onSelectType = onSelectCollectionType,
                             )
                         }
 
+                        // 3. 条目类别与连载/囤番多维状态筛选
                         if (filterIsLoading || hasFilterableList) {
                             item(key = "subject_filter") {
                                 SubjectFilterRow(
@@ -320,12 +294,25 @@ fun UserScreenContent(
                                     onSelectFilter = onSelectSubjectFilter,
                                 )
                             }
+
+                            if (collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ALL ||
+                                collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ANIME
+                            ) {
+                                item(key = "air_filter") {
+                                    AirFilterRow(
+                                        selectedFilter = collectionsState.selectedAirFilter,
+                                        onSelectFilter = onSelectAirFilter,
+                                    )
+                                }
+                            }
                         }
 
+                        // 4. 追番收藏列表（直接呈现，首屏即可见）
                         collectionSection(
                             state = collectionsState,
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
+                            onToggleBinge = onToggleBinge,
                             onRefresh = onRefresh,
                             onRetry = onRetryCollections,
                             onLoadMore = onLoadMore,
@@ -448,12 +435,14 @@ private fun LazyListScope.collectionSection(
     state: UserCollectionsUiState,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: (UserCollection) -> Unit,
+    onToggleBinge: (Long) -> Unit,
     onRefresh: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: (CollectionType) -> Unit,
 ) {
     val type = state.selectedType
-    val collections = state.collectionsByType[type].orEmpty()
+    val collections = state.visibleCollections
+    val rawCollections = state.collectionsByType[type].orEmpty()
     val isLoaded = state.collectionsByType.containsKey(type)
     val isLoading = state.loadingTypes.contains(type) || (state.isLoading && !isLoaded)
     val errorMessage = state.errorByType[type] ?: state.error
@@ -467,7 +456,7 @@ private fun LazyListScope.collectionSection(
             }
         }
 
-        errorMessage != null && collections.isEmpty() -> {
+        errorMessage != null && rawCollections.isEmpty() -> {
             item(key = "collection_error") {
                 ErrorCollectionsView(
                     errorMessage = errorMessage,
@@ -478,7 +467,13 @@ private fun LazyListScope.collectionSection(
 
         isLoaded && collections.isEmpty() -> {
             item(key = "collection_empty") {
-                EmptyCollectionsView(onRefresh = onRefresh)
+                val emptyMsg =
+                    if (rawCollections.isNotEmpty() && state.selectedAirFilter != CollectionAirFilter.ALL) {
+                        "暂无符合「${state.selectedAirFilter.label}」条件的条目"
+                    } else {
+                        "暂无该分类收藏"
+                    }
+                EmptyCollectionsView(message = emptyMsg, onRefresh = onRefresh)
             }
         }
 
@@ -490,8 +485,10 @@ private fun LazyListScope.collectionSection(
                 UserCollectionCard(
                     collection = item,
                     isUpdating = state.updatingSubjectIds.contains(item.subjectId),
+                    isBinge = state.bingeSubjectIds.contains(item.subjectId),
                     onSubjectClick = onSubjectClick,
                     onIncrementProgress = { onIncrementProgress(item) },
+                    onToggleBinge = { onToggleBinge(item.subjectId) },
                     modifier =
                         Modifier.padding(
                             start = 16.dp,

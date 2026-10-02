@@ -59,7 +59,6 @@ import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
-import com.infinitezerone.minibgm.feature.schedule.components.NextUpActionCard
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
@@ -476,20 +475,6 @@ private fun DayScheduleList(
             if (uiState.isOfflineCache) {
                 item(key = "offline_cache_banner") {
                     OfflineCacheBanner(onRetry = {})
-                }
-            }
-
-            if (isTodayPage && uiState.nextUpAction != null && !uiState.isActionDismissed) {
-                item(key = "next_up_action_card") {
-                    NextUpActionCard(
-                        action = uiState.nextUpAction,
-                        onPlayClick = onPlayClick,
-                        playRoute = uiState.nextUpPlayRoute?.takeIf { it.subjectId == uiState.nextUpAction.subjectId },
-                        onPlayInApp = onPlayInApp,
-                        onMarkWatched = onMarkEpisodeWatched,
-                        onDismiss = onDismissNextUpAction,
-                        onClick = { onSubjectClick(SubjectDetailRoute(uiState.nextUpAction.subjectId)) },
-                    )
                 }
             }
 

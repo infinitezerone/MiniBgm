@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PlusOne
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +34,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
@@ -333,12 +336,44 @@ internal fun SubjectFilterRow(
     }
 }
 
+/** 连载/完结/囤番多维状态筛选行 */
+@Composable
+internal fun AirFilterRow(
+    selectedFilter: CollectionAirFilter,
+    onSelectFilter: (CollectionAirFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(CollectionAirFilter.entries) { filter ->
+            FilterChip(
+                selected = selectedFilter == filter,
+                onClick = { onSelectFilter(filter) },
+                label = { Text(filter.label) },
+                border = null,
+                colors =
+                    FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        selectedContainerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f),
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        selectedLabelColor = MaterialTheme.colorScheme.tertiary,
+                    ),
+            )
+        }
+    }
+}
+
 @Composable
 internal fun UserCollectionCard(
     collection: UserCollection,
     isUpdating: Boolean,
+    isBinge: Boolean = false,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onIncrementProgress: () -> Unit,
+    onToggleBinge: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val subject = collection.subject
@@ -420,6 +455,26 @@ internal fun UserCollectionCard(
                         )
                     }
 
+                    val airBadge = collection.airStatusBadge(isBinge)
+                    val badgeColors =
+                        when {
+                            isBinge -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+                            collection.isFinished() -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = badgeColors.first,
+                    ) {
+                        Text(
+                            text = airBadge,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = badgeColors.second,
+                            fontWeight = if (isBinge || collection.isFinished()) FontWeight.SemiBold else FontWeight.Normal,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+
                     if (collection.rate > 0) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -480,23 +535,50 @@ internal fun UserCollectionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    if (canIncrement || isUpdating) {
-                        FilledTonalIconButton(
-                            onClick = onIncrementProgress,
-                            enabled = !isUpdating && canIncrement,
-                            modifier = Modifier.size(30.dp),
-                        ) {
-                            if (isUpdating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (onToggleBinge != null) {
+                            IconButton(
+                                onClick = onToggleBinge,
+                                modifier = Modifier.size(30.dp),
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Filled.PlusOne,
-                                    contentDescription = "+1 话",
+                                    imageVector = if (isBinge) Icons.Filled.Inventory2 else Icons.Outlined.Inventory2,
+                                    contentDescription = if (isBinge) "已设为囤番（完结提醒）" else "设为囤番待看",
+                                    tint =
+                                        if (isBinge) {
+                                            MaterialTheme.colorScheme.tertiary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                                .copy(
+                                                    alpha = 0.6f,
+                                                )
+                                        },
                                     modifier = Modifier.size(16.dp),
                                 )
+                            }
+                        }
+
+                        if (canIncrement || isUpdating) {
+                            FilledTonalIconButton(
+                                onClick = onIncrementProgress,
+                                enabled = !isUpdating && canIncrement,
+                                modifier = Modifier.size(30.dp),
+                            ) {
+                                if (isUpdating) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Filled.PlusOne,
+                                        contentDescription = "+1 话",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
                     }

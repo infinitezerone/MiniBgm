@@ -256,6 +256,7 @@ class ScheduleRepositoryImpl(
                     airAtUtc = event.airAtUtc,
                     kind = event.kind,
                     coverUrl = subject.coverUrl,
+                    totalEpisodes = subject.totalEpisodes,
                 )
             }
 
@@ -283,6 +284,7 @@ class ScheduleRepositoryImpl(
                         airAtUtc = airUtc,
                         kind = entity.nextEpisodeKind.ifBlank { AirEventKind.SCHEDULED },
                         coverUrl = entity.coverUrl,
+                        totalEpisodes = entity.totalEpisodes,
                     )
                 } else {
                     null

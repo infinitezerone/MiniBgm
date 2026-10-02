@@ -73,14 +73,19 @@ class AiringReminderNotifier(
         val manager = NotificationManagerCompat.from(context)
 
         for (item in upcoming) {
-            val titleRes =
-                if (isAlreadyStarted) {
-                    R.string.airing_pre_air_title_started
+            val isFinale = item.isFinale
+            val contentTitle =
+                if (isFinale) {
+                    "🎬《${item.displayName}》全剧完结！"
+                } else if (isAlreadyStarted) {
+                    context.getString(R.string.airing_pre_air_title_started)
                 } else {
-                    R.string.airing_pre_air_title
+                    context.getString(R.string.airing_pre_air_title)
                 }
             val itemText =
-                if (isAlreadyStarted) {
+                if (isFinale) {
+                    "第 ${item.episode} 话（最终话）现已播出，共 ${item.totalEpisodes} 话全部完结，可以一口气开刷啦！"
+                } else if (isAlreadyStarted) {
                     context.getString(R.string.airing_pre_air_item_started, item.displayName, item.episode)
                 } else {
                     context.getString(R.string.airing_pre_air_item, item.displayName, item.episode)
@@ -90,7 +95,7 @@ class AiringReminderNotifier(
                 NotificationCompat
                     .Builder(context, PRE_AIR_CHANNEL_ID)
                     .setSmallIcon(R.drawable.ic_notification_airing)
-                    .setContentTitle(context.getString(titleRes))
+                    .setContentTitle(contentTitle)
                     .setContentText(itemText)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
                     .setContentIntent(launchSubjectIntent(item.subjectId))
@@ -102,6 +107,14 @@ class AiringReminderNotifier(
                     .build()
 
             post(manager, notificationIdForSubject(item.subjectId), notification)
+
+            // 应用前台运行时同步发送应用内顶部胶囊横幅
+            com.infinitezerone.minibgm.core.common.InAppNotificationBus.post(
+                title = contentTitle,
+                message = itemText,
+                subjectId = item.subjectId,
+                coverUrl = item.coverUrl,
+            )
         }
     }
 

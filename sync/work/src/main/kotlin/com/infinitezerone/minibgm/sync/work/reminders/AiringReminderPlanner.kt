@@ -64,12 +64,17 @@ object AiringReminderPlanner {
         leadMinutes: Long,
         airDelayOffsetMinutes: Long = 0L,
         graceMinutes: Long = PRE_AIR_GRACE_MINUTES,
+        bingeSubjectIds: Set<Long> = emptySet(),
         upcoming: List<UpcomingAiring>,
     ): List<UpcomingAiring> {
         if (!enabled) return emptyList()
         if (!isLoggedIn) return emptyList()
         val notifiedContent = notifiedKeys.map { it.substringAfter(':') }.toSet()
         return upcoming.filter { item ->
+            // 若为囤番条目，普通单集静默，仅全剧终（最终话）触发开播提醒
+            if (bingeSubjectIds.contains(item.subjectId) && !item.isFinale) {
+                return@filter false
+            }
             val airAt = runCatching { TimeUtils.epochMillisOfIso(item.airAtUtc) }.getOrNull()
             val effectiveAir = airAt?.let { it + airDelayOffsetMinutes * 60_000L }
             val deltaMillis = effectiveAir?.let { it - nowEpochMillis } ?: Long.MIN_VALUE
@@ -101,11 +106,13 @@ object AiringReminderPlanner {
         leadMinutes: Long,
         airDelayOffsetMinutes: Long = 0L,
         graceMinutes: Long = PRE_AIR_GRACE_MINUTES,
+        bingeSubjectIds: Set<Long> = emptySet(),
         upcoming: List<UpcomingAiring>,
     ): Pair<UpcomingAiring, Long>? {
         val notifiedContent = notifiedKeys.map { it.substringAfter(':') }.toSet()
         return upcoming
             .asSequence()
+            .filter { !bingeSubjectIds.contains(it.subjectId) || it.isFinale }
             .filter { preAirContentKey(it) !in notifiedContent }
             .mapNotNull { item ->
                 val airAt = runCatching { TimeUtils.epochMillisOfIso(item.airAtUtc) }.getOrNull() ?: return@mapNotNull null

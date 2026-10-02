@@ -266,4 +266,33 @@ class UserPreferencesDataSource(
             current.copy(lastPlaybackSourceId = id)
         }
     }
+
+    /** 切换条目的囤番（待全剧终提醒）状态 */
+    suspend fun toggleBingeSubject(subjectId: Long) {
+        dataStore.updateData { current ->
+            val updated =
+                if (current.bingeSubjectIds.contains(subjectId)) {
+                    current.bingeSubjectIds - subjectId
+                } else {
+                    current.bingeSubjectIds + subjectId
+                }
+            current.copy(bingeSubjectIds = updated)
+        }
+    }
+
+    /** 设置条目的囤番状态 */
+    suspend fun setBingeSubject(
+        subjectId: Long,
+        isBinge: Boolean,
+    ) {
+        dataStore.updateData { current ->
+            val updated =
+                if (isBinge) {
+                    current.bingeSubjectIds + subjectId
+                } else {
+                    current.bingeSubjectIds - subjectId
+                }
+            current.copy(bingeSubjectIds = updated)
+        }
+    }
 }

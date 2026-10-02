@@ -318,4 +318,83 @@ class UserCollectionsViewModelTest {
             assertEquals("请先登录 Bangumi 账号", loggedOutState.error)
             assertTrue(loggedOutState.collections.isEmpty())
         }
+
+    @Test
+    fun selectAirFilter_filtersVisibleCollectionsCorrectly() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            // finished item: totalEpisodes = 12, epStatus = 12
+            val finishedItem =
+                sampleUserCollection.copy(
+                    subjectId = 101L,
+                    epStatus = 12,
+                    subject = sampleSubject.copy(totalEpisodes = 12, eps = 12),
+                )
+            // ongoing item: totalEpisodes = 12, epStatus = 3, airDate in future/recent
+            val ongoingItem =
+                sampleUserCollection.copy(
+                    subjectId = 102L,
+                    epStatus = 3,
+                    subject = sampleSubject.copy(id = 102L, totalEpisodes = 12, eps = 12, date = "2026-10-01"),
+                )
+            collectionRepo.sendCollection(finishedItem)
+            collectionRepo.sendCollection(ongoingItem)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            viewModel.uiState.first { it.collections.size == 2 }
+
+            // 1. 全部
+            viewModel.selectAirFilter(CollectionAirFilter.ALL)
+            assertEquals(2, viewModel.uiState.value.visibleCollections.size)
+
+            // 2. 已完结
+            viewModel.selectAirFilter(CollectionAirFilter.FINISHED)
+            val finishedFiltered = viewModel.uiState.value.visibleCollections
+            assertEquals(1, finishedFiltered.size)
+            assertEquals(101L, finishedFiltered.first().subjectId)
+
+            // 3. 连载中
+            viewModel.selectAirFilter(CollectionAirFilter.AIRING)
+            val airingFiltered = viewModel.uiState.value.visibleCollections
+            assertEquals(1, airingFiltered.size)
+            assertEquals(102L, airingFiltered.first().subjectId)
+        }
+
+    @Test
+    fun toggleBingeSubject_updatesBingeSubjectIdsAndFilters() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            val item1 = sampleUserCollection.copy(subjectId = 101L)
+            val item2 = sampleUserCollection.copy(subjectId = 102L)
+            collectionRepo.sendCollection(item1)
+            collectionRepo.sendCollection(item2)
+            val (viewModel, _) = createViewModel(collectionRepo = collectionRepo)
+
+            viewModel.setInitialType(CollectionType.DOING)
+            viewModel.uiState.first { it.collections.size == 2 }
+
+            // 初始无囤番
+            assertEquals(emptySet<Long>(), viewModel.uiState.value.bingeSubjectIds)
+
+            // 标记 101 为囤番
+            viewModel.toggleBingeSubject(101L)
+            val stateWithBinge = viewModel.uiState.first { it.bingeSubjectIds.contains(101L) }
+            assertTrue(stateWithBinge.bingeSubjectIds.contains(101L))
+
+            // 筛选囤番中
+            viewModel.selectAirFilter(CollectionAirFilter.BINGE)
+            val bingeList = viewModel.uiState.value.visibleCollections
+            assertEquals(1, bingeList.size)
+            assertEquals(101L, bingeList.first().subjectId)
+
+            // 取消囤番
+            viewModel.toggleBingeSubject(101L)
+            val stateWithoutBinge = viewModel.uiState.first { !it.bingeSubjectIds.contains(101L) }
+            assertFalse(stateWithoutBinge.bingeSubjectIds.contains(101L))
+            assertTrue(
+                viewModel.uiState.value.visibleCollections
+                    .isEmpty(),
+            )
+        }
 }

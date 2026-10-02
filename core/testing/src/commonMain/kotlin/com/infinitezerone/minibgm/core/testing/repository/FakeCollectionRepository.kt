@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.map
 class FakeCollectionRepository : CollectionRepository {
     private val collectionsState = MutableStateFlow<Map<Long, UserCollection>>(emptyMap())
     private val trackingFootprintState = MutableStateFlow<TrackingFootprint?>(null)
+    private val bingeSubjectIdsState = MutableStateFlow<Set<Long>>(emptySet())
 
     var fetchUserCollectionsResult: AppResult<List<UserCollection>>? = null
     var fetchUserCollectionsCallCount: Int = 0
@@ -47,6 +48,13 @@ class FakeCollectionRepository : CollectionRepository {
 
     override fun getCollectionsByTypeStream(type: CollectionType): Flow<List<UserCollection>> =
         collectionsState.map { it.values.filter { col -> col.type == type.value } }
+
+    override fun getBingeSubjectIdsStream(): Flow<Set<Long>> = bingeSubjectIdsState
+
+    override suspend fun toggleBingeSubject(subjectId: Long) {
+        val current = bingeSubjectIdsState.value
+        bingeSubjectIdsState.value = if (current.contains(subjectId)) current - subjectId else current + subjectId
+    }
 
     override suspend fun fetchUserCollections(
         username: String,

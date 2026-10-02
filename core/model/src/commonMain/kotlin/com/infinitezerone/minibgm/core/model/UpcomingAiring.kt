@@ -10,7 +10,12 @@ data class UpcomingAiring(
     val airAtUtc: String,
     val kind: String,
     val coverUrl: String = "",
+    val totalEpisodes: Int = 0,
 ) {
     val displayName: String
         get() = titleCn.ifBlank { title }
+
+    /** 是否为全剧终 / 最终话 */
+    val isFinale: Boolean
+        get() = totalEpisodes > 0 && episode >= totalEpisodes
 }
