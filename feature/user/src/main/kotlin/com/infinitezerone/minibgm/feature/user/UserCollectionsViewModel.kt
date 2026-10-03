@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.user
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
@@ -10,14 +11,24 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -104,80 +115,249 @@ sealed interface UserCollectionsEvent {
     ) : UserCollectionsEvent
 }
 
+/** 远端收藏列表单页大小：与 `fetchUserCollections` 的 limit 语义一致，页宽决定 hasMore 判据 */
+private const val COLLECTIONS_PAGE_SIZE = 50
+
+private const val LOGIN_REQUIRED_MESSAGE = "请先登录 Bangumi 账号"
+
+/**
+ * 一次收藏列表网络请求的全部输入 —— **换挡的唯一判据**。
+ *
+ * 由「选中分区 × 条目类别筛选 × 当前账号」投影而来：三者任一真变即视为换了请求，
+ * 旧加载链整条取消、新分区走 [CollectionsPagingSignal.Initial] 自动首取。
+ * 条目类别筛选与账号兼任**分区缓存剪除**判据（见 [UserCollectionsViewModel.prunePartitions]），
+ * 复刻旧实现「筛选/账号切换即清缓存重载」的语义。
+ */
+private data class RequestKey(
+    val profileId: Long?,
+    val subjectTypeId: Int,
+    val type: CollectionType,
+)
+
+/** 分区缓存键：账号 × 条目类别筛选 × 收藏分区 */
+private data class PartitionKey(
+    val profileId: Long?,
+    val subjectTypeId: Int,
+    val type: CollectionType,
+)
+
+private fun RequestKey.toPartitionKey(): PartitionKey = PartitionKey(profileId, subjectTypeId, type)
+
+/**
+ * 单个分区的远端数据快照。
+ *
+ * [hasMore] 默认 `true`：与旧实现 `hasMoreByType[type] ?: true` 的缺省语义一致——
+ * 经乐观编辑（就地迁分区）凭空创建的分区，在用户真正翻到触底前不拦截追加。
+ */
+private data class PartitionData(
+    val collections: List<UserCollection> = emptyList(),
+    val hasMore: Boolean = true,
+    val error: String? = null,
+)
+
+/** 瞬态进度标记（首屏加载中 / 刷新中 / 追加中）、全局错误位与打卡进行中的条目集合 */
+private data class PagingProgress(
+    val loadingTypes: Set<CollectionType> = emptySet(),
+    val loadingMoreTypes: Set<CollectionType> = emptySet(),
+    val isRefreshing: Boolean = false,
+    val error: String? = null,
+    val updatingSubjectIds: Set<Long> = emptySet(),
+)
+
+/** 分页取页信号：`Initial` 是进页 / 换挡后的自动首取，其余由用户意图触发 */
+private sealed interface CollectionsPagingSignal {
+    data object Initial : CollectionsPagingSignal
+
+    data object Retry : CollectionsPagingSignal
+
+    data object Refresh : CollectionsPagingSignal
+
+    data object More : CollectionsPagingSignal
+}
+
+/** 重试 / 下拉刷新 / 触底加载更多的触发器；换挡后自动先收到一次 [CollectionsPagingSignal.Initial] */
+private class CollectionsPagingTriggers {
+    private val retryTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val refreshTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val loadMoreTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    fun signals(): Flow<CollectionsPagingSignal> =
+        merge(
+            retryTrigger.map { CollectionsPagingSignal.Retry },
+            refreshTrigger.map { CollectionsPagingSignal.Refresh },
+            loadMoreTrigger.map { CollectionsPagingSignal.More },
+        ).onStart { emit(CollectionsPagingSignal.Initial) }
+
+    fun retry() {
+        retryTrigger.tryEmit(Unit)
+    }
+
+    fun refresh() {
+        refreshTrigger.tryEmit(Unit)
+    }
+
+    fun loadMore() {
+        loadMoreTrigger.tryEmit(Unit)
+    }
+}
+
+/** 数据侧切片：分区缓存 + 瞬态进度 + 三个选中意图（不含身份信息） */
+private data class CollectionsDataSlice(
+    val partitions: Map<PartitionKey, PartitionData>,
+    val progress: PagingProgress,
+    val selectedType: CollectionType,
+    val selectedSubjectFilter: CollectionSubjectFilter,
+    val selectedAirFilter: CollectionAirFilter,
+)
+
+/** 身份侧切片：登录态、当前账号与囤番集合（仓库流直接汇入） */
+private data class CollectionsIdentitySlice(
+    val isLoggedIn: Boolean,
+    val activeProfile: UserProfile?,
+    val bingeSubjectIds: Set<Long>,
+)
+
+/**
+ * 用户收藏列表 ViewModel —— 响应式 UDF 投影（对标 `feature/search` 的 SeasonalGuideViewModel 规范）：
+ *
+ * 1. 对外只读 `uiState: StateFlow<…>`：状态 = `combine(意图流, 分区缓存流, 仓库流)` 的投影 + `stateIn`；
+ * 2. 可变状态只剩**用户意图**（选中分区 / 条目类别筛选 / 连载筛选）与分区缓存、瞬态进度；
+ *    分页取数用 `distinctUntilChangedBy(请求键) + flatMapLatest` 换挡——请求键
+ *    [RequestKey]（账号 × 类别筛选 × 分区）任一真变时旧链整条取消、新分区自动首取，
+ *    **不手动管理任何 fetchJob / loadMoreJob**（旧实现的 `loadJobs: MutableMap<CollectionType, Job>` 已删）；
+ *    账号切换 / 登出由 `activeProfile` 汇入请求键：换挡自动取消旧链 + 剪除旧账号分区缓存 + 重载当前分区，
+ *    未登录（profileId == null）时链上直接落「请先登录」错误位，不发请求；
+ * 3. 收藏列表是**远端拉取**（无 Room 流可回读），因此 +1 打卡、撤销、就地编辑迁分区保留
+ *    本地乐观更新与失败回滚——这是远端数据的 UI 即时反馈层（规范第 3 条的例外情形），
+ *    仓库本身仍只写不读；
+ * 4. 一次性事件（Snackbar / 撤销卡片）走 `Channel(BUFFERED) + receiveAsFlow()`，与状态流隔离；
+ * 5. 分区缓存按 `PartitionKey` 存储、按当前「账号 × 类别筛选」投影成 `collectionsByType` 等
+ *    对外字段——跨账号 / 跨筛选的残留分区天然不可见，等价于旧实现的整图清空。
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 class UserCollectionsViewModel(
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(UserCollectionsUiState())
-    val uiState: StateFlow<UserCollectionsUiState> = _uiState.asStateFlow()
+    // ── 输入：用户意图。这是本类仅有的"命令式"可变状态 ──
+    private val selectedType = MutableStateFlow(CollectionType.DOING)
+    private val selectedSubjectFilter = MutableStateFlow(CollectionSubjectFilter.ALL)
+    private val selectedAirFilter = MutableStateFlow(CollectionAirFilter.ALL)
+
+    /** 进页前的懒加载闸门：`setInitialType` 首次调用后才允许换挡链发请求（保持"进页才发 1 次请求"） */
+    private val isInitialized = MutableStateFlow(false)
+
+    /** 分区缓存：账号 × 类别筛选 × 分区 → 远端数据快照（含乐观更新就地改写的列表） */
+    private val partitions = MutableStateFlow<Map<PartitionKey, PartitionData>>(emptyMap())
+
+    /** 瞬态进度：首屏 / 刷新 / 追加标记与全局错误位；换挡时整体复位 */
+    private val progress = MutableStateFlow(PagingProgress())
+
+    /** 分页触发器（重试 / 刷新 / 触底追加） */
+    private val pagingTriggers = CollectionsPagingTriggers()
+
+    /** 当前换挡键：乐观更新据它定位分区；在链上 `onEach` 里同步维护 */
+    private var currentRequestKey: RequestKey? = null
 
     private val _events = Channel<UserCollectionsEvent>(Channel.BUFFERED)
+
+    /** 一次性事件流。UI 收集它来弹提示 / 展示撤销卡片；不需要也不应该有人回写它 */
     val events: Flow<UserCollectionsEvent> = _events.receiveAsFlow()
 
-    private val loadJobs = mutableMapOf<CollectionType, Job>()
-    private var isInitialized = false
+    /**
+     * 对外只读投影：`combine` 出来的不可变快照。
+     *
+     * Eagerly 而非 WhileSubscribed：投影必须在无人订阅时也保持最新（进页即取数的原语义），
+     * 否则单测读到的永远是初值；上游都是内存流，常驻收集的开销可忽略。
+     */
+    val uiState: StateFlow<UserCollectionsUiState> =
+        combine(
+            combine(
+                partitions,
+                progress,
+                selectedType,
+                selectedSubjectFilter,
+                selectedAirFilter,
+            ) { parts, prog, type, subjectFilter, airFilter ->
+                CollectionsDataSlice(parts, prog, type, subjectFilter, airFilter)
+            },
+            combine(
+                authRepository.isLoggedIn,
+                authRepository.activeProfile,
+                collectionRepository.getBingeSubjectIdsStream(),
+            ) { loggedIn, profile, binge ->
+                CollectionsIdentitySlice(loggedIn, profile, binge)
+            },
+        ) { data, identity ->
+            val currentProfileId = identity.activeProfile?.id
+            val currentSubjectTypeId = data.selectedSubjectFilter.typeId
+            // 只投影当前「账号 × 类别筛选」下的分区：跨账号/跨筛选残留天然不可见
+            val currentPartitions =
+                data.partitions.filterKeys { it.profileId == currentProfileId && it.subjectTypeId == currentSubjectTypeId }
+            UserCollectionsUiState(
+                isLoading = data.progress.loadingTypes.isNotEmpty(),
+                isRefreshing = data.progress.isRefreshing,
+                error = data.progress.error,
+                isLoggedIn = identity.isLoggedIn,
+                activeProfile = identity.activeProfile,
+                selectedType = data.selectedType,
+                selectedSubjectFilter = data.selectedSubjectFilter,
+                selectedAirFilter = data.selectedAirFilter,
+                bingeSubjectIds = identity.bingeSubjectIds,
+                collectionsByType = currentPartitions.mapKeys { it.key.type }.mapValues { it.value.collections },
+                loadingTypes = data.progress.loadingTypes,
+                loadingMoreTypes = data.progress.loadingMoreTypes,
+                hasMoreByType = currentPartitions.mapKeys { it.key.type }.mapValues { it.value.hasMore },
+                errorByType = currentPartitions.mapKeys { it.key.type }.mapValues { it.value.error },
+                updatingSubjectIds = data.progress.updatingSubjectIds,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, UserCollectionsUiState())
 
     init {
-        viewModelScope.launch {
-            authRepository.isLoggedIn.collect { loggedIn ->
-                _uiState.update { it.copy(isLoggedIn = loggedIn) }
-            }
+        combine(
+            selectedType,
+            selectedSubjectFilter,
+            authRepository.activeProfile,
+            isInitialized,
+        ) { type, subjectFilter, profile, initialized ->
+            if (!initialized) null else RequestKey(profile?.id, subjectFilter.typeId, type) to profile
         }
-        viewModelScope.launch {
-            var initialProfileObserved = false
-            authRepository.activeProfile.collect { profile ->
-                val previousProfile = _uiState.value.activeProfile
-                _uiState.update { it.copy(activeProfile = profile) }
-                if (!initialProfileObserved) {
-                    initialProfileObserved = true
-                    return@collect
+            // 换挡判据是"请求是否真的变了"：账号对象内容变化（如同名刷新）不重启链
+            .distinctUntilChangedBy { it?.first }
+            .onEach { latest ->
+                // 换挡清场：瞬态进度复位（打卡进行中集合除外——那是独立命令，不随链取消）；
+                // 剪除不属于当前「账号 × 类别筛选」的分区缓存，等价旧实现的"切换后清缓存"
+                progress.value = PagingProgress(updatingSubjectIds = progress.value.updatingSubjectIds)
+                currentRequestKey = latest?.first
+                if (latest != null) prunePartitions(latest.first)
+            }.flatMapLatest { latest ->
+                if (latest == null) {
+                    emptyFlow()
+                } else {
+                    val (key, profile) = latest
+                    pagingTriggers.signals().onEach { signal -> runPagingSession(key, profile, signal) }
                 }
-                if (profile != null && (previousProfile == null || previousProfile.id != profile.id)) {
-                    loadJobs.values.forEach { it.cancel() }
-                    loadJobs.clear()
-                    _uiState.update { state ->
-                        state.copy(
-                            collectionsByType = emptyMap(),
-                            loadingTypes = emptySet(),
-                            loadingMoreTypes = emptySet(),
-                            hasMoreByType = emptyMap(),
-                            errorByType = emptyMap(),
-                            error = null,
-                        )
-                    }
-                    loadCollectionsForType(_uiState.value.selectedType, isRefresh = false)
-                } else if (profile == null && previousProfile != null) {
-                    loadJobs.values.forEach { it.cancel() }
-                    loadJobs.clear()
-                    _uiState.update { state ->
-                        state.copy(
-                            collectionsByType = emptyMap(),
-                            loadingTypes = emptySet(),
-                            loadingMoreTypes = emptySet(),
-                            hasMoreByType = emptyMap(),
-                            errorByType = mapOf(state.selectedType to "请先登录 Bangumi 账号"),
-                            error = "请先登录 Bangumi 账号",
-                        )
-                    }
-                }
-            }
-        }
-        viewModelScope.launch {
-            collectionRepository.getBingeSubjectIdsStream().collect { ids ->
-                _uiState.update { it.copy(bingeSubjectIds = ids) }
-            }
-        }
+            }.launchIn(viewModelScope)
     }
 
     fun setInitialType(type: CollectionType) {
-        if (isInitialized) return
-        isInitialized = true
-        _uiState.update { it.copy(selectedType = type) }
-        loadCollectionsForType(type, isRefresh = false)
+        if (isInitialized.value) return
+        // 先设分区再开门：换挡链读到的是同一个不可分意图，避免首屏出现两次请求
+        selectedType.value = type
+        isInitialized.value = true
     }
 
+    fun selectType(type: CollectionType) {
+        if (selectedType.value != type) selectedType.value = type
+    }
+
+    fun selectSubjectFilter(filter: CollectionSubjectFilter) {
+        if (selectedSubjectFilter.value != filter) selectedSubjectFilter.value = filter
+    }
+
+    /** 切换连载/完结/囤番视图筛选；纯客户端补筛，不触发重新取数 */
     fun selectAirFilter(filter: CollectionAirFilter) {
-        _uiState.update { it.copy(selectedAirFilter = filter) }
+        selectedAirFilter.value = filter
     }
 
     fun toggleBingeSubject(subjectId: Long) {
@@ -186,36 +366,8 @@ class UserCollectionsViewModel(
         }
     }
 
-    fun selectType(type: CollectionType) {
-        if (_uiState.value.selectedType != type) {
-            _uiState.update { it.copy(selectedType = type) }
-            if (!_uiState.value.collectionsByType.containsKey(type)) {
-                loadCollectionsForType(type, isRefresh = false)
-            }
-        }
-    }
-
-    fun selectSubjectFilter(filter: CollectionSubjectFilter) {
-        if (_uiState.value.selectedSubjectFilter != filter) {
-            loadJobs.values.forEach { it.cancel() }
-            loadJobs.clear()
-            _uiState.update { state ->
-                state.copy(
-                    selectedSubjectFilter = filter,
-                    collectionsByType = emptyMap(),
-                    loadingTypes = emptySet(),
-                    loadingMoreTypes = emptySet(),
-                    hasMoreByType = emptyMap(),
-                    errorByType = emptyMap(),
-                    error = null,
-                )
-            }
-            loadCollectionsForType(_uiState.value.selectedType, isRefresh = false)
-        }
-    }
-
     fun refresh() {
-        loadCollectionsForType(_uiState.value.selectedType, isRefresh = true)
+        pagingTriggers.refresh()
     }
 
     /**
@@ -226,141 +378,185 @@ class UserCollectionsViewModel(
      * 那个转圈表达的是"内容还在、正在更新"，与"空着且刚失败"的事实不符。
      */
     fun retry() {
-        loadCollectionsForType(_uiState.value.selectedType, isRefresh = false)
+        pagingTriggers.retry()
     }
 
-    private fun loadCollectionsForType(
-        type: CollectionType,
-        isRefresh: Boolean = false,
+    /** 触底加载下一页收藏列表（增量追加并自动去重）。只服务当前换挡分区 */
+    fun loadMore(type: CollectionType = selectedType.value) {
+        val key = currentRequestKey
+        if (key == null || key.type != type) return
+        pagingTriggers.loadMore()
+    }
+
+    // ── 分页会话：由换挡链按信号调度，取消语义完全交给 flatMapLatest ──
+
+    private suspend fun runPagingSession(
+        key: RequestKey,
+        profile: UserProfile?,
+        signal: CollectionsPagingSignal,
     ) {
-        loadJobs[type]?.cancel()
-        loadJobs[type] =
-            viewModelScope.launch {
-                if (isRefresh) {
-                    _uiState.update { state ->
-                        state.copy(
-                            isRefreshing = true,
-                            errorByType = state.errorByType - type,
-                            error = null,
-                        )
-                    }
-                } else {
-                    _uiState.update { state ->
-                        state.copy(
-                            loadingTypes = state.loadingTypes + type,
-                            isLoading = true,
-                            errorByType = state.errorByType - type,
-                            error = null,
-                        )
-                    }
-                }
+        when (signal) {
+            CollectionsPagingSignal.Initial -> loadPartitionHead(key, profile, force = false)
+            CollectionsPagingSignal.Retry -> loadPartitionHead(key, profile, force = true)
+            CollectionsPagingSignal.Refresh -> refreshPartitionHead(key, profile)
+            CollectionsPagingSignal.More -> loadNextPage(key, profile)
+        }
+    }
 
-                val profile = _uiState.value.activeProfile ?: authRepository.activeProfile.first()
-                if (profile == null) {
-                    _uiState.update { state ->
-                        state.copy(
-                            loadingTypes = state.loadingTypes - type,
-                            isLoading = false,
-                            isRefreshing = false,
-                            error = "请先登录 Bangumi 账号",
-                            errorByType = state.errorByType + (type to "请先登录 Bangumi 账号"),
-                        )
-                    }
-                    return@launch
-                }
+    /** 首屏 / 重试：[force] 为 false 时已成功加载的分区直接命中缓存，不发请求 */
+    private suspend fun loadPartitionHead(
+        key: RequestKey,
+        profile: UserProfile?,
+        force: Boolean,
+    ) {
+        if (profile == null) {
+            progress.update { it.copy(error = LOGIN_REQUIRED_MESSAGE) }
+            return
+        }
+        if (!force) {
+            val cached = partitions.value[key.toPartitionKey()]
+            if (cached != null && cached.error == null) return
+        }
+        progress.update { it.copy(loadingTypes = it.loadingTypes + key.type, error = null) }
+        clearPartitionError(key)
+        val result =
+            collectionRepository.fetchUserCollections(
+                username = usernameOf(profile),
+                subjectType = key.subjectTypeId,
+                type = key.type,
+                limit = COLLECTIONS_PAGE_SIZE,
+            )
+        settlePartitionHead(key, result)
+    }
 
-                val username =
-                    profile.username
-                        .ifBlank { profile.id.toString() }
-                        .takeIf { it.isNotBlank() } ?: profile.id.toString()
-                val subjectType = _uiState.value.selectedSubjectFilter.typeId
+    /** 下拉刷新：保留原列表非破坏性更新；首屏 / 刷新进行中则忽略（换挡已负责取消旧链） */
+    private suspend fun refreshPartitionHead(
+        key: RequestKey,
+        profile: UserProfile?,
+    ) {
+        if (profile == null) {
+            progress.update { it.copy(isRefreshing = false, error = LOGIN_REQUIRED_MESSAGE) }
+            return
+        }
+        val current = progress.value
+        if (current.isRefreshing || current.loadingTypes.isNotEmpty()) return
+        progress.update { it.copy(isRefreshing = true, error = null) }
+        clearPartitionError(key)
+        val result =
+            collectionRepository.fetchUserCollections(
+                username = usernameOf(profile),
+                subjectType = key.subjectTypeId,
+                type = key.type,
+                limit = COLLECTIONS_PAGE_SIZE,
+            )
+        settlePartitionHead(key, result)
+    }
 
-                collectionRepository
-                    .fetchUserCollections(
-                        username = username,
-                        subjectType = subjectType,
-                        type = type,
-                        limit = 50,
-                    ).onSuccess { data ->
-                        val hasMore = data.size >= 50
-                        _uiState.update { state ->
-                            val newLoading = state.loadingTypes - type
-                            state.copy(
-                                collectionsByType = state.collectionsByType + (type to data),
-                                hasMoreByType = state.hasMoreByType + (type to hasMore),
-                                loadingTypes = newLoading,
-                                errorByType = state.errorByType - type,
-                                error = null,
-                                isLoading = newLoading.isNotEmpty(),
-                                isRefreshing = false,
+    /** 首屏 / 刷新收尾：整体替换分区数据（刷新失败则保留原列表只落错误位） */
+    private suspend fun settlePartitionHead(
+        key: RequestKey,
+        result: AppResult<List<UserCollection>>,
+    ) {
+        result
+            .onSuccess { data ->
+                partitions.update { state ->
+                    state + (
+                        key.toPartitionKey() to
+                            PartitionData(
+                                collections = data,
+                                hasMore = data.size >= COLLECTIONS_PAGE_SIZE,
                             )
-                        }
-                    }.onError { _, message ->
-                        _uiState.update { state ->
-                            val newLoading = state.loadingTypes - type
-                            state.copy(
-                                loadingTypes = newLoading,
-                                errorByType = state.errorByType + (type to message),
-                                error = message,
-                                isLoading = newLoading.isNotEmpty(),
-                                isRefreshing = false,
-                            )
-                        }
-                    }
+                    )
+                }
+                progress.update {
+                    it.copy(loadingTypes = it.loadingTypes - key.type, isRefreshing = false, error = null)
+                }
+            }.onError { _, message ->
+                partitions.update { state ->
+                    val existing = state[key.toPartitionKey()] ?: PartitionData()
+                    state + (key.toPartitionKey() to existing.copy(error = message))
+                }
+                progress.update {
+                    it.copy(loadingTypes = it.loadingTypes - key.type, isRefreshing = false, error = message)
+                }
             }
     }
 
-    /** 触底加载下一页收藏列表（增量追加并自动去重） */
-    fun loadMore(type: CollectionType = _uiState.value.selectedType) {
-        val currentState = _uiState.value
-        if (currentState.loadingTypes.contains(type) || currentState.loadingMoreTypes.contains(type)) return
-        if (currentState.hasMoreByType[type] == false) return
+    /** 触底追加：守卫条件与旧实现逐一对应（加载中 / 追加中 / 取尽 / 空分区 / 未登录） */
+    private suspend fun loadNextPage(
+        key: RequestKey,
+        profile: UserProfile?,
+    ) {
+        val partitionKey = key.toPartitionKey()
+        val current = partitions.value[partitionKey]
+        if (current == null || current.collections.isEmpty()) return
+        if (!current.hasMore) return
+        if (profile == null) return
+        val prog = progress.value
+        if (prog.loadingTypes.contains(key.type) || prog.loadingMoreTypes.contains(key.type)) return
 
-        val currentList = currentState.collectionsByType[type].orEmpty()
-        if (currentList.isEmpty()) return
-
-        _uiState.update { it.copy(loadingMoreTypes = it.loadingMoreTypes + type) }
-
-        viewModelScope.launch {
-            val profile = _uiState.value.activeProfile ?: authRepository.activeProfile.first()
-            if (profile == null) {
-                _uiState.update { it.copy(loadingMoreTypes = it.loadingMoreTypes - type) }
-                return@launch
-            }
-
-            val username =
-                profile.username
-                    .ifBlank { profile.id.toString() }
-                    .takeIf { it.isNotBlank() } ?: profile.id.toString()
-            val subjectType = _uiState.value.selectedSubjectFilter.typeId
-            val offset = currentList.size
-
-            collectionRepository
-                .fetchUserCollections(
-                    username = username,
-                    subjectType = subjectType,
-                    type = type,
-                    limit = 50,
-                    offset = offset,
-                ).onSuccess { data ->
-                    _uiState.update { curState ->
-                        val existing = curState.collectionsByType[type].orEmpty()
-                        val existingIds = existing.map { it.subjectId }.toSet()
-                        val uniqueNewData = data.filterNot { existingIds.contains(it.subjectId) }
-                        val combined = existing + uniqueNewData
-                        val hasMore = data.size >= 50
-                        curState.copy(
-                            collectionsByType = curState.collectionsByType + (type to combined),
-                            hasMoreByType = curState.hasMoreByType + (type to hasMore),
-                            loadingMoreTypes = curState.loadingMoreTypes - type,
-                        )
-                    }
-                }.onError { _, _ ->
-                    _uiState.update { curState ->
-                        curState.copy(loadingMoreTypes = curState.loadingMoreTypes - type)
-                    }
+        progress.update { it.copy(loadingMoreTypes = it.loadingMoreTypes + key.type) }
+        val offset = current.collections.size
+        collectionRepository
+            .fetchUserCollections(
+                username = usernameOf(profile),
+                subjectType = key.subjectTypeId,
+                type = key.type,
+                limit = COLLECTIONS_PAGE_SIZE,
+                offset = offset,
+            ).onSuccess { data ->
+                partitions.update { state ->
+                    val existing = state[partitionKey] ?: return@update state
+                    val knownIds = existing.collections.map { it.subjectId }.toSet()
+                    val combined = existing.collections + data.filterNot { it.subjectId in knownIds }
+                    state + (partitionKey to existing.copy(collections = combined, hasMore = data.size >= COLLECTIONS_PAGE_SIZE))
                 }
+                progress.update { it.copy(loadingMoreTypes = it.loadingMoreTypes - key.type) }
+            }.onError { _, _ ->
+                // 追加失败：保留原数据，只收起追加进度（与旧实现一致，不落全局错误位）
+                progress.update { it.copy(loadingMoreTypes = it.loadingMoreTypes - key.type) }
+            }
+    }
+
+    /** 剪除不属于当前「账号 × 类别筛选」的分区缓存：复刻旧实现"切换后清缓存重载"语义 */
+    private fun prunePartitions(key: RequestKey) {
+        partitions.update { map ->
+            map.filterKeys { it.profileId == key.profileId && it.subjectTypeId == key.subjectTypeId }
         }
+    }
+
+    private fun clearPartitionError(key: RequestKey) {
+        partitions.update { state ->
+            val existing = state[key.toPartitionKey()] ?: return@update state
+            state + (key.toPartitionKey() to existing.copy(error = null))
+        }
+    }
+
+    private fun usernameOf(profile: UserProfile): String = profile.username.ifBlank { profile.id.toString() }
+
+    // ── 乐观更新层 ──
+    // 收藏列表是远端拉取数据，仓库没有本地流可在写入后回读——+1 打卡、撤销、就地编辑迁分区
+    // 的即时反馈只能本地先改、失败回滚（响应式 UDF 规范第 3 条"写后读"的例外，刻意保留）。
+
+    /** 就地改写某个已存在分区的列表；分区不存在则不动（与旧实现 `collectionsByType[type] == null` 守卫一致） */
+    private inline fun mutatePartitionIfExists(
+        type: CollectionType,
+        transform: (List<UserCollection>) -> List<UserCollection>,
+    ) {
+        val key = currentRequestKey ?: return
+        val partitionKey = key.toPartitionKey().copy(type = type)
+        partitions.update { state ->
+            val existing = state[partitionKey] ?: return@update state
+            state + (partitionKey to existing.copy(collections = transform(existing.collections)))
+        }
+    }
+
+    private fun applyOptimisticEpStatus(
+        type: CollectionType,
+        subjectId: Long,
+        epStatus: Int,
+    ) = mutatePartitionIfExists(type) { list ->
+        list.map { item -> if (item.subjectId == subjectId) item.copy(epStatus = epStatus) else item }
     }
 
     fun incrementEpisodeProgress(collection: UserCollection) {
@@ -371,28 +567,13 @@ class UserCollectionsViewModel(
         if (total != null && nextEp > total) return
 
         val subjectId = collection.subjectId
-        if (_uiState.value.updatingSubjectIds.contains(subjectId)) return
+        if (progress.value.updatingSubjectIds.contains(subjectId)) return
         val type = CollectionType.fromValue(collection.type)
 
         viewModelScope.launch {
-            _uiState.update { state ->
-                val currentList = state.collectionsByType[type]
-                val updatedByType =
-                    if (currentList != null) {
-                        state.collectionsByType + (
-                            type to
-                                currentList.map { item ->
-                                    if (item.subjectId == subjectId) item.copy(epStatus = nextEp) else item
-                                }
-                        )
-                    } else {
-                        state.collectionsByType
-                    }
-                state.copy(
-                    updatingSubjectIds = state.updatingSubjectIds + subjectId,
-                    collectionsByType = updatedByType,
-                )
-            }
+            progress.update { it.copy(updatingSubjectIds = it.updatingSubjectIds + subjectId) }
+            // 乐观 +1：远端数据无流可回读，UI 即时反馈靠本地先改
+            applyOptimisticEpStatus(type, subjectId, nextEp)
 
             val result =
                 if (collection.subjectType == 1) {
@@ -418,29 +599,14 @@ class UserCollectionsViewModel(
                 .onSuccess {
                     _events.trySend(UserCollectionsEvent.ProgressIncremented(previous = collection, newEp = nextEp))
                 }.onError { _, message ->
-                    _uiState.update { state ->
-                        val currentList = state.collectionsByType[type]
-                        val rollbackByType =
-                            if (currentList != null) {
-                                state.collectionsByType + (
-                                    type to
-                                        currentList.map { item ->
-                                            if (item.subjectId == subjectId) item.copy(epStatus = collection.epStatus) else item
-                                        }
-                                )
-                            } else {
-                                state.collectionsByType
-                            }
-                        state.copy(
-                            collectionsByType = rollbackByType,
-                            error = message,
-                        )
-                    }
+                    // 失败回滚到打卡前快照
+                    applyOptimisticEpStatus(type, subjectId, collection.epStatus)
+                    progress.update { it.copy(error = message) }
                     // 列表非空时 error 不可见（不打断内容），必须以事件形式显式反馈
                     _events.trySend(UserCollectionsEvent.ShowSnackbar("打卡失败：" + message.ifBlank { "网络异常" }))
                 }
 
-            _uiState.update { state ->
+            progress.update { state ->
                 state.copy(updatingSubjectIds = state.updatingSubjectIds - subjectId)
             }
         }
@@ -450,21 +616,8 @@ class UserCollectionsViewModel(
     fun undoIncrement(previous: UserCollection) {
         viewModelScope.launch {
             val type = CollectionType.fromValue(previous.type)
-            _uiState.update { state ->
-                val currentList = state.collectionsByType[type]
-                val rolledBack =
-                    if (currentList != null) {
-                        state.collectionsByType + (
-                            type to
-                                currentList.map { item ->
-                                    if (item.subjectId == previous.subjectId) item.copy(epStatus = previous.epStatus) else item
-                                }
-                        )
-                    } else {
-                        state.collectionsByType
-                    }
-                state.copy(collectionsByType = rolledBack)
-            }
+            // 乐观回退：远端数据无流可回读，本地先退、网络回写
+            applyOptimisticEpStatus(type, previous.subjectId, previous.epStatus)
 
             val result =
                 if (previous.subjectType == 1) {
@@ -503,7 +656,6 @@ class UserCollectionsViewModel(
         epStatus: Int?,
         tags: List<String>?,
     ) {
-        val oldType = CollectionType.fromValue(collection.type)
         val updated =
             collection.copy(
                 type = type.value,
@@ -512,16 +664,55 @@ class UserCollectionsViewModel(
                 epStatus = epStatus ?: collection.epStatus,
                 tags = tags.orEmpty(),
             )
-        val previousMap = _uiState.value.collectionsByType
-        _uiState.update { state ->
-            val mutable = state.collectionsByType.toMutableMap()
-            val oldList = mutable[oldType].orEmpty().filterNot { it.subjectId == collection.subjectId }
-            val newList = mutable[type].orEmpty().filterNot { it.subjectId == collection.subjectId } + updated
-            mutable[oldType] = oldList
-            mutable[type] = newList
-            state.copy(collectionsByType = mutable, error = null)
+        val key = currentRequestKey
+        if (key == null) {
+            // 理论不可达（UI 必然已 setInitialType）；兜底只走网络写
+            submitCollectionUpdate(collection, type, rate, comment, private, epStatus, tags) { message ->
+                _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+            }
+            return
         }
 
+        val oldType = CollectionType.fromValue(collection.type)
+        val oldPartitionKey = key.toPartitionKey().copy(type = oldType)
+        val newPartitionKey = key.toPartitionKey().copy(type = type)
+        val previousOld = partitions.value[oldPartitionKey]
+        val previousNew = partitions.value[newPartitionKey]
+
+        partitions.update { state ->
+            val oldList = state[oldPartitionKey]?.collections.orEmpty().filterNot { it.subjectId == collection.subjectId }
+            val newList = state[newPartitionKey]?.collections.orEmpty().filterNot { it.subjectId == collection.subjectId } + updated
+            state +
+                (oldPartitionKey to (state[oldPartitionKey]?.copy(collections = oldList) ?: PartitionData(collections = oldList))) +
+                (newPartitionKey to (state[newPartitionKey]?.copy(collections = newList) ?: PartitionData(collections = newList)))
+        }
+        progress.update { it.copy(error = null) }
+
+        submitCollectionUpdate(collection, type, rate, comment, private, epStatus, tags) { message ->
+            // 整图回滚：两个受影响分区精确恢复到编辑前快照（编辑前不存在的分区移除）
+            partitions.update { state ->
+                var restored = state
+                restored =
+                    if (previousOld != null) restored + (oldPartitionKey to previousOld) else restored - oldPartitionKey
+                restored =
+                    if (previousNew != null) restored + (newPartitionKey to previousNew) else restored - newPartitionKey
+                restored
+            }
+            progress.update { it.copy(error = message) }
+            _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+        }
+    }
+
+    private fun submitCollectionUpdate(
+        collection: UserCollection,
+        type: CollectionType,
+        rate: Int?,
+        comment: String?,
+        private: Boolean,
+        epStatus: Int?,
+        tags: List<String>?,
+        onError: (String) -> Unit,
+    ) {
         viewModelScope.launch {
             collectionRepository
                 .updateCollectionStatus(
@@ -536,8 +727,7 @@ class UserCollectionsViewModel(
                 ).onSuccess {
                     _events.trySend(UserCollectionsEvent.ShowSnackbar("收藏已更新"))
                 }.onError { _, message ->
-                    _uiState.update { it.copy(collectionsByType = previousMap, error = message) }
-                    _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+                    onError(message)
                 }
         }
     }
