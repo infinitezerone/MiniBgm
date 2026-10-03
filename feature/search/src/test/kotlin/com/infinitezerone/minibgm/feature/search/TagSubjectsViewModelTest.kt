@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -140,6 +141,44 @@ class TagSubjectsViewModelTest {
             advanceUntilIdle()
 
             assertEquals(1, collectionRepo.updateCollectionCallCount)
+        }
+
+    @Test
+    fun updateCollectionError_postsUserMessageViaChannel() =
+        runTest {
+            // 迁移后一次性提示不再塞进 UiState，走 Channel(BUFFERED) + receiveAsFlow 的独立流
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.updateCollectionResult =
+                AppResult.Error(RuntimeException("boom"), "打卡失败：服务异常")
+            val viewModel = createViewModel(collectionRepo = collectionRepo)
+            advanceUntilIdle()
+
+            viewModel.updateCollection(sampleSubject, CollectionType.DOING)
+            advanceUntilIdle()
+
+            assertEquals("打卡失败：服务异常", viewModel.userMessage.first())
+            // 状态流里不再有 userMessage 字段：失败不影响任何状态投影
+            assertNull(viewModel.uiState.value.errorMessage)
+        }
+
+    @Test
+    fun loadMoreError_postsUserMessageViaChannel_keepsList() =
+        runTest {
+            val searchRepo = FakeSearchRepository()
+            val firstBatch = List(20) { sampleSubject.copy(id = it.toLong() + 1) }
+            searchRepo.advancedSearchResult = AppResult.Success(firstBatch)
+
+            val viewModel = createViewModel(tag = "京阿尼", searchRepo = searchRepo)
+            advanceUntilIdle()
+
+            searchRepo.advancedSearchResult = AppResult.Error(RuntimeException("boom"), "追加失败")
+            viewModel.loadMore()
+            advanceUntilIdle()
+
+            // 追加失败：保留原列表，提示走一次性事件流而非状态
+            assertEquals(20, viewModel.uiState.value.subjects.size)
+            assertFalse(viewModel.uiState.value.isLoadingMore)
+            assertEquals("追加失败", viewModel.userMessage.first())
         }
 
     @Test

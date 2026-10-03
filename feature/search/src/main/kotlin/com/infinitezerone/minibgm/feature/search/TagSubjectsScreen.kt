@@ -55,10 +55,10 @@ fun TagSubjectsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.userMessage) {
-        uiState.userMessage?.let { msg ->
+    // 一次性提示走 Channel 流（消费即消失），与状态流隔离；UI 只收集、不回写
+    LaunchedEffect(viewModel) {
+        viewModel.userMessage.collect { msg ->
             snackbarHostState.showSnackbar(msg)
-            viewModel.clearUserMessage()
         }
     }
 
