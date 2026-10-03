@@ -55,8 +55,7 @@ fun EpisodeQuickActionBottomSheet(
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val isFuture = remember(episode.airdate) { isEpisodeFutureAir(episode) }
-    val group = EpisodeGroup.fromType(episode.type)
-    val epLabel = if (episode.isMain) "第 ${episode.formattedNumber} 话" else "${group.label} ${episode.sort.toInt()}"
+    val epLabel = episode.guideLabel
     val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { epLabel } }
 
     BgmModalBottomSheet(

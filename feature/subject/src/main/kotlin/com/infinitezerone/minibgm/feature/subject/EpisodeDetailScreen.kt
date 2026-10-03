@@ -55,11 +55,11 @@ import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -114,7 +114,7 @@ fun EpisodeDetailScreen(
     val group = episode?.let { EpisodeGroup.fromType(it.type) } ?: EpisodeGroup.MAIN
     val episodeNumberText =
         if (episode != null) {
-            if (episode.isMain) "第 ${episode.formattedNumber} 话" else "${group.label} ${episode.sort.toInt()}"
+            episode.guideLabel
         } else {
             initialEpNumberText.ifBlank { "分集详情" }
         }

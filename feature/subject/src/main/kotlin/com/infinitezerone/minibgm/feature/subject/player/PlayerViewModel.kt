@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositor
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.CancellationException
@@ -71,7 +72,7 @@ data class PlayerEpisodeItem(
         get() =
             nameCn.ifBlank {
                 name.ifBlank {
-                    "第 ${if (sort == sort.toInt().toFloat()) sort.toInt().toString() else sort.toString()} 话"
+                    "第 ${sort.toEpisodeLabel()} 话"
                 }
             }
 }

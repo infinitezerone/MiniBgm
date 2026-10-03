@@ -21,7 +21,6 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
-import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -183,7 +182,7 @@ class EpisodeDetailViewModel(
             if (episode == null) {
                 "《$title》"
             } else {
-                "《$title》 ${episodeGuideLabel(episode)}"
+                "《$title》 ${episode.guideLabel}"
             }
         viewModelScope.launch {
             _events.send(EpisodeDetailUiEvent.OpenSourceSearch("帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"))

@@ -54,6 +54,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -64,7 +65,6 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailContent
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverlays
@@ -142,8 +142,14 @@ fun SubjectDetailScreen(
                     onSourceSearch?.invoke(event.prefillPrompt)
                 }
                 is SubjectDetailUiEvent.EpisodeMarked -> {
-                    val group = EpisodeGroup.fromType(event.episodeType)
-                    val epLabel = if (event.episodeType == 0) "第 ${event.epNumber} 话" else "${group.label} ${event.epNumber}"
+                    val epLabel =
+                        if (event.episodeType ==
+                            0
+                        ) {
+                            "第 ${event.epNumber} 话"
+                        } else {
+                            "${EpisodeGroup.fromType(event.episodeType).label} ${event.epNumber}"
+                        }
                     val snackbarResult =
                         snackbarHostState.showSnackbar(
                             message = "已标记 $epLabel",

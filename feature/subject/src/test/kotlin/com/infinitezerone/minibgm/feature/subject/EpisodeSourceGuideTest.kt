@@ -2,8 +2,8 @@ package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.Subject
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

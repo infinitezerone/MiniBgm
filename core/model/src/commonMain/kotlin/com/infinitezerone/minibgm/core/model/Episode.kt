@@ -42,6 +42,15 @@ data class Episode(
     val formattedNumber: String
         get() = episodeNumber.toEpisodeLabel()
 
+    /** 分集口语化编号：正片为「第 N 话」，其他类型为「特别篇 1」等分组前缀加序号 */
+    val guideLabel: String
+        get() =
+            if (isMain) {
+                "第 $formattedNumber 话"
+            } else {
+                "${EpisodeGroup.fromType(type).label} ${sort.toInt()}"
+            }
+
     val displayTitle: String
         get() = nameCn.ifBlank { name.ifBlank { "第 $formattedNumber 话" } }
 }

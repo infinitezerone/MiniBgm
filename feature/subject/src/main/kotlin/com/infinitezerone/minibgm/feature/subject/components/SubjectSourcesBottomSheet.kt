@@ -248,7 +248,7 @@ fun SubjectSourcesBottomSheet(
             remember(playlists, subject.id, episode) {
                 playlists.matchesForEpisode(subject.id, episode.episodeNumber)
             }
-        val epLabel = remember(episode) { episodeGuideLabel(episode) }
+        val epLabel = remember(episode) { episode.guideLabel }
 
         val bilibiliTarget =
             remember(displayName, epLabel) {
@@ -799,14 +799,6 @@ internal fun EpisodeSourceActionCard(
     }
 }
 
-/** 分集口语化编号：正片为「第 N 话」，其他类型为「SP 1」等分组前缀加序号 */
-fun episodeGuideLabel(episode: Episode): String =
-    if (episode.isMain) {
-        "第 ${episode.formattedNumber} 话"
-    } else {
-        "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
-    }
-
 /**
  * 格式化分集播放源向导顶部标题：
  * 例如《葬送的芙莉莲》 第 5 话 · 死亡与安宁
@@ -815,7 +807,7 @@ fun formatEpisodeGuideHeader(
     displayName: String,
     episode: Episode,
 ): String {
-    val epLabel = episodeGuideLabel(episode)
+    val epLabel = episode.guideLabel
     val rawTitle = episode.nameCn.ifBlank { episode.name }.trim()
     val numLabel = episode.formattedNumber
     val isRedundant =

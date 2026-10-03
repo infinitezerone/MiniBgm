@@ -25,7 +25,6 @@ import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
-import com.infinitezerone.minibgm.feature.subject.components.episodeGuideLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -160,7 +159,7 @@ class SubjectDetailViewModel(
             _uiState.value.subject
                 ?.displayName
                 ?.ifBlank { "本条目" } ?: "本条目"
-        val target = if (episode == null) "《$title》" else "《$title》 ${episodeGuideLabel(episode)}"
+        val target = if (episode == null) "《$title》" else "《$title》 ${episode.guideLabel}"
         val prompt = "帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"
         viewModelScope.launch {
             _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))

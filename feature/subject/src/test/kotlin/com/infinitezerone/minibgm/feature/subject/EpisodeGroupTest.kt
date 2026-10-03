@@ -1,9 +1,9 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.buildEpisodesProgressLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeFutureAir
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch

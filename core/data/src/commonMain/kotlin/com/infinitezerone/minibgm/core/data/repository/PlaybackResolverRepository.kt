@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.ProbeSiteOutput
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
@@ -944,16 +945,8 @@ private fun isNoiseNumber(
         (before == 'h' || before == 'x') &&
         (value == "264" || value == "265")
 
-/** 分集号转展示标签：整数不带小数点，小数保留（7.5 话） */
-internal fun episodeLabelFromNumber(value: Float): String {
-    val text =
-        if (value == value.toInt().toFloat()) {
-            value.toInt().toString()
-        } else {
-            value.toString().trimEnd('0').trimEnd('.')
-        }
-    return "第 $text 话"
-}
+/** 分集号转展示标签：整数不带小数点，小数保留（7.5 话）；统一复用 core:model 的格式化规则 */
+internal fun episodeLabelFromNumber(value: Float): String = "第 ${value.toEpisodeLabel()} 话"
 
 /**
  * 从集名/标注文本里抽分集号（`第03集`、`[12]`、`EP07`、纯数字）。
