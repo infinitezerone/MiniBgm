@@ -14,7 +14,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,9 +22,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -95,22 +92,6 @@ private data class PagedSubjects(
 )
 
 /**
- * 取页信号：由各用户意图触发流 `merge` 而来。
- *
- * `Initial` 是进页 / 查询换挡时的自动首取；`Retry` / `Refresh` / `More` 分别对应
- * 重试、下拉刷新、触底追加。
- */
-private sealed interface PageSignal {
-    data object Initial : PageSignal
-
-    data object Retry : PageSignal
-
-    data object Refresh : PageSignal
-
-    data object More : PageSignal
-}
-
-/**
  * 季度片单 ViewModel —— **方案 B：响应式派生流**。
  *
  * 状态是「底层事件流的数学映射」，不是被命令式修改的容器：
@@ -167,10 +148,8 @@ class SeasonalGuideViewModel(
     /** 一次性事件流。UI 收集它来弹提示 / 触发跳转；不需要也不应该有人回写它 */
     val uiEffects: Flow<UiEffect> = _uiEffects.receiveAsFlow()
 
-    /** 取页信号源：每个用户意图一条流，`merge` 后汇入 `flatMapLatest`（见 [onPageSignals]） */
-    private val retryTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val refreshTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val loadMoreTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /** 取页信号源：公共触发器管线，`signals()` 汇流后经 `flatMapLatest` 换挡（见 [onPageSignals]） */
+    private val pageTriggers = PagingTriggers()
 
     // ── 本季首播：分页投影。游标是顺序状态（第 N 页依赖第 N-1 页的 offset），留一个私有容器；
     //    竞态全部交给下面的 flatMapLatest：查询一变，旧链取消、游标重置。──
@@ -247,13 +226,8 @@ class SeasonalGuideViewModel(
     }
 
     /** 三条触发流汇成一条信号流；进页 / 换挡后自动先取一次首页 */
-    private fun onPageSignals(key: RequestKey): Flow<PageSignal> =
-        merge(
-            retryTrigger.map { PageSignal.Retry },
-            refreshTrigger.map { PageSignal.Refresh },
-            loadMoreTrigger.map { PageSignal.More },
-        ).onStart { emit(PageSignal.Initial) }
-            .onEach { signal -> runPagingSession(key, signal) }
+    private fun onPageSignals(key: RequestKey): Flow<PagingSignal> =
+        pageTriggers.signals().onEach { signal -> runPagingSession(key, signal) }
 
     fun selectYear(year: Int) = setQuery { it.copy(year = year) }
 
@@ -332,11 +306,11 @@ class SeasonalGuideViewModel(
     }
 
     fun refresh() {
-        refreshTrigger.tryEmit(Unit)
+        pageTriggers.refresh()
     }
 
     fun retry() {
-        retryTrigger.tryEmit(Unit)
+        pageTriggers.retry()
     }
 
     /**
@@ -347,7 +321,7 @@ class SeasonalGuideViewModel(
      * 时调这里，会话会一路取到可见条目确实变多或取尽为止（见 [runPagingSession] 的判据）。
      */
     fun loadMore() {
-        loadMoreTrigger.tryEmit(Unit)
+        pageTriggers.loadMore()
     }
 
     fun dismissLoginPrompt() {
@@ -358,11 +332,11 @@ class SeasonalGuideViewModel(
 
     private suspend fun runPagingSession(
         key: RequestKey,
-        signal: PageSignal,
+        signal: PagingSignal,
     ) {
-        val isRefresh = signal is PageSignal.Refresh
-        val isInitialOrRetry = signal is PageSignal.Initial || signal is PageSignal.Retry
-        val isMore = signal is PageSignal.More
+        val isRefresh = signal is PagingSignal.Refresh
+        val isInitialOrRetry = signal is PagingSignal.Initial || signal is PagingSignal.Retry
+        val isMore = signal is PagingSignal.More
 
         val current = pagedSubjects.value
         // 并发控制：

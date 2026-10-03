@@ -23,9 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,17 +49,6 @@ private data class ExplorePagedSubjects(
     val isLoadingMore: Boolean = false,
     val error: String? = null,
 )
-
-/** 取页信号源：由各用户意图触发流 `merge` 而来 */
-private sealed interface ExplorePageSignal {
-    data object Initial : ExplorePageSignal
-
-    data object Retry : ExplorePageSignal
-
-    data object Refresh : ExplorePageSignal
-
-    data object More : ExplorePageSignal
-}
 
 /**
  * 探索发现页面 ViewModel —— **响应式派生流架构**。
@@ -91,9 +78,7 @@ class ExploreViewModel(
     private val startTrigger = MutableSharedFlow<Unit>(replay = 1)
 
     // ── 取页信号源 ──
-    private val retryTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val refreshTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    private val loadMoreTrigger = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val pageTriggers = PagingTriggers()
 
     // ── 分页投影 ──
     private val pagedSubjects = MutableStateFlow(ExplorePagedSubjects())
@@ -177,28 +162,23 @@ class ExploreViewModel(
         }
     }
 
-    private fun onPageSignals(query: ExploreQuery): Flow<ExplorePageSignal> =
-        merge(
-            retryTrigger.map { ExplorePageSignal.Retry },
-            refreshTrigger.map { ExplorePageSignal.Refresh },
-            loadMoreTrigger.map { ExplorePageSignal.More },
-        ).onStart { emit(ExplorePageSignal.Initial) }
-            .onEach { signal -> runPagingSession(query, signal) }
+    private fun onPageSignals(query: ExploreQuery): Flow<PagingSignal> =
+        pageTriggers.signals().onEach { signal -> runPagingSession(query, signal) }
 
     private suspend fun runPagingSession(
         query: ExploreQuery,
-        signal: ExplorePageSignal,
+        signal: PagingSignal,
     ) {
         val current = pagedSubjects.value
-        if (signal is ExplorePageSignal.More) {
+        if (signal is PagingSignal.More) {
             if (current.isLoading || current.isRefreshing || current.isLoadingMore || !current.hasMore) {
                 return
             }
         }
 
-        val isRefresh = signal is ExplorePageSignal.Refresh
-        val isInitial = signal is ExplorePageSignal.Initial || signal is ExplorePageSignal.Retry
-        val isMore = signal is ExplorePageSignal.More
+        val isRefresh = signal is PagingSignal.Refresh
+        val isInitial = signal is PagingSignal.Initial || signal is PagingSignal.Retry
+        val isMore = signal is PagingSignal.More
 
         if (isRefresh) {
             hotComments.value = emptyMap()
@@ -401,16 +381,16 @@ class ExploreViewModel(
 
     fun refresh() {
         loadIfNeeded()
-        refreshTrigger.tryEmit(Unit)
+        pageTriggers.refresh()
     }
 
     fun retry() {
         loadIfNeeded()
-        retryTrigger.tryEmit(Unit)
+        pageTriggers.retry()
     }
 
     fun loadMore() {
         loadIfNeeded()
-        loadMoreTrigger.tryEmit(Unit)
+        pageTriggers.loadMore()
     }
 }
