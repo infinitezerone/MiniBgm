@@ -41,12 +41,12 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.hideThenDismiss
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,9 +140,7 @@ fun ScheduleSourcesBottomSheet(
 
                 IconButton(
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
-                        }
+                        coroutineScope.hideThenDismiss(sheetState, onDismissRequest)
                     },
                 ) {
                     Icon(
@@ -180,7 +178,7 @@ fun ScheduleSourcesBottomSheet(
                         title = "用内置播放器播放",
                         iconVector = BgmIcons.PlayCircle,
                         onClick = {
-                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                            coroutineScope.hideThenDismiss(sheetState) {
                                 onDismissRequest()
                                 onInternalPlayClick()
                             }
@@ -201,7 +199,7 @@ fun ScheduleSourcesBottomSheet(
                         title = "让 AI 助手找源",
                         iconVector = BgmIcons.Assistant,
                         onClick = {
-                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                            coroutineScope.hideThenDismiss(sheetState) {
                                 onDismissRequest()
                                 onAiSourceSearch()
                             }
@@ -222,7 +220,7 @@ fun ScheduleSourcesBottomSheet(
                     title = "哔哩哔哩搜索",
                     iconVector = BgmIcons.Tv,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.hideThenDismiss(sheetState) {
                             onDismissRequest()
                             val targetUrl =
                                 bilibiliTarget.deepLinkUri
@@ -237,7 +235,7 @@ fun ScheduleSourcesBottomSheet(
                     title = "蜜柑计划",
                     iconVector = BgmIcons.Download,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.hideThenDismiss(sheetState) {
                             onDismissRequest()
                             onOpenUrl(mikanUrl)
                         }
@@ -294,7 +292,7 @@ fun ScheduleSourcesBottomSheet(
                                     title = siteLink.displayName,
                                     iconVector = BgmIcons.PlayCircle,
                                     onClick = {
-                                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                                        coroutineScope.hideThenDismiss(sheetState) {
                                             onDismissRequest()
                                             onOpenUrl(siteLink.playUrl)
                                         }

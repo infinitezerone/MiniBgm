@@ -37,12 +37,12 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.hideThenDismiss
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import kotlinx.coroutines.launch
 
 /**
  * 个人中心追番条目播放与选源快捷面板：
@@ -148,9 +148,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 IconButton(
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onDismissRequest()
-                        }
+                        coroutineScope.hideThenDismiss(sheetState, onDismissRequest)
                     },
                 ) {
                     Icon(
@@ -188,7 +186,7 @@ internal fun UserCollectionSourcesBottomSheet(
                     title = "哔哩哔哩搜索",
                     iconVector = BgmIcons.Tv,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.hideThenDismiss(sheetState) {
                             onDismissRequest()
                             val targetUrl =
                                 bilibiliTarget.deepLinkUri
@@ -203,7 +201,7 @@ internal fun UserCollectionSourcesBottomSheet(
                     title = "蜜柑计划",
                     iconVector = BgmIcons.Download,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.hideThenDismiss(sheetState) {
                             onDismissRequest()
                             onOpenUrl(mikanUrl)
                         }
@@ -249,7 +247,7 @@ internal fun UserCollectionSourcesBottomSheet(
                     title = "进入条目详情",
                     iconVector = BgmIcons.Info,
                     onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                        coroutineScope.hideThenDismiss(sheetState) {
                             onDismissRequest()
                             onSubjectClick(
                                 SubjectDetailRoute(

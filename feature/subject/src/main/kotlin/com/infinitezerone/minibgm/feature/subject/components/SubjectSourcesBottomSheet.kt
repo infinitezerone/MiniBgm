@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.hideThenDismiss
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -51,7 +52,6 @@ import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
-import kotlinx.coroutines.launch
 
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
@@ -79,17 +79,13 @@ fun SubjectSourcesBottomSheet(
     val coroutineScope = rememberCoroutineScope()
     val displayName = subject.displayName
     val runAfterDismiss: (() -> Unit) -> Unit = { action ->
-        coroutineScope.launch {
-            sheetState.hide()
+        coroutineScope.hideThenDismiss(sheetState) {
             onDismissRequest()
             action()
         }
     }
     val closeAction: () -> Unit = {
-        coroutineScope.launch {
-            sheetState.hide()
-            onDismissRequest()
-        }
+        coroutineScope.hideThenDismiss(sheetState, onDismissRequest)
     }
 
     if (episode == null) {

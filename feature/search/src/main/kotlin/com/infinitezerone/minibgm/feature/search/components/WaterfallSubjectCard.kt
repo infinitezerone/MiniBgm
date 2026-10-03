@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BadgeClassic
@@ -151,31 +152,7 @@ fun WaterfallSubjectCard(
                             .align(Alignment.TopStart),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if (score > 0.0) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.75f),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Star,
-                                    contentDescription = null,
-                                    tint = RatingGold,
-                                    modifier = Modifier.size(11.dp),
-                                )
-                                Text(
-                                    text = score.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                )
-                            }
-                        }
-                    }
+                    ScoreBadge(score = score)
 
                     val isRecent = isRecentAiring(subject.date.ifBlank { subject.airDate })
                     val ratingTotal = rating?.total ?: 0

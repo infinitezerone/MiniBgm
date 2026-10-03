@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionCollect
 import com.infinitezerone.minibgm.core.designsystem.theme.ActionDoing
@@ -44,7 +46,6 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATI
 import com.infinitezerone.minibgm.core.designsystem.theme.HighlightAmber
 import com.infinitezerone.minibgm.core.designsystem.theme.OnRatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
-import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
 import com.infinitezerone.minibgm.core.designsystem.theme.highlightContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.onHighlightContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.onTypeAnimeColor
@@ -411,21 +412,14 @@ fun SearchResultGridCard(
                 }
 
                 // 右下角评分
-                if (score > 0.0) {
-                    Surface(
-                        shape = RoundedCornerShape(topStart = 8.dp),
-                        color = Color.Black.copy(alpha = 0.72f),
-                        modifier = Modifier.align(Alignment.BottomEnd),
-                    ) {
-                        Text(
-                            text = "★ $score",
-                            fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
-                            fontWeight = FontWeight.Bold,
-                            color = RatingGoldBright,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                        )
-                    }
-                }
+                ScoreBadge(
+                    score = score,
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                    shape = RoundedCornerShape(topStart = 8.dp),
+                    starSize = 10.dp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
+                )
             }
 
             // 底部内容

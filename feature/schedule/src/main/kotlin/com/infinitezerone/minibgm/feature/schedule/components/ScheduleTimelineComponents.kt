@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -43,9 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
-import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusAiring
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
@@ -378,32 +379,14 @@ fun ScheduleTimelineSingleCard(
                 }
 
                 // 封面左下角：Bangumi 评分
-                if (score > 0.0) {
-                    Surface(
-                        shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
-                        color = Color.Black.copy(alpha = 0.76f),
-                        modifier = Modifier.align(Alignment.BottomStart),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Star,
-                                contentDescription = null,
-                                tint = RatingGold,
-                                modifier = Modifier.size(9.dp),
-                            )
-                            Text(
-                                text = score.toString(),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                            )
-                        }
-                    }
-                }
+                ScoreBadge(
+                    score = score,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                    shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
+                    starSize = 9.dp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                )
             }
 
             Spacer(modifier = Modifier.width(10.dp))

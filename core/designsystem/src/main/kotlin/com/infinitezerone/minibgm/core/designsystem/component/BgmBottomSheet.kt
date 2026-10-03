@@ -22,6 +22,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.lang.reflect.Method
 
 /**
@@ -145,6 +147,18 @@ fun rememberBgmBottomSheetState(
             ).also { it.applyMaterial3MotionSpecs() }
         }
     return sheetState
+}
+
+/**
+ * 先播放 sheet 收起动效、动画完成后才回调 [onDismiss]。
+ * 统一替代各调用点手写的 `launch { hide() }.invokeOnCompletion { … }` 样板。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+fun CoroutineScope.hideThenDismiss(
+    sheetState: SheetState,
+    onDismiss: () -> Unit,
+) {
+    launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
 }
 
 /**
