@@ -142,6 +142,35 @@ class FakeCollectionRepository : CollectionRepository {
     ): AppResult<Unit> {
         updateEpisodeCallCount++
         updateEpisodeResult?.let { return it }
+        // 与真实仓库一致（本地优先写库 + 流回读）：更新收藏流的类型推进与进度推进，
+        // 调用方（如 ScheduleViewModel）经流回读写后状态
+        val current = collectionsState.value[subjectId]
+        val resolvedType =
+            when {
+                isWatched && (current == null || current.type == 0 || current.type == CollectionType.WISH.value) ->
+                    CollectionType.DOING.value
+                current != null && current.type > 0 -> current.type
+                else -> CollectionType.DOING.value
+            }
+        val resolvedEpStatus =
+            if (isWatched) {
+                maxOf(current?.epStatus ?: 0, epNumber)
+            } else if (epNumber >= (current?.epStatus ?: 0)) {
+                maxOf(0, epNumber - 1)
+            } else {
+                current?.epStatus ?: 0
+            }
+        val updated =
+            current?.copy(
+                type = resolvedType,
+                epStatus = resolvedEpStatus,
+            ) ?: UserCollection(
+                subjectId = subjectId,
+                subjectType = 2,
+                type = resolvedType,
+                epStatus = resolvedEpStatus,
+            )
+        collectionsState.value = collectionsState.value + (subjectId to updated)
         return AppResult.Success(Unit)
     }
 

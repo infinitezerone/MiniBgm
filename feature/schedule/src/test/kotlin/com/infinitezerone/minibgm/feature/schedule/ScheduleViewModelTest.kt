@@ -206,7 +206,7 @@ class ScheduleViewModelTest {
         }
 
     @Test
-    fun toggleWatching_optimisticallyUpdatesImmediately() =
+    fun toggleWatching_writeThenRead_reflectsInUiState() =
         runTest {
             val repository = FakeScheduleRepository()
             val collectionRepository = FakeCollectionRepository()
@@ -220,7 +220,7 @@ class ScheduleViewModelTest {
                     .contains(101L),
             )
 
-            // 点击加入追番 -> 乐观更新立即生效
+            // 规范第 3 条「写后读」：写仓后由 fake 仓库流发射 → uiState 终态包含该条目
             viewModel.toggleWatching(101L)
             assertTrue(
                 viewModel.uiState.value.watchingSubjectIds
@@ -236,7 +236,7 @@ class ScheduleViewModelTest {
         }
 
     @Test
-    fun toggleWatching_rollsBackOnFailure() =
+    fun toggleWatching_failureLeavesUiStateUnchangedAndShowsMessage() =
         runTest {
             val repository = FakeScheduleRepository()
             val collectionRepository = FakeCollectionRepository()
@@ -255,7 +255,7 @@ class ScheduleViewModelTest {
 
             val message = viewModel.userMessage.first()
             assertEquals("网络异常", message)
-            // 失败后乐观状态已回滚
+            // 写仓失败：fake 仓库流从未发射新收藏，uiState 终态保持原样（不存在乐观残留需要回滚）
             assertFalse(
                 viewModel.uiState.value.watchingSubjectIds
                     .contains(101L),
@@ -383,12 +383,21 @@ class ScheduleViewModelTest {
             val repository = FakeScheduleRepository()
             val collectionRepository = FakeCollectionRepository()
             val viewModel = createViewModel(repository, collectionRepository)
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.uiState.collect()
+            }
 
             viewModel.markEpisodeWatched(subjectId = 888L, epNumber = 9)
 
             assertEquals(1, collectionRepository.updateEpisodeCallCount)
             val message = viewModel.userMessage.first()
             assertEquals("已标记第 9 话已看过", message)
+            // 规范第 3 条「写后读」：打卡写仓后 fake 仓库流发射（条目推进为在看 DOING），
+            // uiState 终态的在看集合随之包含该条目
+            assertTrue(
+                viewModel.uiState.value.watchingSubjectIds
+                    .contains(888L),
+            )
         }
 
     @Test

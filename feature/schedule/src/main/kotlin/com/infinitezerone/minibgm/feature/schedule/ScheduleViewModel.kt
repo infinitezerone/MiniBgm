@@ -16,11 +16,12 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
-import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -201,6 +202,10 @@ data class ScheduleUiState(
  * - 智能提取“昨日/前天在追待补更新”与“昨日播映速览”，实现今日首屏极速消费；
  * - 提供时间段聚合槽逻辑，释放空间并消除同时间冗余；
  * - 离线优先展示，支持下拉刷新。
+ *
+ * 遵循 feature/search `SeasonalGuideViewModel` 类 KDoc 声明的响应式 UDF 规范（全仓 ViewModel 迁移标杆）：
+ * 可变状态只剩用户意图（选日页索引 / 筛选 / 刷新触发器），UI 状态是 `combine(意图流, 仓库流)` 的
+ * 投影；打卡与追番为「写仓 → 仓库流回读」（规范第 3 条），不存在乐观旁路与手动回滚。
  */
 class ScheduleViewModel(
     private val scheduleRepository: ScheduleRepository,
@@ -225,13 +230,39 @@ class ScheduleViewModel(
      */
     private fun today(): LocalDate = Instant.ofEpochMilli(clock()).atZone(CST_ZONE_ID).toLocalDate()
 
+    // ---- 用户意图流（规范第 2 条：可变状态只剩用户意图）----
+
+    /**
+     * 单一选日意图：13 天长卷上的页索引。
+     *
+     * `selectedWeekday` 不再单独持流——weekday 是页索引在 [calculateDateItems] 上的投影，
+     * 在 baseUiState 投影处换算；[selectWeekday] 对外保留星期语义、内部换算为页索引，
+     * 消除两流双向同步的冗余。
+     */
     private val selectedPageIndex = MutableStateFlow(TODAY_PAGE_INDEX)
-    private val selectedWeekday = MutableStateFlow(today().dayOfWeek.value)
     private val onlyWatching = MutableStateFlow(false)
-    private val isRefreshing = MutableStateFlow(false)
-    private val isSyncing = MutableStateFlow(true)
-    private val errorMessage = MutableStateFlow<String?>(null)
     private val showLoginPromptDialog = MutableStateFlow(false)
+
+    /**
+     * 刷新触发器意图：[refresh] 只发射请求，仓库刷新在收集侧执行（规范第 2 条，无手动 Job 管理）。
+     *
+     * `replay = 1` 保证 init 阶段收集器订阅完成前发出的首刷不丢；连续触发时保留最新意图
+     * （DROP_OLDEST）——刷新幂等，折叠无害。
+     */
+    private val refreshRequests =
+        MutableSharedFlow<Boolean>(
+            replay = 1,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+
+    /**
+     * 刷新会话命令态（isRefreshing / isSyncing / error），归入规范第 5 条：这不是仓库数据的投影，
+     * 而是「一次刷新动作」的意图驱动会话态（命令密集型会话允许保留显式命令层，数据侧仍投影化）。
+     * 触发走 [refreshRequests]，执行与状态回收收敛在唯一的收集协程里天然串行；
+     * error 由下一次成功刷新经流回读清空。
+     */
+    private val refreshState = MutableStateFlow(RefreshState())
 
     private val isLoggedIn =
         authRepository.isLoggedIn
@@ -319,51 +350,17 @@ class ScheduleViewModel(
             (doing + wish).distinctBy { it.subjectId }
         }.distinctUntilChanged()
 
-    // 本地乐观更新追番状态缓存：subjectId -> isWatching (true: 加入在看, false: 移出在看)
-    private val optimisticWatching = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
-
-    // 本地乐观打卡集数进度缓存：subjectId -> epNumber
-    private val optimisticEpStatus = MutableStateFlow<Map<Long, Int>>(emptyMap())
-
+    // 收藏状态直接从仓库流投影（规范第 3 条「写后读」）：打卡 / 追番写仓后，收藏流自动重发，
+    // 在看集合与进度随之更新——不存在本地乐观旁路，也无需回滚代码。
     private val collectionsStateFlow =
-        combine(
-            userCollectionsFlow,
-            optimisticWatching,
-            optimisticEpStatus,
-        ) { userCollections, optimisticWatchMap, optimisticEpMap ->
-            val baseWatchingIds = userCollections.map { it.subjectId }.toSet()
-            val finalWatchingIds =
-                (baseWatchingIds + optimisticWatchMap.filterValues { it }.keys) -
-                    optimisticWatchMap.filterValues { !it }.keys
-            val collectionMap = userCollections.associateBy { it.subjectId }.toMutableMap()
-            // 补全乐观追番时的默认收藏进度对象，确保本地未登录/即时追番时立即参与卡片计算
-            finalWatchingIds.forEach { subId ->
-                if (!collectionMap.containsKey(subId)) {
-                    collectionMap[subId] =
-                        UserCollection(
-                            subjectId = subId,
-                            type = CollectionType.DOING.value,
-                            epStatus = 0,
-                        )
-                }
-            }
-            optimisticEpMap.forEach { (subId, ep) ->
-                val existing = collectionMap[subId]
-                if (existing != null) {
-                    collectionMap[subId] = existing.copy(epStatus = maxOf(existing.epStatus, ep))
-                }
-            }
-            finalWatchingIds to collectionMap
-        }.distinctUntilChanged()
+        userCollectionsFlow
+            .map { userCollections ->
+                userCollections.map { it.subjectId }.toSet() to userCollections.associateBy { it.subjectId }
+            }.distinctUntilChanged()
 
     private val filterFlow =
         combine(selectedPageIndex, onlyWatching) { pageIndex, onlyWatch ->
             pageIndex to onlyWatch
-        }
-
-    private val statusFlow =
-        combine(isRefreshing, isSyncing, errorMessage) { refreshing, syncing, error ->
-            Triple(refreshing, syncing, error)
         }
 
     private data class ExtraScheduleState(
@@ -384,7 +381,7 @@ class ScheduleViewModel(
             scheduleDataFlow,
             collectionsStateFlow,
             filterFlow,
-            statusFlow,
+            refreshState,
             extraStateFlow,
         ) {
             (daySchedules, weeklySchedules),
@@ -440,6 +437,11 @@ class ScheduleViewModel(
 
     init {
         viewModelScope.launch {
+            // 刷新执行收敛在唯一收集协程里（无手动 Job 管理）；runCatching 防御仓库意外抛出，
+            // 保证触发器收集器不会被单次异常杀死（performRefresh 的 finally 已回收命令态）
+            refreshRequests.collect { force -> runCatching { performRefresh(force) } }
+        }
+        viewModelScope.launch {
             if (scheduleRepository.getScheduleDefaultOnlyWatching()) {
                 onlyWatching.value = true
             }
@@ -449,12 +451,9 @@ class ScheduleViewModel(
 
     fun selectPage(pageIndex: Int) {
         selectedPageIndex.value = pageIndex.coerceIn(0, TOTAL_SCHEDULE_DAYS - 1)
-        val dateItem = calculateDateItems(today()).getOrNull(pageIndex)
-        if (dateItem != null) {
-            selectedWeekday.value = dateItem.weekday
-        }
     }
 
+    /** 对外保持星期语义；内部换算成 13 天长卷的页索引写入单一选日意图流 */
     fun selectWeekday(weekday: Int) {
         val currentToday = today()
         val dateItems = calculateDateItems(currentToday)
@@ -469,7 +468,6 @@ class ScheduleViewModel(
                     .takeIf { it >= 0 }
                 ?: TODAY_PAGE_INDEX
         selectedPageIndex.value = targetIndex
-        selectedWeekday.value = weekday.coerceIn(1, 7)
     }
 
     fun toggleOnlyWatching() {
@@ -547,7 +545,11 @@ class ScheduleViewModel(
         )
     }
 
-    /** 1-tap 快捷追番/移出追番（支持 0ms 本地即时乐观更新与失败自动回滚，未登录时拦截弹窗） */
+    /**
+     * 1-tap 快捷追番/移出追番（规范第 3 条「写后读」：写仓后由收藏流回读新状态，无本地乐观旁路；
+     * 仓库层本地优先写库 + 失败回滚，NonCancellable 约束在 CollectionRepository 内）。
+     * 未登录时拦截弹窗；写失败仅弹 Snackbar 提示。
+     */
     fun toggleWatching(subjectId: Long) {
         if (!isLoggedIn.value) {
             showLoginPromptDialog.value = true
@@ -555,29 +557,24 @@ class ScheduleViewModel(
         }
 
         val isWatching = uiState.value.watchingSubjectIds.contains(subjectId)
-        val nextIsWatching = !isWatching
-        val targetType = if (nextIsWatching) CollectionType.DOING else CollectionType.DROPPED
-
-        // 1. 本地立即乐观更新：0ms 响应用户点击，UI 瞬间切换状态
-        optimisticWatching.update { it + (subjectId to nextIsWatching) }
+        val targetType = if (isWatching) CollectionType.DROPPED else CollectionType.DOING
 
         viewModelScope.launch {
             collectionRepository
                 .updateCollectionStatus(subjectId, targetType)
                 .onSuccess {
-                    // 2. 成功：数据库将写入新状态并自动流式发射，此时移除临时乐观标记
-                    optimisticWatching.update { it - subjectId }
                     val msg = if (targetType == CollectionType.DOING) "已加入在看追番" else "已移出在看追番"
                     _userMessage.send(msg)
                 }.onError { _, message ->
-                    // 3. 失败：回滚本地乐观状态，恢复为原状态并弹窗提示
-                    optimisticWatching.update { it - subjectId }
                     _userMessage.send(message.ifBlank { "操作失败，请确认是否已登录账号" })
                 }
         }
     }
 
-    /** 1-tap 快捷标记某话为看过（供待补清单一键打卡，支持即时乐观更新，未登录时拦截弹窗） */
+    /**
+     * 1-tap 快捷标记某话为看过，供待补清单一键打卡（规范第 3 条「写后读」：写仓后由收藏流回读
+     * 新进度，无本地乐观旁路）。未登录时拦截弹窗；写失败仅弹 Snackbar 提示。
+     */
     fun markEpisodeWatched(
         subjectId: Long,
         epNumber: Int,
@@ -586,9 +583,6 @@ class ScheduleViewModel(
             showLoginPromptDialog.value = true
             return
         }
-
-        // 本地立即乐观更新打卡进度
-        optimisticEpStatus.update { it + (subjectId to epNumber) }
 
         viewModelScope.launch {
             collectionRepository
@@ -599,10 +593,8 @@ class ScheduleViewModel(
                     isWatched = true,
                     epNumber = epNumber,
                 ).onSuccess {
-                    optimisticEpStatus.update { it - subjectId }
                     _userMessage.send("已标记第 $epNumber 话已看过")
                 }.onError { _, message ->
-                    optimisticEpStatus.update { it - subjectId }
                     _userMessage.send(message.ifBlank { "标记失败，请确认是否已登录账号" })
                 }
         }
@@ -614,28 +606,28 @@ class ScheduleViewModel(
 
     /** [force] = 下拉刷新等用户显式动作；页面重建触发的静默刷新走仓库层 12 小时节流 */
     fun refresh(force: Boolean = false) {
-        viewModelScope.launch {
-            if (force) {
-                isRefreshing.value = true
-            }
-            isSyncing.value = true
-            try {
-                if (isLoggedIn.value) {
-                    launch {
-                        collectionRepository.syncWatchingCollections(force = force)
-                    }
-                }
-                // 全量快照管线：单次 CDN 快照直拉并直接入库
-                val schedulesResult = scheduleRepository.refreshAllSchedules(force = force)
-                schedulesResult
-                    .onSuccess { errorMessage.value = null }
-                    .onError { _, message -> errorMessage.value = message }
-            } finally {
-                isSyncing.value = false
-                if (force) {
-                    isRefreshing.value = false
+        refreshRequests.tryEmit(force)
+    }
+
+    /** 刷新执行体：仅在 [refreshRequests] 的收集协程里运行，天然串行，无需手动 Job 管理 */
+    private suspend fun performRefresh(force: Boolean) {
+        if (force) {
+            refreshState.update { it.copy(isRefreshing = true) }
+        }
+        refreshState.update { it.copy(isSyncing = true) }
+        try {
+            if (isLoggedIn.value) {
+                viewModelScope.launch {
+                    collectionRepository.syncWatchingCollections(force = force)
                 }
             }
+            // 全量快照管线：单次 CDN 快照直拉并直接入库
+            scheduleRepository
+                .refreshAllSchedules(force = force)
+                .onSuccess { refreshState.update { state -> state.copy(error = null) } }
+                .onError { _, message -> refreshState.update { state -> state.copy(error = message) } }
+        } finally {
+            refreshState.update { it.copy(isSyncing = false, isRefreshing = false) }
         }
     }
 
@@ -662,4 +654,11 @@ class ScheduleViewModel(
                 )
             }
     }
+
+/** 一次刷新动作的命令态快照，归类说明见 [ScheduleViewModel.refreshState] */
+    private data class RefreshState(
+        val isRefreshing: Boolean = false,
+        val isSyncing: Boolean = true,
+        val error: String? = null,
+    )
 }
