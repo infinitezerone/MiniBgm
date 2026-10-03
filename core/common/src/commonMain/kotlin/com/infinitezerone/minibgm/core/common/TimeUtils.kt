@@ -44,9 +44,6 @@ object TimeUtils {
             isoUtcString.substringBefore("T").trim()
         }
 
-    /** epoch 毫秒 → 日本时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
-    fun jstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneJst)
-
     /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
     fun cstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneCst)
 
@@ -91,43 +88,6 @@ object TimeUtils {
                 null
             }
         }
-
-    /**
-     * 解析 bangumi-data 的周期播出规则（ISO 8601 重复区间，如 "R/2026-08-12T14:00:00.000Z/P7D"）。
-     * 支持 R[n]/起始时刻/周期的形式，周期单位支持 D（天）与 W（周）。
-     * @return (起始时刻 epoch 毫秒, 周期毫秒)，无法解析时返回 null
-     */
-    fun parseBroadcastRule(rule: String): Pair<Long, Long>? {
-        if (rule.isBlank()) return null
-        return try {
-            val segments = rule.split("/")
-            if (segments.size < 3) return null
-            val startMillis = Instant.parse(segments[1]).toEpochMilliseconds()
-            val periodPart = segments.last().removePrefix("P").uppercase()
-            val days =
-                Regex("(\\d+)D")
-                    .find(periodPart)
-                    ?.groupValues
-                    ?.get(1)
-                    ?.toLongOrNull()
-            val weeks =
-                Regex("(\\d+)W")
-                    .find(periodPart)
-                    ?.groupValues
-                    ?.get(1)
-                    ?.toLongOrNull()
-            val dayMillis = 24L * 60 * 60 * 1000
-            val periodMillis =
-                when {
-                    days != null -> days * dayMillis
-                    weeks != null -> weeks * 7 * dayMillis
-                    else -> return null
-                }
-            if (periodMillis <= 0L) null else startMillis to periodMillis
-        } catch (_: Exception) {
-            null
-        }
-    }
 
     fun nowEpochMillis(): Long =
         Clock.System
@@ -180,22 +140,6 @@ object TimeUtils {
     fun currentCstMonthPrefix(): String {
         val (year, month) = currentCstYearMonth()
         return "%04d-%02d".format(year, month)
-    }
-
-    /** ISO-8601 时刻距今的日历日天数（按 CST 计）；解析失败返回 null */
-    fun daysSinceIsoUtc(isoString: String): Int? {
-        val millis = epochMillisOfIso(isoString) ?: return null
-        return try {
-            val then = Instant.fromEpochMilliseconds(millis).toLocalDateTime(timeZoneCst).date
-            val today =
-                Clock.System
-                    .now()
-                    .toLocalDateTime(timeZoneCst)
-                    .date
-            then.daysUntil(today)
-        } catch (_: Exception) {
-            null
-        }
     }
 
     /**

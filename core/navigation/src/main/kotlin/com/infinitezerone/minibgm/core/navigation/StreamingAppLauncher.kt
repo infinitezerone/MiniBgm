@@ -104,20 +104,6 @@ object StreamingAppLauncher {
     }
 
     /**
-     * 快捷发起哔哩哔哩番剧搜索：
-     * 优先通过 DeepLink 唤起 B 站客户端直接搜索番剧，若未安装或未传 [onAppNotInstalled] 则平滑降级至网页端搜索页。
-     */
-    fun launchBilibiliSearch(
-        context: Context,
-        keyword: String,
-        onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
-    ): StreamingLaunchResult {
-        val target = StreamingIntentResolver.buildBilibiliSearchTarget(keyword)
-        val targetUri = target.deepLinkUri ?: target.webFallbackUrl
-        return launch(context, targetUri, onAppNotInstalled)
-    }
-
-    /**
      * 按目标探测外部播放器（mpv、VLC 等）并唤起：
      * 探测到已安装包名则以 ACTION_VIEW 意图唤起（data = 视频 URL、type 为视频 MIME 类型、setPackage = 目标包名）；
      * 未安装或唤起失败返回 false，并在提供 [onPlayerNotInstalled] 时回调，由 UI 自行展示降级提示。
@@ -159,14 +145,6 @@ fun Context.launchStreamingUrl(
     url: String,
     onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
 ): StreamingLaunchResult = StreamingAppLauncher.launch(this, url, onAppNotInstalled)
-
-/**
- * [Context] 扩展快捷发起哔哩哔哩搜索。
- */
-fun Context.launchBilibiliSearch(
-    keyword: String,
-    onAppNotInstalled: ((appName: String, webUrl: String) -> Unit)? = null,
-): StreamingLaunchResult = StreamingAppLauncher.launchBilibiliSearch(this, keyword, onAppNotInstalled)
 
 /**
  * [Context] 扩展按目标唤起外部播放器（mpv、VLC 等）。

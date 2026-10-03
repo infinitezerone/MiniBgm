@@ -41,8 +41,6 @@ data class UserPreferences(
     val airingReminderHour: Int = 8,
     /** 已逐集提醒过的开播事件键（"yyyy-MM-dd:subjectId:episode"，读取侧按当日裁剪去重） */
     val airingReminderNotifiedKeys: List<String> = emptyList(),
-    /** bangumi-data CDN 静态数据的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
-    val bangumiDataEtag: String = "",
     /** 放送时刻表快照的 HTTP ETag 指纹（用于 304 条件请求，避免全量重复拉取） */
     val scheduleSnapshotEtag: String = "",
     /** 播放源后台自动同步频率 */

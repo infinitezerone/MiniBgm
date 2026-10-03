@@ -54,17 +54,6 @@ object Sync {
         )
     }
 
-    fun initialize(
-        context: Context,
-        interval: SyncInterval = SyncInterval.WEEKLY,
-    ) {
-        AiringReminderNotifier.createNotificationChannels(context)
-        // 彻底注销旧版 WorkManager 周期任务
-        WorkManager.getInstance(context).cancelUniqueWork(AiringReminderWorker.PERIODIC_WORK_NAME)
-        enqueueStartupSync(context)
-        reconfigure(context, interval)
-    }
-
     /** 结合用户偏好执行智能启动同步（节流与未同步检测），预注册通知渠道并动态维护 AlarmManager 闹钟 */
     fun initialize(
         context: Context,

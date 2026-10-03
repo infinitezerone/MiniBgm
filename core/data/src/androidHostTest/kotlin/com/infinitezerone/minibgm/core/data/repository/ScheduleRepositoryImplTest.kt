@@ -144,17 +144,6 @@ class ScheduleRepositoryImplTest {
             events.value = events.value.filterNot { it.source == "anilist" && it.subjectId == subjectId }
         }
 
-        override suspend fun deleteAnilistEventsAt(
-            subjectId: Long,
-            airAts: List<String>,
-        ) {
-            val times = airAts.toSet()
-            events.value =
-                events.value.filterNot {
-                    it.source == "anilist" && it.subjectId == subjectId && it.airAtUtc in times
-                }
-        }
-
         override suspend fun getUpcomingEvents(
             subjectIds: List<Long>,
             fromIso: String,

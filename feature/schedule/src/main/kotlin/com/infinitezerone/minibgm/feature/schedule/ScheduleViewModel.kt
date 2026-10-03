@@ -646,9 +646,6 @@ class ScheduleViewModel(
 
         fun currentLocalDate(): LocalDate = LocalDate.now(CST_ZONE_ID)
 
-        @Deprecated("Use currentLocalDate() instead", ReplaceWith("currentLocalDate()"))
-        fun currentCstDate(): LocalDate = currentLocalDate()
-
         fun calculateDateItems(today: LocalDate): List<WeekdayDateItem> =
             (-6..6).mapIndexed { index, offset ->
                 val date = today.plusDays(offset.toLong())

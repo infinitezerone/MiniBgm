@@ -150,12 +150,6 @@ class UserPreferencesDataSource(
         }
     }
 
-    suspend fun setBangumiDataEtag(etag: String) {
-        dataStore.updateData { current ->
-            current.copy(bangumiDataEtag = etag)
-        }
-    }
-
     suspend fun setScheduleSnapshotEtag(etag: String) {
         dataStore.updateData { current ->
             current.copy(scheduleSnapshotEtag = etag)
@@ -296,22 +290,6 @@ class UserPreferencesDataSource(
                     current.bingeSubjectIds - subjectId
                 } else {
                     current.bingeSubjectIds + subjectId
-                }
-            current.copy(bingeSubjectIds = updated)
-        }
-    }
-
-    /** 设置条目的囤番状态 */
-    suspend fun setBingeSubject(
-        subjectId: Long,
-        isBinge: Boolean,
-    ) {
-        dataStore.updateData { current ->
-            val updated =
-                if (isBinge) {
-                    current.bingeSubjectIds + subjectId
-                } else {
-                    current.bingeSubjectIds - subjectId
                 }
             current.copy(bingeSubjectIds = updated)
         }
