@@ -509,8 +509,13 @@ class ScheduleRepositoryImpl(
                         anchorEp.episode - 1
                     } else {
                         val estimatedEp1Millis = anchorEp.airAtEpochSeconds * 1000 - (anchorEp.episode - 1L) * WEEK_MILLIS
-                        val offsetWeeks = ((anchorMillis - estimatedEp1Millis) / WEEK_MILLIS).toInt()
-                        if (offsetWeeks in 1..<anchorEp.episode) offsetWeeks else 0
+                        val diffMillis = anchorMillis - estimatedEp1Millis
+                        if (diffMillis > 14 * DAY_MILLIS) {
+                            val offsetWeeks = kotlin.math.round(diffMillis.toDouble() / WEEK_MILLIS).toInt()
+                            if (offsetWeeks in 1..<anchorEp.episode) offsetWeeks else 0
+                        } else {
+                            0
+                        }
                     }
                 } else {
                     0
@@ -519,6 +524,7 @@ class ScheduleRepositoryImpl(
             for (episode in episodes) {
                 val bgmEpisode = episode.episode - offset
                 if (bgmEpisode < 1) continue
+                if (entity.totalEpisodes > 0 && bgmEpisode > entity.totalEpisodes) continue
                 val airAtMillis = episode.airAtEpochSeconds * 1000
                 val kind = if (airAtMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
                 anilistEvents +=

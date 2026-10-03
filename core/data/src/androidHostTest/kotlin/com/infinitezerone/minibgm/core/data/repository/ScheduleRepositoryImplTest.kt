@@ -818,6 +818,77 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
+    fun syncAirEvents_derivesAnilistSplitCourOffset_withLateSeasonSnapshotEpisodes_correctsRoundingAndCapsAtTotalEpisodes() =
+        runTest {
+            // 快照只保留后半季末尾三话（如 AniList 17、18、19 话，对应 9/16、9/23、9/30）
+            // 真实开播日为 8/12，条目总集数仅 8 话。
+            // 验证：通过四舍五入推导 offset = 11，将 AniList 19 话精准映射到第 8 话（绝不出现虚假的第 9 话）
+            val beginIso = "2026-08-12T14:00:00Z"
+            val anilist =
+                FakeScheduleSnapshotService().apply {
+                    schedules =
+                        mapOf(
+                            189046L to
+                                listOf(
+                                    AniListAiringEpisode(
+                                        episode = 17,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-09-16T13:00:00Z")!! / 1000,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 18,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-09-23T13:00:00Z")!! / 1000,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 19,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-09-30T13:00:00Z")!! / 1000,
+                                    ),
+                                ),
+                        )
+                }
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 633836L,
+                                title = "Re:ゼロから始める異世界生活 4th season 奪還編",
+                                titleCn = "Re：从零开始的异世界生活 第四季 夺还篇",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = beginIso.substringBefore("T"),
+                                beginAtUtc = beginIso,
+                                totalEpisodes = 8,
+                                weekday = 3,
+                                timeCst = "21:00",
+                                timeJst = "22:00",
+                                sitesJson = "[]",
+                                anilistId = 189046L,
+                                broadcastRule = "R/$beginIso/P7D",
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    dataService = FakeBangumiDataService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    snapshotService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData()
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
+            assertEquals(listOf(6, 7, 8), storedEvents.map { it.episode })
+            val ep8Event = storedEvents.first { it.episode == 8 }
+            assertEquals("2026-09-30T13:00:00Z", ep8Event.airAtUtc)
+        }
+
+    @Test
     fun syncAirEvents_uncoveredSubjectsWithoutSources_haveNoAirEvents() =
         runTest {
             // 无 anilist 且无 bilibili 站点的条目：不生成任何机械推算或虚假事件

@@ -115,7 +115,7 @@ fun SubjectDetailScreen(
             EpisodeDetailRoute(
                 episodeId = episode.id,
                 subjectId = subjectId,
-                episodeSort = episode.sort,
+                episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
                 episodeType = episode.type,
                 episodeName = episode.name,
                 episodeNameCn = episode.nameCn,

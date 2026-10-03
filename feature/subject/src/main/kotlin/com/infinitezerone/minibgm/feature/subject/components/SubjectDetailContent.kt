@@ -150,6 +150,7 @@ internal fun SubjectDetailContent(
                 isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
             }
         }
+    val nextUpEpNumber = nextUpEpisode?.let { if (it.ep > 0f) it.ep else it.sort }
 
     LaunchedEffect(selectedTab) {
         val lastTab = lastTabRef.value
@@ -218,7 +219,7 @@ internal fun SubjectDetailContent(
                     onUpdateCollectionStatus = onUpdateCollectionStatus,
                     onIncrementWatched = onIncrementWatched,
                     onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
-                    nextEpSort = nextUpEpisode?.sort,
+                    nextEpSort = nextUpEpNumber,
                 )
             }
 
@@ -288,7 +289,7 @@ internal fun SubjectDetailContent(
                             onToggleView = onToggleGridView,
                             episodeSortDescending = episodeSortDescending,
                             onToggleSort = onToggleEpisodeSort,
-                            nextUpEpisodeSort = nextUpEpisode?.sort,
+                            nextUpEpisodeSort = nextUpEpNumber,
                             onJumpToNextUp = {
                                 coroutineScope.launch {
                                     listState.animateScrollToItem(tabHeaderIndex)

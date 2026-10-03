@@ -216,4 +216,22 @@ class EpisodeGroupTest {
             ),
         )
     }
+
+    @Test
+    fun franchiseCumulativeSortEpisode_resolvesToSeasonEpisodeNumber() {
+        // 如 Re:0 夺还篇：本季第 1 话在 Bangumi ep=1f, 全系列累计 sort=78f
+        val re0Ep1 = Episode(id = 1656858L, type = 0, ep = 1f, sort = 78f)
+        val re0Ep2 = Episode(id = 1656859L, type = 0, ep = 2f, sort = 79f)
+
+        // 下一待看逻辑对齐 ep=1f（而不是 sort=78f）
+        assertTrue(isEpisodeNextToWatch(re0Ep1, watchedCount = 0))
+        assertFalse(isEpisodeNextToWatch(re0Ep2, watchedCount = 0))
+        assertTrue(isEpisodeNextToWatch(re0Ep2, watchedCount = 1))
+
+        // 有效分集话数推导
+        val ep1Num = if (re0Ep1.ep > 0f) re0Ep1.ep else re0Ep1.sort
+        assertEquals("1", ep1Num.toEpisodeLabel())
+        val ep2Num = if (re0Ep2.ep > 0f) re0Ep2.ep else re0Ep2.sort
+        assertEquals("2", ep2Num.toEpisodeLabel())
+    }
 }

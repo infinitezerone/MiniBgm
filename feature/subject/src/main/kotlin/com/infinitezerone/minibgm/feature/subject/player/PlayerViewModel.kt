@@ -387,7 +387,7 @@ class PlayerViewModel(
                                 .map { ep ->
                                     PlayerEpisodeItem(
                                         id = ep.id,
-                                        sort = ep.sort,
+                                        sort = if (ep.ep > 0f) ep.ep else ep.sort,
                                         type = ep.type,
                                         name = ep.name,
                                         nameCn = ep.nameCn,
