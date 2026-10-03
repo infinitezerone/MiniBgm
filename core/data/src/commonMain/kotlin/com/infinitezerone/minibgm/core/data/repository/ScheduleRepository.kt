@@ -3,9 +3,7 @@ package com.infinitezerone.minibgm.core.data.repository
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
-import com.infinitezerone.minibgm.core.common.toBgmCdnUrl
 import com.infinitezerone.minibgm.core.common.toSecureUrl
-import com.infinitezerone.minibgm.core.common.unescapeHtmlEntities
 import com.infinitezerone.minibgm.core.data.search.SearchAliasIndex
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
@@ -18,7 +16,6 @@ import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.AirScheduleEvent
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
 import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
@@ -43,11 +40,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.abs
 
-// 时间常量放在文件级而非 companion：isZombieBgmDataSchedule 是顶层纯函数（见文件末尾），
-// 它需要这几个常量，而 private companion 对外部顶层声明不可见。类内引用照常解析。
-private const val HOUR_MILLIS = 60L * 60 * 1000
-private const val DAY_MILLIS = 24L * HOUR_MILLIS
-private const val WEEK_MILLIS = 7L * DAY_MILLIS
+// 时间常量 HOUR_MILLIS / DAY_MILLIS / WEEK_MILLIS 已随纯辅助函数提升为 internal 顶层，
+// 见同包 ScheduleMappers.kt；同包引用照常解析。
 
 interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
@@ -688,16 +682,6 @@ class ScheduleRepositoryImpl(
         )
     }
 
-    /** 快照条目的首播日：优先 `airDate`；缺失时用 `startYear/startMonth` 兜一个当月 1 日 */
-    private fun snapshotAirDateOf(sItem: ScheduleSnapshotItemDto?): String {
-        val explicit = sItem?.airDate?.ifBlank { null }
-        if (explicit != null) return explicit
-        val year = sItem?.startYear ?: 0
-        val month = sItem?.startMonth ?: 0
-        if (year <= 0 || month !in 1..12) return ""
-        return "$year-${month.toString().padStart(2, '0')}-01"
-    }
-
     /**
      * 策略 A：该 anilistId 已绑定到正式条目（`bgmId > 0`），只做元数据补全、不重新绑定。
      *
@@ -830,108 +814,8 @@ class ScheduleRepositoryImpl(
             .getOrElse { emptyList() }
             .associateByTo(mutableMapOf<Long, AniListBgmMappingEntity>()) { it.anilistId }
 
-    private fun titlesRoughlyEqual(
-        a: String,
-        b: String,
-    ): Boolean {
-        if (a.isBlank() || b.isBlank()) return false
-        return canonicalTitleKey(a) == canonicalTitleKey(b)
-    }
-
-    /**
-     * 片名归一化：全角数字/字母 → 半角、罗马数字 → 阿拉伯、季/期/部/クール/season 归一，
-     * 再抹平连接符/中点/空白；让「第2季 / 第二季 / 2nd Season / シーズン2」等同起来。
-     */
-    private fun canonicalTitleKey(raw: String): String {
-        if (raw.isBlank()) return ""
-        val s =
-            raw
-                .trim()
-                .lowercase()
-                .map { c ->
-                    val code = c.code
-                    if ((code in 0xFF10..0xFF19) || (code in 0xFF21..0xFF3A) || (code in 0xFF41..0xFF5A)) {
-                        (code - 0xFEE0).toChar()
-                    } else {
-                        c
-                    }
-                }.joinToString("")
-                .replace(ROMAN_NUMERAL_REGEX) { ROMAN_NUMERALS[it.value] ?: it.value }
-                .replace(Regex("第\\s*([一二三四五六七八九十]+)\\s*[季期部章]")) { "s" + chineseNumberToArabic(it.groupValues[1]) }
-                .replace(Regex("第\\s*(\\d+)\\s*[季期部章]"), "s$1")
-                .replace(Regex("(?:season|シーズン)\\s*(\\d+)"), "s$1")
-                .replace(Regex("(\\d+)\\s*(?:st|nd|rd|th)\\s+season"), "s$1")
-                .replace(Regex("(\\d+)\\s*クール"), "s$1")
-        return s.replace(TITLE_NOISE_REGEX, "")
-    }
-
-    private fun chineseNumberToArabic(cn: String): String {
-        val digits = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '七' to 7, '八' to 8, '九' to 9)
-        return when {
-            cn == "十" -> "10"
-            cn.startsWith("十") -> (10 + (digits[cn.getOrNull(1)] ?: 0)).toString()
-            cn.contains("十") -> {
-                val parts = cn.split("十")
-                val tens = digits[parts[0].firstOrNull()] ?: 1
-                val ones = parts.getOrNull(1)?.firstOrNull()?.let { digits[it] } ?: 0
-                (tens * 10 + ones).toString()
-            }
-            else -> cn.mapNotNull { digits[it] }.joinToString("").ifBlank { cn }
-        }
-    }
-
-    private fun mergeSites(
-        existing: String,
-        incoming: String,
-    ): String = if (incoming.isNotBlank() && incoming != "[]") incoming else existing
-
-    private fun AniListBgmMappingEntity.toAirScheduleEntity(
-        item: AniListWeeklyScheduleItem,
-        nowMillis: Long,
-    ): AirScheduleEntity {
-        val airMillis = item.airAtEpochSeconds * 1000
-        val isoUtc = TimeUtils.isoUtcFromEpochMillis(airMillis)
-        val cstTime = TimeUtils.formatToCstTime(isoUtc)
-        val jstTime = TimeUtils.formatToJstTime(isoUtc)
-        val kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED
-        return AirScheduleEntity(
-            bgmId = bgmId,
-            title = title,
-            titleCn = titleCn,
-            coverUrl = item.coverUrl.orEmpty(),
-            ratingScore = 0.0,
-            airDate = beginIso.substringBefore("T"),
-            beginAtUtc = beginIso.ifBlank { isoUtc },
-            sortMinutes = TimeUtils.parseTimeToMinutes(cstTime),
-            weekday = TimeUtils.cstWeekdayOfEpoch(airMillis),
-            timeCst = cstTime,
-            timeJst = jstTime,
-            sitesJson = sitesJson,
-            anilistId = anilistId,
-            source = AirScheduleEntity.SOURCE_BGM_DATA,
-            nextEpisode = item.episode,
-            nextEpisodeAtUtc = isoUtc,
-            nextEpisodeKind = kind,
-        )
-    }
-
-    /** 映射不到 bgmId 时的占位条目：只进时刻表展示，bgmId 用 `-anilistId` 作哨兵值。 */
-
-    private fun AirScheduleEntity.toAniListBgmMapping(
-        anilistId: Long,
-        nowMillis: Long,
-    ): AniListBgmMappingEntity =
-        AniListBgmMappingEntity(
-            anilistId = anilistId,
-            bgmId = bgmId,
-            sitesJson = sitesJson,
-            title = title,
-            titleCn = titleCn,
-            beginIso = beginUtc,
-            endIso = "",
-            monthKey = "",
-            updatedAt = nowMillis,
-        )
+    // titlesRoughlyEqual / canonicalTitleKey / chineseNumberToArabic 已提升为同包顶层，见 ScheduleTitleMatcher.kt；
+    // mergeSites / snapshotAirDateOf / resolveSiteLink 与实体↔模型映射扩展见 ScheduleMappers.kt。
 
     private fun reconcileScheduleEntities(
         entities: List<AirScheduleEntity>,
@@ -1001,52 +885,6 @@ class ScheduleRepositoryImpl(
 
     override suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean) {
         userPreferences.setScheduleDefaultOnlyWatching(onlyWatching)
-    }
-
-    private fun resolveSiteLink(
-        site: String,
-        id: String,
-        customUrl: String = "",
-    ): SiteLink? {
-        val siteKey = site.lowercase()
-        val resolver = SITE_RESOLVERS[siteKey] ?: return null
-        val url = customUrl.ifBlank { resolver.second(id) }
-        if (url.isBlank()) return null
-        return SiteLink(
-            siteName = siteKey,
-            displayName = resolver.first,
-            playUrl = url,
-        )
-    }
-
-    private fun AirScheduleEntity.toModel(json: Json): AirSchedule {
-        val links: List<SiteLink> =
-            try {
-                json.decodeFromString(sitesJson)
-            } catch (_: Exception) {
-                emptyList()
-            }
-
-        val calculatedEp = nextEpisode.takeIf { it > 0 } ?: 0
-
-        return AirSchedule(
-            bgmId = bgmId,
-            title = title.unescapeHtmlEntities(),
-            titleCn = titleCn.unescapeHtmlEntities(),
-            coverUrl = coverUrl.toBgmCdnUrl(),
-            ratingScore = ratingScore,
-            airDate = airDate,
-            beginAtUtc = beginAtUtc,
-            beginUtc = beginUtc,
-            weekday = weekday,
-            timeCst = timeCst,
-            timeJst = timeJst,
-            siteLinks = links,
-            nextEpisodeNumber = calculatedEp,
-            nextEpisodeAtUtc = nextEpisodeAtUtc,
-            nextEpisodeKind = nextEpisodeKind,
-            isUnmapped = bgmId <= 0,
-        )
     }
 
     private fun AirScheduleEntity.isActiveForSchedule(nowMillis: Long): Boolean {
@@ -1135,128 +973,13 @@ class ScheduleRepositoryImpl(
         const val EVENT_SOURCE_BGM_DATA = "bgm_data"
         const val ROSTER_LOOKBACK_DAYS = 370L
 
-        /** 片名归一化时抹掉的连接符/中点/空白（含全角变体） */
-        private val TITLE_NOISE_REGEX = Regex("[・&＆\\-\\s　·]")
-
-        private val ROMAN_NUMERAL_REGEX = Regex("[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ]")
-        private val ROMAN_NUMERALS =
-            mapOf(
-                "Ⅰ" to "1",
-                "Ⅱ" to "2",
-                "Ⅲ" to "3",
-                "Ⅳ" to "4",
-                "Ⅴ" to "5",
-                "Ⅵ" to "6",
-                "Ⅶ" to "7",
-                "Ⅷ" to "8",
-                "Ⅸ" to "9",
-                "Ⅹ" to "10",
-                "Ⅺ" to "11",
-                "Ⅻ" to "12",
-                "ⅰ" to "1",
-                "ⅱ" to "2",
-                "ⅲ" to "3",
-                "ⅳ" to "4",
-                "ⅴ" to "5",
-                "ⅵ" to "6",
-                "ⅶ" to "7",
-                "ⅷ" to "8",
-                "ⅸ" to "9",
-                "ⅹ" to "10",
-                "ⅺ" to "11",
-                "ⅻ" to "12",
-            )
+        // 标题归一化用的 TITLE_NOISE_REGEX / ROMAN_NUMERAL_REGEX / ROMAN_NUMERALS
+        // 已随 canonicalTitleKey 移至 ScheduleTitleMatcher.kt；
+        // SITE_RESOLVERS / buildBilibiliUrl 已随 resolveSiteLink 移至 ScheduleMappers.kt。
 
         /** 非强制刷新的节流阈值：12 小时内不重跑全量管线，杜绝后台无谓唤醒与高频网络请求 */
         const val REFRESH_THROTTLE_MILLIS = 12L * 60L * 60L * 1000L
-
-        private fun buildBilibiliUrl(id: String): String =
-            when {
-                id.startsWith("http") -> id
-                id.startsWith("md") -> "https://www.bilibili.com/bangumi/media/$id"
-                id.startsWith("ss") -> "https://www.bilibili.com/bangumi/play/$id"
-                id.startsWith("ep") -> "https://www.bilibili.com/bangumi/play/$id"
-                else -> "https://www.bilibili.com/bangumi/media/md$id"
-            }
-
-        private val SITE_RESOLVERS: Map<String, Pair<String, (String) -> String>> =
-            mapOf(
-                "bilibili" to ("哔哩哔哩" to ::buildBilibiliUrl),
-                "gamer" to ("巴哈姆特" to { "https://ani.gamer.com.tw/animeVideo.php?sn=$it" }),
-                "gamer_hk" to ("巴哈姆特" to { "https://ani.gamer.com.tw/animeVideo.php?sn=$it" }),
-                "iqiyi" to ("爱奇艺" to { "https://www.iqiyi.com/v_$it.html" }),
-                "qq" to ("腾讯视频" to { "https://v.qq.com/x/cover/$it.html" }),
-                "youku" to ("优酷" to { "https://v.youku.com/v_show/id_$it.html" }),
-                "netflix" to ("Netflix" to { "https://www.netflix.com/title/$it" }),
-                "danime" to ("d动画" to { "https://animestore.docomo.ne.jp/animestore/ci_pc?workId=$it" }),
-                "abema" to ("ABEMA" to { "https://abema.tv/channels/$it" }),
-                "unext" to ("U-NEXT" to { "https://video.unext.jp/title/$it" }),
-                "prime" to ("Prime Video" to { "https://www.amazon.co.jp/dp/$it" }),
-                "disneyplus" to ("Disney+" to { "https://www.disneyplus.com/series/$it" }),
-                "crunchyroll" to ("Crunchyroll" to { "https://www.crunchyroll.com/series/$it" }),
-                "muse_tw" to ("木棉花" to { "https://www.youtube.com/playlist?list=$it" }),
-                "muse_hk" to ("木棉花" to { "https://www.youtube.com/playlist?list=$it" }),
-                "ani_one" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
-                "ani_one_asia" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
-                "nicovideo" to ("NicoNico" to { "https://ch.nicovideo.jp/$it" }),
-                "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
-            )
     }
 }
 
-/**
- * 判定一条 `bgm_data` 来源的条目是否已成"僵尸"：本周及未来都不会再有任何播出事件，该从时刻表剔除。
- * 非 `bgm_data` 来源（如 AniList 名单）一律不判，直接返回 false。
- *
- * 两支判据：**有事件**时看是否已播完全部集数、或总放送周期已过；**无事件**时看距最后事件／开播日
- * 是否已过去足够久（14 天）。
- *
- * 刻意做成**无依赖的顶层纯函数**，而不是 [ScheduleRepositoryImpl] 的 private 成员：它只依赖传入的
- * 实体、事件与当前时刻，抽出来才能逐分支钉住。留在类里当私有成员时行覆盖率只有 51.9%，
- * 在 CRAP 门禁（阈值 30，CC=26）下是 DANGER。
- */
-internal fun isZombieBgmDataSchedule(
-    entity: AirScheduleEntity,
-    events: List<AirEventEntity>,
-    nowMillis: Long,
-): Boolean {
-    if (entity.source != AirScheduleEntity.SOURCE_BGM_DATA) return false
-    val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
-    if (events.isNotEmpty()) {
-        val hasActiveOrFutureEvent =
-            events.any { event ->
-                val millis = TimeUtils.epochMillisOfIso(event.airAtUtc) ?: 0L
-                millis >= weekStartMillis
-            }
-        if (hasActiveOrFutureEvent) return false
-
-        // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为僵尸条目
-        if (entity.totalEpisodes == 1) return true
-        if (entity.totalEpisodes > 1) {
-            if (events.size >= entity.totalEpisodes) return true
-            val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
-            if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
-                return true
-            }
-            return false
-        }
-        // totalEpisodes <= 0
-        val latestEventMillis = events.maxOfOrNull { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L } ?: 0L
-        return latestEventMillis < weekStartMillis - 14 * DAY_MILLIS
-    }
-
-    // events 为空
-    if (entity.totalEpisodes == 1) {
-        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return true
-        return beginMillis < weekStartMillis
-    }
-    if (entity.totalEpisodes > 1) {
-        val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
-        if (beginMillis != null && beginMillis + entity.totalEpisodes * WEEK_MILLIS < weekStartMillis) {
-            return true
-        }
-        return false
-    }
-    val beginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc) ?: return false
-    return beginMillis < weekStartMillis - 14 * DAY_MILLIS
-}
+// isZombieBgmDataSchedule 顶层谓词已移至同包 SchedulePruning.kt（语义与命名不变）。
