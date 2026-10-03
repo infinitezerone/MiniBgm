@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.data.repository.resolver.sameRegistrableDomain
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.test.runTest
