@@ -84,16 +84,32 @@ sealed interface PlaybackRulesUiEvent {
 
 /**
  * 播放源管理 ViewModel：自备片单（JSON 导入）与第三方解析规则的读写。
+ *
+ * 结构 = 「主列表投影 + 两个对话框会话态」：[uiState] 是三仓库流（规则 / 片单 / 续播位置）
+ * `combine` 出的只读投影；[siteProbe] 与 [subscriptionImport] 是两个对话框的局部会话态，
+ * 按响应式 UDF 规范第 5 条保留为独立意图流（见各字段 KDoc），不并入主投影。
  */
 class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
 ) : ViewModel() {
+    /**
+     * 站点探测对话框的会话态（响应式 UDF 规范第 5 条：局部多步命令会话允许保留为独立意图流，
+     * 不并入主投影）——输入 → 探测中 → 结论是一个**对话框内的多步过程**，生命周期随对话框
+     * 开合整体重置（open 时清空、add/close 时归零），与主列表没有任何共享字段；
+     * 并入主投影只会让探测过程无谓地重建规则列表。
+     */
     private val _siteProbe = MutableStateFlow(SiteProbeUiState())
 
     /** 站点探测状态；与主列表相互独立，探测过程不该让规则列表重建 */
     val siteProbe: StateFlow<SiteProbeUiState> = _siteProbe.asStateFlow()
 
+    /**
+     * 订阅导入对话框的会话态（响应式 UDF 规范第 5 条：局部多步命令会话允许保留为独立意图流，
+     * 不并入主投影）——贴 URL → 检测 → 按报告勾选 → 导入是**对话框内的多步流水线**，
+     * 生命周期随对话框开合整体重置，与主列表、站点探测互不共享字段；
+     * 并入主投影只会让校验过程无谓地重建规则列表。
+     */
     private val _subscriptionImport = MutableStateFlow(SubscriptionImportUiState())
 
     /** 订阅导入状态；与站点探测、主列表相互独立 */
