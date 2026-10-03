@@ -332,6 +332,9 @@ class UserViewModelTest {
             collectionRepo.sendCollection(com.infinitezerone.minibgm.core.testing.data.sampleUserCollection)
             val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
 
+            // 订阅驱动 counts 链的初始加载（WhileSubscribed：无订阅不拉取）
+            viewModel.uiState.first { it.collectionCounts.isNotEmpty() }
+
             var refreshDone = false
             viewModel.refresh { success ->
                 refreshDone = success
@@ -339,7 +342,7 @@ class UserViewModelTest {
 
             assertTrue(refreshDone)
             assertEquals(1, authRepo.refreshProfileCallCount)
-            // 初始加载 1 次 + 下拉刷新 1 次 = 共 2 次，无并发冗余请求
+            // 初始加载 1 次 + 下拉刷新（generation 递增触发 flatMapLatest 换挡）1 次 = 共 2 次
             assertEquals(2, collectionRepo.fetchCollectionCountsCallCount)
         }
 
@@ -386,8 +389,54 @@ class UserViewModelTest {
             viewModel.setSyncInterval(SyncInterval.DAILY)
             viewModel.setAiringReminderHour(10)
 
-            // 验证未触发重新拉取
+            // 验证未触发重新拉取：settings 流不在 counts 换挡判据（profile + generation）里
             assertEquals(1, collectionRepo.fetchCollectionCountsCallCount)
+        }
+
+    @Test
+    fun switchAccount_refetchesCollectionCountsForNewProfile() =
+        runTest {
+            // 回归：counts 拉取由 profile 驱动 flatMapLatest 换挡，切换账号自动重拉，
+            // 无需手动触发（旧的 lastLoadedUserId 手动去重已删除）
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                    initialAccounts = listOf(sampleUserProfile, sampleUserProfileAlt),
+                )
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(com.infinitezerone.minibgm.core.testing.data.sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            viewModel.uiState.first { it.collectionCounts.isNotEmpty() }
+            assertEquals(1, collectionRepo.fetchCollectionCountsCallCount)
+
+            viewModel.switchAccount(sampleUserProfileAlt.id)
+            advanceUntilIdle()
+
+            assertEquals(2, collectionRepo.fetchCollectionCountsCallCount)
+        }
+
+    @Test
+    fun logout_clearsCollectionCountsState() =
+        runTest {
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = sampleUserProfile,
+                    initialAccounts = listOf(sampleUserProfile),
+                )
+            val collectionRepo = FakeCollectionRepository()
+            collectionRepo.sendCollection(com.infinitezerone.minibgm.core.testing.data.sampleUserCollection)
+            val (viewModel, _) = createViewModel(authRepo = authRepo, collectionRepo = collectionRepo)
+
+            viewModel.uiState.first { it.collectionCounts.isNotEmpty() }
+
+            viewModel.logout()
+
+            // null 档案 → flatMapLatest 换挡为清空分支
+            val state = viewModel.uiState.first { !it.isLoggedIn && it.collectionCounts.isEmpty() }
+            assertNull(state.activeProfile)
         }
 
     @Test

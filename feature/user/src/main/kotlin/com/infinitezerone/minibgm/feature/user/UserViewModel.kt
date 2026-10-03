@@ -17,7 +17,7 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,6 +25,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -81,6 +84,12 @@ private data class LocalSlice(
     val trackingFootprint: TrackingFootprint?,
 )
 
+/** 收藏统计域投影的局部状态：counts 快照 + 拉取中标记（flatMapLatest 链的产出） */
+private data class CollectionCountsState(
+    val collectionCounts: Map<CollectionType, Int> = emptyMap(),
+    val isCountsLoading: Boolean = false,
+)
+
 class UserViewModel(
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
@@ -91,28 +100,58 @@ class UserViewModel(
 ) : ViewModel() {
     private val isManualSyncing = MutableStateFlow(false)
     private val isRefreshingFlow = MutableStateFlow(false)
-    private val collectionCountsFlow = MutableStateFlow<Map<CollectionType, Int>>(emptyMap())
-    private val isCountsLoadingFlow = MutableStateFlow(false)
-    private var lastLoadedUserId: Long? = null
-    private var countsJob: Job? = null
 
-    init {
-        viewModelScope.launch {
-            authRepository.activeProfile
-                .distinctUntilChanged { old, new -> old?.id == new?.id && old?.username == new?.username }
-                .collect { profile ->
-                    if (profile != null) {
-                        if (lastLoadedUserId != profile.id || collectionCountsFlow.value.isEmpty()) {
-                            lastLoadedUserId = profile.id
-                            refreshCollectionCounts(profile, force = false)
+    /**
+     * 用户意图：手动刷新代数。下拉刷新递增它来触发 counts 链换挡重拉（见
+     * [collectionCountsState]），本类仅有的命令态输入之一；profile 驱动的自动重拉不经过它。
+     */
+    private val countsRefreshGeneration = MutableStateFlow(0)
+
+    /**
+     * 收藏统计投影：活跃档案（id + username）是换挡判据，经 `distinctUntilChanged` +
+     * `flatMapLatest` 自动重拉——档案切换 / 登出（null 档案清空）/ 手动刷新（generation 递增）
+     * 都会让旧链整条取消、加载态重置，**没有 lastLoadedUserId 之类的手动去重与 Job 判序**：
+     * 「请求是否真的变了」由 distinctUntilChanged 判定，竞态全部交给 flatMapLatest。
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val collectionCountsState: Flow<CollectionCountsState> =
+        combine(
+            authRepository.activeProfile,
+            countsRefreshGeneration,
+        ) { profile, generation -> profile to generation }
+            .distinctUntilChanged { old, new ->
+                val (oldProfile, oldGeneration) = old
+                val (newProfile, newGeneration) = new
+                oldGeneration == newGeneration &&
+                    oldProfile?.id == newProfile?.id &&
+                    oldProfile?.username == newProfile?.username
+            }.flatMapLatest { (profile, generation) ->
+                countsForProfile(profile, force = generation > 0)
+            }
+
+    /** 单个档案的 counts 一次性拉取流：loading → 结果 → done（isCountsLoading 并入本链） */
+    private fun countsForProfile(
+        profile: UserProfile?,
+        force: Boolean,
+    ): Flow<CollectionCountsState> =
+        if (profile == null) {
+            flowOf(CollectionCountsState())
+        } else {
+            flow {
+                emit(CollectionCountsState(isCountsLoading = true))
+                val username = profile.username.ifBlank { profile.id.toString() }
+                if (username.isBlank() || username == "0") {
+                    emit(CollectionCountsState())
+                } else {
+                    val state =
+                        when (val res = collectionRepository.fetchCollectionCounts(username, force = force)) {
+                            is AppResult.Success -> CollectionCountsState(collectionCounts = res.data)
+                            else -> CollectionCountsState()
                         }
-                    } else {
-                        lastLoadedUserId = null
-                        collectionCountsFlow.value = emptyMap()
-                    }
+                    emit(state)
                 }
+            }
         }
-    }
 
     /**
      * uiState 组装：combine 的类型安全重载最多 5 路，超出部分按域分组为
@@ -141,12 +180,17 @@ class UserViewModel(
     private val localSlice: Flow<LocalSlice> =
         combine(
             isManualSyncing,
-            collectionCountsFlow,
-            isCountsLoadingFlow,
+            collectionCountsState,
             isRefreshingFlow,
             collectionRepository.observeTrackingFootprint(),
-        ) { manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint ->
-            LocalSlice(manualSyncing, collectionCounts, isCountsLoading, isRefreshing, trackingFootprint)
+        ) { manualSyncing, countsState, isRefreshing, trackingFootprint ->
+            LocalSlice(
+                manualSyncing,
+                countsState.collectionCounts,
+                countsState.isCountsLoading,
+                isRefreshing,
+                trackingFootprint,
+            )
         }
 
     val uiState: StateFlow<UserUiState> =
@@ -185,7 +229,7 @@ class UserViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState(isLoading = true))
 
-    /** 刷新个人中心：同步最新个人资料与全量收藏统计 */
+    /** 刷新个人中心：同步最新个人资料并触发收藏统计链换挡重拉，再全量同步追番收藏 */
     fun refresh(onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch {
             isRefreshingFlow.value = true
@@ -197,10 +241,8 @@ class UserViewModel(
                     if (profileRes is AppResult.Error) {
                         success = false
                     }
-                    val currentProfile = (profileRes as? AppResult.Success)?.data ?: uiState.value.activeProfile
-                    if (currentProfile != null) {
-                        refreshCollectionCounts(currentProfile, force = true)
-                    }
+                    // counts 不再手动拉取：递增刷新代数让 flatMapLatest 取消旧链、强制绕缓存重拉
+                    countsRefreshGeneration.value += 1
                     // 追番收藏同步失败必须反映到刷新结果，否则 UI 会误报成功、用户停留在过期收藏数据上
                     if (collectionRepository.syncWatchingCollections() is AppResult.Error) {
                         success = false
@@ -215,32 +257,6 @@ class UserViewModel(
             }
             onComplete?.invoke(success)
         }
-    }
-
-    /** 刷新活跃用户的五大收藏分类条目总数（真实 Bangumi 远端统计汇总） */
-    fun refreshCollectionCounts(
-        profile: UserProfile? = null,
-        force: Boolean = false,
-    ) {
-        val currentProfile = profile ?: uiState.value.activeProfile ?: return
-        val username = currentProfile.username.ifBlank { currentProfile.id.toString() }
-        if (username.isBlank() || username == "0") return
-
-        if (!force && countsJob?.isActive == true) return
-
-        countsJob?.cancel()
-        countsJob =
-            viewModelScope.launch {
-                isCountsLoadingFlow.value = true
-                try {
-                    val res = collectionRepository.fetchCollectionCounts(username, force = force)
-                    if (res is AppResult.Success) {
-                        collectionCountsFlow.value = res.data
-                    }
-                } finally {
-                    isCountsLoadingFlow.value = false
-                }
-            }
     }
 
     fun setSyncInterval(interval: SyncInterval) {
