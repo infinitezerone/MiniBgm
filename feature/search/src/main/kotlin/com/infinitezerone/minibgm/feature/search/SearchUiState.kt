@@ -41,7 +41,12 @@ enum class SearchViewMode {
     GRID, // 3列高密度海报网格
 }
 
-/** 搜索界面的单一不可变 UI 状态 */
+/**
+ * 搜索界面的单一不可变 UI 状态。
+ *
+ * 一次性提示（打卡结果 / 失败原因）不在状态里：走 [SearchViewModel.userMessage] 的
+ * `Channel(BUFFERED) + receiveAsFlow()`，与状态流隔离、消费即消失。
+ */
 @Immutable
 data class SearchUiState(
     val query: String = "",
@@ -60,7 +65,6 @@ data class SearchUiState(
     val offlineNotice: String? = null,
     val userCollections: Map<Long, CollectionType> = emptyMap(),
     val showLoginPromptDialog: Boolean = false,
-    val userMessage: String? = null,
     val error: String? = null,
     val searchHistory: List<String> = emptyList(),
 )

@@ -11,58 +11,109 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.LocalSubjectMatch
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 内部搜索与分页独立状态载体 */
-private data class SearchPaginationState(
-    val query: String = "",
+private const val PAGE_SIZE = 20
+
+/**
+ * 搜索意图：输入文本 + 分类 + 排序 + 是否已发起搜索。
+ * 这是本类仅有的可变状态之一；只有 [hasSearched] 为真且文本非空才构成请求。
+ */
+private data class SearchIntent(
+    val text: String = "",
     val hasSearched: Boolean = false,
     val selectedType: Int = 0,
     val selectedSort: SearchSort = SearchSort.MATCH,
-    val viewMode: SearchViewMode = SearchViewMode.LIST,
+)
+
+/** 换挡的唯一判据：请求是否真的变了（文本 / 分类 / 排序）；null = 当前无待执行请求 */
+private data class SearchRequestKey(
+    val query: String,
+    val type: Int,
+    val sort: SearchSort,
+)
+
+private fun SearchIntent.requestKey(): SearchRequestKey? =
+    if (!hasSearched || text.isBlank()) {
+        null
+    } else {
+        SearchRequestKey(query = text.trim(), type = selectedType, sort = selectedSort)
+    }
+
+/**
+ * 搜索分页会话的投影容器，私有于换挡管线：
+ * - [serverCursor] 服务端分页游标：翻页 offset 必须用"已向服务端索取的条目数"推进，
+ *   而非去重后的列表长度——服务端数据漂移导致某页与已有结果重叠时，
+ *   去重会让列表长度停滞，若用列表长度做 offset 会在重叠区间死循环；
+ * - [rawResults] 未排序的原始搜索数据：客户端即时切换排序的双轨数据源。
+ */
+private data class SearchSession(
+    val results: List<Subject> = emptyList(),
+    val rawResults: List<Subject> = emptyList(),
+    val serverCursor: Int = 0,
+    val totalCount: Int = 0,
+    val hasMore: Boolean = false,
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val hasMore: Boolean = false,
-    val totalCount: Int = 0,
-    val results: List<Subject> = emptyList(),
     val localMatches: List<LocalSubjectMatch> = emptyList(),
     val offlineNotice: String? = null,
     val error: String? = null,
 )
 
 /**
- * 搜索功能 ViewModel：
- * - 声明式数据流架构：Room 收藏与搜索历史作为唯一真源直接进入 [uiState] 响应式合并；
- * - [onQueryChange] 仅更新输入框内容，空白时自动重置搜索结果回到历史发现页；
- * - [search] 响应软键盘搜索/手动点击搜索按钮，触发网络请求；
- * - [onTypeSelect] 切换分类（已搜索时即时以新分类重搜）；
- * - [onSortChange] 切换排序维度（综合 / 热门 / 高分 / 排名）；
- * - [onViewModeToggle] 切换列表 / 3列海报网格视图；
- * - [toggleCollection] 快捷打卡（自适应动词：想看/想读/想听/想玩），未登录弹窗拦截；
- * - [loadMore] 触底增量分页加载；
- * - [clearQuery] 一键清空输入与结果。
+ * 搜索功能 ViewModel —— 响应式 UDF（同模块 [ExploreViewModel] 模板）：
+ * - 对外只读 `uiState: StateFlow<SearchUiState>`，状态 = `combine(意图流, 会话投影, 仓库流)`；
+ * - 搜索是**查询意图换挡**：`searchIntent` 投影成请求键（query/type/sort）后
+ *   `distinctUntilChanged` + `flatMapLatest`——请求真变时旧链整条取消、首取自动发起；
+ *   同键重搜（错误重试 / 再次点击搜索）经 [PagingTriggers] 的 Retry 信号重跑会话；
+ * - `loadMore` 用 [PagingTriggers] 的 More 信号接入同一会话，无手动 Job 判空判序；
+ * - 服务端游标（防漂移死循环）、客户端即时排序双轨、离线降级（别名兜底）原样保留在会话内；
+ * - 一次性提示（打卡结果 / 失败原因）走 `Channel(BUFFERED) + receiveAsFlow()`，与状态流隔离；
+ * - Room 收藏与搜索历史作为唯一真源直接进入 [uiState] 响应式合并。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
 ) : ViewModel() {
-    private val paginationState = MutableStateFlow(SearchPaginationState())
+    // ── 输入：用户意图（仅有的可变状态）──
+    private val searchIntent = MutableStateFlow(SearchIntent())
+    private val viewMode = MutableStateFlow(SearchViewMode.LIST)
     private val loginPromptVisible = MutableStateFlow(false)
-    private val userMessage = MutableStateFlow<String?>(null)
+
+    // 一次性提示：形态与 TagSubjectsViewModel.userMessage 一致（Channel(BUFFERED) + receiveAsFlow）
+    private val _userMessage = Channel<String>(Channel.BUFFERED)
+
+    /** 一次性事件流。UI 收集它来弹 Snackbar；不需要也不应该有人回写它 */
+    val userMessage: Flow<String> = _userMessage.receiveAsFlow()
+
+    /** 取页信号源：More（触底）/ Retry（同键重搜）接入换挡会话（见 [runSearchSession]） */
+    private val pageTriggers = PagingTriggers()
+
+    /** 搜索分页投影：游标 / 原始结果 / 降级状态私有于换挡管线，对外只经 [uiState] 暴露 */
+    private val searchSession = MutableStateFlow(SearchSession())
 
     private val collectionsStream: Flow<Map<Long, CollectionType>> =
         combine(
@@ -80,30 +131,31 @@ class SearchViewModel(
     /** 对外只读不可变 UI 快照：响应式多路合并 */
     val uiState: StateFlow<SearchUiState> =
         combine(
-            paginationState,
+            combine(searchSession, searchIntent, viewMode) { session, intent, mode ->
+                SearchUiState(
+                    query = intent.text,
+                    hasSearched = intent.hasSearched,
+                    selectedType = intent.selectedType,
+                    selectedSort = intent.selectedSort,
+                    viewMode = mode,
+                    isLoading = session.isLoading,
+                    isLoadingMore = session.isLoadingMore,
+                    hasMore = session.hasMore,
+                    totalCount = session.totalCount,
+                    results = session.results,
+                    localMatches = session.localMatches,
+                    offlineNotice = session.offlineNotice,
+                    error = session.error,
+                )
+            },
             collectionsStream,
             searchRepository.getSearchHistory().catch { emit(emptyList()) },
             loginPromptVisible,
-            userMessage,
-        ) { pagination, collections, history, loginPrompt, msg ->
-            SearchUiState(
-                query = pagination.query,
-                hasSearched = pagination.hasSearched,
-                selectedType = pagination.selectedType,
-                selectedSort = pagination.selectedSort,
-                viewMode = pagination.viewMode,
-                isLoading = pagination.isLoading,
-                isLoadingMore = pagination.isLoadingMore,
-                hasMore = pagination.hasMore,
-                totalCount = pagination.totalCount,
-                results = pagination.results,
-                localMatches = pagination.localMatches,
-                offlineNotice = pagination.offlineNotice,
-                error = pagination.error,
+        ) { base, collections, history, loginPrompt ->
+            base.copy(
                 userCollections = collections,
                 searchHistory = history,
                 showLoginPromptDialog = loginPrompt,
-                userMessage = msg,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -111,94 +163,48 @@ class SearchViewModel(
             initialValue = SearchUiState(),
         )
 
-    private var searchJob: Job? = null
-    private var loadMoreJob: Job? = null
-
-    /**
-     * 服务端分页游标：翻页 offset 必须用"已向服务端索取的条目数"推进，
-     * 而非去重后的列表长度——服务端数据漂移导致某页与已有结果重叠时，
-     * 去重会让列表长度停滞，若用列表长度做 offset 会在重叠区间死循环。
-     */
-    private var serverCursor = 0
-
-    // 存储未排序的原始搜索数据，方便即时客户端切换排序
-    private var rawSearchResults: List<Subject> = emptyList()
-
-    // 06-B：滚动位置在 VM 层记忆（plain 字段，不驱动重组），重建组合时作为初始位置回填
-    var listScrollIndex: Int = 0
-        private set
-    var listScrollOffset: Int = 0
-        private set
-    var gridScrollIndex: Int = 0
-        private set
-    var gridScrollOffset: Int = 0
-        private set
-
-    // 06-B：搜索代数——每次新搜索/切类/切序自增，UI 仅在该值变化时回滚到顶部（返回不触发）
-    var searchGeneration: Int = 0
-        private set
-
-    fun onQueryChange(query: String) {
-        if (paginationState.value.query == query) return
-        paginationState.update {
-            it.copy(
-                query = query,
-                hasSearched = false,
-                error = null,
-            )
-        }
-
-        if (query.isBlank()) {
-            searchJob?.cancel()
-            loadMoreJob?.cancel()
-            rawSearchResults = emptyList()
-            paginationState.update {
-                it.copy(
-                    isLoading = false,
-                    isLoadingMore = false,
-                    hasMore = false,
-                    totalCount = 0,
-                    results = emptyList(),
-                    error = null,
-                )
-            }
-        }
+    init {
+        searchIntent
+            .map { it.requestKey() }
+            .distinctUntilChanged()
+            .onEach { key ->
+                // 键变 null（清空输入 / 未发起搜索）：整条会话清空，flatMapLatest 同时取消在飞请求
+                if (key == null) searchSession.value = SearchSession()
+            }.flatMapLatest { key ->
+                if (key == null) {
+                    emptyFlow()
+                } else {
+                    pageTriggers.signals().onEach { signal -> runSearchSession(key, signal) }
+                }
+            }.launchIn(viewModelScope)
     }
 
+    fun onQueryChange(query: String) {
+        if (searchIntent.value.text == query) return
+        searchIntent.value = searchIntent.value.copy(text = query, hasSearched = false)
+    }
+
+    /** 切换分类：已搜索时请求键真变 → 自动换挡重搜；未搜索时只改筛选，不发请求 */
     fun onTypeSelect(type: Int) {
-        if (paginationState.value.selectedType == type) return
-        paginationState.update { it.copy(selectedType = type) }
-        val currentQuery = paginationState.value.query.trim()
-        if (currentQuery.isNotBlank() && paginationState.value.hasSearched) {
-            performSearch(currentQuery, type, paginationState.value.selectedSort)
-        }
+        if (searchIntent.value.selectedType == type) return
+        searchIntent.value = searchIntent.value.copy(selectedType = type)
     }
 
     fun onSortChange(sort: SearchSort) {
-        if (paginationState.value.selectedSort == sort) return
-        // 1. 本地即刻 0ms 视觉即时响应
-        paginationState.update {
-            it.copy(
-                selectedSort = sort,
-                results = sortResults(rawSearchResults, sort),
-            )
-        }
-        val currentQuery = paginationState.value.query.trim()
-        if (currentQuery.isNotBlank() && paginationState.value.hasSearched) {
-            // 2. 服务端异步全局排序查询
-            performSearch(
-                query = currentQuery,
-                type = paginationState.value.selectedType,
-                sort = sort,
-            )
-        }
+        if (searchIntent.value.selectedSort == sort) return
+        // 1. 本地即刻 0ms 视觉即时响应：用未排序原始数据重排当前结果（客户端排序双轨）
+        searchSession.update { it.copy(results = sortResults(it.rawResults, sort)) }
+        // 2. 服务端异步全局排序查询：排序进请求键，键真变自动换挡重搜
+        searchIntent.value = searchIntent.value.copy(selectedSort = sort)
     }
 
     fun onViewModeToggle() {
-        paginationState.update {
-            val nextMode = if (it.viewMode == SearchViewMode.LIST) SearchViewMode.GRID else SearchViewMode.LIST
-            it.copy(viewMode = nextMode)
-        }
+        viewMode.value =
+            if (viewMode.value == SearchViewMode.LIST) {
+                SearchViewMode.GRID
+            } else {
+                SearchViewMode.LIST
+            }
     }
 
     fun toggleCollection(
@@ -232,13 +238,13 @@ class SearchViewModel(
 
                 when (syncResult) {
                     is AppResult.Success -> {
-                        userMessage.value = "已标记为「$verb」"
+                        _userMessage.trySend("已标记为「$verb」")
                     }
 
                     is AppResult.Error -> {
                         // syncResult.message 已由仓库层带上动作前缀（如「打卡失败：网络超时，请重试」）。
                         // 这里再拼一层就会变成「打卡失败：打卡失败：…」——只兜底，不加前缀。
-                        userMessage.value = syncResult.message.ifBlank { "打卡失败，请重试" }
+                        _userMessage.trySend(syncResult.message.ifBlank { "打卡失败，请重试" })
                     }
 
                     is AppResult.Loading -> Unit
@@ -251,16 +257,15 @@ class SearchViewModel(
         loginPromptVisible.value = false
     }
 
-    fun clearUserMessage() {
-        userMessage.value = null
-    }
-
+    /** 发起搜索（软键盘 / 搜索按钮 / 历史词条 / 错误重试共用入口） */
     fun search(overrideQuery: String? = null) {
-        val targetQuery = (overrideQuery ?: paginationState.value.query).trim()
-        if (targetQuery.isNotBlank()) {
-            paginationState.update { it.copy(query = targetQuery, hasSearched = true) }
-            performSearch(targetQuery, paginationState.value.selectedType, paginationState.value.selectedSort)
-        }
+        val targetQuery = (overrideQuery ?: searchIntent.value.text).trim()
+        if (targetQuery.isBlank()) return
+        val next = searchIntent.value.copy(text = targetQuery, hasSearched = true)
+        val keyChanged = next.requestKey() != searchIntent.value.requestKey()
+        searchIntent.value = next
+        // 同键重搜（错误重试 / 再次点击搜索）不会触发换挡，用 Retry 信号强制重跑会话
+        if (!keyChanged) pageTriggers.retry()
     }
 
     fun deleteHistoryItem(query: String) {
@@ -293,6 +298,20 @@ class SearchViewModel(
         gridScrollOffset = offset
     }
 
+    // 06-B：滚动位置在 VM 层记忆（plain 字段，不驱动重组），重建组合时作为初始位置回填
+    var listScrollIndex: Int = 0
+        private set
+    var listScrollOffset: Int = 0
+        private set
+    var gridScrollIndex: Int = 0
+        private set
+    var gridScrollOffset: Int = 0
+        private set
+
+    // 06-B：搜索代数——每次新搜索/切类/切序自增，UI 仅在该值变化时回滚到顶部（返回不触发）
+    var searchGeneration: Int = 0
+        private set
+
     private fun resetScrollState() {
         listScrollIndex = 0
         listScrollOffset = 0
@@ -302,161 +321,121 @@ class SearchViewModel(
     }
 
     fun clearQuery() {
-        searchJob?.cancel()
-        loadMoreJob?.cancel()
-        rawSearchResults = emptyList()
         resetScrollState()
-        paginationState.update {
-            it.copy(
-                query = "",
-                hasSearched = false,
-                isLoading = false,
-                isLoadingMore = false,
-                hasMore = false,
-                totalCount = 0,
-                results = emptyList(),
-                error = null,
-                localMatches = emptyList(),
-                offlineNotice = null,
-            )
-        }
+        searchIntent.value = searchIntent.value.copy(text = "", hasSearched = false)
     }
 
+    /** 触底增量分页加载：作为 More 信号接入当前换挡会话 */
     fun loadMore() {
-        val state = paginationState.value
-        if (state.isLoading || state.isLoadingMore || !state.hasMore || state.query.isBlank()) return
-
-        loadMoreJob?.cancel()
-        loadMoreJob =
-            viewModelScope.launch {
-                paginationState.update { it.copy(isLoadingMore = true) }
-                val currentOffset = serverCursor
-                when (
-                    val result =
-                        searchRepository.searchSubjects(
-                            query = state.query.trim(),
-                            type = state.selectedType,
-                            sort = state.selectedSort.serverSort,
-                            limit = PAGE_SIZE,
-                            offset = currentOffset,
-                        )
-                ) {
-                    is AppResult.Success -> {
-                        val newItems = result.data.list
-                        val existingIds = rawSearchResults.map { s -> s.id }.toSet()
-                        val uniqueNew = newItems.filter { it.id !in existingIds }
-                        rawSearchResults = rawSearchResults + uniqueNew
-                        // 游标按服务端实际返回条数推进，与去重后的列表长度解耦
-                        serverCursor = currentOffset + newItems.size
-                        val newTotal = if (result.data.total > 0) result.data.total else state.totalCount
-                        val sorted = sortResults(rawSearchResults, state.selectedSort)
-
-                        paginationState.update { current ->
-                            current.copy(
-                                isLoadingMore = false,
-                                results = sorted,
-                                totalCount = newTotal,
-                                hasMore = newItems.isNotEmpty() && rawSearchResults.size < newTotal,
-                            )
-                        }
-                    }
-
-                    is AppResult.Error -> {
-                        paginationState.update { it.copy(isLoadingMore = false) }
-                    }
-
-                    is AppResult.Loading -> Unit
-                }
-            }
+        pageTriggers.loadMore()
     }
 
-    private fun performSearch(
-        query: String,
-        type: Int,
-        sort: SearchSort = paginationState.value.selectedSort,
+    /**
+     * 搜索分页会话：首取（Initial / Retry / Refresh）从 offset 0 重取；
+     * 触底（More）从服务端游标追加。并发与越界控制全部以会话快照判据，无手动 Job。
+     */
+    private suspend fun runSearchSession(
+        key: SearchRequestKey,
+        signal: PagingSignal,
     ) {
-        val trimmedQuery = query.trim()
-        if (trimmedQuery.isNotBlank()) {
-            viewModelScope.launch {
-                searchRepository.addSearchHistory(trimmedQuery)
-            }
+        val isMore = signal is PagingSignal.More
+        val current = searchSession.value
+
+        if (isMore) {
+            // 并发控制：正在拉取或已取尽时忽略触底信号
+            if (current.isLoading || current.isLoadingMore || !current.hasMore) return
+            searchSession.value = current.copy(isLoadingMore = true)
+        } else {
+            // 首取/重试：重置进度与派生标志；保留已展示结果（非破坏性，顶部进度条表达刷新）
+            resetScrollState()
+            // 主动搜索写入搜索历史（旧 performSearch 语义：历史与取数同源同节奏）
+            searchRepository.addSearchHistory(key.query)
+            searchSession.value =
+                current.copy(
+                    isLoading = true,
+                    isLoadingMore = false,
+                    hasMore = false,
+                    totalCount = 0,
+                    error = null,
+                    offlineNotice = null,
+                    localMatches = emptyList(),
+                )
         }
-        resetScrollState()
-        searchJob?.cancel()
-        loadMoreJob?.cancel()
-        searchJob =
-            viewModelScope.launch {
-                paginationState.update {
-                    it.copy(
-                        hasSearched = true,
-                        isLoading = true,
+
+        val offset = if (isMore) current.serverCursor else 0
+        // 06-A：先查本地别名词典（Room 缓存窗口内），网络失败时即为离线降级结果
+        val localMatches = scheduleRepository.searchLocalSubjects(key.query)
+        when (
+            val result =
+                searchRepository.searchSubjects(
+                    query = key.query,
+                    type = key.type,
+                    sort = key.sort.serverSort,
+                    limit = PAGE_SIZE,
+                    offset = offset,
+                )
+        ) {
+            is AppResult.Success -> {
+                val newItems = result.data.list
+                val existingIds = current.rawResults.map { s -> s.id }.toSet()
+                val rawResults =
+                    if (isMore) {
+                        current.rawResults + newItems.filter { it.id !in existingIds }
+                    } else {
+                        newItems
+                    }
+                // 游标按服务端实际返回条数推进，与去重后的列表长度解耦（防数据漂移死循环）
+                val serverCursor = offset + newItems.size
+                val totalCount =
+                    if (isMore && result.data.total <= 0) current.totalCount else result.data.total
+                searchSession.value =
+                    SearchSession(
+                        results = sortResults(rawResults, key.sort),
+                        rawResults = rawResults,
+                        serverCursor = serverCursor,
+                        totalCount = totalCount,
+                        hasMore = newItems.isNotEmpty() && rawResults.size < totalCount,
+                        isLoading = false,
                         isLoadingMore = false,
-                        hasMore = false,
-                        totalCount = 0,
-                        error = null,
+                        // 别名兜底：本地命中但网络结果未覆盖时补充展示
+                        localMatches =
+                            if (isMore) {
+                                current.localMatches
+                            } else {
+                                localMatches.filter { m -> newItems.none { it.id == m.bgmId } }
+                            },
                         offlineNotice = null,
-                        localMatches = emptyList(),
+                        error = null,
                     )
-                }
-                // 06-A：先查本地别名词典（Room 缓存窗口内），网络失败时即为离线降级结果
-                val localMatches = scheduleRepository.searchLocalSubjects(trimmedQuery)
-                when (
-                    val result =
-                        searchRepository.searchSubjects(
-                            query = trimmedQuery,
-                            type = type,
-                            sort = sort.serverSort,
-                            limit = PAGE_SIZE,
-                            offset = 0,
-                        )
-                ) {
-                    is AppResult.Success -> {
-                        val data = result.data
-                        rawSearchResults = data.list
-                        serverCursor = data.list.size
-                        val sorted = sortResults(data.list, sort)
-                        paginationState.update {
-                            it.copy(
+            }
+
+            is AppResult.Error -> {
+                if (isMore) {
+                    // 追加失败：保留原数据展示，仅收起进度（与既有语义一致，不改错误位）
+                    searchSession.value = searchSession.value.copy(isLoadingMore = false)
+                } else {
+                    // 07-A：弱网降级——本地索引命中时降级为软提示 + 离线结果；否则维持全屏错误
+                    val offline = localMatches.take(6)
+                    searchSession.value =
+                        if (offline.isNotEmpty()) {
+                            searchSession.value.copy(
                                 isLoading = false,
-                                results = sorted,
-                                totalCount = data.total,
-                                hasMore = data.list.isNotEmpty() && data.list.size < data.total,
-                                error = null,
-                                // 别名兜底：本地命中但网络结果未覆盖时补充展示
-                                localMatches = localMatches.filter { m -> data.list.none { it.id == m.bgmId } },
+                                localMatches = offline,
+                                offlineNotice = result.message.ifBlank { "网络异常，已展示本地索引命中" },
+                            )
+                        } else {
+                            searchSession.value.copy(
+                                isLoading = false,
+                                error = result.message,
+                                localMatches = emptyList(),
                                 offlineNotice = null,
                             )
                         }
-                    }
-
-                    is AppResult.Error -> {
-                        // 07-A：弱网降级——本地索引命中时降级为软提示 + 离线结果；否则维持全屏错误
-                        val offline = localMatches.take(6)
-                        if (offline.isNotEmpty()) {
-                            paginationState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    localMatches = offline,
-                                    offlineNotice = result.message.ifBlank { "网络异常，已展示本地索引命中" },
-                                )
-                            }
-                        } else {
-                            paginationState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    error = result.message,
-                                    localMatches = emptyList(),
-                                    offlineNotice = null,
-                                )
-                            }
-                        }
-                    }
-
-                    is AppResult.Loading -> {
-                        paginationState.update { it.copy(isLoading = true) }
-                    }
                 }
             }
+
+            is AppResult.Loading -> Unit
+        }
     }
 
     private fun sortResults(
@@ -479,8 +458,4 @@ class SearchViewModel(
                     }.thenByDescending { it.rating?.score ?: 0.0 },
                 )
         }
-
-    companion object {
-        private const val PAGE_SIZE = 20
-    }
 }

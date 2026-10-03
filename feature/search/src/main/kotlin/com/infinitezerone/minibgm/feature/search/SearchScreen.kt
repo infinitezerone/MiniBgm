@@ -53,10 +53,11 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(uiState.userMessage) {
-        uiState.userMessage?.let { msg ->
+    LaunchedEffect(Unit) {
+        // 一次性提示走 Channel(BUFFERED) + receiveAsFlow（见 SearchViewModel.userMessage）：
+        // 发生一次即消费消失，与状态流物理隔离，无需回写清空
+        viewModel.userMessage.collect { msg ->
             snackbarHostState.showSnackbar(msg)
-            viewModel.clearUserMessage()
         }
     }
 
