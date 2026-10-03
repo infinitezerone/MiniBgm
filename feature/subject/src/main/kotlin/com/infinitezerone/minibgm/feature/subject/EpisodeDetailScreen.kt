@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
@@ -669,46 +670,13 @@ fun EpisodeDetailScreen(
     }
 
     if (uiState.showLoginPromptDialog) {
-        AlertDialog(
-            onDismissRequest = viewModel::dismissLoginPrompt,
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.AccountCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp),
-                )
+        BgmLoginPromptDialog(
+            description = "分集打卡需要同步至您的 Bangumi 账号，登录后即可随手打卡并同步进度。",
+            onLogin = {
+                viewModel.dismissLoginPrompt()
+                onLoginRequest()
             },
-            title = {
-                Text(
-                    text = "请先登录 Bangumi 账号",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            text = {
-                Text(
-                    text = "分集打卡需要同步至您的 Bangumi 账号，登录后即可随手打卡并同步进度。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            confirmButton = {
-                Button(
-                    // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
-                    onClick = {
-                        viewModel.dismissLoginPrompt()
-                        onLoginRequest()
-                    },
-                ) {
-                    Text("立即登录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissLoginPrompt) {
-                    Text("稍后再说")
-                }
-            },
+            onDismiss = viewModel::dismissLoginPrompt,
         )
     }
 }

@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -24,7 +22,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -38,8 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
@@ -338,46 +335,13 @@ fun ExploreScreen(
 
         // 未登录引导弹窗
         if (exploreUiState.showLoginPromptDialog) {
-            AlertDialog(
-                onDismissRequest = exploreViewModel::dismissLoginPrompt,
-                icon = {
-                    Icon(
-                        imageVector = BgmIcons.AccountCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+            BgmLoginPromptDialog(
+                description = "一键「想看 / 追番」需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+                onLogin = {
+                    exploreViewModel.dismissLoginPrompt()
+                    onLoginRequest()
                 },
-                title = {
-                    Text(
-                        text = "请先登录 Bangumi 账号",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                text = {
-                    Text(
-                        text = "一键「想看 / 追番」需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
-                        onClick = {
-                            exploreViewModel.dismissLoginPrompt()
-                            onLoginRequest()
-                        },
-                    ) {
-                        Text("立即登录")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = exploreViewModel::dismissLoginPrompt) {
-                        Text("稍后再说")
-                    }
-                },
+                onDismiss = exploreViewModel::dismissLoginPrompt,
             )
         }
     }

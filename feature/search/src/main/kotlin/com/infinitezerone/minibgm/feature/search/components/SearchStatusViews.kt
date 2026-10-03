@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,13 +20,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
@@ -182,19 +181,10 @@ fun SearchLoginDialog(
     onDismiss: () -> Unit,
     onConfirmLogin: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("登录以同步追番进度") },
-        text = { Text("登录 Bangumi 账号后，即可一键标记在看、在读、在听、在玩，并同步至你的个人收藏库。") },
-        confirmButton = {
-            Button(onClick = onConfirmLogin) {
-                Text("前往登录")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("稍后再说")
-            }
-        },
+    BgmLoginPromptDialog(
+        title = "登录以同步追番进度",
+        description = "登录 Bangumi 账号后，即可一键标记在看、在读、在听、在玩，并同步至你的个人收藏库。",
+        onLogin = onConfirmLogin,
+        onDismiss = onDismiss,
     )
 }

@@ -17,8 +17,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -430,47 +429,16 @@ fun SeasonalGuideContent(
         )
 
         if (uiState.showLoginPromptDialog) {
-            AlertDialog(
-                onDismissRequest = viewModel::dismissLoginPrompt,
-                icon = {
-                    Icon(
-                        imageVector = BgmIcons.AccountCircle,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+            BgmLoginPromptDialog(
+                title = "登录开启快捷追番",
+                description = "登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。",
+                onLogin = {
+                    viewModel.dismissLoginPrompt()
+                    onLoginRequest()
                 },
-                title = {
-                    Text(
-                        text = "登录开启快捷追番",
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                text = {
-                    Text(
-                        text = "登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        // 登录页是独立路由（应用内 WebView + ECH 通道）：本页只负责发起并收起提示
-                        onClick = {
-                            viewModel.dismissLoginPrompt()
-                            onLoginRequest()
-                        },
-                    ) {
-                        Text("立即登录")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = viewModel::dismissLoginPrompt) {
-                        Text("稍后再说")
-                    }
-                },
+                onDismiss = viewModel::dismissLoginPrompt,
             )
         }
-
         if (showSeasonPicker) {
             SeasonPickerBottomSheet(
                 selectedYear = uiState.selectedYear,
