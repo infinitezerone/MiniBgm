@@ -15,6 +15,8 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
+import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -26,14 +28,21 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -121,6 +130,52 @@ data class SubjectDetailUiState(
     val failedSourceReasons: Map<String, String> = emptyMap(),
 )
 
+/** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
+private data class SubjectCoreData(
+    val subject: Subject?,
+    val episodes: List<Episode>,
+    val collection: UserCollection?,
+)
+
+/** 播放规则/片单/失败归因投影的中间态（私有于 [SubjectDetailViewModel]） */
+private data class SubjectPlaybackData(
+    val playbackRules: List<PlaybackSourceRule>,
+    val playlists: List<PlaybackPlaylist>,
+    val failedSourceReasons: Map<String, String>,
+)
+
+/** 单点回读收集器的仓库快照投影（私有于 [SubjectDetailViewModel]） */
+private data class RepoSnapshot(
+    val core: SubjectCoreData,
+    val hasMoreEpisodes: Boolean,
+    val isLoggedIn: Boolean,
+    val playback: SubjectPlaybackData,
+)
+
+/**
+ * 条目详情 ViewModel —— **数据侧单点回读 + 显式命令层**（响应式 UDF 规范见
+ * [com.infinitezerone.minibgm.feature.search.SeasonalGuideViewModel] 顶部五条，与同模块
+ * [EpisodeDetailViewModel] 同型迁移）。本类状态密度高（首刷三要素 + 分集分页 + 两个懒加载 Tab +
+ * 乐观收藏命令），迁移形态取舍如下：
+ *
+ * 1. 对外只读 [uiState]；仓库流（条目/分集/收藏/分页游标/登录态/播放规则/片单/失败归因）收敛为
+ *    [RepoSnapshot] 单点投影，经 init 里**唯一**的 `_uiState.update` 收集点回读——替代旧实现
+ *    5+ 路离散 collect，各字段合并规则与旧实现逐点等价（subject 只进不清、collection 流只覆盖
+ *    type/epStatus 以保住命令层的乐观 rate/comment/tags）。
+ * 2. 资料与社区两个懒加载 Tab 改为"意图 → flatMapLatest 换挡"：[loadDetailsTabIfNeeded] /
+ *    [loadCommunityTabIfNeeded] 只发意图并同步置在途标记（替代旧 detailsJob?.isActive 判定），
+ *    换挡与在途取消交给 flatMapLatest，无手动 Job；拉取结果是一次性网络数据而非仓库流，
+ *    按规范第 5 条落回 [SubjectDetailUiState] 的会话字段。
+ * 3. 收藏打卡 / 批量打卡 / 撤销保留为**显式命令层**（规范第 5 条）：乐观写 + 失败回滚 + undo
+ *    快照回写全部原样保留，不改写为仓库流回读——undo 快照语义与仓库流时序强耦合；仓库流回读
+ *    时按上述合并规则与乐观值共存，不形成双写冲突（乐观值在途期间流只覆盖 type/epStatus）。
+ * 4. 一次性事件（Snackbar / 撤销交接 / 找源交接）走 Channel(BUFFERED) + receiveAsFlow()，
+ *    与状态流隔离。
+ * 5. [refresh] 是首刷三要素（条目 → 分集 → 收藏）的显式刷新命令：顺序取数 + 条件合并错误 +
+ *    取消在途旧刷新，保留命令式实现；[nextEpisodeToWatch] / [buildPlayerRoute] 读 [uiState]
+ *    投影快照，与 UI 所见一致。
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SubjectDetailViewModel(
     private val subjectRepository: SubjectRepository,
     private val subjectId: Long,
@@ -190,66 +245,77 @@ class SubjectDetailViewModel(
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** 资料 Tab 拉取意图：true = 强制重取（flatMapLatest 的换挡判据） */
+    private val detailsIntents =
+        MutableSharedFlow<Boolean>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 社区 Tab 拉取意图：true = 强制重取（flatMapLatest 的换挡判据） */
+    private val communityIntents =
+        MutableSharedFlow<Boolean>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 在途标记：发意图时同步置位，会话落定/取消时清除（替代旧 detailsJob?.isActive 判定） */
+    private var detailsInFlight = false
+    private var communityInFlight = false
+
     init {
-        viewModelScope.launch {
-            authRepository.isLoggedIn.collect { loggedIn ->
-                _uiState.update { it.copy(isLoggedIn = loggedIn) }
-            }
-        }
-        // 先订阅本地库/内存缓存流：如果仓库中已有缓存，立刻合成进入 UiState，秒开无白屏
+        // 数据侧单点回读：全部仓库流收敛为 RepoSnapshot 单点投影，唯一的 _uiState 写入点。
+        // 合并规则与旧逐路 collect 逐点等价：subject 只进不清（流未命中保留旧值）、
+        // collection 流只覆盖 type/epStatus（保住命令层的乐观 rate/comment/tags）。
         viewModelScope.launch {
             combine(
-                subjectRepository.getSubjectStream(subjectId),
-                subjectRepository.getEpisodesStream(subjectId),
-                collectionRepository.getCollectionStream(subjectId),
-            ) { subject, episodes, localCollection ->
-                Triple(subject, episodes, localCollection)
-            }.collect { (subject, episodes, localCollection) ->
+                combine(
+                    subjectRepository.getSubjectStream(subjectId),
+                    subjectRepository.getEpisodesStream(subjectId),
+                    collectionRepository.getCollectionStream(subjectId),
+                ) { subject, episodes, localCollection ->
+                    SubjectCoreData(subject, episodes, localCollection)
+                },
+                subjectRepository.hasMoreEpisodesStream(subjectId),
+                isLoggedIn,
+                combine(
+                    settingsRepository?.playbackRules ?: flowOf(emptyList()),
+                    settingsRepository?.playlists ?: flowOf(emptyList()),
+                    failureStore?.recentFailures ?: flowOf(emptyMap()),
+                ) { rules, playlists, failures ->
+                    SubjectPlaybackData(rules, playlists, failures)
+                },
+            ) { core, hasMore, loggedIn, playback ->
+                RepoSnapshot(core, hasMore, loggedIn, playback)
+            }.collect { snapshot ->
                 _uiState.update { state ->
+                    val streamCollection = snapshot.core.collection
                     val mergedCollection =
-                        if (localCollection == null) {
+                        if (streamCollection == null) {
                             null
                         } else {
                             state.collection?.copy(
-                                type = localCollection.type,
-                                epStatus = localCollection.epStatus,
-                            ) ?: localCollection
+                                type = streamCollection.type,
+                                epStatus = streamCollection.epStatus,
+                            ) ?: streamCollection
                         }
                     state.copy(
-                        subject = subject ?: state.subject,
-                        episodes = episodes,
+                        subject = snapshot.core.subject ?: state.subject,
+                        episodes = snapshot.core.episodes,
                         collection = mergedCollection,
-                        isLoading = if (subject != null || state.subject != null) false else state.isLoading,
-                        isEpisodesLoading = if (episodes.isNotEmpty()) false else state.isEpisodesLoading,
-                        episodesError = if (episodes.isNotEmpty()) null else state.episodesError,
+                        isLoggedIn = snapshot.isLoggedIn,
+                        hasMoreEpisodes = snapshot.hasMoreEpisodes,
+                        playbackRules = snapshot.playback.playbackRules,
+                        playlists = snapshot.playback.playlists,
+                        failedSourceReasons = snapshot.playback.failedSourceReasons,
+                        isLoading = if (snapshot.core.subject != null || state.subject != null) false else state.isLoading,
+                        isEpisodesLoading = if (snapshot.core.episodes.isNotEmpty()) false else state.isEpisodesLoading,
+                        episodesError = if (snapshot.core.episodes.isNotEmpty()) null else state.episodesError,
                     )
                 }
             }
         }
-        viewModelScope.launch {
-            subjectRepository.hasMoreEpisodesStream(subjectId).collect { more ->
-                _uiState.update { it.copy(hasMoreEpisodes = more) }
-            }
-        }
-        if (settingsRepository != null) {
-            viewModelScope.launch {
-                settingsRepository.playbackRules.collect { rules ->
-                    _uiState.update { it.copy(playbackRules = rules) }
-                }
-            }
-            viewModelScope.launch {
-                settingsRepository.playlists.collect { playlists ->
-                    _uiState.update { it.copy(playlists = playlists) }
-                }
-            }
-        }
-        if (failureStore != null) {
-            viewModelScope.launch {
-                failureStore.recentFailures.collect { failures ->
-                    _uiState.update { it.copy(failedSourceReasons = failures) }
-                }
-            }
-        }
+        // Tab 懒加载换挡链：意图一变整条取消（flatMapLatest），旧拉取响应不可能后到覆盖新数据
+        detailsIntents
+            .flatMapLatest(::detailsSession)
+            .launchIn(viewModelScope)
+        communityIntents
+            .flatMapLatest(::communitySession)
+            .launchIn(viewModelScope)
         // 拉取条目详情与章节（写入本地库）；错误仅转为文案，不中断流程
         refresh(isUserPullToRefresh = false)
     }
@@ -257,8 +323,6 @@ class SubjectDetailViewModel(
     private var detailsLoaded = false
     private var communityLoaded = false
     private var refreshJob: Job? = null
-    private var detailsJob: Job? = null
-    private var communityJob: Job? = null
 
     /** 刷新/重新拉取条目、分集与收藏数据（首屏核心三要素） */
     fun refresh(isUserPullToRefresh: Boolean = false) {
@@ -482,13 +546,21 @@ class SubjectDetailViewModel(
 
     /**
      * 按需懒加载资料与演职员 Tab 数据（角色 -> 人员 -> 关联作品）。
-     * 仅在用户主动切到「资料与演职员」Tab 时触发，已加载过则不再重复请求。
+     *
+     * 意图换挡（规范第 2 条）：已加载或在途时跳过；force 触发整条换挡重取，在途旧会话由
+     * flatMapLatest 取消——无手动 Job。仅在用户主动切到「资料与演职员」Tab 时触发，
+     * 已加载过则不再重复请求。
      */
     fun loadDetailsTabIfNeeded(force: Boolean = false) {
-        if (!force && (detailsLoaded || detailsJob?.isActive == true)) return
-        detailsJob?.cancel()
-        detailsJob =
-            viewModelScope.launch {
+        if (!force && (detailsLoaded || detailsInFlight)) return
+        detailsInFlight = true
+        detailsIntents.tryEmit(force)
+    }
+
+    /** 资料 Tab 拉取会话（flatMapLatest 的内层流）：进入即"加载中"，任一成功即落定加载标记 */
+    private fun detailsSession(force: Boolean): Flow<Unit> =
+        flow {
+            try {
                 _uiState.update { it.copy(isDetailsLoading = true) }
                 val charactersResult = subjectRepository.fetchCharacters(subjectId)
                 val personsResult = subjectRepository.fetchPersons(subjectId)
@@ -510,18 +582,29 @@ class SubjectDetailViewModel(
                 if (hasAnySuccess) {
                     detailsLoaded = true
                 }
+            } finally {
+                detailsInFlight = false
             }
-    }
+            emit(Unit)
+        }
 
     /**
      * 按需懒加载社区吐槽与讨论版 Tab 数据（短评 -> 讨论）。
-     * 仅在用户主动切到「社区吐槽」Tab 时触发，已加载过则不再重复请求。
+     *
+     * 意图换挡（规范第 2 条）：已加载或在途时跳过；force 触发整条换挡重取，在途旧会话由
+     * flatMapLatest 取消——无手动 Job。仅在用户主动切到「社区吐槽」Tab 时触发，
+     * 已加载过则不再重复请求；全部失败不落定加载标记，允许二次重试。
      */
     fun loadCommunityTabIfNeeded(force: Boolean = false) {
-        if (!force && (communityLoaded || communityJob?.isActive == true)) return
-        communityJob?.cancel()
-        communityJob =
-            viewModelScope.launch {
+        if (!force && (communityLoaded || communityInFlight)) return
+        communityInFlight = true
+        communityIntents.tryEmit(force)
+    }
+
+    /** 社区 Tab 拉取会话（flatMapLatest 的内层流）：进入即"加载中"，短评或讨论任一成功即落定 */
+    private fun communitySession(force: Boolean): Flow<Unit> =
+        flow {
+            try {
                 _uiState.update { it.copy(isCommunityLoading = true) }
                 val subjectCommentsResult = communityRepository.getSubjectComments(subjectId, limit = 15)
                 val subjectTopicsResult = communityRepository.getSubjectTopics(subjectId, limit = 5)
@@ -544,10 +627,19 @@ class SubjectDetailViewModel(
                 if (commentsSuccess || topicsSuccess) {
                     communityLoaded = true
                 }
+            } finally {
+                communityInFlight = false
             }
-    }
+            emit(Unit)
+        }
 
-    /** 更新条目收藏状态（想看/在看/看过等，支持 0ms 本地即时乐观更新与失败回滚，未登录时拦截弹窗） */
+    /**
+     * 更新条目收藏状态（想看/在看/看过等，支持 0ms 本地即时乐观更新与失败回滚，未登录时拦截弹窗）。
+     *
+     * 显式命令层（规范第 5 条）：乐观写 → 写仓 → 失败回滚，保留命令式实现，不改写为仓库流回读
+     * ——undo 快照语义与仓库流时序强耦合；仓库流回读只覆盖 type/epStatus，不冲掉乐观中的
+     * rate/comment/tags（见 init 的合并规则）。
+     */
     fun updateCollectionStatus(
         type: CollectionType,
         rate: Int? = null,
@@ -660,7 +752,12 @@ class SubjectDetailViewModel(
         updateCollectionStatus(nextType)
     }
 
-    /** 单集观看状态打卡（支持即时乐观更新，未登录时拦截弹窗） */
+    /**
+     * 单集观看状态打卡（支持即时乐观更新，未登录时拦截弹窗）。
+     *
+     * 显式命令层（规范第 5 条）：同 [updateCollectionStatus]，乐观写 epStatus/type + 失败回滚
+     * 保留为命令式实现，非主篇（SP/OP/ED）不污染正篇进度的语义在此处收口。
+     */
     fun toggleEpisodeWatched(
         episodeId: Long,
         isWatched: Boolean,
@@ -749,6 +846,10 @@ class SubjectDetailViewModel(
     /**
      * 批量标记观看进度至目标话数（看到本集，未登录时拦截弹窗）。
      * 将本集及之前的所有常规单集批量打卡，并更新条目观看进度与收藏状态。
+     *
+     * 显式命令层（规范第 5 条）：同 [updateCollectionStatus]，乐观写 + 失败回滚 +
+     * [SubjectDetailUiEvent.BatchMarked] 撤销快照（previousEpStatus/previousType/episodeIds）
+     * 保留为命令式实现，不改写为仓库流回读。
      */
     fun markWatchedUpTo(targetEpisode: Episode) {
         if (!isLoggedIn.value) {
@@ -828,6 +929,10 @@ class SubjectDetailViewModel(
 
     /**
      * 撤销批量打卡操作，立即乐观回滚本地状态并异步同步至云端。
+     *
+     * 显式命令层（规范第 5 条）：undo 快照回写是本函数的核心语义——先按快照乐观还原
+     * （快照指向"未收藏"时直接清空 collection），失败再回滚为撤销前状态；与仓库流时序
+     * 强耦合，禁止改写为仓库流回读。
      */
     fun undoMarkWatchedUpTo(
         previousEpStatus: Int,
