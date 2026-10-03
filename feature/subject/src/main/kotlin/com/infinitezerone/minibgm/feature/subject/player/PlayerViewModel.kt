@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositor
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -24,7 +25,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -151,7 +155,76 @@ sealed interface PlayerUiEvent {
 }
 
 /**
- * 播放器 ViewModel：
+ * 数据侧仓库流投影快照（私有于 [PlayerViewModel]）：
+ * 续播位置表 / 播放规则 / 源健康度 / 条目元数据 / 全部分集 / PiP 偏好六个仓库流
+ * 经单点 combine 合流为一份不可变快照，再统一并入 [_uiState]（写法对齐
+ * [EpisodeDetailViewModel] 的仓库快照合流形态）。UI 可见的字段一律是投影，
+ * 不存在逐路 `collect { _uiState.update {} }` 的第二事实源。
+ */
+private data class PlayerRepoSnapshot(
+    val positions: Map<String, Long> = emptyMap(),
+    val rules: List<PlaybackSourceRule> = emptyList(),
+    val failureCounts: Map<String, Int> = emptyMap(),
+    val subject: Subject? = null,
+    val episodes: List<PlayerEpisodeItem> = emptyList(),
+    val pipEnabled: Boolean = true,
+)
+
+/**
+ * 媒体会话命令层的私有状态容器（私有于 [PlayerViewModel]）。
+ *
+ * 规范第 5 条：命令密集型会话可保留显式命令层——位置节流落盘（20 跳计数）、自动打卡
+ * 一次性守卫、换集"先落盘旧位置再切"的副作用顺序都是过程式命令，无法也不应改写成纯投影。
+ * 原实现散落在 ViewModel 顶层的 8 个裸可变字段在此收敛为单个容器，集中管理、逐字段注释；
+ * 对外仍只经 [PlayerViewModel.uiState] 暴露，容器内不持有任何 UI 可见状态的第二份拷贝。
+ *
+ * [positionsMap] / [subjectAliases] / [subjectOriginalName] 是仓库流的**命令侧只读镜像**：
+ * 由投影收集器同步，仅供命令读取（换集按新地址查恢复点、取源拼关键词候选），
+ * UI 展示值一律走 [_uiState] 投影，不在此处双写。
+ */
+private class PlaybackSession(
+    startIndex: Int,
+) {
+    /** 分集队列中的当前集下标 */
+    var currentIndex: Int = startIndex
+
+    /** 自动打卡一次性守卫：一次播放会话仅触发一次，换集后复位 */
+    var hasTriggeredAutoMark: Boolean = false
+
+    /** 断点续播位置表镜像（由 [PlayerRepoSnapshot.positions] 持续同步） */
+    var positionsMap: Map<String, Long> = emptyMap()
+
+    /** 界面回报的当前播放位置（内存暂存，按 [POSITION_SAVE_TICKS] 节流落盘） */
+    var latestPositionMs: Long = 0L
+
+    /** 距上次落盘累计的进度跳数 */
+    var progressTicksSinceSave: Int = 0
+
+    /** 条目片名别名（台译/港译/英文名/罗马音），来自已缓存 Subject 的 infobox */
+    var subjectAliases: List<String> = emptyList()
+
+    /** 条目日文原名 */
+    var subjectOriginalName: String = ""
+
+    /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore */
+    var lastSavedSourceId: String = ""
+}
+
+/**
+ * 播放器 ViewModel —— 响应式 UDF，规范五条见 feature/search 的 [SeasonalGuideViewModel] 顶部，
+ * 就近形态参照同模块刚完成同型迁移的 [EpisodeDetailViewModel]。本类是 Tier 3 保守迁移：
+ *
+ * 1. 对外只读 [uiState]；数据侧收敛为单点 [repoSnapshots] 投影收集器——sources 由播放规则派生、
+ *    episodes / subjectName / resumePositionMs / pipEnabled / sourceFailureCounts 一律为仓库流投影，
+ *    统一并入 [_uiState]，不再有散落的逐路订阅。
+ * 2. 可变状态只剩媒体会话命令层（[PlaybackSession]，8 个裸字段的收敛容器）与取源 [Job] 柄：
+ *    媒体会话是命令密集型会话，命令逻辑（节流/守卫/副作用顺序）逐点保留。
+ * 3. 写后读：条目标题/别名/分集由仓库流投影回读，fetch 仅兜底写仓。
+ * 4. 一次性事件（Snackbar / 打卡回执）走 Channel(BUFFERED) + receiveAsFlow()，与状态流隔离。
+ * 5. 命令层保留：[onProgressChanged] 20 跳节流落盘、[markWatched] 一次性守卫、
+ *    [onPlaybackEnded] / [selectEpisode] / [switchTo] 先落盘旧位置再切的顺序、
+ *    直链精确匹配不串集——语义与迁移前完全一致。
+ *
  * 维护分集队列中的当前播放会话（换集/连播）、处理自动打卡标记（观看进度达到阈值或播放完成时触发）、
  * 断点续播位置的节流落盘与恢复点下发、鉴权校验（未登录拦截）、错误提示与失败归因回传、
  * 播放源切换（直链/外部源）与分集流嗅探联动。
@@ -180,35 +253,11 @@ class PlayerViewModel(
             )
         }
 
-    private var currentIndex = route.startIndex.coerceIn(queue.indices)
-
-    private var hasTriggeredAutoMark = false
-
-    /** 断点续播位置表（由 [settingsRepository.playbackPositions] 持续同步） */
-    private var positionsMap: Map<String, Long> = emptyMap()
-
-    /** 界面回报的当前播放位置（内存暂存，按 [POSITION_SAVE_TICKS] 节流落盘） */
-    private var latestPositionMs = 0L
-
-    private var progressTicksSinceSave = 0
-
-    private var subjectOriginalName: String = ""
-
     /** 与 AI 找源共用的「规则 × 标题候选 → 直链」编排；未注入解析仓库时为 null */
     private val episodeStreamResolver = playbackResolverRepository?.let(::EpisodeStreamResolver)
 
-    /**
-     * 条目的片名别名（台译/港译/英文名/罗马音），来自已缓存 Subject 的 infobox。
-     *
-     * 只读缓存不额外发请求：从详情页进播放页时详情已经拉过，缓存命中即有别名；
-     * 冷启动直达则为空，退化成「主标题 + 繁体 + 原名」的老行为，不会变慢。
-     */
-    private var subjectAliases: List<String> = emptyList()
-
-    private var resolveJob: Job? = null
-
-    /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore。 */
-    private var lastSavedSourceId: String = ""
+    /** 媒体会话命令层状态（8 个裸字段的收敛容器，见 [PlaybackSession]） */
+    private val session = PlaybackSession(startIndex = route.startIndex.coerceIn(queue.indices))
 
     private fun initialEpisodes(): List<PlayerEpisodeItem> =
         if (route.queue.isNotEmpty()) {
@@ -257,7 +306,7 @@ class PlayerViewModel(
     }
 
     private fun createInitialState(): PlayerUiState {
-        val entry = queue[currentIndex]
+        val entry = queue[session.currentIndex]
         val initialSources = buildSources(emptyList())
         return PlayerUiState(
             subjectId = route.subjectId,
@@ -269,7 +318,7 @@ class PlayerViewModel(
             subjectName = route.subjectName,
             requestHeaders = entry.requestHeaders,
             queue = queue,
-            currentIndex = currentIndex,
+            currentIndex = session.currentIndex,
             autoNextEnabled = true,
             resumePositionMs = 0L,
             sources = initialSources,
@@ -289,142 +338,198 @@ class PlayerViewModel(
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    init {
-        // 1. 订阅断点续播位置
-        viewModelScope.launch {
-            settingsRepository.playbackPositions.collect { map ->
-                positionsMap = map
-                _uiState.update { state ->
-                    // 尚无可恢复点时跟随位置表刷新当前分集（已下发/消费过的不回退）
-                    if (state.resumePositionMs == 0L && state.streamUrl.isNotBlank()) {
-                        state.copy(resumePositionMs = map[state.streamUrl] ?: 0L)
-                    } else {
-                        state
-                    }
-                }
-            }
+    private var resolveJob: Job? = null
+
+    /** 条目流：仅在有 subjectId 且注入了条目仓库时订阅 */
+    private val subjectFlow: Flow<Subject?> =
+        if (route.subjectId > 0) {
+            subjectRepository?.getSubjectStream(route.subjectId) ?: flowOf(null)
+        } else {
+            flowOf(null)
         }
 
-        // 2. 订阅播放规则并初始化可用源列表；首次进页优先选中上次成功起播的源
+    /** 全部分集流：过滤正片/PV 以外类型、按类型与序号排序后投影为网格条目 */
+    private val episodesFlow: Flow<List<PlayerEpisodeItem>> =
+        if (route.subjectId > 0) {
+            (subjectRepository?.getEpisodesStream(route.subjectId) ?: flowOf(emptyList()))
+                .map { eps ->
+                    eps
+                        .filter { it.type == 0 || it.type == 1 }
+                        .sortedWith(compareBy({ it.type }, { it.sort }))
+                        .map { ep ->
+                            PlayerEpisodeItem(
+                                id = ep.id,
+                                sort = ep.episodeNumber,
+                                type = ep.type,
+                                name = ep.name,
+                                nameCn = ep.nameCn,
+                            )
+                        }
+                }
+        } else {
+            flowOf(emptyList())
+        }
+
+    /** 画中画开关偏好流：仅在有 subjectId 时订阅（与迁移前收集器的门控一致） */
+    private val pipEnabledFlow: Flow<Boolean> =
+        if (route.subjectId > 0) {
+            settingsRepository.settings.map { it.pipEnabled }
+        } else {
+            flowOf(true)
+        }
+
+    /**
+     * 数据侧单点投影：全部仓库流 combine 成一个 [PlayerRepoSnapshot] 快照流。
+     *
+     * 条目/分集/PiP 三路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
+     * 其余场景给空默认值，快照仍可即时产出）。
+     */
+    private val repoSnapshots: Flow<PlayerRepoSnapshot> =
+        combine(
+            combine(
+                settingsRepository.playbackPositions,
+                settingsRepository.playbackRules,
+            ) { positions, rules ->
+                positions to rules
+            },
+            combine(
+                failureStore?.sourceHealth ?: flowOf(emptyMap()),
+                pipEnabledFlow,
+            ) { health, pipEnabled ->
+                health.mapValues { it.value.consecutiveFailures } to pipEnabled
+            },
+            combine(
+                subjectFlow,
+                episodesFlow,
+            ) { subject, episodes ->
+                subject to episodes
+            },
+        ) { (positions, rules), (failureCounts, pipEnabled), (subject, episodes) ->
+            PlayerRepoSnapshot(
+                positions = positions,
+                rules = rules,
+                failureCounts = failureCounts,
+                subject = subject,
+                episodes = episodes,
+                pipEnabled = pipEnabled,
+            )
+        }
+
+    init {
+        // 数据侧单点投影：任一仓库流变化即产出新快照，统一并入 _uiState（规范第 1 条）。
+        // 首次进页优先选中上次成功起播的源——在收集开始前读一次（与迁移前一致的 only-once 语义）
         viewModelScope.launch {
             val preferredSourceId =
                 runCatching { settingsRepository.lastPlaybackSourceId.first() }.getOrDefault("")
-            settingsRepository.playbackRules.collect { rules ->
-                val newSources = buildSources(rules)
-                val targetRuleIndex =
-                    if (route.initialRuleId.isNotBlank()) {
-                        newSources.indexOfFirst { it.rule?.id == route.initialRuleId }.takeIf { it >= 0 }
-                    } else {
-                        null
-                    }
-                _uiState.update { state ->
-                    // 仅在首次构建源列表且入口未携带直链/片单时应用上次可用源：
-                    // 直链是用户显式给进来的（自备片单/助手），直链始终优先，记忆源只对无直链入口兜底；
-                    // 同时避免之后覆盖用户的手动选择
-                    val preferredIndex =
-                        if (route.initialRuleId.isBlank() &&
-                            preferredSourceId.isNotBlank() &&
-                            state.sources.isEmpty()
-                        ) {
-                            newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
-                        } else {
-                            null
-                        }
-                    val newIndex =
-                        targetRuleIndex
-                            ?: preferredIndex
-                            ?: state.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
-                    state.copy(
-                        sources = newSources,
-                        selectedSourceIndex = newIndex,
-                    )
-                }
-                // 若当前没有有效直链且有选中的规则源，自动触发嗅探
-                val currentState = _uiState.value
-                val selectedTab = currentState.sources.getOrNull(currentState.selectedSourceIndex)
-                if (currentState.streamUrl.isBlank() && selectedTab != null && !selectedTab.isDirect) {
-                    resolveCurrentEpisodeStream()
-                }
-            }
-        }
-
-        // 3. 订阅源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
-        //    selectedSourceIndex 有位置语义，重排会让选中项错位）
-        if (failureStore != null) {
-            viewModelScope.launch {
-                failureStore.sourceHealth.collect { health ->
-                    _uiState.update { state ->
-                        state.copy(sourceFailureCounts = health.mapValues { it.value.consecutiveFailures })
+            repoSnapshots.collect { snapshot ->
+                val sourcesChanged = applyRepoSnapshot(snapshot, preferredSourceId)
+                // 命令层副作用（规范第 5 条）：源列表就绪/变化后，无直链且选中规则源时自动嗅探。
+                // 以"列表真实变化"为触发判据——无关偏好写入（如 PiP 开关）重放同一列表时不再
+                // 重复取消/重启在途嗅探
+                if (sourcesChanged) {
+                    val currentState = _uiState.value
+                    val selectedTab = currentState.sources.getOrNull(currentState.selectedSourceIndex)
+                    if (currentState.streamUrl.isBlank() && selectedTab != null && !selectedTab.isDirect) {
+                        resolveCurrentEpisodeStream()
                     }
                 }
             }
         }
 
-        // 4. 若有 subjectId，加载番剧详情（补充标题）与全部分集列表
+        // 兜底拉取：结果经仓库流投影回读（写后读，规范第 3 条），此处不手写状态
         if (route.subjectId > 0) {
-            viewModelScope.launch {
-                subjectRepository?.getSubjectStream(route.subjectId)?.collect { subject ->
-                    if (subject != null) {
-                        subjectOriginalName = subject.name
-                        subjectAliases = subject.titleAliases
-                        _uiState.update { current ->
-                            if (current.subjectName.isBlank()) {
-                                current.copy(subjectName = subject.displayName)
-                            } else {
-                                current
-                            }
-                        }
-                    }
-                }
-            }
-
-            viewModelScope.launch {
-                subjectRepository?.getEpisodesStream(route.subjectId)?.collect { eps ->
-                    if (eps.isNotEmpty()) {
-                        val mapped =
-                            eps
-                                .filter { it.type == 0 || it.type == 1 }
-                                .sortedWith(compareBy({ it.type }, { it.sort }))
-                                .map { ep ->
-                                    PlayerEpisodeItem(
-                                        id = ep.id,
-                                        sort = ep.episodeNumber,
-                                        type = ep.type,
-                                        name = ep.name,
-                                        nameCn = ep.nameCn,
-                                    )
-                                }
-                        if (mapped.isNotEmpty()) {
-                            _uiState.update { current ->
-                                current.copy(episodes = mapped)
-                            }
-                        }
-                    }
-                }
-            }
-
             viewModelScope.launch {
                 subjectRepository?.fetchEpisodes(route.subjectId)
                 if (route.subjectName.isBlank()) {
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
                 }
             }
+        }
+    }
 
-            // 3. 订阅画中画开关偏好
-            viewModelScope.launch {
-                settingsRepository.settings.collect { settings ->
-                    _uiState.update { it.copy(pipEnabled = settings.pipEnabled) }
+    /**
+     * 把一份仓库流快照并入 [_uiState]：各字段按原有逐路收集器的守卫条件逐点投影。
+     * @return 播放源列表是否发生了真实变化（命令层据此决定是否自动嗅探）
+     */
+    private fun applyRepoSnapshot(
+        snapshot: PlayerRepoSnapshot,
+        preferredSourceId: String,
+    ): Boolean {
+        // 会话镜像同步（命令侧只读，见 [PlaybackSession]）
+        session.positionsMap = snapshot.positions
+        snapshot.subject?.let { subject ->
+            session.subjectOriginalName = subject.name
+            session.subjectAliases = subject.titleAliases
+        }
+        var sourcesChanged = false
+        _uiState.update { state ->
+            var next = state
+            // 条目主标题缺失时由条目流补充（冷启动直达时保持空，退化成老行为）
+            if (next.subjectName.isBlank()) {
+                snapshot.subject?.let { subject ->
+                    next = next.copy(subjectName = subject.displayName)
                 }
             }
+            // 播放源列表：由规则流派生；仅在列表真实变化时重算选中项
+            val newSources = buildSources(snapshot.rules)
+            if (newSources != next.sources) {
+                val targetRuleIndex =
+                    if (route.initialRuleId.isNotBlank()) {
+                        newSources.indexOfFirst { it.rule?.id == route.initialRuleId }.takeIf { it >= 0 }
+                    } else {
+                        null
+                    }
+                // 仅在首次构建源列表且入口未携带直链/片单时应用上次可用源：
+                // 直链是用户显式给进来的（自备片单/助手），直链始终优先，记忆源只对无直链入口兜底；
+                // 同时避免之后覆盖用户的手动选择
+                val preferredIndex =
+                    if (route.initialRuleId.isBlank() &&
+                        preferredSourceId.isNotBlank() &&
+                        next.sources.isEmpty()
+                    ) {
+                        newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
+                    } else {
+                        null
+                    }
+                val newIndex =
+                    targetRuleIndex
+                        ?: preferredIndex
+                        ?: next.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
+                next =
+                    next.copy(
+                        sources = newSources,
+                        selectedSourceIndex = newIndex,
+                    )
+                sourcesChanged = true
+            }
+            // 全部分集列表（由条目详情流持续同步）
+            if (snapshot.episodes.isNotEmpty() && snapshot.episodes != next.episodes) {
+                next = next.copy(episodes = snapshot.episodes)
+            }
+            // 源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
+            // selectedSourceIndex 有位置语义，重排会让选中项错位）
+            if (snapshot.failureCounts != next.sourceFailureCounts) {
+                next = next.copy(sourceFailureCounts = snapshot.failureCounts)
+            }
+            // 画中画开关
+            if (snapshot.pipEnabled != next.pipEnabled) {
+                next = next.copy(pipEnabled = snapshot.pipEnabled)
+            }
+            // 尚无可恢复点时跟随位置表刷新当前分集（已下发/消费过的不回退）
+            if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
+                next = next.copy(resumePositionMs = snapshot.positions[next.streamUrl] ?: 0L)
+            }
+            next
         }
+        return sourcesChanged
     }
 
     /** 界面周期回报播放进度（毫秒）：内存暂存，每 [POSITION_SAVE_TICKS] 跳落盘一次 */
     fun onProgressChanged(positionMs: Long) {
         if (positionMs <= 0L) return
-        latestPositionMs = positionMs
-        if (++progressTicksSinceSave >= POSITION_SAVE_TICKS) {
-            progressTicksSinceSave = 0
+        session.latestPositionMs = positionMs
+        if (++session.progressTicksSinceSave >= POSITION_SAVE_TICKS) {
+            session.progressTicksSinceSave = 0
             flushPlaybackPosition()
         }
     }
@@ -435,7 +540,7 @@ class PlayerViewModel(
      */
     fun flushPlaybackPosition() {
         val url = _uiState.value.streamUrl
-        val position = latestPositionMs
+        val position = session.latestPositionMs
         if (url.isBlank() || position <= 0L) return
         viewModelScope.launch { settingsRepository.savePlaybackPosition(url, position) }
     }
@@ -445,12 +550,12 @@ class PlayerViewModel(
      * 自动向 Bangumi 提交当前分集的看过标记（一次播放会话仅触发一次）。
      */
     fun markWatched(epNumber: Int) {
-        if (hasTriggeredAutoMark || _uiState.value.isWatched) return
+        if (session.hasTriggeredAutoMark || _uiState.value.isWatched) return
         if (!isLoggedIn.value) {
             return
         }
 
-        hasTriggeredAutoMark = true
+        session.hasTriggeredAutoMark = true
         viewModelScope.launch {
             val result =
                 collectionRepository.updateEpisodeStatus(
@@ -465,7 +570,7 @@ class PlayerViewModel(
                     _events.send(PlayerUiEvent.MarkedWatched(epNumber))
                     _events.send(PlayerUiEvent.ShowSnackbar("已自动标记为看过（第 $epNumber 话）"))
                 }.onError { _, message ->
-                    hasTriggeredAutoMark = false
+                    session.hasTriggeredAutoMark = false
                     _events.send(PlayerUiEvent.ShowSnackbar(message))
                 }
         }
@@ -485,8 +590,8 @@ class PlayerViewModel(
         val state = _uiState.value
         markWatched(state.episodeSort.toInt())
         val finishedUrl = state.streamUrl
-        latestPositionMs = 0L
-        progressTicksSinceSave = 0
+        session.latestPositionMs = 0L
+        session.progressTicksSinceSave = 0
         viewModelScope.launch { settingsRepository.clearPlaybackPosition(finishedUrl) }
         if (!state.autoNextEnabled) return false
 
@@ -511,10 +616,10 @@ class PlayerViewModel(
     fun switchTo(index: Int) {
         if (index !in queue.indices || index == _uiState.value.currentIndex) return
         flushPlaybackPosition()
-        latestPositionMs = 0L
-        progressTicksSinceSave = 0
-        hasTriggeredAutoMark = false
-        currentIndex = index
+        session.latestPositionMs = 0L
+        session.progressTicksSinceSave = 0
+        session.hasTriggeredAutoMark = false
+        session.currentIndex = index
         val entry = queue[index]
         _uiState.update {
             it.copy(
@@ -527,7 +632,7 @@ class PlayerViewModel(
                 currentIndex = index,
                 isWatched = false,
                 autoMarked = false,
-                resumePositionMs = positionsMap[entry.streamUrl] ?: 0L,
+                resumePositionMs = session.positionsMap[entry.streamUrl] ?: 0L,
             )
         }
     }
@@ -554,9 +659,9 @@ class PlayerViewModel(
         val state = _uiState.value
         if (episode.sort == state.episodeSort && episode.id == state.episodeId && state.streamUrl.isNotBlank()) return
         flushPlaybackPosition()
-        latestPositionMs = 0L
-        progressTicksSinceSave = 0
-        hasTriggeredAutoMark = false
+        session.latestPositionMs = 0L
+        session.progressTicksSinceSave = 0
+        session.hasTriggeredAutoMark = false
 
         val queueIndex =
             queue.indexOfFirst {
@@ -564,7 +669,7 @@ class PlayerViewModel(
                     (it.episodeSort > 0 && it.episodeSort == episode.sort)
             }
         if (queueIndex >= 0) {
-            currentIndex = queueIndex
+            session.currentIndex = queueIndex
         }
 
         val isDirect = state.currentSource?.isDirect == true
@@ -666,8 +771,8 @@ class PlayerViewModel(
                     val baseTitles =
                         ChineseConverter.searchTitles(
                             primary = primaryTitle,
-                            aliases = subjectAliases,
-                            origin = subjectOriginalName,
+                            aliases = session.subjectAliases,
+                            origin = session.subjectOriginalName,
                         )
 
                     // 候选顺序/集号策略/超时/命中判定统一收敛在 EpisodeStreamResolver（与 AI 找源共用）
@@ -759,8 +864,8 @@ class PlayerViewModel(
     fun onPlaybackReady() {
         failureStore?.markPlayable(_uiState.value.streamUrl, currentSourceId())
         val id = currentSourceId() ?: return
-        if (id == lastSavedSourceId) return
-        lastSavedSourceId = id
+        if (id == session.lastSavedSourceId) return
+        session.lastSavedSourceId = id
         viewModelScope.launch { settingsRepository.setLastPlaybackSourceId(id) }
     }
 
