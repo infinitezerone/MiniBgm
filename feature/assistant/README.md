@@ -43,6 +43,7 @@ graph TB
   :core:designsystem -.-> :core:common
   :core:designsystem -.-> :core:model
   :core:navigation -.-> :core:common
+  :core:navigation -.-> :core:designsystem
   :core:network -.->|commonMainImplementation| :core:common
   :core:network -.->|commonMainImplementation| :core:model
   :feature:assistant -.-> :core:ai

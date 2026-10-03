@@ -36,6 +36,7 @@ graph TB
     :core:data[data]:::kmp-library
     :core:database[database]:::kmp-library
     :core:datastore[datastore]:::kmp-library
+    :core:designsystem[designsystem]:::android-library
     :core:model[model]:::kmp-library
     :core:navigation[navigation]:::android-library
     :core:network[network]:::kmp-library
@@ -50,7 +51,10 @@ graph TB
   :core:database -.->|commonMainImplementation| :core:model
   :core:datastore -.->|commonMainImplementation| :core:common
   :core:datastore -.->|commonMainImplementation| :core:model
+  :core:designsystem -.-> :core:common
+  :core:designsystem -.-> :core:model
   :core:navigation -.-> :core:common
+  :core:navigation -.-> :core:designsystem
   :core:network -.->|commonMainImplementation| :core:common
   :core:network -.->|commonMainImplementation| :core:model
   :sync:work -.-> :core:common
