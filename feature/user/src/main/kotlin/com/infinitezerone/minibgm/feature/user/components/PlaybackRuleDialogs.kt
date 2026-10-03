@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.feature.user
+package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,6 +40,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.feature.user.SiteProbeUiState
+import com.infinitezerone.minibgm.feature.user.SubscriptionImportUiState
 
 /**
  * 变量支持提示卡片

@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.feature.user
+package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

@@ -62,6 +62,8 @@ import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.user.components.AiSettingsDialog
+import com.infinitezerone.minibgm.feature.user.components.AiringTimingBottomSheet
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 

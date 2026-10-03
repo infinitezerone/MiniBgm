@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.feature.user
+package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -52,6 +52,10 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.user.CollectionAirFilter
+import com.infinitezerone.minibgm.feature.user.CollectionSubjectFilter
+import com.infinitezerone.minibgm.feature.user.airStatusBadge
+import com.infinitezerone.minibgm.feature.user.isFinished
 
 /**
  * 收藏五状态的展示顺序：主动在追的排前面，归档态（搁置 / 抛弃）收尾。

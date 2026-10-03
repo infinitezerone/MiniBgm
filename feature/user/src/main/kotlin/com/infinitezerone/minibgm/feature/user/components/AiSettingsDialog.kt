@@ -1,4 +1,4 @@
-package com.infinitezerone.minibgm.feature.user
+package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
