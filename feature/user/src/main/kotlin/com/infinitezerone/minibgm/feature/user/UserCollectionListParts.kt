@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
@@ -620,30 +620,18 @@ internal fun EmptyCollectionsView(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    BgmStatusState(
+        message = message,
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp, vertical = 56.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            imageVector = BgmIcons.SearchOff,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(56.dp),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onRefresh) {
-            Text("刷新")
-        }
-    }
+        icon = BgmIcons.SearchOff,
+        iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        iconSize = 56.dp,
+        actionLabel = "刷新",
+        onAction = onRefresh,
+    )
 }
 
 /** 错误态：内联列表区块，不占满全屏 */
@@ -653,38 +641,20 @@ internal fun ErrorCollectionsView(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    BgmStatusState(
+        message = errorMessage,
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp, vertical = 56.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(
-            imageVector = BgmIcons.ErrorOutline,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(56.dp),
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "加载收藏失败",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.error,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = errorMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onRetry) {
-            Text("重试")
-        }
-    }
+        title = "加载收藏失败",
+        icon = BgmIcons.ErrorOutline,
+        iconTint = MaterialTheme.colorScheme.error,
+        iconSize = 56.dp,
+        titleColor = MaterialTheme.colorScheme.error,
+        actionLabel = "重试",
+        onAction = onRetry,
+    )
 }
 
 @Composable
