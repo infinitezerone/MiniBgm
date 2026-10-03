@@ -55,6 +55,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainer
 import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 
 /** 分集/曲目/章节列表头部栏：总数/打卡进度、列表/网格切换与续看播放源通栏卡片 */
 @Composable
@@ -455,9 +456,8 @@ fun EpisodeListItem(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 ) {
-                    if (episode.type == 0) {
-                        val epNum = if (episode.ep > 0f) episode.ep else episode.sort
-                        val epLabel = epNum.toEpisodeLabel()
+                    if (episode.isMain) {
+                        val epLabel = episode.formattedNumber
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
@@ -518,9 +518,8 @@ fun EpisodeListItem(
                 // 主标题：支持多行自适应展示（maxLines = 3），独占横向宽度避免与胶囊争抢造成严重省略截断
                 val group = EpisodeGroup.fromType(episode.type)
                 val fallbackTitle =
-                    if (episode.type == 0) {
-                        val num = if (episode.ep > 0f) episode.ep else episode.sort
-                        "第 ${num.toEpisodeLabel()} 话"
+                    if (episode.isMain) {
+                        "第 ${episode.formattedNumber} 话"
                     } else {
                         "${group.label} ${episode.sort.toInt()}"
                     }
@@ -707,10 +706,9 @@ fun EpisodeListItem(
             ) {
                 // 仅当分集已放送时展示播放入口，避免对未播分集展示虚假播放按钮
                 if (!isFuture && (onPlayClick != null || onOpenSources != null)) {
-                    val epNum = if (episode.ep > 0f) episode.ep else episode.sort
                     val playDescription =
-                        if (episode.type == 0) {
-                            "播放第 ${epNum.toEpisodeLabel()} 话"
+                        if (episode.isMain) {
+                            "播放第 ${episode.formattedNumber} 话"
                         } else {
                             val group = EpisodeGroup.fromType(episode.type)
                             "播放${group.label} ${episode.sort.toInt()}"
@@ -797,9 +795,8 @@ fun EpisodeGrid(
                     val isFuture = isEpisodeFutureAir(episode)
                     val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress)
                     val label =
-                        if (episode.type == 0) {
-                            val num = if (episode.ep > 0f) episode.ep else episode.sort
-                            num.toEpisodeLabel()
+                        if (episode.isMain) {
+                            episode.formattedNumber
                         } else {
                             val prefix =
                                 when (episode.type) {
@@ -920,8 +917,8 @@ fun isEpisodeWatched(
     episode: Episode,
     watchedCount: Int,
 ): Boolean {
-    if (episode.type != 0) return false
-    val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+    if (!episode.isMain) return false
+    val epNumber = episode.episodeInt
     return watchedCount >= epNumber && epNumber > 0
 }
 
@@ -938,9 +935,9 @@ fun isEpisodeNextToWatch(
     nowMillis: Long = TimeUtils.nowEpochMillis(),
 ): Boolean {
     if (!hasProgress) return false
-    if (episode.type != 0) return false
+    if (!episode.isMain) return false
     if (isEpisodeFutureAir(episode, nowMillis)) return false
-    val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+    val epNumber = episode.episodeInt
     return epNumber == watchedCount + 1 && epNumber > 0
 }
 
@@ -951,13 +948,6 @@ fun isEpisodeFutureAir(
 ): Boolean {
     val airMillis = TimeUtils.epochMillisOfIso(episode.airdate) ?: return false
     return airMillis > nowMillis
-}
-
-/** 格式化分集话数编号 */
-fun Float.toEpisodeLabel(): String {
-    if (this <= 0f) return "1"
-    val whole = toInt()
-    return if (this == whole.toFloat()) whole.toString() else toString()
 }
 
 /** 辅助方法：生成分集列表进度徽章文本 */

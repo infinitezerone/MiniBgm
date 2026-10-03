@@ -883,7 +883,7 @@ class SubjectDetailViewModelTest {
             testScheduler.advanceUntilIdle()
 
             // 针对第 2 话触发「看到本集」
-            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
+            val targetEp = sampleEpisodeList.first { it.episodeInt == 2 }
             viewModel.markWatchedUpTo(targetEp)
 
             // 验证乐观更新状态
@@ -915,7 +915,7 @@ class SubjectDetailViewModelTest {
             testScheduler.advanceUntilIdle()
 
             // 初始打卡至第 2 集
-            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
+            val targetEp = sampleEpisodeList.first { it.episodeInt == 2 }
             viewModel.markWatchedUpTo(targetEp)
             testScheduler.advanceUntilIdle()
             assertEquals(
@@ -962,7 +962,7 @@ class SubjectDetailViewModelTest {
             testScheduler.advanceUntilIdle()
 
             // 之前未收藏该条目 (null)
-            val targetEp = sampleEpisodeList.first { it.ep.toInt() == 2 }
+            val targetEp = sampleEpisodeList.first { it.episodeInt == 2 }
             viewModel.markWatchedUpTo(targetEp)
             testScheduler.advanceUntilIdle()
             assertEquals(
@@ -1556,7 +1556,7 @@ class SubjectDetailViewModelTest {
             val fallbackRoute = viewModel.buildPlayerRoute(episode)
             assertTrue(fallbackRoute.streamUrl.isBlank())
             assertEquals(episode.id, fallbackRoute.episodeId)
-            assertEquals(episode.ep, fallbackRoute.episodeSort)
+            assertEquals(episode.episodeNumber, fallbackRoute.episodeSort)
 
             settingsRepository.setPlaylists(
                 listOf(

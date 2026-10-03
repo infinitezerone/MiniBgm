@@ -655,7 +655,6 @@ class ScheduleRepositoryImpl(
         val entitiesByBgmId: MutableMap<Long, AirScheduleEntity>,
         val mappingCache: MutableMap<Long, AniListBgmMappingEntity>,
         val newlyInserted: MutableList<AirScheduleEntity> = mutableListOf(),
-        val newEvents: MutableList<AirEventEntity> = mutableListOf(),
         val mappingsToPersist: MutableList<AniListBgmMappingEntity> = mutableListOf(),
     )
 
@@ -737,7 +736,6 @@ class ScheduleRepositoryImpl(
             state.entitiesByBgmId[updated.bgmId] = updated
             state.newlyInserted += updated
         }
-        state.newEvents += ctx.item.toAirEventEntity(existing.bgmId, nowMillis)
     }
 
     /**
@@ -781,7 +779,6 @@ class ScheduleRepositoryImpl(
         state.entitiesByBgmId[entity.bgmId] = entity
         state.entitiesByAnilistId[ctx.item.anilistId] = entity
         state.newlyInserted += entity
-        state.newEvents += ctx.item.toAirEventEntity(entity.bgmId, nowMillis)
         return true
     }
 
@@ -815,7 +812,6 @@ class ScheduleRepositoryImpl(
         state.entitiesByAnilistId[ctx.item.anilistId] = updated
         state.newlyInserted += updated
         state.mappingsToPersist += updated.toAniListBgmMapping(ctx.item.anilistId, nowMillis)
-        state.newEvents += ctx.item.toAirEventEntity(updated.bgmId, nowMillis)
         return true
     }
 
@@ -826,9 +822,6 @@ class ScheduleRepositoryImpl(
         }
         if (state.newlyInserted.isNotEmpty()) {
             scheduleDao.insertSchedules(state.newlyInserted)
-        }
-        if (state.newEvents.isNotEmpty()) {
-            airEventDao.insertAirEvents(state.newEvents)
         }
     }
 
@@ -891,20 +884,6 @@ class ScheduleRepositoryImpl(
         existing: String,
         incoming: String,
     ): String = if (incoming.isNotBlank() && incoming != "[]") incoming else existing
-
-    private fun AniListWeeklyScheduleItem.toAirEventEntity(
-        subjectId: Long,
-        nowMillis: Long,
-    ): AirEventEntity {
-        val airMillis = airAtEpochSeconds * 1000
-        return AirEventEntity(
-            subjectId = subjectId,
-            episode = episode,
-            airAtUtc = TimeUtils.isoUtcFromEpochMillis(airMillis),
-            kind = if (airMillis <= nowMillis) AirEventKind.ACTUAL else AirEventKind.SCHEDULED,
-            source = EVENT_SOURCE_ANILIST,
-        )
-    }
 
     private fun AniListBgmMappingEntity.toAirScheduleEntity(
         item: AniListWeeklyScheduleItem,

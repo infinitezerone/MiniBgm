@@ -56,9 +56,7 @@ fun EpisodeQuickActionBottomSheet(
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val isFuture = remember(episode.airdate) { isEpisodeFutureAir(episode) }
     val group = EpisodeGroup.fromType(episode.type)
-    val epNum = if (episode.ep > 0f) episode.ep else episode.sort
-    val epNumberInt = epNum.toInt()
-    val epLabel = if (episode.type == 0) "第 ${epNum.toEpisodeLabel()} 话" else "${group.label} ${episode.sort.toInt()}"
+    val epLabel = if (episode.isMain) "第 ${episode.formattedNumber} 话" else "${group.label} ${episode.sort.toInt()}"
     val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { epLabel } }
 
     BgmModalBottomSheet(
@@ -93,7 +91,7 @@ fun EpisodeQuickActionBottomSheet(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = epNum.toEpisodeLabel(),
+                            text = episode.formattedNumber,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color =
@@ -276,7 +274,7 @@ fun EpisodeQuickActionBottomSheet(
                     Text(text = "查看吐槽与讨论")
                 }
 
-                if (onBatchMark != null && !isWatched && episode.type == 0 && epNumberInt > 1) {
+                if (onBatchMark != null && !isWatched && episode.isMain && episode.episodeInt > 1) {
                     OutlinedButton(
                         onClick = {
                             onDismiss()
@@ -290,7 +288,7 @@ fun EpisodeQuickActionBottomSheet(
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "看到此集 (1~$epNumberInt)")
+                        Text(text = "看到此集 (1~${episode.episodeInt})")
                     }
                 }
             }

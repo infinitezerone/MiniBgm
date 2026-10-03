@@ -115,7 +115,7 @@ fun SubjectDetailScreen(
             EpisodeDetailRoute(
                 episodeId = episode.id,
                 subjectId = subjectId,
-                episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                episodeSort = episode.episodeNumber,
                 episodeType = episode.type,
                 episodeName = episode.name,
                 episodeNameCn = episode.nameCn,
@@ -464,8 +464,7 @@ fun SubjectDetailScreen(
                                 if (uiState.isLoggedIn) {
                                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 }
-                                val epNumber =
-                                    if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                val epNumber = episode.episodeInt
                                 viewModel.toggleEpisodeWatched(
                                     episodeId = episode.id,
                                     isWatched = isWatched,

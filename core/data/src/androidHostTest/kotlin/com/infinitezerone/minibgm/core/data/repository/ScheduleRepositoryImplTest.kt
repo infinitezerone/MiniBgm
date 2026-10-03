@@ -140,6 +140,10 @@ class ScheduleRepositoryImplTest {
             events.value = events.value.filter { it.subjectId in keepIds }
         }
 
+        override suspend fun deleteAnilistEventsFor(subjectId: Long) {
+            events.value = events.value.filterNot { it.source == "anilist" && it.subjectId == subjectId }
+        }
+
         override suspend fun deleteAnilistEventsAt(
             subjectId: Long,
             airAts: List<String>,

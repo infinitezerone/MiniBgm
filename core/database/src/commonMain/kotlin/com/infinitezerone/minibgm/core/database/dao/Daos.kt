@@ -87,6 +87,9 @@ interface AirEventDao {
     @Query("DELETE FROM air_events WHERE kind = 'predicted'")
     suspend fun deleteAllPredictedEvents()
 
+    @Query("DELETE FROM air_events WHERE source = 'anilist' AND subjectId = :subjectId")
+    suspend fun deleteAnilistEventsFor(subjectId: Long)
+
     @Query("DELETE FROM air_events WHERE source = 'anilist' AND subjectId = :subjectId AND airAtUtc IN (:airAts)")
     suspend fun deleteAnilistEventsAt(
         subjectId: Long,
@@ -116,8 +119,7 @@ interface AirEventDao {
         deleteEventsNotIn(keepSubjectIds)
         deleteAllPredictedEvents()
         for ((subjectId, events) in eventsGroupedBySubject) {
-            val airAts = events.map { it.airAtUtc }.distinct()
-            if (airAts.isNotEmpty()) deleteAnilistEventsAt(subjectId, airAts)
+            deleteAnilistEventsFor(subjectId)
             if (events.isNotEmpty()) insertAirEvents(events)
         }
     }

@@ -572,4 +572,49 @@ class ScheduleViewModelTest {
             assertEquals(15, scheduleOnYesterday.nextEpisodeNumber)
             assertEquals("23:00", scheduleOnYesterday.timeCst)
         }
+
+    @Test
+    fun sameDayMultipleEpisodes_displaysAllEpisodesInOrder() =
+        runTest {
+            val repository = FakeScheduleRepository()
+            val collectionRepository = FakeCollectionRepository()
+
+            val baseSchedule =
+                AirSchedule(
+                    bgmId = 777L,
+                    title = "连播动画",
+                    titleCn = "连播动画",
+                    weekday = today,
+                    timeCst = "20:00",
+                )
+            repository.sendSchedules(weekday = today, schedules = listOf(baseSchedule))
+
+            val currentToday = cstDate()
+            val todayDateStr = currentToday.toString()
+            val ep1 =
+                com.infinitezerone.minibgm.core.model.AirScheduleEvent(
+                    subjectId = 777L,
+                    episode = 1,
+                    airAtUtc = "${todayDateStr}T12:00:00Z",
+                )
+            val ep2 =
+                com.infinitezerone.minibgm.core.model.AirScheduleEvent(
+                    subjectId = 777L,
+                    episode = 2,
+                    airAtUtc = "${todayDateStr}T12:30:00Z",
+                )
+            repository.sendAirEvents(listOf(ep1, ep2))
+
+            val viewModel = createViewModel(repository, collectionRepository)
+
+            val state =
+                viewModel.uiState.first {
+                    it.selectedPageIndex == ScheduleViewModel.TODAY_PAGE_INDEX && it.schedules.size == 2
+                }
+            assertEquals(2, state.schedules.size)
+            assertEquals(1, state.schedules[0].nextEpisodeNumber)
+            assertEquals("20:00", state.schedules[0].timeCst)
+            assertEquals(2, state.schedules[1].nextEpisodeNumber)
+            assertEquals("20:30", state.schedules[1].timeCst)
+        }
 }

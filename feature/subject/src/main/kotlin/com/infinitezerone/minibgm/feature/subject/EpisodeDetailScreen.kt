@@ -61,7 +61,6 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
-import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -115,7 +114,7 @@ fun EpisodeDetailScreen(
     val group = episode?.let { EpisodeGroup.fromType(it.type) } ?: EpisodeGroup.MAIN
     val episodeNumberText =
         if (episode != null) {
-            if (episode.type == 0) "第 ${episode.ep.toEpisodeLabel()} 话" else "${group.label} ${episode.sort.toInt()}"
+            if (episode.isMain) "第 ${episode.formattedNumber} 话" else "${group.label} ${episode.sort.toInt()}"
         } else {
             initialEpNumberText.ifBlank { "分集详情" }
         }
@@ -374,7 +373,7 @@ fun EpisodeDetailScreen(
                                         Text(text = "已看过 · 点击取消打卡")
                                     }
                                 } else {
-                                    val epNum = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                                    val epNum = episode.episodeInt
                                     if (epNum > 1) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),

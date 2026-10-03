@@ -267,19 +267,21 @@ class ScheduleViewModel(
                 val seenSubjectIdsOnThisDay = mutableSetOf<Long>()
 
                 eventsOnThisDay.groupBy { it.subjectId }.forEach { (subId, events) ->
-                    val bestEvent = events.maxByOrNull { it.episode } ?: events.first()
                     val schedule = schedulesByBgmId[subId]
                     if (schedule != null) {
                         seenSubjectIdsOnThisDay.add(subId)
-                        list.add(
-                            schedule.copy(
-                                weekday = weekday,
-                                nextEpisodeNumber = bestEvent.episode,
-                                nextEpisodeAtUtc = bestEvent.airAtUtc,
-                                timeCst = TimeUtils.formatToCstTime(bestEvent.airAtUtc).ifBlank { schedule.timeCst },
-                                timeJst = TimeUtils.formatToJstTime(bestEvent.airAtUtc).ifBlank { schedule.timeJst },
-                            ),
-                        )
+                        val distinctEvents = events.distinctBy { it.episode }.sortedBy { it.episode }
+                        distinctEvents.forEach { event ->
+                            list.add(
+                                schedule.copy(
+                                    weekday = weekday,
+                                    nextEpisodeNumber = event.episode,
+                                    nextEpisodeAtUtc = event.airAtUtc,
+                                    timeCst = TimeUtils.formatToCstTime(event.airAtUtc).ifBlank { schedule.timeCst },
+                                    timeJst = TimeUtils.formatToJstTime(event.airAtUtc).ifBlank { schedule.timeJst },
+                                ),
+                            )
+                        }
                     }
                 }
 
@@ -515,11 +517,10 @@ class ScheduleViewModel(
         episodes: List<Episode>,
         watchedCount: Int,
     ): Episode? {
-        val mainEpisodes = episodes.filter { it.type == 0 }.sortedBy { it.sort }
+        val mainEpisodes = episodes.filter { it.isMain }.sortedBy { it.sort }
 
-        fun epNumber(ep: Episode): Int = if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()
-        return mainEpisodes.firstOrNull { epNumber(it) == watchedCount + 1 }
-            ?: mainEpisodes.firstOrNull { epNumber(it) > watchedCount }
+        return mainEpisodes.firstOrNull { it.episodeInt == watchedCount + 1 }
+            ?: mainEpisodes.firstOrNull { it.episodeInt > watchedCount }
             ?: mainEpisodes.firstOrNull()
     }
 
@@ -531,7 +532,7 @@ class ScheduleViewModel(
     ): PlayerRoute {
         val matchedEntry =
             playlists
-                .matchesForEpisode(subjectId, if (episode.ep > 0f) episode.ep else episode.sort)
+                .matchesForEpisode(subjectId, episode.episodeNumber)
                 .firstOrNull()
                 ?.entry
         return PlayerRoute(
@@ -541,7 +542,7 @@ class ScheduleViewModel(
             requestHeaders = matchedEntry?.headers.orEmpty(),
             episodeName = episode.nameCn.ifBlank { episode.name },
             subjectName = subjectName,
-            episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+            episodeSort = episode.episodeNumber,
             episodeType = episode.type,
         )
     }
@@ -611,7 +612,7 @@ class ScheduleViewModel(
         showLoginPromptDialog.value = false
     }
 
-    /** [force] = 下拉刷新等用户显式动作；页面重建触发的静默刷新走仓库层 30 分钟节流 */
+    /** [force] = 下拉刷新等用户显式动作；页面重建触发的静默刷新走仓库层 12 小时节流 */
     fun refresh(force: Boolean = false) {
         viewModelScope.launch {
             if (force) {
@@ -643,7 +644,7 @@ class ScheduleViewModel(
         const val TOTAL_SCHEDULE_DAYS = 13
         val CST_ZONE_ID: ZoneId = ZoneId.of("Asia/Shanghai")
 
-        fun currentLocalDate(): LocalDate = LocalDate.now()
+        fun currentLocalDate(): LocalDate = LocalDate.now(CST_ZONE_ID)
 
         @Deprecated("Use currentLocalDate() instead", ReplaceWith("currentLocalDate()"))
         fun currentCstDate(): LocalDate = currentLocalDate()

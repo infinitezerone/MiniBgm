@@ -1,10 +1,6 @@
 package com.infinitezerone.minibgm.feature.schedule
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +19,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,7 +31,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,11 +101,6 @@ fun ScheduleScreen(
         )
 
     val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
-
-    // 「回到今天」：仅在滑离今天页时出现，一键同时回到今天页与列表顶部
-    val showBackToToday by remember {
-        derivedStateOf { pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX }
-    }
 
     // 登录引导横幅：核心循环（打卡/收藏/个人页）依赖登录，未登录时给一次轻量主动引导
     var loginBannerDismissed by rememberSaveable { mutableStateOf(false) }
@@ -316,29 +305,6 @@ fun ScheduleScreen(
                             }
                         }
                     }
-                }
-
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = showBackToToday,
-                    enter = fadeIn() + slideInVertically { it / 2 },
-                    exit = fadeOut() + slideOutVertically { it / 2 },
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp),
-                ) {
-                    ExtendedFloatingActionButton(
-                        text = { Text(text = "回到今天") },
-                        icon = { Icon(imageVector = BgmIcons.Today, contentDescription = null) },
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
-                                pageListStates
-                                    .getOrNull(ScheduleViewModel.TODAY_PAGE_INDEX)
-                                    ?.animateScrollToItem(0)
-                            }
-                        },
-                    )
                 }
             }
         }

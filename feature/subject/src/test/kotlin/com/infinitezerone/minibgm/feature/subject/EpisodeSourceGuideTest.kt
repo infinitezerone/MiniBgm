@@ -4,7 +4,6 @@ import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
-import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,8 +19,7 @@ class EpisodeSourceGuideTest {
     @Test
     fun bilibiliKeyword_forMainEpisode_formatsTitleAndEpisodeCorrectly() {
         val ep5 = Episode(id = 1005L, type = 0, ep = 5f, sort = 5f, name = "死者の眠る里", nameCn = "死亡与安宁")
-        val num = if (ep5.ep > 0f) ep5.ep else ep5.sort
-        val epLabel = "第 ${num.toEpisodeLabel()} 话"
+        val epLabel = "第 ${ep5.formattedNumber} 话"
         val keyword = "${sampleSubject.displayName} $epLabel"
 
         assertEquals("葬送的芙莉莲 第 5 话", keyword)
@@ -51,8 +49,7 @@ class EpisodeSourceGuideTest {
     @Test
     fun mikanUrl_withPreciseMikanId_navigatesDirectlyToBangumiPage() {
         val ep5 = Episode(id = 1005L, type = 0, ep = 5f, sort = 5f)
-        val num = if (ep5.ep > 0f) ep5.ep else ep5.sort
-        val keyword = "${sampleSubject.displayName} ${num.toEpisodeLabel()}".trim()
+        val keyword = "${sampleSubject.displayName} ${ep5.formattedNumber}".trim()
 
         val url = StreamingIntentResolver.buildMikanUrl(mikanId = "3233", keyword = keyword)
         assertEquals("https://mikanani.me/Home/Bangumi/3233", url)
@@ -61,8 +58,7 @@ class EpisodeSourceGuideTest {
     @Test
     fun mikanUrl_withoutMikanId_fallsBackToEpisodeKeywordSearch() {
         val ep5 = Episode(id = 1005L, type = 0, ep = 5f, sort = 5f)
-        val num = if (ep5.ep > 0f) ep5.ep else ep5.sort
-        val keyword = "${sampleSubject.displayName} ${num.toEpisodeLabel()}".trim()
+        val keyword = "${sampleSubject.displayName} ${ep5.formattedNumber}".trim()
 
         val url = StreamingIntentResolver.buildMikanUrl(mikanId = null, keyword = keyword)
         assertTrue(url.startsWith("https://mikanani.me/Home/Search?searchstr="))
@@ -75,8 +71,7 @@ class EpisodeSourceGuideTest {
     @Test
     fun fractionalEpisodeLabel_formatsCorrectlyInKeywords() {
         val epRecap = Episode(id = 1006L, type = 0, ep = 6.5f, sort = 6.5f)
-        val num = if (epRecap.ep > 0f) epRecap.ep else epRecap.sort
-        val epLabel = "第 ${num.toEpisodeLabel()} 话"
+        val epLabel = "第 ${epRecap.formattedNumber} 话"
 
         assertEquals("第 6.5 话", epLabel)
         assertEquals("葬送的芙莉莲 第 6.5 话", "${sampleSubject.displayName} $epLabel")
@@ -146,8 +141,7 @@ class EpisodeSourceGuideTest {
     @Test
     fun mikanKeyword_forMainEpisode_formatsTitleAndNumberConsistently() {
         val ep5 = Episode(id = 1005L, type = 0, ep = 5f, sort = 5f)
-        val num = if (ep5.ep > 0f) ep5.ep else ep5.sort
-        val keyword = "${sampleSubject.displayName} ${num.toEpisodeLabel()}".trim()
+        val keyword = "${sampleSubject.displayName} ${ep5.formattedNumber}".trim()
         assertEquals("葬送的芙莉莲 5", keyword)
 
         val url = StreamingIntentResolver.buildMikanUrl(mikanId = null, keyword = keyword)

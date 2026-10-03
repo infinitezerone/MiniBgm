@@ -2,10 +2,10 @@ package com.infinitezerone.minibgm.feature.subject.navigation
 
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailScreen
-import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 
 /** 分集详情与讨论全屏三级页面的导航条目；由 `:app` 的 BgmNavHost 聚合（NiA 模式） */
 fun EntryProviderScope<NavKey>.episodeDetailEntry(

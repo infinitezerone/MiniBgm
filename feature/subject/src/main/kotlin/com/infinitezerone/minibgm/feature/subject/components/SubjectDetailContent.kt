@@ -150,7 +150,7 @@ internal fun SubjectDetailContent(
                 isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
             }
         }
-    val nextUpEpNumber = nextUpEpisode?.let { if (it.ep > 0f) it.ep else it.sort }
+    val nextUpEpNumber = nextUpEpisode?.episodeNumber
 
     LaunchedEffect(selectedTab) {
         val lastTab = lastTabRef.value

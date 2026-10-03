@@ -280,7 +280,7 @@ class EpisodeDetailViewModel(
             return
         }
 
-        val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+        val epNumber = episode.episodeInt
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
         val newEpStatus =
@@ -342,7 +342,7 @@ class EpisodeDetailViewModel(
             return
         }
 
-        val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
+        val targetEpNumber = targetEpisode.episodeInt
         val previousCollection = _uiState.value.collection
         val currentEp = previousCollection?.epStatus ?: 0
         val newEpStatus = maxOf(currentEp, targetEpNumber)
@@ -355,10 +355,8 @@ class EpisodeDetailViewModel(
 
         val targetEpisodeIds =
             _uiState.value.allEpisodes
-                .filter { ep ->
-                    val num = if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()
-                    num in 1..targetEpNumber
-                }.map { it.id }
+                .filter { ep -> ep.episodeInt in 1..targetEpNumber }
+                .map { it.id }
 
         _uiState.update { state ->
             // 未收藏时与 toggleWatched 对齐：构造乐观收藏，避免"看到本集"点击后 UI 无反馈

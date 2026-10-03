@@ -2,12 +2,12 @@ package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
 import com.infinitezerone.minibgm.feature.subject.components.buildEpisodesProgressLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeFutureAir
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
-import com.infinitezerone.minibgm.feature.subject.components.toEpisodeLabel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -228,10 +228,12 @@ class EpisodeGroupTest {
         assertFalse(isEpisodeNextToWatch(re0Ep2, watchedCount = 0))
         assertTrue(isEpisodeNextToWatch(re0Ep2, watchedCount = 1))
 
-        // 有效分集话数推导
-        val ep1Num = if (re0Ep1.ep > 0f) re0Ep1.ep else re0Ep1.sort
-        assertEquals("1", ep1Num.toEpisodeLabel())
-        val ep2Num = if (re0Ep2.ep > 0f) re0Ep2.ep else re0Ep2.sort
-        assertEquals("2", ep2Num.toEpisodeLabel())
+        // 统一分集话数推导
+        assertEquals(1f, re0Ep1.episodeNumber)
+        assertEquals("1", re0Ep1.formattedNumber)
+        assertEquals("第 1 话", re0Ep1.displayTitle)
+        assertEquals(2f, re0Ep2.episodeNumber)
+        assertEquals("2", re0Ep2.formattedNumber)
+        assertEquals("第 2 话", re0Ep2.displayTitle)
     }
 }

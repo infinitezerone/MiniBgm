@@ -246,7 +246,7 @@ fun SubjectSourcesBottomSheet(
         val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
         val playlistMatches =
             remember(playlists, subject.id, episode) {
-                playlists.matchesForEpisode(subject.id, if (episode.ep > 0f) episode.ep else episode.sort)
+                playlists.matchesForEpisode(subject.id, episode.episodeNumber)
             }
         val epLabel = remember(episode) { episodeGuideLabel(episode) }
 
@@ -257,9 +257,8 @@ fun SubjectSourcesBottomSheet(
         val mikanUrl =
             remember(mikanId, displayName, epLabel, episode) {
                 val keyword =
-                    if (episode.type == 0) {
-                        val num = if (episode.ep > 0f) episode.ep else episode.sort
-                        "$displayName ${num.toEpisodeLabel()}".trim()
+                    if (episode.isMain) {
+                        "$displayName ${episode.formattedNumber}".trim()
                     } else {
                         "$displayName $epLabel".trim()
                     }
@@ -283,8 +282,7 @@ fun SubjectSourcesBottomSheet(
                     }?.url
                     ?: enabledRules.firstNotNullOfOrNull { rule ->
                         if (rule.kind == PlaybackRuleKind.SOURCE) return@firstNotNullOfOrNull null
-                        val rawEpSort = if (episode.ep > 0f) episode.ep else episode.sort
-                        val epStr = if (episode.type == 0) rawEpSort.toEpisodeLabel() else rawEpSort.toInt().toString()
+                        val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
                         val resolvedUrl =
                             rule.resolveUrl(
                                 title = displayName,
@@ -358,8 +356,7 @@ fun SubjectSourcesBottomSheet(
                     if (enabledRules.isNotEmpty()) {
                         // 渲染已启用的自定义播放规则
                         for (rule in enabledRules) {
-                            val rawEpSort = if (episode.ep > 0f) episode.ep else episode.sort
-                            val epStr = if (episode.type == 0) rawEpSort.toEpisodeLabel() else rawEpSort.toInt().toString()
+                            val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
                             val resolvedUrl =
                                 remember(rule, displayName, epStr, subject.id, episode.id) {
                                     rule.resolveUrl(
@@ -419,7 +416,7 @@ fun SubjectSourcesBottomSheet(
                                                     streamUrl = if (isMedia) resolvedUrl else "",
                                                     episodeName = episode.nameCn.ifBlank { episode.name },
                                                     subjectName = displayName,
-                                                    episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                                    episodeSort = episode.episodeNumber,
                                                     episodeType = episode.type,
                                                     initialRuleId = rule.id,
                                                 )
@@ -455,7 +452,7 @@ fun SubjectSourcesBottomSheet(
                                             streamUrl = "",
                                             episodeName = episode.nameCn.ifBlank { episode.name },
                                             subjectName = displayName,
-                                            episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                            episodeSort = episode.episodeNumber,
                                             episodeType = episode.type,
                                         )
                                     onInternalPlayClick(route)
@@ -701,7 +698,7 @@ internal fun PlaylistSourceSection(
                                     streamUrl = entry.url,
                                     episodeName = episode.nameCn.ifBlank { episode.name },
                                     subjectName = displayName,
-                                    episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+                                    episodeSort = episode.episodeNumber,
                                     episodeType = episode.type,
                                     requestHeaders = entry.headers,
                                     queue =
@@ -712,7 +709,7 @@ internal fun PlaylistSourceSection(
                                                 episodeName = matched.title,
                                                 episodeSort =
                                                     matched.label.toFloatOrNull()
-                                                        ?: (if (episode.ep > 0f) episode.ep else episode.sort),
+                                                        ?: episode.episodeNumber,
                                                 episodeType = episode.type,
                                                 episodeId = episode.id,
                                                 requestHeaders = matched.headers,
@@ -804,9 +801,8 @@ internal fun EpisodeSourceActionCard(
 
 /** 分集口语化编号：正片为「第 N 话」，其他类型为「SP 1」等分组前缀加序号 */
 fun episodeGuideLabel(episode: Episode): String =
-    if (episode.type == 0) {
-        val num = if (episode.ep > 0f) episode.ep else episode.sort
-        "第 ${num.toEpisodeLabel()} 话"
+    if (episode.isMain) {
+        "第 ${episode.formattedNumber} 话"
     } else {
         "${EpisodeGroup.fromType(episode.type).label} ${episode.sort.toInt()}"
     }
@@ -821,11 +817,11 @@ fun formatEpisodeGuideHeader(
 ): String {
     val epLabel = episodeGuideLabel(episode)
     val rawTitle = episode.nameCn.ifBlank { episode.name }.trim()
-    val numLabel = (if (episode.ep > 0f) episode.ep else episode.sort).toEpisodeLabel()
+    val numLabel = episode.formattedNumber
     val isRedundant =
         rawTitle.isBlank() ||
             rawTitle.filterNot { it.isWhitespace() }.equals(epLabel.filterNot { it.isWhitespace() }, ignoreCase = true) ||
-            (episode.type == 0 && (rawTitle == numLabel || rawTitle == "第${numLabel}集" || rawTitle == "第${numLabel}话"))
+            (episode.isMain && (rawTitle == numLabel || rawTitle == "第${numLabel}集" || rawTitle == "第${numLabel}话"))
 
     val epTitle = if (!isRedundant) rawTitle else null
     val subjectPrefix = if (displayName.isNotBlank()) "《$displayName》 " else ""

@@ -93,7 +93,7 @@ internal fun SubjectDetailOverlays(
     failedSourceReasons: Map<String, String>,
 ) {
     batchMarkTargetEpisode?.let { episode ->
-        val targetEpNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+        val targetEpNumber = episode.episodeInt
         AlertDialog(
             onDismissRequest = onDismissBatchMark,
             title = { Text("看到此集？") },
@@ -196,7 +196,7 @@ internal fun SubjectDetailOverlays(
             isNextToWatch = isNextToWatch,
             onDismiss = onDismissQuickAction,
             onToggleWatched = {
-                val epNumber = if (episode.ep > 0f) episode.ep.toInt() else episode.sort.toInt()
+                val epNumber = episode.episodeInt
                 if (isLoggedIn) {
                     haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 }

@@ -17,7 +17,7 @@ fun buildEpisodePlayerRoute(
 ): PlayerRoute {
     val matchingEntry =
         playlists
-            .matchesForEpisode(subjectId, if (episode.ep > 0f) episode.ep else episode.sort)
+            .matchesForEpisode(subjectId, episode.episodeNumber)
             .firstOrNull()
             ?.entry
     return PlayerRoute(
@@ -27,7 +27,7 @@ fun buildEpisodePlayerRoute(
         requestHeaders = matchingEntry?.headers.orEmpty(),
         episodeName = episode.nameCn.ifBlank { episode.name },
         subjectName = subjectName,
-        episodeSort = if (episode.ep > 0f) episode.ep else episode.sort,
+        episodeSort = episode.episodeNumber,
         episodeType = episode.type,
     )
 }

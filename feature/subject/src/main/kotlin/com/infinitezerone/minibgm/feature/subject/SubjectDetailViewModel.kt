@@ -625,7 +625,7 @@ class SubjectDetailViewModel(
         val nextEpNum = currentEp + 1
         val nextEpisode =
             _uiState.value.episodes.firstOrNull {
-                it.type == 0 && (if (it.ep > 0f) it.ep.toInt() else it.sort.toInt()) == nextEpNum
+                it.isMain && it.episodeInt == nextEpNum
             }
         if (nextEpisode != null) {
             toggleEpisodeWatched(
@@ -759,7 +759,7 @@ class SubjectDetailViewModel(
             }
             return
         }
-        val targetEpNumber = if (targetEpisode.ep > 0f) targetEpisode.ep.toInt() else targetEpisode.sort.toInt()
+        val targetEpNumber = targetEpisode.episodeInt
         val previousCollection = _uiState.value.collection
         val previousEpStatus = previousCollection?.epStatus ?: 0
         val previousType = previousCollection?.type ?: 0
@@ -793,14 +793,13 @@ class SubjectDetailViewModel(
         val targetEpisodeIds =
             _uiState.value.episodes
                 .filter { ep ->
-                    ep.type == 0 && (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in 1..targetEpNumber
+                    ep.isMain && ep.episodeInt in 1..targetEpNumber
                 }.map { it.id }
 
         val newlyMarkedIds =
             _uiState.value.episodes
                 .filter { ep ->
-                    ep.type == 0 &&
-                        (if (ep.ep > 0f) ep.ep.toInt() else ep.sort.toInt()) in (previousEpStatus + 1)..targetEpNumber
+                    ep.isMain && ep.episodeInt in (previousEpStatus + 1)..targetEpNumber
                 }.map { it.id }
 
         viewModelScope.launch {
