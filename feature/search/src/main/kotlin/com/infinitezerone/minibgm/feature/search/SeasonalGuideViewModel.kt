@@ -94,6 +94,16 @@ private data class PagedSubjects(
 /**
  * 季度片单 ViewModel —— **方案 B：响应式派生流**。
  *
+ * 本类与 [ExploreViewModel] 是全仓 ViewModel 的**响应式 UDF 规范标杆**，新 ViewModel 与迁移
+ * 旧 ViewModel 时以此为准：
+ * 1. 对外只读 `uiState: StateFlow<…>`，状态 = `combine(意图流, 仓库流)` 的投影 + `stateIn`；
+ * 2. 可变状态只剩**用户意图**（不可分查询对象 / 触发器）；按意图取数用 `flatMapLatest` 换挡，
+ *    禁止手动 Job 判空判序（loadJobs / refreshJob 一律不允许）；
+ * 3. **写后读**：能写仓后经仓库流回读的，不写手动乐观状态与回滚代码；
+ * 4. 一次性事件（Snackbar / 导航）走 `Channel(BUFFERED) + receiveAsFlow()`，与状态流隔离；
+ * 5. 局部会话态（对话框多步流程）允许保留为独立意图流，不强并进主投影。
+ * 命令密集型会话（播放器会话、智能体执行、乐观打卡撤销）可保留显式命令层，但数据侧仍应投影化。
+ *
  * 状态是「底层事件流的数学映射」，不是被命令式修改的容器：
  * - 可变状态只剩**用户意图**（档期 / 产地 / 形式 / 视图形态）与两个一次性 UI 提示位；
  * - 「本季首播」是 [seasonQuery] 先投影成 [RequestKey]、再经 `distinctUntilChanged` + `flatMapLatest`
