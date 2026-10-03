@@ -435,10 +435,10 @@ class ScheduleRepositoryImpl(
                 entities
             }
 
-        // 剔除已完结或在未来无任何播出事件的 bgm_data 僵尸条目
+        // 剔除已完结或在未来无任何播出事件的 bgm_data 过期条目
         val (activeEntities, zombieEntities) =
             entitiesWithCovers.partition { entity ->
-                !isZombieBgmDataSchedule(entity, allEvents[entity.bgmId].orEmpty(), nowMillis)
+                !isStalePrunableSchedule(entity, allEvents[entity.bgmId].orEmpty(), nowMillis)
             }
 
         val reconciled = reconcileScheduleEntities(activeEntities, allEvents, nowMillis)
@@ -982,4 +982,4 @@ class ScheduleRepositoryImpl(
     }
 }
 
-// isZombieBgmDataSchedule 顶层谓词已移至同包 SchedulePruning.kt（语义与命名不变）。
+// isStalePrunableSchedule 顶层谓词已移至同包 SchedulePruning.kt（语义与命名不变）。

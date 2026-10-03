@@ -2601,14 +2601,14 @@ class ScheduleRepositoryImplTest {
     )
 
     /**
-     * `isZombieBgmDataSchedule` 是无依赖的纯谓词，所以能在这里逐分支钉住。
+     * `isStalePrunableSchedule` 是无依赖的纯谓词，所以能在这里逐分支钉住。
      *
      * 它分支密度很高（CC=26），而 CRAP 门禁只认覆盖率：留在类里当 private 成员时行覆盖率只有
      * 51.9%、CRAP=101.5，是 DANGER。抽成顶层 internal 后由这条表驱动测试补齐覆盖。
      * 每个用例都对着一个具体的判据分支，新增分支时这里应该同步加一行。
      */
     @Test
-    fun isZombieBgmDataSchedule_coversEveryBranch() {
+    fun isStalePrunableSchedule_coversEveryBranch() {
         val now = assertNotNull(TimeUtils.epochMillisOfIso("2026-09-29T12:00:00Z"))
         val weekStart = TimeUtils.cstWeekStartEpochMillis(now)
         val week = 7 * DAY_MILLIS
@@ -2692,7 +2692,7 @@ class ScheduleRepositoryImplTest {
         cases.forEach { case ->
             assertEquals(
                 case.expected,
-                isZombieBgmDataSchedule(case.entity, case.events, now),
+                isStalePrunableSchedule(case.entity, case.events, now),
                 "用例「${case.name}」",
             )
         }

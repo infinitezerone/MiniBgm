@@ -44,6 +44,28 @@ object TimeUtils {
             isoUtcString.substringBefore("T").trim()
         }
 
+    /** epoch 毫秒 → 中国时区短日期时间（"MM-dd HH:mm"）；解析失败返回空串 */
+    fun formatShortDateTimeEpochMillis(millis: Long): String =
+        try {
+            val local = Instant.fromEpochMilliseconds(millis).toLocalDateTime(timeZoneCst)
+            "%02d-%02d %02d:%02d".format(local.month.number, local.day, local.hour, local.minute)
+        } catch (_: Exception) {
+            ""
+        }
+
+    /** 星期数字 → 中文标签（1..7 → "周一".."周日"）；越界返回空串 */
+    fun weekdayCnLabel(dayOfWeek: Int): String =
+        when (dayOfWeek) {
+            1 -> "周一"
+            2 -> "周二"
+            3 -> "周三"
+            4 -> "周四"
+            5 -> "周五"
+            6 -> "周六"
+            7 -> "周日"
+            else -> ""
+        }
+
     /** epoch 毫秒 → 中国时区的星期（1=周一 … 7=周日）；越界异常值回退为当前时刻的星期 */
     fun cstWeekdayOfEpoch(millis: Long): Int = weekdayOfEpoch(millis, timeZoneCst)
 

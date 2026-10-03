@@ -2,6 +2,13 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
 
+/**
+ * 时刻表条目领域模型，一个类型承载三重语义：
+ * 1. **时刻表条目**：封面 / 中日双标题 / 评分 / 播出时间段（[weekday]、[timeCst]、[timeJst]）等展示信息；
+ * 2. **下一话仲裁结果**：[nextEpisodeNumber]、[nextEpisodeAtUtc]、[nextEpisodeKind] 三元组——
+ *    由多来源播出事件仲裁回写（可信度 actual / scheduled / predicted），是"下一话"的唯一真值；
+ * 3. **来源与占位**：[isUnmapped] 标记未映射到 bgmId 的占位条目（仅时刻表展示，不可进详情/追番/播放）。
+ */
 @Serializable
 data class AirSchedule(
     val bgmId: Long,
@@ -24,7 +31,11 @@ data class AirSchedule(
     val isAiring: Boolean = true,
     /** 未映射到 bgmId 的占位条目（仅时刻表展示，不可进详情/追番/播放） */
     val isUnmapped: Boolean = false,
-)
+) {
+    /** 展示标题：中文标题优先，空缺回退原日文标题 */
+    val displayName: String
+        get() = titleCn.ifBlank { title }
+}
 
 /** 单集播出事件领域模型（按自然日与时刻精准对应集数） */
 @Serializable

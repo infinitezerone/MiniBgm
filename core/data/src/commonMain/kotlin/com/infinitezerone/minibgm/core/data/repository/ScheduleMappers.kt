@@ -17,7 +17,7 @@ import kotlinx.serialization.json.Json
  * 均为不读类状态的纯映射逻辑）。
  *
  * 时间常量原为 ScheduleRepository.kt 的文件级私有常量，随纯辅助函数提升为 internal——
- * private companion 对外部顶层声明（如 isZombieBgmDataSchedule）不可见，类内与同包引用照常解析。
+ * private companion 对外部顶层声明（如 isStalePrunableSchedule）不可见，类内与同包引用照常解析。
  */
 internal const val HOUR_MILLIS = 60L * 60 * 1000
 internal const val DAY_MILLIS = 24L * HOUR_MILLIS

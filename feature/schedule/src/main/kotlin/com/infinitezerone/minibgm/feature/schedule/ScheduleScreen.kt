@@ -317,7 +317,7 @@ fun ScheduleScreen(
             onAiSourceSearch =
                 if (onAssistantClick != null) {
                     {
-                        val title = schedule.titleCn.ifBlank { schedule.title }
+                        val title = schedule.displayName
                         onSourceSearch(
                             "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
                         )

@@ -10,6 +10,14 @@ import androidx.room3.PrimaryKey
         Index(value = ["weekday", "sortMinutes", "ratingScore"]),
     ],
 )
+/**
+ * 时刻表条目持久化实体，与 [com.infinitezerone.minibgm.core.model.AirSchedule] 一一对应，同样承载三重语义：
+ * 1. **时刻表条目**：封面 / 中日双标题 / 评分 / 排序键（[weekday]、[sortMinutes]、[timeCst]、[timeJst]）等展示信息；
+ * 2. **下一话仲裁结果**：[nextEpisode]、[nextEpisodeAtUtc]、[nextEpisodeKind] 三元组——
+ *    由多来源播出事件仲裁回写（可信度 actual / scheduled / predicted），是"下一话"的唯一真值；
+ * 3. **来源与占位**：[source] 区分 official / bgm_data / anilist_unmapped，其中 anilist_unmapped
+ *    为未映射到 bgmId 的占位条目（仅时刻表展示，不可进详情/追番/播放）。
+ */
 data class AirScheduleEntity(
     @PrimaryKey val bgmId: Long,
     val title: String,

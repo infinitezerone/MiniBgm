@@ -507,9 +507,9 @@ class ScheduleViewModel(
         val collection = collectionRepository.getCollectionStream(subjectId).first()
         val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0)
         if (target == null) {
-            return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.titleCn.ifBlank { schedule.title })
+            return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.displayName)
         }
-        return buildEpisodeRoute(subjectId, schedule.titleCn.ifBlank { schedule.title }, target, playlists)
+        return buildEpisodeRoute(subjectId, schedule.displayName, target, playlists)
     }
 
     /** 下一待看集：进度 +1 优先，回退第一个未看正篇，再回退第一集 */
@@ -540,7 +540,7 @@ class ScheduleViewModel(
             episodeId = episode.id,
             streamUrl = matchedEntry?.url.orEmpty(),
             requestHeaders = matchedEntry?.headers.orEmpty(),
-            episodeName = episode.nameCn.ifBlank { episode.name },
+            episodeName = episode.primaryName,
             subjectName = subjectName,
             episodeSort = episode.episodeNumber,
             episodeType = episode.type,
@@ -650,17 +650,7 @@ class ScheduleViewModel(
             (-6..6).mapIndexed { index, offset ->
                 val date = today.plusDays(offset.toLong())
                 val weekday = date.dayOfWeek.value
-                val weekdayLabel =
-                    when (weekday) {
-                        1 -> "周一"
-                        2 -> "周二"
-                        3 -> "周三"
-                        4 -> "周四"
-                        5 -> "周五"
-                        6 -> "周六"
-                        7 -> "周日"
-                        else -> ""
-                    }
+                val weekdayLabel = TimeUtils.weekdayCnLabel(weekday)
                 WeekdayDateItem(
                     weekday = weekday,
                     weekdayLabel = weekdayLabel,

@@ -5,7 +5,8 @@ import com.infinitezerone.minibgm.core.database.entity.AirEventEntity
 import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 
 /**
- * 判定一条 `bgm_data` 来源的条目是否已成"僵尸"：本周及未来都不会再有任何播出事件，该从时刻表剔除。
+ * 判定一条 `bgm_data` 来源的条目是否已过期、可从时刻表清理（stale prunable）：
+ * 本周及未来都不会再有任何播出事件，该从时刻表剔除。
  * 非 `bgm_data` 来源（如 AniList 名单）一律不判，直接返回 false。
  *
  * 两支判据：**有事件**时看是否已播完全部集数、或总放送周期已过；**无事件**时看距最后事件／开播日
@@ -15,7 +16,7 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
  * 实体、事件与当前时刻，抽出来才能逐分支钉住。留在类里当私有成员时行覆盖率只有 51.9%，
  * 在 CRAP 门禁（阈值 30，CC=26）下是 DANGER。
  */
-internal fun isZombieBgmDataSchedule(
+internal fun isStalePrunableSchedule(
     entity: AirScheduleEntity,
     events: List<AirEventEntity>,
     nowMillis: Long,
@@ -30,7 +31,7 @@ internal fun isZombieBgmDataSchedule(
             }
         if (hasActiveOrFutureEvent) return false
 
-        // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为僵尸条目
+        // 没有本周或未来事件：仅当确已播完全部集数或总放送周期已结束时才视为过期条目
         if (entity.totalEpisodes == 1) return true
         if (entity.totalEpisodes > 1) {
             if (events.size >= entity.totalEpisodes) return true

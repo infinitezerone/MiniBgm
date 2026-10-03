@@ -287,7 +287,7 @@ fun ScheduleTimelineSingleCard(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
-    val displayName = schedule.titleCn.ifBlank { schedule.title }
+    val displayName = schedule.displayName
     val score = schedule.ratingScore
 
     Card(

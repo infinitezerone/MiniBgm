@@ -50,6 +50,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -58,8 +59,6 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.assistant.components.PendingActionCard
 import com.infinitezerone.minibgm.feature.assistant.components.PlayableSourcesCard
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 internal val PROMPT_SUGGESTIONS =
     listOf(
@@ -82,7 +81,6 @@ internal fun SessionSwitcherSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
-    val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
     var renamingSession by remember { mutableStateOf<AssistantSession?>(null) }
     var renameText by remember { mutableStateOf("") }
     var deletingSession by remember { mutableStateOf<AssistantSession?>(null) }
@@ -158,7 +156,7 @@ internal fun SessionSwitcherSheet(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = dateFormat.format(java.util.Date(session.updatedAt)),
+                            text = TimeUtils.formatShortDateTimeEpochMillis(session.updatedAt),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

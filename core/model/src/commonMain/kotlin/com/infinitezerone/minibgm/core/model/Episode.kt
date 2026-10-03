@@ -51,6 +51,10 @@ data class Episode(
                 "${EpisodeGroup.fromType(type).label} ${sort.toInt()}"
             }
 
+    /** 分集主显示名：中文名优先，空缺回退原日文名（不再追加「第 N 话」兜底） */
+    val primaryName: String
+        get() = nameCn.ifBlank { name }
+
     val displayTitle: String
         get() = nameCn.ifBlank { name.ifBlank { "第 $formattedNumber 话" } }
 }

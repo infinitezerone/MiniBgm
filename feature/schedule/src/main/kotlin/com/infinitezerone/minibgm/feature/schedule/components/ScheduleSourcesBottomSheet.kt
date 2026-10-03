@@ -61,7 +61,7 @@ fun ScheduleSourcesBottomSheet(
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
-    val displayName = schedule.titleCn.ifBlank { schedule.title }
+    val displayName = schedule.displayName
 
     val bilibiliTarget =
         remember(displayName) {

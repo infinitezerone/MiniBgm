@@ -62,7 +62,7 @@ object ScheduleWidgetPlanner {
                 todaySchedules.map { schedule ->
                     buildEntry(
                         subjectId = schedule.bgmId,
-                        title = schedule.titleCn.ifBlank { schedule.title },
+                        title = schedule.displayName,
                         episode = schedule.nextEpisodeNumber,
                         airKind = schedule.nextEpisodeKind,
                         isTracked = false,
