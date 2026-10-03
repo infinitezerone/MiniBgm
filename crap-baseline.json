@@ -74,11 +74,6 @@
       "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
       "method": "syncAirEvents",
       "reason": "AniList weekly airing calendar sync with complex date window aggregation"
-    },
-    {
-      "class": "com/infinitezerone/minibgm/core/data/repository/AuthRepositoryImpl",
-      "method": "startInAppWebSession",
-      "reason": "In-app WebView session initialization with loopback proxy coordination"
     }
   ]
 }
