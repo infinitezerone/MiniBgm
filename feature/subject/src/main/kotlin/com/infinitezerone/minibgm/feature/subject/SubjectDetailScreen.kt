@@ -187,8 +187,14 @@ fun SubjectDetailScreen(
             }
         }
     val isEntering = isNavEntering()
+    var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(isEntering) {
+        if (!isEntering) {
+            hasEnteredTransitionFinished = true
+        }
+    }
     val hasPreview = initialName.isNotBlank() || initialCoverUrl.isNotBlank()
-    val isTransitionStabilizing = isEntering && hasPreview
+    val isTransitionStabilizing = isEntering && !hasEnteredTransitionFinished && hasPreview
 
     val previewSubject =
         if (hasPreview) {
@@ -310,7 +316,7 @@ fun SubjectDetailScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface),
     ) {
-        if (!isEntering) {
+        if (hasEnteredTransitionFinished || !isEntering) {
             AmbientBlurBackdrop(
                 imageUrl = displaySubject?.images?.bestImage,
                 modifier =
