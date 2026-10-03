@@ -1,7 +1,9 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeGroup
+import com.infinitezerone.minibgm.feature.subject.components.buildEpisodesProgressLabel
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeFutureAir
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
@@ -93,5 +95,125 @@ class EpisodeGroupTest {
         assertEquals("6.5", 6.5f.toEpisodeLabel())
         assertEquals("1", 0f.toEpisodeLabel())
         assertEquals("1", (-1f).toEpisodeLabel())
+    }
+
+    @Test
+    fun buildEpisodesProgressLabel_formatsCorrectlyForAllCases() {
+        // Anime 本篇已知总集数
+        assertEquals(
+            "已看 3 / 全 12 话",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 12,
+                watchedEpisodes = 3,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.MAIN,
+            ),
+        )
+        assertEquals(
+            "全 12 话",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 12,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.MAIN,
+            ),
+        )
+
+        // 音乐 / 书籍 / 游戏类型
+        assertEquals(
+            "已听 2 / 全 10 首",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 10,
+                watchedEpisodes = 2,
+                subjectType = SubjectType.MUSIC,
+            ),
+        )
+        assertEquals(
+            "已读 5 / 全 50 话",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 50,
+                watchedEpisodes = 5,
+                subjectType = SubjectType.BOOK,
+            ),
+        )
+        assertEquals(
+            "已过 1 / 全 8 关",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 8,
+                watchedEpisodes = 1,
+                subjectType = SubjectType.GAME,
+            ),
+        )
+
+        // 未定总集数且分页中（柯南等长篇连载）
+        assertEquals(
+            "已看 50 话 (更新中)",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 0,
+                watchedEpisodes = 50,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.MAIN,
+                hasMoreEpisodes = true,
+            ),
+        )
+        assertEquals(
+            "连载中",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 0,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.MAIN,
+                hasMoreEpisodes = true,
+            ),
+        )
+
+        // 特别篇 (SP)
+        assertEquals(
+            "已看 1 / 共 3 篇",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 3,
+                watchedEpisodes = 1,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.SP,
+            ),
+        )
+        assertEquals(
+            "共 3 篇",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 3,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.SP,
+            ),
+        )
+        assertEquals(
+            "",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 0,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.SP,
+            ),
+        )
+
+        // OP/ED 与其他
+        assertEquals(
+            "共 4 首",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 4,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.OP_ED,
+            ),
+        )
+        assertEquals(
+            "共 2 项",
+            buildEpisodesProgressLabel(
+                totalEpisodes = 2,
+                watchedEpisodes = 0,
+                subjectType = SubjectType.ANIME,
+                group = EpisodeGroup.OTHER,
+            ),
+        )
     }
 }

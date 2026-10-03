@@ -71,6 +71,8 @@ fun EpisodesSectionHeader(
     onToggleSort: (() -> Unit)? = null,
     nextUpEpisodeSort: Float? = null,
     onJumpToNextUp: (() -> Unit)? = null,
+    group: EpisodeGroup = EpisodeGroup.MAIN,
+    hasMoreEpisodes: Boolean = false,
 ) {
     val headerTitle =
         when (subjectType) {
@@ -81,12 +83,13 @@ fun EpisodesSectionHeader(
         }
 
     val progressLabel =
-        when (subjectType) {
-            SubjectType.MUSIC -> "已听 $watchedEpisodes / 全 $totalEpisodes 首"
-            SubjectType.BOOK -> "已读 $watchedEpisodes / 全 $totalEpisodes 话"
-            SubjectType.GAME -> "已过 $watchedEpisodes / 全 $totalEpisodes 关"
-            SubjectType.ANIME, SubjectType.REAL -> "已看 $watchedEpisodes / 全 $totalEpisodes 话"
-        }
+        buildEpisodesProgressLabel(
+            totalEpisodes = totalEpisodes,
+            watchedEpisodes = watchedEpisodes,
+            subjectType = subjectType,
+            group = group,
+            hasMoreEpisodes = hasMoreEpisodes,
+        )
 
     val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
     val hasPlaybackEntry = isEpisodeLike && (onPlayNext != null || onOpenSources != null)
@@ -111,7 +114,7 @@ fun EpisodesSectionHeader(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
-                if (totalEpisodes > 0) {
+                if (progressLabel.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -955,4 +958,61 @@ fun Float.toEpisodeLabel(): String {
     if (this <= 0f) return "1"
     val whole = toInt()
     return if (this == whole.toFloat()) whole.toString() else toString()
+}
+
+/** 辅助方法：生成分集列表进度徽章文本 */
+fun buildEpisodesProgressLabel(
+    totalEpisodes: Int,
+    watchedEpisodes: Int,
+    subjectType: SubjectType,
+    group: EpisodeGroup = EpisodeGroup.MAIN,
+    hasMoreEpisodes: Boolean = false,
+): String {
+    val unit =
+        when (subjectType) {
+            SubjectType.MUSIC -> "首"
+            SubjectType.BOOK -> "话"
+            SubjectType.GAME -> "关"
+            SubjectType.ANIME, SubjectType.REAL -> "话"
+        }
+    val verb =
+        when (subjectType) {
+            SubjectType.MUSIC -> "已听"
+            SubjectType.BOOK -> "已读"
+            SubjectType.GAME -> "已过"
+            SubjectType.ANIME, SubjectType.REAL -> "已看"
+        }
+
+    return when {
+        group == EpisodeGroup.SP ->
+            if (totalEpisodes <= 0) {
+                ""
+            } else if (watchedEpisodes > 0) {
+                "已看 $watchedEpisodes / 共 $totalEpisodes 篇"
+            } else {
+                "共 $totalEpisodes 篇"
+            }
+
+        group == EpisodeGroup.OP_ED ->
+            if (totalEpisodes <= 0) "" else "共 $totalEpisodes 首"
+
+        group == EpisodeGroup.OTHER ->
+            if (totalEpisodes <= 0) "" else "共 $totalEpisodes 项"
+
+        totalEpisodes > 0 ->
+            if (watchedEpisodes > 0) {
+                "$verb $watchedEpisodes / 全 $totalEpisodes $unit"
+            } else {
+                "全 $totalEpisodes $unit"
+            }
+
+        hasMoreEpisodes ->
+            if (watchedEpisodes > 0) "$verb $watchedEpisodes $unit (更新中)" else "连载中"
+
+        watchedEpisodes > 0 ->
+            "$verb $watchedEpisodes $unit"
+
+        else ->
+            ""
+    }
 }

@@ -272,9 +272,16 @@ internal fun SubjectDetailContent(
                             isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
                         }
 
+                    val effectiveTotalEpisodes =
+                        if (activeGroup == EpisodeGroup.MAIN) {
+                            if (totalEpisodes > 0) maxOf(totalEpisodes, currentEpisodes.size) else 0
+                        } else {
+                            currentEpisodes.size
+                        }
+
                     item(key = "episodes_header") {
                         EpisodesSectionHeader(
-                            totalEpisodes = currentEpisodes.size,
+                            totalEpisodes = effectiveTotalEpisodes,
                             watchedEpisodes = watchedInGroup,
                             subjectType = subjectType,
                             isGridView = isGridView,
@@ -289,6 +296,8 @@ internal fun SubjectDetailContent(
                             },
                             onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
                             onOpenSources = onOpenSources,
+                            group = activeGroup,
+                            hasMoreEpisodes = hasMoreEpisodes,
                         )
                     }
 
