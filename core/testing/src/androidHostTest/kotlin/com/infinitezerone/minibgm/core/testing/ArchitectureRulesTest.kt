@@ -306,14 +306,12 @@ class ArchitectureRulesTest {
         // - :core:network -> BgmHttpClient.jsonConfig（全仓库默认家）
         // - :core:ai      -> aiJson（LLM 协议需要 explicitNulls = false）
         // - :core:datastore -> UserPreferencesSerializer（持久化语义独立）
-        // - :feature:user -> PlaybackRulesViewModel（feature 看不到 jsonConfig，红线 2）
         // 测试源集豁免（测试本就该能构造隔离/异构配置）。
         val whitelist =
             listOf(
                 "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BgmHttpClient.kt",
                 "core/ai/src/commonMain/kotlin/com/infinitezerone/minibgm/core/ai/AiJson.kt",
                 "core/datastore/src/androidMain/kotlin/com/infinitezerone/minibgm/core/datastore/UserPreferencesSerializer.kt",
-                "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/PlaybackRulesViewModel.kt",
             )
         val pattern = Regex("""\bJson\s*\{""")
         val violations = mutableListOf<String>()

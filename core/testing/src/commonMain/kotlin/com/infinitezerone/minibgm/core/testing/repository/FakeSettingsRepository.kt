@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.RuleImportSummary
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -181,6 +182,25 @@ class FakeSettingsRepository(
     override suspend fun importPlaybackRules(rules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule>) {
         val existingIds = playbackRulesState.value.map { it.id }.toSet()
         playbackRulesState.value = playbackRulesState.value + rules.filterNot { it.id in existingIds }
+    }
+
+    override suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary> {
+        // 与 SettingsRepository 真实实现同样的解析/校验语义（含拒收文案）：
+        // 替身一旦和真实实现漂移，钉住替身行为的 ViewModel 测试就成了假绿。
+        val importedList =
+            runCatching {
+                if (jsonText.startsWith("[")) {
+                    Json.Default.decodeFromString<List<PlaybackSourceRule>>(jsonText)
+                } else {
+                    listOf(Json.Default.decodeFromString<PlaybackSourceRule>(jsonText))
+                }
+            }.getOrElse {
+                return AppResult.Error(IllegalStateException("规则解析失败，请检查 JSON 格式"))
+            }
+        if (importedList.isEmpty()) return AppResult.Success(RuleImportSummary(acceptedCount = 0, rejectedCount = 0))
+        val (accepted, rejected) = importedList.partition { it.isImportable }
+        if (accepted.isNotEmpty()) importPlaybackRules(accepted)
+        return AppResult.Success(RuleImportSummary(acceptedCount = accepted.size, rejectedCount = rejected.size))
     }
 
     private val playlistsState = MutableStateFlow<List<PlaybackPlaylist>>(emptyList())

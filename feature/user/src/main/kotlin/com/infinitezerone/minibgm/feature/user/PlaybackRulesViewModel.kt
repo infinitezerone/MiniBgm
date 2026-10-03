@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -90,15 +89,6 @@ class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
 ) : ViewModel() {
-    // feature 层看不到 :core:network 的 jsonConfig（红线 2 禁止越级依赖），这里是
-    // feature 作用域唯一的 Json 实例（ArchitectureRulesTest 白名单登记处），仅用于
-    // 解析用户粘贴的规则 JSON；如需新增用例请复用本实例而不是再建
-    private val json =
-        Json {
-            ignoreUnknownKeys = true
-            isLenient = true
-        }
-
     private val _siteProbe = MutableStateFlow(SiteProbeUiState())
 
     /** 站点探测状态；与主列表相互独立，探测过程不该让规则列表重建 */
@@ -432,6 +422,7 @@ class PlaybackRulesViewModel(
         }
     }
 
+    /** 导入文本来自 SAF 文件或粘贴框，解析/校验/合并由 SettingsRepository 负责 */
     fun importRulesFromJson(jsonStr: String) {
         val trimmed = jsonStr.trim()
         if (trimmed.isBlank()) {
@@ -439,30 +430,23 @@ class PlaybackRulesViewModel(
             return
         }
         viewModelScope.launch {
-            runCatching {
-                // 支持单条规则或规则数组解析
-                val importedList =
-                    if (trimmed.startsWith("[")) {
-                        json.decodeFromString<List<PlaybackSourceRule>>(trimmed)
-                    } else {
-                        listOf(json.decodeFromString<PlaybackSourceRule>(trimmed))
-                    }
-                if (importedList.isEmpty()) {
-                    sendSnackbar("未解析到有效规则")
-                } else {
-                    // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探；
-                    // minClientApi 超出本客户端能力级别的规则同理——宁拒收，不跑错语义
-                    val (accepted, rejected) = importedList.partition { it.isImportable }
-                    if (accepted.isEmpty()) {
-                        sendSnackbar("规则组合无效：专用解析器只能配在取源(SOURCE)规则上")
-                    } else {
-                        settingsRepository.importPlaybackRules(accepted)
-                        val dropped = if (rejected.isEmpty()) "" else "，已跳过 ${rejected.size} 条无效或超出客户端版本的规则"
-                        sendSnackbar("成功导入 ${accepted.size} 条规则$dropped")
+            when (val result = settingsRepository.importRulesFromJson(trimmed)) {
+                is AppResult.Success -> {
+                    val summary = result.data
+                    when {
+                        // 两条拒收路径由仓库层经计数区分，文案与旧实现逐字一致
+                        summary.acceptedCount == 0 && summary.rejectedCount == 0 -> sendSnackbar("未解析到有效规则")
+                        summary.acceptedCount == 0 ->
+                            sendSnackbar("规则组合无效：专用解析器只能配在取源(SOURCE)规则上")
+                        else -> {
+                            val dropped =
+                                if (summary.rejectedCount == 0) "" else "，已跳过 ${summary.rejectedCount} 条无效或超出客户端版本的规则"
+                            sendSnackbar("成功导入 ${summary.acceptedCount} 条规则$dropped")
+                        }
                     }
                 }
-            }.onFailure {
-                sendSnackbar("规则解析失败，请检查 JSON 格式")
+                is AppResult.Error -> sendSnackbar(result.message)
+                AppResult.Loading -> Unit
             }
         }
     }

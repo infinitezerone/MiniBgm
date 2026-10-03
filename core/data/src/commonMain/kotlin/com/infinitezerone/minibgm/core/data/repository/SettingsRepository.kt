@@ -52,6 +52,16 @@ data class UserSettings(
     val showRestrictedContent: Boolean = false,
 )
 
+/**
+ * 规则 JSON 导入结果：acceptedCount 为实际落库条数，rejectedCount 为因 kind/parserType
+ * 无执行路径或 minClientApi 超出客户端能力级别而被拒的条数。
+ * 两者都为 0 表示输入没有解析出任何规则。
+ */
+data class RuleImportSummary(
+    val acceptedCount: Int,
+    val rejectedCount: Int,
+)
+
 interface SettingsRepository {
     val settings: Flow<UserSettings>
     val aiConfig: Flow<AiConfig>
@@ -130,6 +140,15 @@ interface SettingsRepository {
     )
 
     suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>)
+
+    /**
+     * 解析并导入用户粘贴的播放源规则 JSON（支持单条对象或数组，解析/校验/落库都在仓库层完成）。
+     *
+     * 只收下 [PlaybackSourceRule.isImportable] 的规则（kind 与 parserType 有执行路径、
+     * minClientApi 未超客户端能力级别），被拒条数经 [RuleImportSummary.rejectedCount] 报给调用方。
+     * JSON 解析失败返回 [AppResult.Error]，文案固定为「规则解析失败，请检查 JSON 格式」。
+     */
+    suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary>
 
     /** 用户自备播放列表（解码失败按空处理；损坏的原始数据只读不写回） */
     val playlists: Flow<List<PlaybackPlaylist>>
@@ -404,6 +423,35 @@ class SettingsRepositoryImpl(
             val newRules = rules.filterNot { it.id in existingIds }
             val updated = current + newRules
             userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
+        }
+
+    override suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary> =
+        try {
+            // 支持单条规则或规则数组解析
+            val importedList =
+                if (jsonText.startsWith("[")) {
+                    json.decodeFromString<List<PlaybackSourceRule>>(jsonText)
+                } else {
+                    listOf(json.decodeFromString<PlaybackSourceRule>(jsonText))
+                }
+            when {
+                importedList.isEmpty() -> AppResult.Success(RuleImportSummary(acceptedCount = 0, rejectedCount = 0))
+                // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探；
+                // minClientApi 超出本客户端能力级别的规则同理——宁拒收，不跑错语义
+                else -> {
+                    val (accepted, rejected) = importedList.partition { it.isImportable }
+                    if (accepted.isNotEmpty()) importPlaybackRules(accepted)
+                    AppResult.Success(
+                        RuleImportSummary(acceptedCount = accepted.size, rejectedCount = rejected.size),
+                    )
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 不拼 it.message：反序列化异常的原文是英文（如 "Unexpected JSON token at offset 12"），
+            // 对用户没有意义。这里真正有用的是"检查 JSON 格式"的行动提示。
+            AppResult.Error(IllegalStateException("规则解析失败，请检查 JSON 格式"))
         }
 
     private val playlistsWriteMutex = Mutex()

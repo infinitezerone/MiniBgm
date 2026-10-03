@@ -25,7 +25,7 @@ fun buildEpisodePlayerRoute(
         episodeId = episode.id,
         streamUrl = matchingEntry?.url.orEmpty(),
         requestHeaders = matchingEntry?.headers.orEmpty(),
-        episodeName = episode.nameCn.ifBlank { episode.name },
+        episodeName = episode.primaryName,
         subjectName = subjectName,
         episodeSort = episode.episodeNumber,
         episodeType = episode.type,

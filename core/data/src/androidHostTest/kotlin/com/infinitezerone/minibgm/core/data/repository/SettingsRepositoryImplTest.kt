@@ -73,6 +73,41 @@ class SettingsRepositoryImplTest {
         }
 
     @Test
+    fun importRulesFromJson_validArray_parsesAndPersistsOnlyImportableRules() =
+        runTest {
+            val repo =
+                SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), FakeCommunitySubscriptionService())
+
+            val validJson =
+                """
+                [
+                    {"id": "imported-1", "name": "BimiBimi", "urlTemplate": "https://bimibimi.net/search/{title}", "isEnabled": true}
+                ]
+                """.trimIndent()
+            val result = repo.importRulesFromJson(validJson)
+
+            val summary = assertIs<AppResult.Success<RuleImportSummary>>(result).data
+            assertEquals(1, summary.acceptedCount)
+            assertEquals(0, summary.rejectedCount)
+            val rules = repo.playbackRules.first()
+            assertEquals(1, rules.size)
+            assertEquals("BimiBimi", rules.single().name)
+        }
+
+    @Test
+    fun importRulesFromJson_malformedJson_returnsFixedParseErrorAndPersistsNothing() =
+        runTest {
+            val repo =
+                SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), FakeCommunitySubscriptionService())
+
+            val result = repo.importRulesFromJson("invalid json string {}")
+
+            // 文案与旧 ViewModel 实现逐字一致，且不携带英文反序列化异常原文
+            assertEquals("规则解析失败，请检查 JSON 格式", assertIs<AppResult.Error>(result).message)
+            assertTrue(repo.playbackRules.first().isEmpty())
+        }
+
+    @Test
     fun aiConfigProfiles_roundTrip_saveActivateDelete() =
         runTest {
             val fakeService = FakeCommunitySubscriptionService()
