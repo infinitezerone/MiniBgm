@@ -13,18 +13,25 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.WebViewResolveRepository
 import com.infinitezerone.minibgm.core.model.ActionCardStatus
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.AssistantChatMessage
+import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.model.ChatMessageRole
 import com.infinitezerone.minibgm.core.model.PendingActionCard
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -39,6 +46,58 @@ private const val NEW_SESSION_TITLE = "新会话"
 /** 会话标题取首条用户消息的前 N 个字符 */
 private const val SESSION_TITLE_MAX_LENGTH = 20
 
+/** 配置侧投影的中间态（私有于 [AssistantViewModel]） */
+private data class AiSettingsData(
+    val aiConfig: AiConfig,
+    val aiProfiles: List<AiConfigProfile>,
+    val activeProfileId: String,
+)
+
+/** 运行时侧投影的中间态：工具活动 + 播放失败归因（私有于 [AssistantViewModel]） */
+private data class AssistantRuntimeData(
+    val toolActivity: String?,
+    val activityEvents: List<String>,
+    val failedSources: Map<String, String>,
+)
+
+/**
+ * 会话侧投影的中间态（私有于 [AssistantViewModel]）。
+ *
+ * 无会话仓库（[AssistantViewModel.assistantRepository] == null）时三个字段全为 null 哨兵：
+ * 合并时跳过对应字段——消息与激活会话由命令层独管，投影不得覆盖命令层本地追加的消息。
+ */
+private data class AssistantConversationData(
+    val sessions: List<AssistantSession>?,
+    val messages: List<AssistantMessage>?,
+    val activeSessionId: String?,
+)
+
+/** 单点回读收集器的仓库快照投影（私有于 [AssistantViewModel]） */
+private data class RepoSnapshot(
+    val settings: AiSettingsData,
+    val runtime: AssistantRuntimeData,
+    val conversation: AssistantConversationData,
+)
+
+/**
+ * AI 助手会话 ViewModel —— **数据侧单点投影 + 显式命令层**（响应式 UDF 规范见
+ * [com.infinitezerone.minibgm.feature.search.SeasonalGuideViewModel] 顶部五条；迁移形态同
+ * [com.infinitezerone.minibgm.feature.subject.SubjectDetailViewModel] 的形态 b）。
+ *
+ * 1. 对外只读 [uiState]；仓库/共享流（aiConfig/aiProfiles/activeProfileId/AiToolActivity/
+ *    failedSources/sessions/messages）收敛为 [RepoSnapshot] 单点投影，经 init 里**唯一**的
+ *    `_uiState.update` 收集点回读——替代旧实现 6 路离散 collect（messages 原为
+ *    activeSessionId.collectLatest 嵌套收集），各字段合并规则与旧实现逐点等价。
+ * 2. messages 改为 `flatMapLatest(activeSessionId)` 换挡（与 getMessages(sessionId) 同构），
+ *    切会话时旧收集整条取消，新会话消息不可能被旧会话流覆盖。
+ * 3. 会话自愈（空列表自动建首个会话；激活会话被删时切到最近一个）保留为投影上游 sessions 流的
+ *    onEach：先写 [AssistantViewModel.activeSessionId] 再放行 sessions，投影读到的激活 id
+ *    恒为自愈后的值；onEach 顺序处理，不存在并发双建会话。
+ * 4. 命令层保留显式实现（规范第 5 条）：sendMessage 本地追加 + 异步 saveMessage + 仓库流回读、
+ *    stopGeneration、pendingAction 卡片状态机（PENDING→EXECUTING→SUCCESS/FAILED，成功回写
+ *    持久层）、deepResolve、会话增删改名切换——一行不改语义。
+ * 5. 一次性事件走 Channel(BUFFERED) + receiveAsFlow()，与状态流隔离。
+ */
 class AssistantViewModel(
     private val agentService: BgmAiAgentService,
     private val settingsRepository: SettingsRepository,
@@ -61,63 +120,77 @@ class AssistantViewModel(
     private val activeSessionId = MutableStateFlow("")
 
     init {
+        // 数据侧单点回读：全部仓库/共享流收敛为 RepoSnapshot 单点投影，唯一的 _uiState 写入点。
+        // 合并规则与旧逐路 collect 逐点等价：会话侧为 null 哨兵（无仓库）时跳过，不覆盖命令层本地消息。
         viewModelScope.launch {
-            settingsRepository.aiConfig.collect { config ->
-                _uiState.update { it.copy(aiConfig = config) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.aiConfigProfiles.collect { profiles ->
-                _uiState.update { it.copy(aiProfiles = profiles) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.activeAiProfileId.collect { profileId ->
-                _uiState.update { it.copy(activeProfileId = profileId) }
-            }
-        }
-        viewModelScope.launch {
-            AiToolActivity.events.collect { activityEvents ->
-                _uiState.update { state ->
-                    state.copy(
+            combine(
+                combine(
+                    settingsRepository.aiConfig,
+                    settingsRepository.aiConfigProfiles,
+                    settingsRepository.activeAiProfileId,
+                ) { config, profiles, profileId ->
+                    AiSettingsData(config, profiles, profileId)
+                },
+                combine(
+                    AiToolActivity.events,
+                    failureStore?.recentFailures ?: flowOf(emptyMap()),
+                ) { activityEvents, failures ->
+                    AssistantRuntimeData(
                         toolActivity = activityEvents.lastOrNull()?.text,
                         activityEvents = activityEvents.map { it.text },
+                        failedSources = failures,
+                    )
+                },
+                conversationData(),
+            ) { settings, runtime, conversation ->
+                RepoSnapshot(settings, runtime, conversation)
+            }.collect { snapshot ->
+                _uiState.update { state ->
+                    state.copy(
+                        aiConfig = snapshot.settings.aiConfig,
+                        aiProfiles = snapshot.settings.aiProfiles,
+                        activeProfileId = snapshot.settings.activeProfileId,
+                        toolActivity = snapshot.runtime.toolActivity,
+                        activityEvents = snapshot.runtime.activityEvents,
+                        failedSources = snapshot.runtime.failedSources,
+                        sessions = snapshot.conversation.sessions ?: state.sessions,
+                        messages = snapshot.conversation.messages ?: state.messages,
+                        activeSessionId = snapshot.conversation.activeSessionId ?: state.activeSessionId,
                     )
                 }
             }
         }
-        failureStore?.recentFailures?.let { flow ->
-            viewModelScope.launch {
-                flow.collect { failures ->
-                    _uiState.update { it.copy(failedSources = failures) }
+    }
+
+    /**
+     * 会话侧投影：sessions 流（上游 onEach 自愈激活 id）+ 消息流经 `flatMapLatest(activeSessionId)`
+     * 换挡，两流 combine 出会话快照。无仓库时返回 null 哨兵（只发一次，不覆盖任何字段）。
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun conversationData(): Flow<AssistantConversationData> {
+        val repo = assistantRepository ?: return flowOf(AssistantConversationData(null, null, null))
+        // 会话列表驱动激活 id：空列表自动建首个会话；激活会话被删时自愈到最近一个
+        val sessions =
+            repo.getSessions().onEach { sessions ->
+                val current = sessions.firstOrNull { it.id == activeSessionId.value }
+                if (current == null) {
+                    val fallbackId =
+                        sessions.firstOrNull()?.id
+                            ?: repo.createSession(NEW_SESSION_TITLE)
+                    activeSessionId.value = fallbackId
                 }
             }
-        }
-        assistantRepository?.let { repo ->
-            viewModelScope.launch {
-                // 会话列表驱动激活 id：空列表自动建首个会话；激活会话被删时自愈到最近一个
-                repo.getSessions().collectLatest { sessions ->
-                    _uiState.update { it.copy(sessions = sessions) }
-                    val current = sessions.firstOrNull { it.id == activeSessionId.value }
-                    if (current == null) {
-                        val fallbackId =
-                            sessions.firstOrNull()?.id
-                                ?: repo.createSession(NEW_SESSION_TITLE)
-                        activeSessionId.value = fallbackId
+        val messages =
+            activeSessionId
+                .flatMapLatest { sessionId ->
+                    if (sessionId.isBlank()) {
+                        flowOf(emptyList<AssistantChatMessage>())
+                    } else {
+                        repo.getMessages(sessionId)
                     }
-                    _uiState.update { it.copy(activeSessionId = activeSessionId.value) }
-                }
-            }
-            viewModelScope.launch {
-                activeSessionId.collectLatest { sessionId ->
-                    if (sessionId.isBlank()) return@collectLatest
-                    repo.getMessages(sessionId).collect { domainMessages ->
-                        _uiState.update { state ->
-                            state.copy(messages = domainMessages.map { it.toUiModel() })
-                        }
-                    }
-                }
-            }
+                }.map { domainMessages -> domainMessages.map { it.toUiModel() } }
+        return combine(sessions, messages) { sessions, messages ->
+            AssistantConversationData(sessions, messages, activeSessionId.value)
         }
     }
 
@@ -583,7 +656,7 @@ class AssistantViewModel(
         viewModelScope.launch {
             val id = profileId ?: UUID.randomUUID().toString()
             settingsRepository.saveAiConfigProfile(
-                com.infinitezerone.minibgm.core.model.AiConfigProfile(
+                AiConfigProfile(
                     id = id,
                     name = trimmedName,
                     config = config,
