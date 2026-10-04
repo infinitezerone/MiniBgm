@@ -104,4 +104,12 @@ class BgmOverlayTest {
         assertTrue(scope.handlers.containsKey(ConfirmDialogAction::class))
         assertFalse(scope.handlers.containsKey(OverlayRequest::class))
     }
+
+    @Test
+    fun unregisteredRequest_handlerNotFoundInScope() {
+        val scope = OverlayProviderScope()
+        scope.confirmDialog()
+
+        assertFalse(scope.handlers.containsKey(CustomPromptRequest::class))
+    }
 }

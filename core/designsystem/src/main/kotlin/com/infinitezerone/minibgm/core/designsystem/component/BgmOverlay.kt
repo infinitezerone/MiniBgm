@@ -176,8 +176,13 @@ fun BgmOverlayHost(
     val current = hostState.currentEntry
 
     if (current != null) {
-        val renderer = scope.handlers[current.request::class]
-        renderer?.invoke(current.request) { result ->
+        val renderer =
+            scope.handlers[current.request::class]
+                ?: error(
+                    "未注册的 Overlay 渲染器: [${current.request::class.qualifiedName}]！" +
+                        "请在当前页面的 BgmOverlayHost { ... } 中使用 overlay<${current.request::class.simpleName}, ...> { ... } 进行声明。",
+                )
+        renderer.invoke(current.request) { result ->
             @Suppress("UNCHECKED_CAST")
             (current as OverlayHostState.ActiveEntry<Any?>).respond(result)
         }
