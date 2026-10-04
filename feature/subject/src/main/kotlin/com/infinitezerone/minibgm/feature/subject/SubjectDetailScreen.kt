@@ -49,8 +49,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientBlurBackdrop
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
@@ -126,58 +130,56 @@ fun SubjectDetailScreen(
     val haptic = LocalHapticFeedback.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
-    var batchMarkTargetEpisode by remember { mutableStateOf<Episode?>(null) }
     var selectedEpisodeForQuickAction by remember { mutableStateOf<Episode?>(null) }
     var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
     var showAiringReminderPrompt by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        viewModel.uiEvents.collect { event ->
-            when (event) {
-                is SubjectDetailUiEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
-                is SubjectDetailUiEvent.OpenSourceSearch -> {
-                    onSourceSearch?.invoke(event.prefillPrompt)
-                }
-                is SubjectDetailUiEvent.EpisodeMarked -> {
-                    val epLabel =
-                        if (event.episodeType ==
-                            0
-                        ) {
-                            "第 ${event.epNumber} 话"
-                        } else {
-                            "${EpisodeGroup.fromType(event.episodeType).label} ${event.epNumber}"
-                        }
-                    val snackbarResult =
-                        snackbarHostState.showSnackbar(
-                            message = "已标记 $epLabel",
-                            actionLabel = "撤销",
-                            duration = SnackbarDuration.Short,
-                        )
-                    if (snackbarResult == SnackbarResult.ActionPerformed) {
-                        viewModel.undoMarkWatchedUpTo(
-                            previousEpStatus = event.previousEpStatus,
-                            previousType = event.previousType,
-                            undoneEpisodeIds = listOf(event.episodeId),
-                        )
+    ObserveAsEvents(viewModel.uiEvents) { event ->
+        when (event) {
+            is SubjectDetailUiEvent.ShowMessage -> {
+                snackbarHostState.showSnackbar(event.message)
+            }
+            is SubjectDetailUiEvent.OpenSourceSearch -> {
+                onSourceSearch?.invoke(event.prefillPrompt)
+            }
+            is SubjectDetailUiEvent.EpisodeMarked -> {
+                val epLabel =
+                    if (event.episodeType ==
+                        0
+                    ) {
+                        "第 ${event.epNumber} 话"
+                    } else {
+                        "${EpisodeGroup.fromType(event.episodeType).label} ${event.epNumber}"
                     }
+                val snackbarResult =
+                    snackbarHostState.showSnackbar(
+                        message = "已标记 $epLabel",
+                        actionLabel = "撤销",
+                        duration = SnackbarDuration.Short,
+                    )
+                if (snackbarResult == SnackbarResult.ActionPerformed) {
+                    viewModel.undoMarkWatchedUpTo(
+                        previousEpStatus = event.previousEpStatus,
+                        previousType = event.previousType,
+                        undoneEpisodeIds = listOf(event.episodeId),
+                    )
                 }
-                is SubjectDetailUiEvent.BatchMarked -> {
-                    val snackbarResult =
-                        snackbarHostState.showSnackbar(
-                            message = "已标记至第 ${event.targetEpNumber} 集",
-                            actionLabel = "撤销",
-                            duration = SnackbarDuration.Short,
-                        )
-                    if (snackbarResult == SnackbarResult.ActionPerformed) {
-                        viewModel.undoMarkWatchedUpTo(
-                            previousEpStatus = event.previousEpStatus,
-                            previousType = event.previousType,
-                            undoneEpisodeIds = event.episodeIds,
-                        )
-                    }
+            }
+            is SubjectDetailUiEvent.BatchMarked -> {
+                val snackbarResult =
+                    snackbarHostState.showSnackbar(
+                        message = "已标记至第 ${event.targetEpNumber} 集",
+                        actionLabel = "撤销",
+                        duration = SnackbarDuration.Short,
+                    )
+                if (snackbarResult == SnackbarResult.ActionPerformed) {
+                    viewModel.undoMarkWatchedUpTo(
+                        previousEpStatus = event.previousEpStatus,
+                        previousType = event.previousType,
+                        undoneEpisodeIds = event.episodeIds,
+                    )
                 }
             }
         }
@@ -242,15 +244,49 @@ fun SubjectDetailScreen(
         }
     val subjectType = displaySubject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
     var previewCharacter by remember { mutableStateOf<SubjectCharacter?>(null) }
-    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val handleStreamingUrl: (String) -> Unit = { url ->
         context.launchStreamingUrl(
             url = url,
             onAppNotInstalled = { appName, webUrl ->
-                appNotInstalledPrompt = appName to webUrl
+                coroutineScope.launch {
+                    val openInBrowser =
+                        overlayHostState.await(
+                            ConfirmDialogAction(
+                                title = "未安装 $appName 客户端",
+                                message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
+                                confirmText = "浏览器打开",
+                                dismissText = "取消",
+                            ),
+                        )
+                    if (openInBrowser) {
+                        context.launchWebUrl(webUrl)
+                    }
+                }
             },
         )
+    }
+
+    val handleBatchMark: (Episode) -> Unit = { episode ->
+        if (!uiState.isLoggedIn) {
+            viewModel.promptLogin()
+        } else {
+            coroutineScope.launch {
+                val targetEpNumber = episode.episodeInt
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = "看到此集？",
+                            message = "是否将第 1 集至第 $targetEpNumber 集全部标记为已看过？",
+                            confirmText = "确认",
+                            dismissText = "取消",
+                        ),
+                    )
+                if (confirmed) {
+                    viewModel.markWatchedUpTo(episode)
+                }
+            }
+        }
     }
 
     val handleLinkClick: (String) -> Unit = { url ->
@@ -541,13 +577,7 @@ fun SubjectDetailScreen(
                                     onTopicClick = onTopicClick,
                                     onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                     isTransitionStabilizing = isTransitionStabilizing,
-                                    onBatchMarkEpisode = { episode ->
-                                        if (!uiState.isLoggedIn) {
-                                            viewModel.promptLogin()
-                                        } else {
-                                            batchMarkTargetEpisode = episode
-                                        }
-                                    },
+                                    onBatchMarkEpisode = handleBatchMark,
                                     onPlayEpisode =
                                         if (onPlayClick != null) {
                                             { episode -> onPlayClick(viewModel.buildPlayerRoute(episode)) }
@@ -584,18 +614,6 @@ fun SubjectDetailScreen(
     }
 
     SubjectDetailOverlays(
-        batchMarkTargetEpisode = batchMarkTargetEpisode,
-        onDismissBatchMark = { batchMarkTargetEpisode = null },
-        onConfirmBatchMark = { episode ->
-            batchMarkTargetEpisode = null
-            viewModel.markWatchedUpTo(episode)
-        },
-        appNotInstalledPrompt = appNotInstalledPrompt,
-        onDismissAppNotInstalled = { appNotInstalledPrompt = null },
-        onOpenAppNotInstalledWebUrl = { webUrl ->
-            appNotInstalledPrompt = null
-            context.launchWebUrl(webUrl)
-        },
         showLoginPromptDialog = uiState.showLoginPromptDialog,
         onDismissLoginPrompt = viewModel::dismissLoginPrompt,
         onLoginClick = {
@@ -642,7 +660,7 @@ fun SubjectDetailScreen(
             selectedEpisodeForSources = episode
             showSourcesBottomSheet = true
         },
-        onBatchMarkRequest = { episode -> batchMarkTargetEpisode = episode },
+        onBatchMarkRequest = handleBatchMark,
         isLoggedIn = uiState.isLoggedIn,
         haptic = haptic,
         previewCharacter = previewCharacter,
@@ -691,4 +709,8 @@ fun SubjectDetailScreen(
         playlists = uiState.playlists,
         failedSourceReasons = uiState.failedSourceReasons,
     )
+
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
+    }
 }

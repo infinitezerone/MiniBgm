@@ -1,22 +1,12 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
+import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
-import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
@@ -33,17 +23,11 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 
 /**
- * 条目详情页的所有浮层与弹窗（快捷打卡、全集标记、登录提示、权限弹窗、详情抽屉与播放源抽屉）统一收敛组件。
+ * 条目详情页的所有浮层与抽屉（快捷打卡、登录提示、权限弹窗、详情抽屉与播放源抽屉）统一收敛组件。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SubjectDetailOverlays(
-    batchMarkTargetEpisode: Episode?,
-    onDismissBatchMark: () -> Unit,
-    onConfirmBatchMark: (Episode) -> Unit,
-    appNotInstalledPrompt: Pair<String, String>?,
-    onDismissAppNotInstalled: () -> Unit,
-    onOpenAppNotInstalledWebUrl: (String) -> Unit,
     showLoginPromptDialog: Boolean,
     onDismissLoginPrompt: () -> Unit,
     onLoginClick: () -> Unit,
@@ -92,86 +76,11 @@ internal fun SubjectDetailOverlays(
     playlists: List<PlaybackPlaylist>,
     failedSourceReasons: Map<String, String>,
 ) {
-    batchMarkTargetEpisode?.let { episode ->
-        val targetEpNumber = episode.episodeInt
-        AlertDialog(
-            onDismissRequest = onDismissBatchMark,
-            title = { Text("看到此集？") },
-            text = { Text("是否将第 1 集至第 $targetEpNumber 集全部标记为已看过？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onConfirmBatchMark(episode)
-                    },
-                ) {
-                    Text("确认")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissBatchMark) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
-    appNotInstalledPrompt?.let { (appName, webUrl) ->
-        AlertDialog(
-            onDismissRequest = onDismissAppNotInstalled,
-            title = { Text("未安装 $appName 客户端") },
-            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onOpenAppNotInstalledWebUrl(webUrl)
-                    },
-                ) {
-                    Text("浏览器打开")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissAppNotInstalled) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
     if (showLoginPromptDialog) {
-        AlertDialog(
-            onDismissRequest = onDismissLoginPrompt,
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.AccountCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp),
-                )
-            },
-            title = {
-                Text(
-                    text = "请先登录 Bangumi 账号",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            text = {
-                Text(
-                    text = "追番、收藏与章节打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            confirmButton = {
-                Button(onClick = onLoginClick) {
-                    Text("立即登录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissLoginPrompt) {
-                    Text("稍后再说")
-                }
-            },
+        BgmLoginPromptDialog(
+            description = "追番、收藏与章节打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+            onLogin = onLoginClick,
+            onDismiss = onDismissLoginPrompt,
         )
     }
 

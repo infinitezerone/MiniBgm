@@ -45,6 +45,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AirSchedule
@@ -119,8 +120,8 @@ fun ScheduleScreen(
     var loginBannerDismissed by rememberSaveable { mutableStateOf(false) }
 
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
-    LaunchedEffect(scrollToTop) {
-        scrollToTop?.collect {
+    if (scrollToTop != null) {
+        ObserveAsEvents(scrollToTop) {
             if (pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX) {
                 pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
             } else {
@@ -130,10 +131,8 @@ fun ScheduleScreen(
     }
 
     // 监听 ViewModel 提示消息（如快捷追番或标记已看反馈）
-    LaunchedEffect(Unit) {
-        viewModel.userMessage.collect { message ->
-            snackbarHostState.showSnackbar(message)
-        }
+    ObserveAsEvents(viewModel.userMessage) { message ->
+        snackbarHostState.showSnackbar(message)
     }
 
     // 滑动 Pager 时，双向同步选中的天索引

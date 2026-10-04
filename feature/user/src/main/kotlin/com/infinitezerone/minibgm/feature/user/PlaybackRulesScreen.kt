@@ -25,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +40,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -112,15 +112,13 @@ fun PlaybackRulesScreen(
             }
         }
 
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is PlaybackRulesUiEvent.ShowSnackbar -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
-                is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
-                    onAiSourceSearch(event.prompt)
-                }
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is PlaybackRulesUiEvent.ShowSnackbar -> {
+                snackbarHostState.showSnackbar(event.message)
+            }
+            is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
+                onAiSourceSearch(event.prompt)
             }
         }
     }

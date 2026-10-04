@@ -32,7 +32,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -45,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.TopicMainPostCard
@@ -77,11 +77,9 @@ fun TopicDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 表态结果与登录提示
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is TopicDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
-            }
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is TopicDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
         }
     }
 

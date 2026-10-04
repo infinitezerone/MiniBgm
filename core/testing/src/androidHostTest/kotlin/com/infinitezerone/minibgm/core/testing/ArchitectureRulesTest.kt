@@ -31,6 +31,7 @@ import kotlin.test.fail
  * 14. 现代时间规范：生产代码严禁 import java.util.Date / java.util.Calendar，统一使用 kotlinx.datetime.*
  * 15. 结构化并发规范：生产代码严禁使用 GlobalScope 裸协程，所有协程必须受控于明确生命周期作用域
  * 16. 面向接口契约：UI 源码（:feature:* 与 :app）严禁直接 import 底层实现类（*Impl），必须面向 Interface 编程
+ * 17. 一次性事件生命周期感知：feature UI 源码严禁直接对 ViewModel 一次性事件流调用裸 .collect，必须使用 :core:designsystem 的 ObserveAsEvents 绑定生命周期（STARTED）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -625,6 +626,39 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反面向接口契约（feature 与 app 源码严禁直接引入 *Impl 或底层服务实现类，必须通过 Interface 契约依赖）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun feature_screens_never_collect_viewmodel_events_without_observe_as_events() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+        val rawCollectPattern =
+            Regex(
+                """\b(viewModel|collectionsViewModel|[a-zA-Z0-9_]*ViewModel)\.(events|uiEvents|userMessage|userMessages|uiEffects)\.collect\b""",
+            )
+
+        featureDir
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                scanner.findMatches(rawCollectPattern).forEach { match ->
+                    violations.add(
+                        "$relPath:${match.lineNumber} 违规裸收集 ViewModel 一次性事件 -> ${match.lineContent.trim()}，必须使用 ObserveAsEvents 绑定生命周期（STARTED）",
+                    )
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反生命周期与一次性事件消费规范（ViewModel 一次性事件流必须使用 ObserveAsEvents 收集，确保后台挂起与前台恢复，杜绝静默吃事件与多栈穿透）：\n" +
                     violations.joinToString("\n"),
             )
         }

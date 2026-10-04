@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.components.SearchCategoryTabs
 import com.infinitezerone.minibgm.feature.search.components.SearchErrorState
@@ -53,12 +54,8 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) {
-        // 一次性提示走 Channel(BUFFERED) + receiveAsFlow（见 SearchViewModel.userMessage）：
-        // 发生一次即消费消失，与状态流物理隔离，无需回写清空
-        viewModel.userMessage.collect { msg ->
-            snackbarHostState.showSnackbar(msg)
-        }
+    ObserveAsEvents(viewModel.userMessage) { msg ->
+        snackbarHostState.showSnackbar(msg)
     }
 
     LaunchedEffect(initialQuery) {

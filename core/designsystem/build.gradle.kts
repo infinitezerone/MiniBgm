@@ -16,6 +16,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material3.adaptive)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(libs.coil.compose)

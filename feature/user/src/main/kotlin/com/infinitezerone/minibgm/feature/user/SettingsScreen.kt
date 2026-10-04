@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +54,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
@@ -90,6 +90,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
 
     val openWebUrl = { url: String ->
@@ -105,8 +106,6 @@ fun SettingsScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
-
-    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
 
     // 清理缓存期间行内置忙（onClick 置空防重入），结果按真实成败反馈
     var isClearingCache by remember { mutableStateOf(false) }
@@ -143,6 +142,27 @@ fun SettingsScreen(
             }
         }
 
+    val showNotificationRationale = {
+        coroutineScope.launch {
+            val confirmed =
+                overlayHostState.await(
+                    ConfirmDialogAction(
+                        title = "需要系统通知权限",
+                        message = "您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。",
+                        confirmText = "前往设置",
+                        dismissText = "取消",
+                    ),
+                )
+            if (confirmed) {
+                val intent =
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    }
+                context.startActivity(intent)
+            }
+        }
+    }
+
     val toggleAiringReminder: (Boolean) -> Unit = { enabled ->
         if (enabled) {
             val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
@@ -150,7 +170,7 @@ fun SettingsScreen(
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                     notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 } else {
-                    showPermissionRationaleDialog = true
+                    showNotificationRationale()
                 }
             } else {
                 viewModel.setAiringReminderEnabled(true)
@@ -235,47 +255,9 @@ fun SettingsScreen(
         onPlaybackRulesClick = onPlaybackRulesClick,
         enableAiConfig = enableAiConfig,
         snackbarHostState = snackbarHostState,
+        overlayHostState = overlayHostState,
         modifier = modifier,
     )
-
-    if (showPermissionRationaleDialog) {
-        AlertDialog(
-            onDismissRequest = { showPermissionRationaleDialog = false },
-            title = {
-                Text(
-                    text = "需要系统通知权限",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            },
-            text = {
-                Text(
-                    text = "您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPermissionRationaleDialog = false
-                        val intent =
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            }
-                        context.startActivity(intent)
-                    },
-                ) {
-                    Text("前往设置")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionRationaleDialog = false }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
 
     if (showCrashLogDialog) {
         CrashLogDialog(
@@ -422,8 +404,8 @@ fun SettingsScreenContent(
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
+    overlayHostState: OverlayHostState = rememberOverlayHostState(),
 ) {
-    val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }

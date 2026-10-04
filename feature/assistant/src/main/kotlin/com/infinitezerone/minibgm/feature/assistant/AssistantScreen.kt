@@ -62,6 +62,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -87,15 +88,13 @@ fun AssistantScreen(
         viewModel.sendPrefilledPrompt(prefillPrompt)
     }
 
-    LaunchedEffect(viewModel.events) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is AssistantUiEvent.ShowSnackbar -> {
-                    snackbarHostState.showSnackbar(event.message)
-                }
-                is AssistantUiEvent.NavigateToSubject -> {
-                    onSubjectClick(SubjectDetailRoute(event.subjectId))
-                }
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is AssistantUiEvent.ShowSnackbar -> {
+                snackbarHostState.showSnackbar(event.message)
+            }
+            is AssistantUiEvent.NavigateToSubject -> {
+                onSubjectClick(SubjectDetailRoute(event.subjectId))
             }
         }
     }

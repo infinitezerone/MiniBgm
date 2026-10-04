@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -170,11 +171,9 @@ fun SeasonalGuideContent(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.uiEffects.collect { effect ->
-            when (effect) {
-                is UiEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.text)
-            }
+    ObserveAsEvents(viewModel.uiEffects) { effect ->
+        when (effect) {
+            is UiEffect.ShowMessage -> snackbarHostState.showSnackbar(effect.text)
         }
     }
 

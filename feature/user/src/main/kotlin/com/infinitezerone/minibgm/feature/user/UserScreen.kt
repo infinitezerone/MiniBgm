@@ -37,6 +37,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
@@ -92,22 +93,20 @@ fun UserScreen(
     }
 
     // 打卡/编辑结果反馈：+1 成功给 4 秒撤销口，失败显式提示（列表非空时 state.error 不可见）
-    LaunchedEffect(collectionsViewModel) {
-        collectionsViewModel.events.collect { event ->
-            when (event) {
-                is UserCollectionsEvent.ProgressIncremented -> {
-                    val result =
-                        snackbarHostState.showSnackbar(
-                            message = "已打卡至第 " + event.newEp + " 话",
-                            actionLabel = "撤销",
-                            duration = SnackbarDuration.Short,
-                        )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        collectionsViewModel.undoIncrement(event.previous)
-                    }
+    ObserveAsEvents(collectionsViewModel.events) { event ->
+        when (event) {
+            is UserCollectionsEvent.ProgressIncremented -> {
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = "已打卡至第 " + event.newEp + " 话",
+                        actionLabel = "撤销",
+                        duration = SnackbarDuration.Short,
+                    )
+                if (result == SnackbarResult.ActionPerformed) {
+                    collectionsViewModel.undoIncrement(event.previous)
                 }
-                is UserCollectionsEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
             }
+            is UserCollectionsEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
         }
     }
 
@@ -197,8 +196,8 @@ fun UserScreenContent(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(scrollToTop) {
-        scrollToTop?.collect {
+    if (scrollToTop != null) {
+        ObserveAsEvents(scrollToTop) {
             listState.animateScrollToItem(0)
         }
     }

@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -97,8 +98,8 @@ fun ExploreScreen(
         customFilterExpanded = false
     }
 
-    LaunchedEffect(scrollToTop) {
-        scrollToTop?.collect {
+    if (scrollToTop != null) {
+        ObserveAsEvents(scrollToTop) {
             if (pagerState.currentPage == 1) {
                 exploreGridState.animateScrollToItem(0)
             }

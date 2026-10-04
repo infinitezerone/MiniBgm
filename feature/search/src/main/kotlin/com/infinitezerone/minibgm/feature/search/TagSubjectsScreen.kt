@@ -18,13 +18,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.components.SearchCategoryTabs
 import com.infinitezerone.minibgm.feature.search.components.SearchErrorState
@@ -56,10 +56,8 @@ fun TagSubjectsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 一次性提示走 Channel 流（消费即消失），与状态流隔离；UI 只收集、不回写
-    LaunchedEffect(viewModel) {
-        viewModel.userMessage.collect { msg ->
-            snackbarHostState.showSnackbar(msg)
-        }
+    ObserveAsEvents(viewModel.userMessage) { msg ->
+        snackbarHostState.showSnackbar(msg)
     }
 
     Scaffold(

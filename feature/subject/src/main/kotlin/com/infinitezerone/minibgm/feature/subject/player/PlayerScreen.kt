@@ -76,6 +76,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.compose.ContentFrame
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -307,12 +308,10 @@ fun PlayerScreen(
     }
 
     // ViewModel 一次性事件 → 提示
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is PlayerUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
-                is PlayerUiEvent.MarkedWatched -> Unit
-            }
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is PlayerUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            is PlayerUiEvent.MarkedWatched -> Unit
         }
     }
 
