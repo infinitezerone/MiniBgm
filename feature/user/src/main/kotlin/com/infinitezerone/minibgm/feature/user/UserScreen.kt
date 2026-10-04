@@ -8,21 +8,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,9 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -191,11 +189,9 @@ fun UserScreenContent(
     modifier: Modifier = Modifier,
 ) {
     var showAccountSheet by remember { mutableStateOf(false) }
-    var accountToLogout by remember { mutableStateOf<UserProfile?>(null) }
-    var showLogoutAllDialog by remember { mutableStateOf(false) }
     var selectedCollectionForSources by remember { mutableStateOf<UserCollection?>(null) }
     var collectionToEdit by remember { mutableStateOf<UserCollection?>(null) }
-    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val overlayHostState = rememberOverlayHostState()
     val context = LocalContext.current
 
     val listState = rememberLazyListState()
@@ -389,95 +385,47 @@ fun UserScreenContent(
                 showAccountSheet = false
             },
             onLogoutAccountClick = { profile ->
-                accountToLogout = profile
+                coroutineScope.launch {
+                    val confirmed =
+                        overlayHostState.await(
+                            ConfirmDialogAction(
+                                title = "退出账号",
+                                message = "退出「${profile.displayName}」(@${profile.username})？退出后需重新登录。",
+                                confirmText = "退出该账号",
+                                isDestructive = true,
+                            ),
+                        )
+                    if (confirmed) {
+                        onLogoutAccount(profile.id)
+                    }
+                }
             },
             onAddAccountClick = {
                 showAccountSheet = false
                 onLogin()
             },
             onLogoutAllClick = {
-                showLogoutAllDialog = true
-            },
-        )
-    }
-
-    accountToLogout?.let { profile ->
-        AlertDialog(
-            onDismissRequest = { accountToLogout = null },
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(text = "退出账号") },
-            text = {
-                Text(
-                    text = "退出「${profile.displayName}」(@${profile.username})？退出后需重新登录。",
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onLogoutAccount(profile.id)
-                        accountToLogout = null
-                    },
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                ) {
-                    Text(text = "退出该账号")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { accountToLogout = null }) {
-                    Text(text = "取消")
-                }
-            },
-        )
-    }
-
-    if (showLogoutAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutAllDialog = false },
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.Logout,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(text = "退出所有账号") },
-            text = {
-                Text(
-                    text = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
+                coroutineScope.launch {
+                    val confirmed =
+                        overlayHostState.await(
+                            ConfirmDialogAction(
+                                title = "退出所有账号",
+                                message = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
+                                confirmText = "退出所有账号",
+                                isDestructive = true,
+                            ),
+                        )
+                    if (confirmed) {
                         onLogoutAll()
-                        showLogoutAllDialog = false
                         showAccountSheet = false
-                    },
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                ) {
-                    Text(text = "退出所有账号")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutAllDialog = false }) {
-                    Text(text = "取消")
+                    }
                 }
             },
         )
+    }
+
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 
     collectionToEdit?.let { toEdit ->
@@ -503,36 +451,25 @@ fun UserScreenContent(
                 context.launchStreamingUrl(
                     url = url,
                     onAppNotInstalled = { appName, webUrl ->
-                        appNotInstalledPrompt = appName to webUrl
+                        coroutineScope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = "未安装 $appName 客户端",
+                                        message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
+                                        confirmText = "浏览器打开",
+                                    ),
+                                )
+                            if (confirmed) {
+                                context.launchWebUrl(webUrl)
+                            }
+                        }
                     },
                 )
             },
             onSubjectClick = { route ->
                 selectedCollectionForSources = null
                 onSubjectClick(route)
-            },
-        )
-    }
-
-    appNotInstalledPrompt?.let { (appName, webUrl) ->
-        AlertDialog(
-            onDismissRequest = { appNotInstalledPrompt = null },
-            title = { Text("未安装 $appName 客户端") },
-            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        appNotInstalledPrompt = null
-                        context.launchWebUrl(webUrl)
-                    },
-                ) {
-                    Text("浏览器打开")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { appNotInstalledPrompt = null }) {
-                    Text("取消")
-                }
             },
         )
     }
