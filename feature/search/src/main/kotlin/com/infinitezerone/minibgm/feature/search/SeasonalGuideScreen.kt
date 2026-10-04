@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -155,16 +156,17 @@ fun SeasonalGuideContent(
         filterExpanded = false
     }
 
-    LaunchedEffect(
-        uiState.selectedYear,
-        uiState.selectedQuarter,
-        uiState.selectedSort,
-        uiState.selectedOrigin,
-        uiState.selectedForm,
-    ) {
-        when (uiState.viewMode) {
-            SeasonalViewMode.LIST -> listState.scrollToItem(0)
-            SeasonalViewMode.POSTER -> gridState.scrollToItem(0)
+    val currentFilterKey =
+        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}"
+    var previousFilterKey by rememberSaveable { mutableStateOf(currentFilterKey) }
+
+    LaunchedEffect(currentFilterKey) {
+        if (previousFilterKey != currentFilterKey) {
+            previousFilterKey = currentFilterKey
+            when (uiState.viewMode) {
+                SeasonalViewMode.LIST -> listState.scrollToItem(0)
+                SeasonalViewMode.POSTER -> gridState.scrollToItem(0)
+            }
         }
     }
 

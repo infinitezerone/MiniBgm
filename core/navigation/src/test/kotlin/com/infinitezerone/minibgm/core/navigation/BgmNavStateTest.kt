@@ -224,9 +224,10 @@ class BgmNavStateTest {
     }
 
     @Test
-    fun goBackAtTabBase_returnsToPreviousTabViaHistory() {
+    fun goBackAtTabBase_returnsDirectlyToStartRoute() {
         val state = newState()
         state.navigateTo(ExploreRoute)
+        state.navigateTo(UserRoute)
 
         state.goBack()
 

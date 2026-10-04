@@ -102,8 +102,8 @@ class BgmNavState(
         when (currentKey) {
             // 起始 Tab 根部是应用出口，NavDisplay 在无可弹出条目时不会回调 onBack
             startRoute -> error("You cannot go back from the start route")
-            // 已在当前 Tab 根部：沿顶层历史回退到上一个 Tab
-            currentTopLevelKey -> topLevelStack.removeLastOrNull()
+            // 已在当前 Tab 根部：直接返回起始 Tab（首页）
+            currentTopLevelKey -> goToTopLevel(startRoute)
             else -> currentSubStack.removeLastOrNull()
         }
     }
@@ -161,21 +161,20 @@ class BgmNavState(
 
     /**
      * 将导航状态转换为带装饰器的条目列表供 [androidx.navigation3.ui.NavDisplay] 渲染：
-     * SaveableStateHolder 保存各条目的界面状态，ViewModelStore 让每个条目拥有独立的
-     * ViewModel 作用域（feature 的 ViewModel 应经 entry 内的 viewModel() 获取而非 Activity 级）；
+     * 每个顶层 Tab 拥有独立的 SaveableStateHolder 与 ViewModelStore 装饰器作用域，
+     * 避免不同子栈间状态碰撞或过早清理；
      * 起始 Tab 的条目始终在列（exit through home），其余 Tab 的栈状态仍被保留，只是不参与渲染。
      */
     @Composable
     fun toEntries(entryProvider: (NavKey) -> NavEntry<NavKey>): List<NavEntry<NavKey>> {
-        val saveableStateHolderDecorator = rememberSaveableStateHolderNavEntryDecorator<NavKey>()
-        val viewModelStoreDecorator = rememberViewModelStoreNavEntryDecorator<NavKey>()
-        val decorators =
-            remember(saveableStateHolderDecorator, viewModelStoreDecorator) {
-                listOf(saveableStateHolderDecorator, viewModelStoreDecorator)
-            }
-
         val decoratedEntries =
             subStacks.mapValues { (_, stack) ->
+                val saveableStateHolderDecorator = rememberSaveableStateHolderNavEntryDecorator<NavKey>()
+                val viewModelStoreDecorator = rememberViewModelStoreNavEntryDecorator<NavKey>()
+                val decorators =
+                    remember(saveableStateHolderDecorator, viewModelStoreDecorator) {
+                        listOf(saveableStateHolderDecorator, viewModelStoreDecorator)
+                    }
                 rememberDecoratedNavEntries(
                     backStack = stack,
                     entryDecorators = decorators,
