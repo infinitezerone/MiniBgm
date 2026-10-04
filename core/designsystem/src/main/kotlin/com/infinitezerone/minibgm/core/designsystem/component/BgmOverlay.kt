@@ -21,37 +21,20 @@ import kotlin.reflect.KClass
 annotation class BgmOverlayDsl
 
 /**
- * 交互式挂起动作契约基类。
+ * 强类型交互请求标记接口。
  *
- * 通过 1 对 1 的 [CancellableContinuation] 将挂起调用与 UI 渲染解耦，
- * 生命周期跟随当前作用域自动取消，彻底消除 ViewModel 中的临时 Boolean 状态与回调地狱。
+ * 任意纯数据类（data class / data object）均可实现本接口，
+ * 携带交互参数并声明其期望的强类型返回值 [R]。
+ *
+ * 示例：
+ * ```kotlin
+ * data class PickEpisodeRequest(val episodes: List<Episode>) : OverlayRequest<Episode?>
+ * ```
  */
-abstract class OverlayAction<R> {
-    private var continuation: CancellableContinuation<R>? = null
-
-    internal fun attachContinuation(cont: CancellableContinuation<R>) {
-        this.continuation = cont
-    }
-
-    /** 提交结果并唤醒调用方挂起点 */
-    fun complete(result: R) {
-        val cont = continuation
-        if (cont != null && cont.isActive) {
-            cont.resumeWith(Result.success(result))
-        }
-    }
-
-    /** 取消交互并向调用方抛出 [CancellationException] */
-    fun cancel() {
-        val cont = continuation
-        if (cont != null && cont.isActive) {
-            cont.cancel()
-        }
-    }
-}
+interface OverlayRequest<out R>
 
 /**
- * 通用二值确认对话框动作契约。
+ * 通用二值确认对话框请求契约。
  */
 data class ConfirmDialogAction(
     val title: String,
@@ -59,40 +42,67 @@ data class ConfirmDialogAction(
     val confirmText: String = "确定",
     val dismissText: String = "取消",
     val isDestructive: Boolean = false,
-) : OverlayAction<Boolean>()
+) : OverlayRequest<Boolean>
 
 /**
  * 局部弹窗宿主状态持有者（限定在具体 Screen / NavEntry 树内）。
  */
 @Stable
 class OverlayHostState {
-    var currentAction by mutableStateOf<OverlayAction<*>?>(null)
+    @PublishedApi
+    internal class ActiveEntry<R>(
+        val request: OverlayRequest<R>,
+        private val continuation: CancellableContinuation<R>,
+    ) {
+        fun respond(result: R) {
+            if (continuation.isActive) {
+                continuation.resumeWith(Result.success(result))
+            }
+        }
+
+        fun cancel() {
+            if (continuation.isActive) {
+                continuation.cancel()
+            }
+        }
+    }
+
+    internal var currentEntry by mutableStateOf<ActiveEntry<*>?>(null)
         private set
 
+    /** 当前正在展示的交互请求数据对象 */
+    val currentRequest: OverlayRequest<*>?
+        get() = currentEntry?.request
+
     /**
-     * 挂起等待用户完成交互并返回强类型结果。
-     * 若协程或页面被销毁，自动关闭弹窗并触发取消。
+     * 发起交互请求并挂起等待结果。
+     * 若调用协程或承载页面被取消，自动撤销交互并清理。
      */
-    suspend fun <R> await(action: OverlayAction<R>): R =
+    suspend fun <R> request(request: OverlayRequest<R>): R =
         suspendCancellableCoroutine { continuation ->
-            action.attachContinuation(continuation)
-            currentAction = action
+            currentEntry = ActiveEntry(request, continuation)
             continuation.invokeOnCancellation {
-                currentAction = null
+                currentEntry = null
             }
         }.also {
-            currentAction = null
+            currentEntry = null
         }
 
     /**
-     * 挂起等待交互结果；若用户通过外部点击或手势取消，安全返回 null。
+     * 发起交互请求并安全等待结果；若用户通过外部点击或手势取消，返回 null。
      */
-    suspend fun <R> awaitOrNull(action: OverlayAction<R>): R? =
+    suspend fun <R> requestOrNull(request: OverlayRequest<R>): R? =
         try {
-            await(action)
+            request(request)
         } catch (_: CancellationException) {
             null
         }
+
+    /** 别名兼容，等价于 [request] */
+    suspend fun <R> await(request: OverlayRequest<R>): R = request(request)
+
+    /** 别名兼容，等价于 [requestOrNull] */
+    suspend fun <R> awaitOrNull(request: OverlayRequest<R>): R? = requestOrNull(request)
 }
 
 @Composable
@@ -104,27 +114,32 @@ fun rememberOverlayHostState(): OverlayHostState = remember { OverlayHostState()
 @BgmOverlayDsl
 class OverlayProviderScope internal constructor() {
     @PublishedApi
-    internal val handlers = mutableMapOf<KClass<*>, @Composable (OverlayAction<*>) -> Unit>()
+    internal val handlers = mutableMapOf<KClass<*>, @Composable (OverlayRequest<*>, (Any?) -> Unit) -> Unit>()
 
-    inline fun <reified T : OverlayAction<*>> overlay(noinline content: @Composable (T) -> Unit) {
-        handlers[T::class] = { action ->
+    /**
+     * 注册特定请求数据类对应的 Composable 交互视图。
+     *
+     * @param content 接受纯数据请求对象 [request] 和完成交互的响应回调 [onRespond]
+     */
+    inline fun <reified T : OverlayRequest<R>, R> overlay(noinline content: @Composable (request: T, onRespond: (R) -> Unit) -> Unit) {
+        handlers[T::class] = { request, onRespond ->
             @Suppress("UNCHECKED_CAST")
-            content(action as T)
+            content(request as T, onRespond as (R) -> Unit)
         }
     }
 
     /** 预设的 Material 3 确认对话框扩展 */
     fun confirmDialog(icon: (@Composable () -> Unit)? = null) {
-        overlay<ConfirmDialogAction> { action ->
+        overlay<ConfirmDialogAction, Boolean> { action, onRespond ->
             AlertDialog(
-                onDismissRequest = { action.complete(false) },
+                onDismissRequest = { onRespond(false) },
                 icon = icon,
                 title = { Text(text = action.title) },
                 text = { Text(text = action.message) },
                 confirmButton = {
                     if (action.isDestructive) {
                         Button(
-                            onClick = { action.complete(true) },
+                            onClick = { onRespond(true) },
                             colors =
                                 ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error,
@@ -134,13 +149,13 @@ class OverlayProviderScope internal constructor() {
                             Text(text = action.confirmText)
                         }
                     } else {
-                        TextButton(onClick = { action.complete(true) }) {
+                        TextButton(onClick = { onRespond(true) }) {
                             Text(text = action.confirmText)
                         }
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { action.complete(false) }) {
+                    TextButton(onClick = { onRespond(false) }) {
                         Text(text = action.dismissText)
                     }
                 },
@@ -158,10 +173,13 @@ fun BgmOverlayHost(
     builder: OverlayProviderScope.() -> Unit,
 ) {
     val scope = remember(builder) { OverlayProviderScope().apply(builder) }
-    val current = hostState.currentAction
+    val current = hostState.currentEntry
 
     if (current != null) {
-        val renderer = scope.handlers[current::class]
-        renderer?.invoke(current)
+        val renderer = scope.handlers[current.request::class]
+        renderer?.invoke(current.request) { result ->
+            @Suppress("UNCHECKED_CAST")
+            (current as OverlayHostState.ActiveEntry<Any?>).respond(result)
+        }
     }
 }

@@ -9,56 +9,62 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BgmOverlayTest {
-    private class TestAction(
-        val value: String,
-    ) : OverlayAction<Int>()
+    // 纯数据类直接作为事件契约！
+    private data class CustomPromptRequest(
+        val message: String,
+    ) : OverlayRequest<Int>
+
+    private data class CustomNullableRequest(
+        val tag: String,
+    ) : OverlayRequest<String?>
 
     @Test
-    fun await_suspendsUntilCompleteIsCalled() =
+    fun request_suspendsUntilResponded() =
         runBlocking {
             val hostState = OverlayHostState()
-            val action = TestAction("hello")
+            val request = CustomPromptRequest("hello")
             var result: Int? = null
 
             val job =
                 launch {
-                    result = hostState.await(action)
+                    result = hostState.request(request)
                 }
 
-            // Yield so coroutine starts and enters await
             kotlinx.coroutines.yield()
 
-            assertEquals(action, hostState.currentAction)
+            assertEquals(request, hostState.currentRequest)
             assertNull(result)
 
-            action.complete(42)
+            val entry = hostState.currentEntry
+            @Suppress("UNCHECKED_CAST")
+            (entry as OverlayHostState.ActiveEntry<Int>).respond(100)
             job.join()
 
-            assertEquals(42, result)
-            assertNull(hostState.currentAction)
+            assertEquals(100, result)
+            assertNull(hostState.currentRequest)
         }
 
     @Test
-    fun awaitOrNull_returnsNullOnCancel() =
+    fun requestOrNull_returnsNullOnCancel() =
         runBlocking {
             val hostState = OverlayHostState()
-            val action = TestAction("test")
-            var result: Int? = -1
+            val request = CustomNullableRequest("test")
+            var result: String? = "initial"
 
             val job =
                 launch {
-                    result = hostState.awaitOrNull(action)
+                    result = hostState.requestOrNull(request)
                 }
 
             kotlinx.coroutines.yield()
 
-            assertEquals(action, hostState.currentAction)
+            assertEquals(request, hostState.currentRequest)
 
-            action.cancel()
+            hostState.currentEntry?.cancel()
             job.join()
 
             assertNull(result)
-            assertNull(hostState.currentAction)
+            assertNull(hostState.currentRequest)
         }
 
     @Test
@@ -75,23 +81,27 @@ class BgmOverlayTest {
 
             kotlinx.coroutines.yield()
 
-            assertTrue(hostState.currentAction is ConfirmDialogAction)
+            assertTrue(hostState.currentRequest is ConfirmDialogAction)
 
-            action.complete(true)
+            val entry = hostState.currentEntry
+            @Suppress("UNCHECKED_CAST")
+            (entry as OverlayHostState.ActiveEntry<Boolean>).respond(true)
             job.join()
 
             assertEquals(true, result)
-            assertNull(hostState.currentAction)
+            assertNull(hostState.currentRequest)
         }
 
     @Test
     fun overlayProviderScope_registersHandlersByType() {
         val scope = OverlayProviderScope()
-        scope.overlay<TestAction> { }
+        scope.overlay<CustomPromptRequest, Int> { req, onRespond ->
+            onRespond(req.message.length)
+        }
         scope.confirmDialog()
 
-        assertTrue(scope.handlers.containsKey(TestAction::class))
+        assertTrue(scope.handlers.containsKey(CustomPromptRequest::class))
         assertTrue(scope.handlers.containsKey(ConfirmDialogAction::class))
-        assertFalse(scope.handlers.containsKey(OverlayAction::class))
+        assertFalse(scope.handlers.containsKey(OverlayRequest::class))
     }
 }
