@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.designsystem.component
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -12,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -42,6 +44,8 @@ data class ConfirmDialogAction(
     val confirmText: String = "确定",
     val dismissText: String = "取消",
     val isDestructive: Boolean = false,
+    val isPrimary: Boolean = false,
+    val icon: ImageVector? = null,
 ) : OverlayRequest<Boolean>
 
 /**
@@ -131,26 +135,52 @@ class OverlayProviderScope internal constructor() {
     /** 预设的 Material 3 确认对话框扩展 */
     fun confirmDialog(icon: (@Composable () -> Unit)? = null) {
         overlay<ConfirmDialogAction, Boolean> { action, onRespond ->
+            val effectiveIcon: (@Composable () -> Unit)? =
+                if (action.icon != null) {
+                    {
+                        Icon(
+                            imageVector = action.icon,
+                            contentDescription = null,
+                            tint =
+                                if (action.isDestructive) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                        )
+                    }
+                } else {
+                    icon
+                }
+
             AlertDialog(
                 onDismissRequest = { onRespond(false) },
-                icon = icon,
+                icon = effectiveIcon,
                 title = { Text(text = action.title) },
                 text = { Text(text = action.message) },
                 confirmButton = {
-                    if (action.isDestructive) {
-                        Button(
-                            onClick = { onRespond(true) },
-                            colors =
-                                ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError,
-                                ),
-                        ) {
-                            Text(text = action.confirmText)
+                    when {
+                        action.isDestructive -> {
+                            Button(
+                                onClick = { onRespond(true) },
+                                colors =
+                                    ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError,
+                                    ),
+                            ) {
+                                Text(text = action.confirmText)
+                            }
                         }
-                    } else {
-                        TextButton(onClick = { onRespond(true) }) {
-                            Text(text = action.confirmText)
+                        action.isPrimary -> {
+                            Button(onClick = { onRespond(true) }) {
+                                Text(text = action.confirmText)
+                            }
+                        }
+                        else -> {
+                            TextButton(onClick = { onRespond(true) }) {
+                                Text(text = action.confirmText)
+                            }
                         }
                     }
                 },

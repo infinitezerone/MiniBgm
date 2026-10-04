@@ -22,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,8 +51,11 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -421,8 +423,8 @@ fun SettingsScreenContent(
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
 ) {
-    var showLogoutAllDialog by remember { mutableStateOf(false) }
-    var showLogoutCurrentDialog by remember { mutableStateOf(false) }
+    val overlayHostState = rememberOverlayHostState()
+    val coroutineScope = rememberCoroutineScope()
     var showSyncIntervalDialog by remember { mutableStateOf(false) }
     var showReminderHourDialog by remember { mutableStateOf(false) }
     var showTimingBottomSheet by remember { mutableStateOf(false) }
@@ -527,8 +529,47 @@ fun SettingsScreenContent(
                     activeProfile = uiState.activeProfile,
                     savedAccountsCount = uiState.savedAccounts.size,
                     onOpenWebUrl = onOpenWebUrl,
-                    onLogoutCurrentClick = { showLogoutCurrentDialog = true },
-                    onLogoutAllClick = { showLogoutAllDialog = true },
+                    onLogoutCurrentClick = {
+                        val currentProfile = uiState.activeProfile
+                        val message =
+                            if (currentProfile != null) {
+                                "退出「${currentProfile.displayName}」(@${currentProfile.username})？退出后需重新登录。"
+                            } else {
+                                "退出当前账号？退出后需重新登录。"
+                            }
+                        coroutineScope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = "退出当前账号",
+                                        message = message,
+                                        confirmText = "退出登录",
+                                        isDestructive = true,
+                                        icon = BgmIcons.Logout,
+                                    ),
+                                )
+                            if (confirmed) {
+                                onLogoutCurrent()
+                            }
+                        }
+                    },
+                    onLogoutAllClick = {
+                        coroutineScope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = "退出所有账号",
+                                        message = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
+                                        confirmText = "退出全部",
+                                        isDestructive = true,
+                                        icon = BgmIcons.Delete,
+                                    ),
+                                )
+                            if (confirmed) {
+                                onLogoutAll()
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -566,88 +607,8 @@ fun SettingsScreenContent(
         )
     }
 
-    if (showLogoutCurrentDialog) {
-        val currentProfile = uiState.activeProfile
-        AlertDialog(
-            onDismissRequest = { showLogoutCurrentDialog = false },
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.Logout,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(text = "退出当前账号") },
-            text = {
-                Text(
-                    text =
-                        if (currentProfile != null) {
-                            "退出「${currentProfile.displayName}」(@${currentProfile.username})？退出后需重新登录。"
-                        } else {
-                            "退出当前账号？退出后需重新登录。"
-                        },
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLogoutCurrentDialog = false
-                        onLogoutCurrent()
-                    },
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                ) {
-                    Text(text = "退出登录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutCurrentDialog = false }) {
-                    Text(text = "取消")
-                }
-            },
-        )
-    }
-
-    if (showLogoutAllDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutAllDialog = false },
-            icon = {
-                Icon(
-                    imageVector = BgmIcons.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(text = "退出所有账号") },
-            text = {
-                Text(
-                    text = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showLogoutAllDialog = false
-                        onLogoutAll()
-                    },
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError,
-                        ),
-                ) {
-                    Text(text = "退出全部")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutAllDialog = false }) {
-                    Text(text = "取消")
-                }
-            },
-        )
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 }
 

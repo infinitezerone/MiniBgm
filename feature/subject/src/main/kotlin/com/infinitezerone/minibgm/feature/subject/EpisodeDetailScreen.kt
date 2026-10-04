@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,7 +31,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +52,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -62,6 +63,7 @@ import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -108,8 +110,24 @@ fun EpisodeDetailScreen(
             }
         }
     }
-    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val overlayHostState = rememberOverlayHostState()
     var showSourcesSheet by remember { mutableStateOf(false) }
+
+    val handleAppNotInstalled: (String, String) -> Unit = { appName, webUrl ->
+        coroutineScope.launch {
+            val confirmed =
+                overlayHostState.await(
+                    ConfirmDialogAction(
+                        title = "未安装 $appName 客户端",
+                        message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
+                        confirmText = "浏览器打开",
+                    ),
+                )
+            if (confirmed) {
+                context.launchWebUrl(webUrl)
+            }
+        }
+    }
 
     val episode = uiState.episode
     val group = episode?.let { EpisodeGroup.fromType(it.type) } ?: EpisodeGroup.MAIN
@@ -134,9 +152,7 @@ fun EpisodeDetailScreen(
                     is BgmLink.External -> {
                         context.launchStreamingUrl(
                             url = url,
-                            onAppNotInstalled = { appName, webUrl ->
-                                appNotInstalledPrompt = appName to webUrl
-                            },
+                            onAppNotInstalled = handleAppNotInstalled,
                         )
                     }
                 }
@@ -605,27 +621,8 @@ fun EpisodeDetailScreen(
         }
     }
 
-    appNotInstalledPrompt?.let { (appName, webUrl) ->
-        AlertDialog(
-            onDismissRequest = { appNotInstalledPrompt = null },
-            title = { Text("未安装 $appName 客户端") },
-            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        appNotInstalledPrompt = null
-                        context.launchWebUrl(webUrl)
-                    },
-                ) {
-                    Text("浏览器打开")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { appNotInstalledPrompt = null }) {
-                    Text("取消")
-                }
-            },
-        )
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 
     val currentEpisode = uiState.episode
@@ -638,9 +635,7 @@ fun EpisodeDetailScreen(
             onOpenUrl = { url ->
                 context.launchStreamingUrl(
                     url = url,
-                    onAppNotInstalled = { appName, webUrl ->
-                        appNotInstalledPrompt = appName to webUrl
-                    },
+                    onAppNotInstalled = handleAppNotInstalled,
                 )
             },
             onInternalPlayClick =

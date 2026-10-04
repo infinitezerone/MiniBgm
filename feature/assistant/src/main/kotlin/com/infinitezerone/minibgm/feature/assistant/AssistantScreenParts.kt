@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,13 +53,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.assistant.components.PendingActionCard
 import com.infinitezerone.minibgm.feature.assistant.components.PlayableSourcesCard
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 internal val PROMPT_SUGGESTIONS =
     listOf(
@@ -69,6 +75,10 @@ internal val PROMPT_SUGGESTIONS =
     )
 
 /** 会话切换底部面板：列出全部会话（最近更新在前），支持切换、新建、重命名与删除 */
+private data class RenameSessionRequest(
+    val currentTitle: String,
+) : OverlayRequest<String?>
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SessionSwitcherSheet(
@@ -81,9 +91,8 @@ internal fun SessionSwitcherSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
-    var renamingSession by remember { mutableStateOf<AssistantSession?>(null) }
-    var renameText by remember { mutableStateOf("") }
-    var deletingSession by remember { mutableStateOf<AssistantSession?>(null) }
+    val overlayHostState = rememberOverlayHostState()
+    val coroutineScope = rememberCoroutineScope()
     BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -162,8 +171,12 @@ internal fun SessionSwitcherSheet(
                         )
                     }
                     IconButton(onClick = {
-                        renamingSession = session
-                        renameText = session.title
+                        coroutineScope.launch {
+                            val newTitle = overlayHostState.await(RenameSessionRequest(session.title))
+                            if (!newTitle.isNullOrBlank()) {
+                                onRename(session.id, newTitle)
+                            }
+                        }
                     }) {
                         Icon(
                             imageVector = BgmIcons.EditBorder,
@@ -171,7 +184,22 @@ internal fun SessionSwitcherSheet(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = { deletingSession = session }) {
+                    IconButton(onClick = {
+                        coroutineScope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = "删除会话",
+                                        message = "确定要删除会话「${session.title}」及其所有记录吗？删除后无法恢复。",
+                                        confirmText = "删除",
+                                        isDestructive = true,
+                                    ),
+                                )
+                            if (confirmed) {
+                                onDelete(session.id)
+                            }
+                        }
+                    }) {
                         Icon(
                             imageVector = BgmIcons.DeleteBorder,
                             contentDescription = "删除会话",
@@ -182,58 +210,36 @@ internal fun SessionSwitcherSheet(
             }
         }
 
-        renamingSession?.let { session ->
-            AlertDialog(
-                onDismissRequest = { renamingSession = null },
-                title = { Text("重命名会话") },
-                text = {
-                    OutlinedTextField(
-                        value = renameText,
-                        onValueChange = { renameText = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            onRename(session.id, renameText)
-                            renamingSession = null
-                        },
-                        enabled = renameText.trim().isNotBlank(),
-                    ) {
-                        Text("保存")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { renamingSession = null }) {
-                        Text("取消")
-                    }
-                },
-            )
-        }
-
-        deletingSession?.let { session ->
-            AlertDialog(
-                onDismissRequest = { deletingSession = null },
-                title = { Text("删除会话") },
-                text = { Text("确定要删除会话「${session.title}」及其所有记录吗？删除后无法恢复。") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            onDelete(session.id)
-                            deletingSession = null
-                        },
-                    ) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { deletingSession = null }) {
-                        Text("取消")
-                    }
-                },
-            )
+        BgmOverlayHost(hostState = overlayHostState) {
+            confirmDialog()
+            overlay<RenameSessionRequest, String?> { request, onRespond ->
+                var text by remember { mutableStateOf(request.currentTitle) }
+                AlertDialog(
+                    onDismissRequest = { onRespond(null) },
+                    title = { Text("重命名会话") },
+                    text = {
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { onRespond(text.trim()) },
+                            enabled = text.trim().isNotBlank(),
+                        ) {
+                            Text("保存")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { onRespond(null) }) {
+                            Text("取消")
+                        }
+                    },
+                )
+            }
         }
     }
 }

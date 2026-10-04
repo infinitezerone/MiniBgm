@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,15 +36,14 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,13 +58,17 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.assistant.components.AssistantConfigDialog
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
@@ -164,6 +166,8 @@ fun AssistantScreenContent(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    val overlayHostState = rememberOverlayHostState()
 
     // 新消息到达时自动滚动到底部
     LaunchedEffect(uiState.messages.size, uiState.isLoading) {
@@ -171,36 +175,6 @@ fun AssistantScreenContent(
         if (totalCount > 0) {
             listState.animateScrollToItem(totalCount - 1)
         }
-    }
-
-    var showDeleteCurrentSessionDialog by remember { mutableStateOf(false) }
-
-    if (showDeleteCurrentSessionDialog) {
-        val activeTitle =
-            uiState.sessions
-                .firstOrNull { it.id == uiState.activeSessionId }
-                ?.title
-                ?.ifBlank { "当前会话" } ?: "当前会话"
-        AlertDialog(
-            onDismissRequest = { showDeleteCurrentSessionDialog = false },
-            title = { Text("删除会话") },
-            text = { Text("确定要删除会话「$activeTitle」及其所有聊天记录吗？删除后无法恢复。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteCurrentSessionDialog = false
-                        onDeleteSession(uiState.activeSessionId)
-                    },
-                ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteCurrentSessionDialog = false }) {
-                    Text("取消")
-                }
-            },
-        )
     }
 
     Scaffold(
@@ -245,7 +219,27 @@ fun AssistantScreenContent(
                         )
                     }
                     if (uiState.messages.isNotEmpty()) {
-                        IconButton(onClick = { showDeleteCurrentSessionDialog = true }) {
+                        IconButton(onClick = {
+                            val activeTitle =
+                                uiState.sessions
+                                    .firstOrNull { it.id == uiState.activeSessionId }
+                                    ?.title
+                                    ?.ifBlank { "当前会话" } ?: "当前会话"
+                            coroutineScope.launch {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = "删除会话",
+                                            message = "确定要删除会话「$activeTitle」及其所有聊天记录吗？删除后无法恢复。",
+                                            confirmText = "删除",
+                                            isDestructive = true,
+                                        ),
+                                    )
+                                if (confirmed) {
+                                    onDeleteSession(uiState.activeSessionId)
+                                }
+                            }
+                        }) {
                             Icon(
                                 imageVector = BgmIcons.DeleteBorder,
                                 contentDescription = "删除当前会话",
@@ -525,5 +519,9 @@ fun AssistantScreenContent(
             onRename = onRenameSession,
             onDismiss = { onToggleSessionSwitcher(false) },
         )
+    }
+
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 }

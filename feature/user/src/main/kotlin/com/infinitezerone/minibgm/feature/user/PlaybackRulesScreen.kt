@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -38,11 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.feature.user.components.MAX_IMPORT_BYTES
 import com.infinitezerone.minibgm.feature.user.components.PLAYLIST_MIME_TYPES
@@ -87,10 +88,7 @@ fun PlaybackRulesScreen(
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isImportingPlaylistJson by remember { mutableStateOf(false) }
     var showAdvancedRules by rememberSaveable { mutableStateOf(false) }
-    var ruleToDelete by remember { mutableStateOf<PlaybackSourceRule?>(null) }
-    var playlistToDelete by remember { mutableStateOf<PlaybackPlaylist?>(null) }
-    var confirmClearPlaylists by rememberSaveable { mutableStateOf(false) }
-    var confirmClearPositions by rememberSaveable { mutableStateOf(false) }
+    val overlayHostState = rememberOverlayHostState()
 
     val playlistPicker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -191,7 +189,24 @@ fun PlaybackRulesScreen(
                         supporting = "导入 JSON 片源后，分集播放向导会直接给出对应地址",
                         trailing = {
                             if (uiState.playlists.isNotEmpty()) {
-                                TextButton(onClick = { confirmClearPlaylists = true }) {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val confirmed =
+                                                overlayHostState.await(
+                                                    ConfirmDialogAction(
+                                                        title = "清空全部片单",
+                                                        message = "将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。",
+                                                        confirmText = "清空",
+                                                        isDestructive = true,
+                                                    ),
+                                                )
+                                            if (confirmed) {
+                                                viewModel.clearPlaylists()
+                                            }
+                                        }
+                                    },
+                                ) {
                                     Text("清空", color = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -210,7 +225,22 @@ fun PlaybackRulesScreen(
                     items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
                         PlaylistCard(
                             playlist = playlist,
-                            onDelete = { playlistToDelete = playlist },
+                            onDelete = {
+                                scope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = "确认删除片单",
+                                                message = "确定要删除片单「${playlist.name}」及其 ${playlist.entries.size} 条分集吗？",
+                                                confirmText = "删除",
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        viewModel.deletePlaylist(playlist.id)
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -225,7 +255,24 @@ fun PlaybackRulesScreen(
                         supporting = "内置播放器自动记录各播放地址的观看位置，用于下次断点续播",
                         trailing = {
                             if (uiState.playbackPositions.isNotEmpty()) {
-                                TextButton(onClick = { confirmClearPositions = true }) {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val confirmed =
+                                                overlayHostState.await(
+                                                    ConfirmDialogAction(
+                                                        title = "清空全部续播记录",
+                                                        message = "将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。",
+                                                        confirmText = "清空",
+                                                        isDestructive = true,
+                                                    ),
+                                                )
+                                            if (confirmed) {
+                                                uiState.playbackPositions.keys.forEach { viewModel.clearPlaybackPosition(it) }
+                                            }
+                                        }
+                                    },
+                                ) {
                                     Text("清空", color = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -324,7 +371,22 @@ fun PlaybackRulesScreen(
                             rule = rule,
                             onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
                             onEdit = { ruleToEdit = rule },
-                            onDelete = { ruleToDelete = rule },
+                            onDelete = {
+                                scope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = "确认删除规则",
+                                                message = "确定要删除播放规则「${rule.name}」吗？",
+                                                confirmText = "删除",
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        viewModel.deleteRule(rule.id)
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -398,96 +460,7 @@ fun PlaybackRulesScreen(
         )
     }
 
-    // 删除确认对话框
-    ruleToDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { ruleToDelete = null },
-            title = { Text("确认删除规则") },
-            text = { Text("确定要删除播放规则「${target.name}」吗？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteRule(target.id)
-                        ruleToDelete = null
-                    },
-                ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { ruleToDelete = null }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
-    playlistToDelete?.let { target ->
-        AlertDialog(
-            onDismissRequest = { playlistToDelete = null },
-            title = { Text("确认删除片单") },
-            text = { Text("确定要删除片单「${target.name}」及其 ${target.entries.size} 条分集吗？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deletePlaylist(target.id)
-                        playlistToDelete = null
-                    },
-                ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { playlistToDelete = null }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
-    if (confirmClearPlaylists) {
-        AlertDialog(
-            onDismissRequest = { confirmClearPlaylists = false },
-            title = { Text("清空全部片单") },
-            text = { Text("将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.clearPlaylists()
-                        confirmClearPlaylists = false
-                    },
-                ) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClearPlaylists = false }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-
-    if (confirmClearPositions) {
-        AlertDialog(
-            onDismissRequest = { confirmClearPositions = false },
-            title = { Text("清空全部续播记录") },
-            text = { Text("将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        uiState.playbackPositions.keys.forEach { viewModel.clearPlaybackPosition(it) }
-                        confirmClearPositions = false
-                    },
-                ) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClearPositions = false }) {
-                    Text("取消")
-                }
-            },
-        )
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 }

@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,8 +41,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -80,14 +82,26 @@ fun ScheduleScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
-    var appNotInstalledPrompt by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     val handleLaunchStreamingUrl: (String) -> Unit = { url ->
         context.launchStreamingUrl(
             url = url,
             onAppNotInstalled = { appName, webUrl ->
-                appNotInstalledPrompt = appName to webUrl
+                coroutineScope.launch {
+                    val confirmed =
+                        overlayHostState.await(
+                            ConfirmDialogAction(
+                                title = "未安装 $appName 客户端",
+                                message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
+                                confirmText = "浏览器打开",
+                            ),
+                        )
+                    if (confirmed) {
+                        context.launchWebUrl(webUrl)
+                    }
+                }
             },
         )
     }
@@ -336,27 +350,8 @@ fun ScheduleScreen(
         )
     }
 
-    appNotInstalledPrompt?.let { (appName, webUrl) ->
-        AlertDialog(
-            onDismissRequest = { appNotInstalledPrompt = null },
-            title = { Text("未安装 $appName 客户端") },
-            text = { Text("未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        appNotInstalledPrompt = null
-                        context.launchWebUrl(webUrl)
-                    },
-                ) {
-                    Text("浏览器打开")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { appNotInstalledPrompt = null }) {
-                    Text("取消")
-                }
-            },
-        )
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 
     if (uiState.showLoginPromptDialog) {
