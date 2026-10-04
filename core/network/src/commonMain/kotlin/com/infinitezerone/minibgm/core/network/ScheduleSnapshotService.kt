@@ -75,7 +75,7 @@ interface ScheduleSnapshotService {
     suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult
 }
 
-class ScheduleSnapshotServiceImpl(
+internal class ScheduleSnapshotServiceImpl(
     private val client: HttpClient,
     private val cdnUrls: List<String> = DEFAULT_SCHEDULE_SNAPSHOT_URLS,
 ) : ScheduleSnapshotService {

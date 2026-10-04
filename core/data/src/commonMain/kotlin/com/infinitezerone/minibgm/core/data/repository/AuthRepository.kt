@@ -91,7 +91,7 @@ interface AuthRepository {
     suspend fun refreshProfile(): AppResult<UserProfile>
 }
 
-class AuthRepositoryImpl(
+internal class AuthRepositoryImpl(
     private val tokenService: BgmTokenService,
     private val tokenProvider: TokenProvider,
     private val userPreferences: UserPreferencesDataSource,

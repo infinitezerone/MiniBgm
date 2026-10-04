@@ -59,7 +59,7 @@ interface BangumiCommunityService {
     )
 }
 
-class BangumiCommunityServiceImpl(
+internal class BangumiCommunityServiceImpl(
     private val client: HttpClient,
     private val baseUrl: String = "https://next.bgm.tv",
 ) : BangumiCommunityService {

@@ -116,7 +116,7 @@ interface ScheduleRepository {
     suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean)
 }
 
-class ScheduleRepositoryImpl(
+internal class ScheduleRepositoryImpl(
     private val scheduleDao: AirScheduleDao,
     private val airEventDao: AirEventDao,
     private val anilistMappingDao: AniListMappingDao,

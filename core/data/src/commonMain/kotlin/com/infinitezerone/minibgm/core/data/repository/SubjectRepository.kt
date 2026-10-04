@@ -72,7 +72,7 @@ interface SubjectRepository {
     suspend fun fetchRelations(subjectId: Long): AppResult<List<SubjectRelation>>
 }
 
-class SubjectRepositoryImpl(
+internal class SubjectRepositoryImpl(
     private val apiService: BangumiApiService,
     private val maxMemoryEntries: Int = DEFAULT_MAX_ENTRIES,
 ) : SubjectRepository {

@@ -12,12 +12,11 @@ import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
-import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
+import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BgmPkce
 import com.infinitezerone.minibgm.core.network.BgmTokenService
-import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.forms.FormDataContent
@@ -214,14 +213,75 @@ class AuthRepositoryImplTest {
 
         /** 本套件聚焦 token 兑换与凭据生命周期：getMe 一律 404，completeLogin 内 runCatching 吞掉即可 */
         private val stubApiService =
-            BangumiApiServiceImpl(
-                client =
-                    HttpClient(
-                        MockEngine {
-                            respond(content = "", status = HttpStatusCode.NotFound)
-                        },
-                    ),
-            )
+            object : BangumiApiService {
+                override suspend fun getMe(): com.infinitezerone.minibgm.core.model.UserProfile =
+                    throw com.infinitezerone.minibgm.core.network.BgmNetworkException
+                        .ServerError(404)
+
+                override suspend fun getSubject(id: Long) = error("unused")
+
+                override suspend fun getSubjectCharacters(id: Long) = error("unused")
+
+                override suspend fun getCharacter(id: Long) = error("unused")
+
+                override suspend fun getCharacterSubjects(id: Long) = error("unused")
+
+                override suspend fun getSubjectPersons(id: Long) = error("unused")
+
+                override suspend fun getPerson(id: Long) = error("unused")
+
+                override suspend fun getPersonSubjects(id: Long) = error("unused")
+
+                override suspend fun getSubjectRelations(id: Long) = error("unused")
+
+                override suspend fun getEpisodes(
+                    subjectId: Long,
+                    offset: Int,
+                    limit: Int,
+                ) = error("unused")
+
+                override suspend fun searchSubjects(
+                    keyword: String,
+                    type: Int,
+                    limit: Int,
+                    offset: Int,
+                ) = error("unused")
+
+                override suspend fun searchSubjectsAdvanced(
+                    request: com.infinitezerone.minibgm.core.model.SearchSubjectsRequest,
+                    limit: Int,
+                    offset: Int,
+                ) = error("unused")
+
+                override suspend fun getUserCollections(
+                    username: String,
+                    subjectType: Int,
+                    type: Int?,
+                    limit: Int,
+                    offset: Int,
+                ) = error("unused")
+
+                override suspend fun getCollection(
+                    username: String,
+                    subjectId: Long,
+                ) = error("unused")
+
+                override suspend fun updateCollection(
+                    subjectId: Long,
+                    type: Int,
+                    rate: Int?,
+                    comment: String?,
+                    private: Boolean,
+                    epStatus: Int?,
+                    tags: List<String>?,
+                ) = Unit
+
+                override suspend fun updateEpisodeStatus(
+                    subjectId: Long,
+                    episodeId: Long,
+                    type: Int,
+                ) = Unit
+            }
 
         val repository =
             AuthRepositoryImpl(

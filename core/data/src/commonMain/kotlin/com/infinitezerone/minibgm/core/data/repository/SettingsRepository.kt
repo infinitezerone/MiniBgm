@@ -199,7 +199,7 @@ interface SettingsRepository {
     ): com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport>
 }
 
-class SettingsRepositoryImpl(
+internal class SettingsRepositoryImpl(
     private val userPreferences: UserPreferencesDataSource,
     private val secureSecretStore: SecureSecretStore,
     private val communitySubscriptionService: com.infinitezerone.minibgm.core.network.CommunitySubscriptionService? = null,

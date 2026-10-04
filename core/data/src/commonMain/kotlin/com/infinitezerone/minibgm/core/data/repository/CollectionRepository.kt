@@ -140,7 +140,7 @@ data class TrackingFootprint(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class CollectionRepositoryImpl(
+internal class CollectionRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userCollectionDao: UserCollectionDao,
     private val tokenProvider: TokenProvider,

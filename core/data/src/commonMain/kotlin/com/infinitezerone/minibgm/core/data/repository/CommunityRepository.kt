@@ -54,7 +54,7 @@ interface CommunityRepository {
     ): AppResult<Unit>
 }
 
-class CommunityRepositoryImpl(
+internal class CommunityRepositoryImpl(
     private val communityService: BangumiCommunityService,
 ) : CommunityRepository {
     override suspend fun getEpisodeComments(episodeId: Long): AppResult<List<EpisodeComment>> =

@@ -50,7 +50,7 @@ interface BangumiDataService {
     ): BangumiDataMonthResult = BangumiDataMonthResult.NotFound
 }
 
-class BangumiDataServiceImpl(
+internal class BangumiDataServiceImpl(
     private val client: HttpClient,
     private val cdnUrls: List<String> = DEFAULT_CDN_URLS,
     private val cdnBases: List<String> = DEFAULT_CDN_BASES,

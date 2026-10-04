@@ -141,7 +141,7 @@ interface PlaybackResolverRepository {
     ): RecordedRuleDraft? = null
 }
 
-class PlaybackResolverRepositoryImpl(
+internal class PlaybackResolverRepositoryImpl(
     private val pageFetchService: PageFetchService,
     private val playbackRuleEngine: PlaybackRuleEngine = PlaybackRuleEngineImpl(pageFetchService),
     private val webViewCaptureService: WebViewCaptureService? = null,

@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import java.util.UUID
 
-class AssistantRepositoryImpl(
+internal class AssistantRepositoryImpl(
     private val assistantMessageDao: AssistantMessageDao,
     private val assistantSessionDao: AssistantSessionDao,
 ) : AssistantRepository {

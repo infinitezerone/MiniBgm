@@ -51,7 +51,7 @@ interface CommunitySubscriptionService {
     suspend fun validateAndTestSubscription(target: String): SubscriptionValidationReport
 }
 
-class CommunitySubscriptionServiceImpl(
+internal class CommunitySubscriptionServiceImpl(
     private val client: HttpClient,
     private val json: Json = BgmHttpClient.jsonConfig,
 ) : CommunitySubscriptionService {

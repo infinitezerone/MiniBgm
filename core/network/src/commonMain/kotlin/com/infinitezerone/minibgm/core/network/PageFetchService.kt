@@ -78,7 +78,7 @@ interface PageFetchService {
     ): StreamProbe = StreamProbe.Unsupported
 }
 
-class PageFetchServiceImpl(
+internal class PageFetchServiceImpl(
     private val client: HttpClient,
 ) : PageFetchService {
     private val logger = bgmLogger("Bgm/PageFetch")

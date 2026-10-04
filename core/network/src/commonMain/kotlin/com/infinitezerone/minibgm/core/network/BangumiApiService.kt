@@ -157,7 +157,7 @@ interface BangumiApiService {
     suspend fun getUserCollectionStats(username: String): List<UserCollectionStatusGroup> = emptyList()
 }
 
-class BangumiApiServiceImpl(
+internal class BangumiApiServiceImpl(
     private val client: HttpClient,
     private val baseUrl: String = "https://api.bgm.tv",
     private val authConfig: BgmAuthConfig = BgmAuthConfig(),

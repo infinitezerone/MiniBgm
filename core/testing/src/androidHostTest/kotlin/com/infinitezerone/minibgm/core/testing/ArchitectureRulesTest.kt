@@ -30,6 +30,7 @@ import kotlin.test.fail
  *     所有图标必须统一经 :core:designsystem 的 BgmIcons 引用
  * 14. 现代时间规范：生产代码严禁 import java.util.Date / java.util.Calendar，统一使用 kotlinx.datetime.*
  * 15. 结构化并发规范：生产代码严禁使用 GlobalScope 裸协程，所有协程必须受控于明确生命周期作用域
+ * 16. 面向接口契约：UI 源码（:feature:* 与 :app）严禁直接 import 底层实现类（*Impl），必须面向 Interface 编程
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -591,6 +592,39 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反结构化并发规范（生产源码严禁使用 GlobalScope，请使用 viewModelScope 或注入的 CoroutineScope）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun ui_sources_never_import_implementation_classes() {
+        val violations = mutableListOf<String>()
+
+        listOf("feature", "app").forEach { dirName ->
+            val dir = File(projectRoot, dirName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { sourceFile ->
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    scanner.imports.forEach { imp ->
+                        val simpleName = imp.path.substringAfterLast('.')
+                        if (simpleName.endsWith("Impl") || simpleName == "LocalOAuthProxyServer") {
+                            violations.add(
+                                "$relPath:${imp.lineNumber} 违规直接引入底层实现类 -> import ${imp.path}，UI 层必须面向抽象接口编程",
+                            )
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反面向接口契约（feature 与 app 源码严禁直接引入 *Impl 或底层服务实现类，必须通过 Interface 契约依赖）：\n" +
                     violations.joinToString("\n"),
             )
         }

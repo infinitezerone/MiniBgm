@@ -66,7 +66,7 @@ private val UPSTREAM_FAILURE_HTML =
  * 只接受携带本次会话令牌 Cookie 的请求——环回端口对本机其他应用可见，
  * 无令牌会把「以本应用身份访问 bgm.tv」白送出去。
  */
-class LocalOAuthProxyServer(
+internal class LocalOAuthProxyServer(
     private val client: HttpClient,
 ) : OAuthProxyService {
     private val log = bgmLogger("Bgm/OAuthProxy")

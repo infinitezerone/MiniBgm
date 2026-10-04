@@ -63,7 +63,7 @@ interface SearchRepository {
     suspend fun setBlockedSubjectTags(tags: List<String>)
 }
 
-class SearchRepositoryImpl(
+internal class SearchRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userPreferences: UserPreferencesDataSource,
 ) : SearchRepository {
