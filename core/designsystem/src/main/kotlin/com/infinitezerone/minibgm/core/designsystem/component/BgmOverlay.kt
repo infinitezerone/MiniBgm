@@ -1,10 +1,18 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -13,7 +21,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -47,6 +58,17 @@ data class ConfirmDialogAction(
     val isPrimary: Boolean = false,
     val icon: ImageVector? = null,
 ) : OverlayRequest<Boolean>
+
+/**
+ * 通用单选列表对话框请求契约。
+ */
+data class SingleChoiceDialogAction<T : Any>(
+    val title: String,
+    val options: List<T>,
+    val selectedOption: T,
+    val optionLabel: (T) -> String = { it.toString() },
+    val dismissText: String = "关闭",
+) : OverlayRequest<T?>
 
 /**
  * 局部弹窗宿主状态持有者（限定在具体 Screen / NavEntry 树内）。
@@ -187,6 +209,50 @@ class OverlayProviderScope internal constructor() {
                 dismissButton = {
                     TextButton(onClick = { onRespond(false) }) {
                         Text(text = action.dismissText)
+                    }
+                },
+            )
+        }
+    }
+
+    /** 预设的 Material 3 单选列表对话框扩展 */
+    @Suppress("UNCHECKED_CAST")
+    fun singleChoiceDialog() {
+        overlay<SingleChoiceDialogAction<*>, Any?> { request, onRespond ->
+            val typedRequest = request as SingleChoiceDialogAction<Any>
+            AlertDialog(
+                onDismissRequest = { onRespond(null) },
+                title = { Text(text = typedRequest.title) },
+                text = {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        typedRequest.options.forEach { option ->
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onRespond(option)
+                                        }.padding(vertical = 10.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = (option == typedRequest.selectedOption),
+                                    onClick = {
+                                        onRespond(option)
+                                    },
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = typedRequest.optionLabel(option),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { onRespond(null) }) {
+                        Text(text = typedRequest.dismissText)
                     }
                 },
             )

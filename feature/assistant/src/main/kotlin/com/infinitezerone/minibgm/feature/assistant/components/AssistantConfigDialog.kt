@@ -44,7 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -71,7 +71,7 @@ fun AssistantConfigDialog(
     onSaveProfile: (profileId: String?, name: String, config: AiConfig) -> Unit = { _, _, _ -> },
     onDeleteProfile: (String) -> Unit = {},
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
 
@@ -482,14 +482,19 @@ fun AssistantConfigDialog(
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = {
-                                val pasted =
-                                    clipboardManager
-                                        .getText()
-                                        ?.text
-                                        .orEmpty()
-                                        .trim()
-                                if (pasted.isNotBlank()) {
-                                    onApiKeyUpdated(pasted)
+                                coroutineScope.launch {
+                                    val clipEntry = clipboard.getClipEntry()
+                                    val pasted =
+                                        clipEntry
+                                            ?.clipData
+                                            ?.getItemAt(0)
+                                            ?.text
+                                            ?.toString()
+                                            .orEmpty()
+                                            .trim()
+                                    if (pasted.isNotBlank()) {
+                                        onApiKeyUpdated(pasted)
+                                    }
                                 }
                             }) {
                                 Icon(BgmIcons.ContentPaste, contentDescription = "粘贴剪贴板内容")

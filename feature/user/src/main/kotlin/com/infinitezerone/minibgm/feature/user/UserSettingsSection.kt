@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,11 +25,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -765,98 +762,6 @@ internal fun AboutAndSupportSettingsCard(
             }
         }
     }
-}
-
-@Composable
-internal fun SyncIntervalDialog(
-    currentInterval: SyncInterval,
-    onSelectInterval: (SyncInterval) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("播放源自动同步频率") },
-        text = {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                SyncInterval.entries.forEach { interval ->
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectInterval(interval)
-                                    onDismiss()
-                                }.padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.RadioButton(
-                            selected = (interval == currentInterval),
-                            onClick = {
-                                onSelectInterval(interval)
-                                onDismiss()
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = interval.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
-            }
-        },
-    )
-}
-
-@Composable
-internal fun ReminderHourDialog(
-    currentHour: Int,
-    onSelectHour: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("每日提醒时刻") },
-        text = {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                listOf(7, 8, 12, 18, 21).forEach { hour ->
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectHour(hour)
-                                    onDismiss()
-                                }.padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.RadioButton(
-                            selected = (hour == currentHour),
-                            onClick = {
-                                onSelectHour(hour)
-                                onDismiss()
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "%02d:00".format(hour),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("关闭")
-            }
-        },
-    )
 }
 
 @Composable

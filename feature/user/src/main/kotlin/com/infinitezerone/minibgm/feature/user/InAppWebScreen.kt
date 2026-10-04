@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.ClipData
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -17,8 +18,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import com.infinitezerone.minibgm.core.model.InAppWebSession
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -37,7 +38,7 @@ internal fun InAppWebScreen(
     onOpenInBrowser: (String) -> Unit,
     viewModel: InAppWebViewModel = koinViewModel(),
 ) {
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -71,8 +72,9 @@ internal fun InAppWebScreen(
 
     fun copyUrl() {
         val target = resolveUpstreamUrl(currentUrl)
-        clipboardManager.setText(AnnotatedString(target))
         scope.launch {
+            val clipEntry = ClipEntry(ClipData.newPlainText("url", target))
+            clipboard.setClipEntry(clipEntry)
             snackbarHostState.showSnackbar("链接已复制")
         }
     }

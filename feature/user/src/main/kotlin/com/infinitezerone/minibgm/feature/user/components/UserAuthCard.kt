@@ -29,14 +29,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import kotlinx.coroutines.launch
 
 /** Bangumi 官方访问令牌生成页（next.bgm.tv 子域，属 bgm 系域名，可走应用内浏览）。 */
 private const val ACCESS_TOKEN_PAGE_URL = "https://next.bgm.tv/demo/access-token"
@@ -159,7 +161,8 @@ private fun PersonalAccessTokenDialog(
     var tokenText by rememberSaveable { mutableStateOf("") }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isLoading by rememberSaveable { mutableStateOf(false) }
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -230,9 +233,20 @@ private fun PersonalAccessTokenDialog(
                     trailingIcon = {
                         IconButton(
                             onClick = {
-                                clipboardManager.getText()?.text?.let { clipText ->
-                                    tokenText = clipText.trim()
-                                    errorMessage = null
+                                coroutineScope.launch {
+                                    val clipEntry = clipboard.getClipEntry()
+                                    val clipText =
+                                        clipEntry
+                                            ?.clipData
+                                            ?.getItemAt(0)
+                                            ?.text
+                                            ?.toString()
+                                            .orEmpty()
+                                            .trim()
+                                    if (clipText.isNotBlank()) {
+                                        tokenText = clipText
+                                        errorMessage = null
+                                    }
                                 }
                             },
                             enabled = !isLoading,

@@ -93,15 +93,77 @@ class BgmOverlayTest {
         }
 
     @Test
+    fun singleChoiceDialogAction_completesWithSelection() =
+        runBlocking {
+            val hostState = OverlayHostState()
+            val action =
+                SingleChoiceDialogAction(
+                    title = "选择模式",
+                    options = listOf("模式一", "模式二", "模式三"),
+                    selectedOption = "模式一",
+                )
+            var result: String? = null
+
+            val job =
+                launch {
+                    result = hostState.await(action)
+                }
+
+            kotlinx.coroutines.yield()
+
+            assertTrue(hostState.currentRequest is SingleChoiceDialogAction<*>)
+
+            val entry = hostState.currentEntry
+            @Suppress("UNCHECKED_CAST")
+            (entry as OverlayHostState.ActiveEntry<String?>).respond("模式二")
+            job.join()
+
+            assertEquals("模式二", result)
+            assertNull(hostState.currentRequest)
+        }
+
+    @Test
+    fun singleChoiceDialogAction_completesWithNullOnDismiss() =
+        runBlocking {
+            val hostState = OverlayHostState()
+            val action =
+                SingleChoiceDialogAction(
+                    title = "选择模式",
+                    options = listOf("模式一", "模式二"),
+                    selectedOption = "模式一",
+                )
+            var result: String? = "initial"
+
+            val job =
+                launch {
+                    result = hostState.await(action)
+                }
+
+            kotlinx.coroutines.yield()
+
+            assertTrue(hostState.currentRequest is SingleChoiceDialogAction<*>)
+
+            val entry = hostState.currentEntry
+            @Suppress("UNCHECKED_CAST")
+            (entry as OverlayHostState.ActiveEntry<String?>).respond(null)
+            job.join()
+
+            assertNull(result)
+            assertNull(hostState.currentRequest)
+        }
+
+    @Test
     fun overlayProviderScope_registersHandlersByType() {
         val scope = OverlayProviderScope()
         scope.overlay<CustomPromptRequest, Int> { req, onRespond ->
             onRespond(req.message.length)
         }
         scope.confirmDialog()
+        scope.singleChoiceDialog()
 
         assertTrue(scope.handlers.containsKey(CustomPromptRequest::class))
         assertTrue(scope.handlers.containsKey(ConfirmDialogAction::class))
+        assertTrue(scope.handlers.containsKey(SingleChoiceDialogAction::class))
         assertFalse(scope.handlers.containsKey(OverlayRequest::class))
     }
 
@@ -109,6 +171,7 @@ class BgmOverlayTest {
     fun unregisteredRequest_handlerNotFoundInScope() {
         val scope = OverlayProviderScope()
         scope.confirmDialog()
+        scope.singleChoiceDialog()
 
         assertFalse(scope.handlers.containsKey(CustomPromptRequest::class))
     }

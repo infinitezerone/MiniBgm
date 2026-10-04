@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -40,9 +41,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,6 +56,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
+import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
@@ -289,7 +291,8 @@ private fun CrashLogDialog(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -329,7 +332,10 @@ private fun CrashLogDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    clipboardManager.setText(AnnotatedString(content))
+                    coroutineScope.launch {
+                        val clipEntry = ClipEntry(ClipData.newPlainText("crash_log", content))
+                        clipboard.setClipEntry(clipEntry)
+                    }
                     onDismiss()
                 },
             ) {
@@ -407,8 +413,6 @@ fun SettingsScreenContent(
     overlayHostState: OverlayHostState = rememberOverlayHostState(),
 ) {
     val coroutineScope = rememberCoroutineScope()
-    var showSyncIntervalDialog by remember { mutableStateOf(false) }
-    var showReminderHourDialog by remember { mutableStateOf(false) }
     var showTimingBottomSheet by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
 
@@ -470,7 +474,22 @@ fun SettingsScreenContent(
                     syncInterval = uiState.syncInterval,
                     lastSyncTimestamp = uiState.lastSyncTimestamp,
                     isSyncing = uiState.isSyncing,
-                    onOpenSyncDialog = { showSyncIntervalDialog = true },
+                    onOpenSyncDialog = {
+                        coroutineScope.launch {
+                            val selected =
+                                overlayHostState.await(
+                                    SingleChoiceDialogAction(
+                                        title = "播放源自动同步频率",
+                                        options = SyncInterval.entries,
+                                        selectedOption = uiState.syncInterval,
+                                        optionLabel = { it.displayName },
+                                    ),
+                                )
+                            if (selected != null) {
+                                onSelectSyncInterval(selected)
+                            }
+                        }
+                    },
                     onSyncNow = onSyncNow,
                     onOpenPlaybackRules = onPlaybackRulesClick,
                     airingReminderEnabled = uiState.airingReminderEnabled,
@@ -479,7 +498,22 @@ fun SettingsScreenContent(
                     airingDailySummaryEnabled = airingDailySummaryEnabled,
                     onToggleAiringDailySummary = onToggleAiringDailySummary,
                     airingReminderHour = airingReminderHour,
-                    onOpenReminderHourDialog = { showReminderHourDialog = true },
+                    onOpenReminderHourDialog = {
+                        coroutineScope.launch {
+                            val selected =
+                                overlayHostState.await(
+                                    SingleChoiceDialogAction(
+                                        title = "每日提醒时刻",
+                                        options = listOf(7, 8, 12, 18, 21),
+                                        selectedOption = airingReminderHour,
+                                        optionLabel = { "%02d:00".format(it) },
+                                    ),
+                                )
+                            if (selected != null) {
+                                onSelectReminderHour(selected)
+                            }
+                        }
+                    },
                     airingPreAirEnabled = airingPreAirEnabled,
                     onToggleAiringPreAir = onToggleAiringPreAir,
                     airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
@@ -565,22 +599,6 @@ fun SettingsScreenContent(
         )
     }
 
-    if (showSyncIntervalDialog) {
-        SyncIntervalDialog(
-            currentInterval = uiState.syncInterval,
-            onSelectInterval = onSelectSyncInterval,
-            onDismiss = { showSyncIntervalDialog = false },
-        )
-    }
-
-    if (showReminderHourDialog) {
-        ReminderHourDialog(
-            currentHour = airingReminderHour,
-            onSelectHour = onSelectReminderHour,
-            onDismiss = { showReminderHourDialog = false },
-        )
-    }
-
     if (showTimingBottomSheet) {
         AiringTimingBottomSheet(
             initialOffsetMinutes = airingNotificationOffsetMinutes,
@@ -591,6 +609,7 @@ fun SettingsScreenContent(
 
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
+        singleChoiceDialog()
     }
 }
 
