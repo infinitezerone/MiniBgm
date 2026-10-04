@@ -28,6 +28,8 @@ import kotlin.test.fail
  *     （4/8/12/16/24）；off-ladder 野值（6/10/14 等）一律改用阶梯值，防止圆角体系再次漂移
  * 13. 图标令牌收口：feature 与 app 源码严禁直接 import androidx.compose.material.icons.*，
  *     所有图标必须统一经 :core:designsystem 的 BgmIcons 引用
+ * 14. 现代时间规范：生产代码严禁 import java.util.Date / java.util.Calendar，统一使用 kotlinx.datetime.*
+ * 15. 结构化并发规范：生产代码严禁使用 GlobalScope 裸协程，所有协程必须受控于明确生命周期作用域
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -525,6 +527,70 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反图标令牌收口（feature 与 app 源码严禁直接引入 androidx.compose.material.icons，所有图标必须统一经 :core:designsystem 的 BgmIcons 访问）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun production_sources_never_import_legacy_date_or_calendar() {
+        val violations = mutableListOf<String>()
+        val forbiddenImports = setOf("java.util.Date", "java.util.Calendar")
+
+        listOf("core", "feature", "app", "sync").forEach { dirName ->
+            val dir = File(projectRoot, dirName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { sourceFile ->
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    scanner.imports.forEach { imp ->
+                        if (imp.path in forbiddenImports) {
+                            violations.add(
+                                "$relPath:${imp.lineNumber} 违规引入遗留时间类型 -> import ${imp.path}，请改用 kotlinx.datetime.*",
+                            )
+                        }
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反现代时间规范（全仓生产代码严禁使用 java.util.Date / java.util.Calendar，统一使用 kotlinx.datetime.*）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun production_sources_never_use_global_scope() {
+        val violations = mutableListOf<String>()
+        val pattern = Regex("""\bGlobalScope\b""")
+
+        listOf("core", "feature", "app", "sync").forEach { dirName ->
+            val dir = File(projectRoot, dirName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { sourceFile ->
+                    val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                    val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    scanner.findMatches(pattern).forEach { match ->
+                        violations.add(
+                            "$relPath:${match.lineNumber} 违规使用 GlobalScope 裸协程 -> ${match.lineContent.trim()}",
+                        )
+                    }
+                }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反结构化并发规范（生产源码严禁使用 GlobalScope，请使用 viewModelScope 或注入的 CoroutineScope）：\n" +
                     violations.joinToString("\n"),
             )
         }

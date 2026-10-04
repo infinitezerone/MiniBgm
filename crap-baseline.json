@@ -26,16 +26,6 @@
       "reason": "JNI bridge method with coroutine cancellation handler for Rust fetch operations"
     },
     {
-      "class": "com/infinitezerone/minibgm/core/network/ScheduleSnapshotServiceImpl",
-      "method": "getSnapshot",
-      "reason": "Snapshot downloading and unpacking with legacy fallback"
-    },
-    {
-      "class": "com/infinitezerone/minibgm/core/network/BgmTokenService",
-      "method": "verifyToken",
-      "reason": "Token inspection and validation"
-    },
-    {
       "class": "com/infinitezerone/minibgm/core/data/repository/ScheduleRepositoryImpl",
       "method": "syncAirEvents",
       "reason": "AniList weekly airing calendar sync with complex date window aggregation"

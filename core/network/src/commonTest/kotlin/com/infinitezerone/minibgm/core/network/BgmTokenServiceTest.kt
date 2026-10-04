@@ -61,6 +61,12 @@ class BgmTokenServiceTest {
             config = BgmAuthConfig(),
         )
 
+    private fun unauthenticatedService(engine: MockEngine): BgmTokenService =
+        BgmTokenService(
+            client = BgmHttpClient.createBaseClient(engine = engine, userAgent = "MiniBgm/test"),
+            config = BgmAuthConfig(),
+        )
+
     @Test
     fun `refresh_token 失效（400 invalid_grant）时降级为 null 而非抛异常`() =
         runTest {
@@ -130,5 +136,115 @@ class BgmTokenServiceTest {
             val tokens = service(engine).refreshOrNull("old-token")
             assertEquals(STUB_ACCESS, tokens?.accessToken)
             assertEquals("", tokens?.refreshToken)
+        }
+
+    @Test
+    fun `verifyToken 成功返回有效用户信息`() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    assertEquals("Bearer valid-token", request.headers[HttpHeaders.Authorization])
+                    assertEquals("https://api.bgm.tv/v0/me", request.url.toString())
+                    respond(
+                        """{"id": 12345, "username": "testuser", "nickname": "Tester"}""",
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val profile = unauthenticatedService(engine).verifyToken("valid-token")
+            assertEquals(12345L, profile.id)
+            assertEquals("testuser", profile.username)
+            assertEquals("Tester", profile.displayName)
+        }
+
+    @Test
+    fun `verifyToken 返回 id 小于等于 0 时抛出 Unauthorized`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        """{"id": 0, "username": "nobody"}""",
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val e =
+                assertFailsWith<BgmNetworkException.Unauthorized> {
+                    unauthenticatedService(engine).verifyToken("valid-token")
+                }
+            assertEquals("未能获取有效用户身份", e.message)
+        }
+
+    @Test
+    fun `verifyToken 遭遇 401 抛出 Unauthorized`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.Unauthorized)
+                }
+
+            assertFailsWith<BgmNetworkException.Unauthorized> {
+                unauthenticatedService(engine).verifyToken("invalid-token")
+            }
+        }
+
+    @Test
+    fun `verifyToken 遭遇 403 抛出 Forbidden`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.Forbidden)
+                }
+
+            assertFailsWith<BgmNetworkException.Forbidden> {
+                unauthenticatedService(engine).verifyToken("forbidden-token")
+            }
+        }
+
+    @Test
+    fun `verifyToken 遭遇 429 抛出 RateLimited`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.TooManyRequests)
+                }
+
+            assertFailsWith<BgmNetworkException.RateLimited> {
+                unauthenticatedService(engine).verifyToken("limited-token")
+            }
+        }
+
+    @Test
+    fun `verifyToken 遭遇 500 抛出 ServerError`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.InternalServerError)
+                }
+
+            val e =
+                assertFailsWith<BgmNetworkException.ServerError> {
+                    unauthenticatedService(engine).verifyToken("error-token")
+                }
+            assertEquals(500, e.statusCode)
+        }
+
+    @Test
+    fun `exchangeCode 成功兑换并返回凭据`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        """{"$ACCESS_TOKEN_FIELD": "$STUB_ACCESS", "refresh_token": "refresh-123", "token_type": "Bearer", "expires_in": 604800}""",
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+
+            val tokens = unauthenticatedService(engine).exchangeCode("auth-code", "state-123", "verifier-abc")
+            assertEquals(STUB_ACCESS, tokens.accessToken)
+            assertEquals("refresh-123", tokens.refreshToken)
         }
 }
