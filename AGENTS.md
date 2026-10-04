@@ -4,7 +4,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 版本控制
 
-仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要建议遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。git 只读（log/diff/show/ls-remote/tag/clone）——git 写子命令由 VCS 层的 `tools/githooks`（pre-commit / pre-push 硬拒）拦下，新 clone 跑一次 `tools/githooks/setup.sh` 接线，`tools/jgate` 会自愈补配；jj 不运行 git 钩子，与合法路径零冲突。
+仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。git 只读（log/diff/show/ls-remote/tag/clone）——git 写子命令被 VCS 层的 `tools/githooks` 硬拒，新 clone 跑一次 `tools/githooks/setup.sh` 接线，`tools/jgate` 会自愈补配；jj 不运行 git 钩子，与合法路径零冲突。
 
 - 一个提交一个目的；同一文件别混两个目的——事后 `jj split` 拆不出可编译的中间态。
 - 同一时刻只允许一条 Gradle 命令在跑（长构建后台 + 足够超时，避免 daemon 互踩）。
@@ -12,21 +12,19 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 构建与验证
 
-提交前唯一入口（取代手工四件套，含"绿≠测过"的 XML 真实性校验）：
+提交前唯一入口（含"绿≠测过"的 XML 真实性校验）：
 
 ```bash
 bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ spotlessApply → 架构红线 → 触及模块测试（含 :app 单测）→ :app:assembleDebug → 结果校验
 ```
 
-- 验证目标是"改动"而非"全仓库"，按改动自动推断：工作副本 `@` 有改动 → 验证工作副本；`@` 干净则退到最近一次提交 `@-`（`jj commit` 之后复跑）；改动触及基础数据层（`:core:model`、`:core:common`、`:core:data`、`:core:network`、`:core:database`、`:core:datastore`）、`build-logic/`、`gradle/`、根构建脚本或版本目录 → 具有向下扩散性，自动提升为全模块单元测试与 Debug 装配（不跑耗时的 Release R8 混淆与 CRAP 度量）。都推断不出来时**明确报错**——既不静默放行（假绿），也不静默全量（慢）。
-- `bash tools/jgate --plan` 只打印本次的验证目标、模块与 gradle/Rust 任务（零副作用）；`--all` 显式全量验证（追加 `:app:assembleRelease` 与 `:core:testing:crapCheck`，与 CI 标准完全闭环，用于 PR 前与发版验证）；显式传模块（`bash tools/jgate feature/user sync/work`）则跳过推断。日常提交与 `jj commit` / `jj git push` 均不跑 release。
-
-- KMP 模块纯 Kotlin 领域逻辑测试位于 `commonTest`（如 `:core:model`、`:core:common`、`:core:ai`）；依赖 Android 运行时/Robolectric 的宿主测试位于 `androidHostTest`（如 `:core:data`、`:core:database`、`:core:datastore`、`:core:testing`）。Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`、`:core:webview`）使用 `testDebugUnitTest`。命名错误或未挂载导致任务 NO-SOURCE 空跑由 jgate 的测试源码与 XML 存在性双向校验拦下。
-- 全量 `allTests testDebugUnitTest` 用于底层跨切面改动、PR 前及 CI 主干；Android-only 模块没有 allTests。
-- **素材体积门（jgate 第 1 步）**：改动涉及的图片单张 > 200 KB 或合计 > 1 MB 直接拦下。原因是截图会**不可逆**地撑大仓库历史——git 保留每一版，一张 `screencap` 原始输出（1272×2772 PNG，280 KB～1 MB）只能靠改写历史清掉，而同样内容的 800px WebP 约 95 KB。截图一律压成 800px 宽的 WebP 再提交（README 表格里约 380px 显示宽度，2 倍图够用；转完删原图）。**不要指望 git pre-commit 钩子**——jj 不运行钩子。
+- 验证目标是"改动"而非"全仓库"，按改动自动推断：`@` 有改动验工作副本，`@` 干净退到 `@-`（`jj commit` 之后复跑）；触及基础数据层（`:core:model/common/data/network/database/datastore`）、`build-logic/`、`gradle/`、根构建脚本或版本目录 → 自动提升为全模块单测 + Debug 装配；都推不出来时**明确报错**——不静默放行，也不静默全量。
+- `--plan` 只打印验证计划（零副作用）；`--all` 显式全量（追加 `:app:assembleRelease` 与 `:core:testing:crapCheck`，用于 PR 前与发版）；显式传模块（`bash tools/jgate feature/user sync/work`）则跳过推断。日常提交与 `jj commit` / `jj git push` 均不跑 release。
+- KMP 模块：纯 Kotlin 逻辑测试放 `commonTest`，依赖 Android 运行时/Robolectric 的放 `androidHostTest`；Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`、`:core:webview`）用 `testDebugUnitTest` 且没有 allTests。NO-SOURCE 空跑由 jgate 的源码与 XML 双向校验拦下。全量 `allTests testDebugUnitTest` 用于底层跨切面改动与 PR 前。
+- 素材体积门：改动涉及的图片单张 > 200 KB 或合计 > 1 MB 直接拦下。截图一律压成 800px 宽的 WebP 再提交，转完删原图。**不要指望 git pre-commit 钩子**——jj 不运行钩子。
 - 模块依赖边变化后跑 `./gradlew graphUpdate` 重建各 README 依赖图。
-- Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 独立 job 只拦新增；修复代码后基线残留无害，勿手工编辑基线。
-- **Rust ECH 原生库（`:core:network` + `crates/minibgm-ech`）**：`libminibgm_ech.so` 是构建产物（落在 `:core:network/build/ech-native/jniLibs`，**不再写进 `src/`**——那会撞上 `core/testing` 架构红线测试的 `core/*/src/**` 输入声明），由 `:core:network:buildEchNative` 在 jniLibs 合并前编译。因此任何 Android 打包都需要 Rust 工具链（rustup + `cargo install cargo-ndk` + NDK）；NDK 解析顺序为 `-Pminibgm.ech.ndkDir` → `ANDROID_NDK_HOME/ANDROID_NDK_ROOT` → `ANDROID_HOME/local.properties(sdk.dir)` 下最高版本。已有产物时可用 `-Pminibgm.ech.skipBuild=true` 跳过编译，但产物必须与 Rust 源码指纹一致，否则失败。**缺库一律硬失败**——静默回退 CIO 等于 ECH 在发布产物里不存在（v0.3 之前的老问题）。Rust 侧门禁：`cargo fmt --check` / `cargo clippy -D warnings` / `cargo test`（jgate 触及 `crates/` 或 `--all` 时本地执行，命令与 CI 逐字一致；另有 CI 独立 job + release 前的 Verify）。Windows 宿主需 MSVC C++ 构建工具与 NASM；若构建 aws-lc-sys 遇 `0xc0000142`（STATUS_DLL_INIT_FAILED），系目录被沙盒工具标记了低完整性级别（Low Mandatory Level），需在管理员 PowerShell 执行 `icacls . /setintegritylevel "(OI)(CI)M" /t /c /q` 恢复正常完整性级别，jgate 保持全量硬门禁。
+- Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 只拦新增；勿手工编辑基线。
+- Rust ECH 原生库（`:core:network` + `crates/minibgm-ech`）：任何 Android 打包都需要 Rust 工具链 + NDK；`libminibgm_ech.so` 是构建产物，**缺库一律硬失败**，禁止静默回退 CIO。环境要求、NDK 解析与排障见 `crates/minibgm-ech/README.md`。
 
 ## 硬红线
 
