@@ -56,6 +56,7 @@ fun SeasonalFilterBar(
     onClearSelectedTags: () -> Unit,
     onAddCustomTag: (String) -> Unit,
     onRemoveCustomTag: (String) -> Unit,
+    onTogglePurifyContent: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var showAddTagSheet by remember { mutableStateOf(false) }
@@ -264,6 +265,18 @@ fun SeasonalFilterBar(
                             onClick = { onSelectSort(sort) },
                         )
                     }
+                }
+
+                // 内容净化（折叠短片、MV、泡面番、动态漫等）
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SeasonalGuideFilterChip(
+                        label = if (uiState.purifyContent) "净化已开启（折叠短片/泡面）" else "内容净化（全部平铺）",
+                        selected = uiState.purifyContent,
+                        onClick = onTogglePurifyContent,
+                    )
                 }
             }
         }

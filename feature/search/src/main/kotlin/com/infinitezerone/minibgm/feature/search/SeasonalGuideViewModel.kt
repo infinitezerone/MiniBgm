@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -181,6 +182,8 @@ class SeasonalGuideViewModel(
     // ── 本季首播：分页投影。游标是顺序状态（第 N 页依赖第 N-1 页的 offset），留一个私有容器；
     //    竞态全部交给下面的 flatMapLatest：查询一变，旧链取消、游标重置。──
     private val pagedSubjects = MutableStateFlow(PagedSubjects())
+    private val purifyContent = MutableStateFlow(true)
+    private val expandedGroupKeys = MutableStateFlow<Set<String>>(emptySet())
 
     /** 常量部分：年份/季度选项与「当季」标记，建一次不再变 */
     private val stateTemplate =
@@ -236,13 +239,16 @@ class SeasonalGuideViewModel(
             },
             loginPromptVisible,
             searchRepository.getCustomFilterTags(),
-        ) { data, identity, prompt, customTags ->
+            combine(purifyContent, expandedGroupKeys) { purify, keys -> Pair(purify, keys) },
+        ) { data, identity, prompt, customTags, purifyData ->
             data.copy(
                 isLoggedIn = identity.isLoggedIn,
                 wishedSubjectIds = identity.wishedSubjectIds,
                 doingSubjectIds = identity.doingSubjectIds,
                 showLoginPromptDialog = prompt,
                 customFilterTags = customTags,
+                purifyContent = purifyData.first,
+                expandedGroupKeys = purifyData.second,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
@@ -251,8 +257,10 @@ class SeasonalGuideViewModel(
         seasonQuery
             .map { it.requestKey() }
             .distinctUntilChanged()
-            .onEach { pagedSubjects.value = PagedSubjects() }
-            .flatMapLatest { key -> onPageSignals(key) }
+            .onEach {
+                pagedSubjects.value = PagedSubjects()
+                expandedGroupKeys.value = emptySet()
+            }.flatMapLatest { key -> onPageSignals(key) }
             .launchIn(viewModelScope)
     }
 
@@ -326,6 +334,16 @@ class SeasonalGuideViewModel(
             } else {
                 SeasonalViewMode.LIST
             }
+    }
+
+    /** 切换内容净化开关（折叠短片、MV、泡面番、动态漫等杂音条目） */
+    fun togglePurifyContent() {
+        purifyContent.update { !it }
+    }
+
+    /** 就地展开/收起特定的折叠胶囊组 */
+    fun toggleFoldedGroup(groupKey: String) {
+        expandedGroupKeys.update { if (groupKey in it) it - groupKey else it + groupKey }
     }
 
     /**

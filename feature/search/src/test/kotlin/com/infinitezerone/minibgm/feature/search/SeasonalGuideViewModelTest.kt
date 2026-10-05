@@ -730,4 +730,62 @@ class SeasonalGuideViewModelTest {
                     .contains("机战"),
             )
         }
+
+    @Test
+    fun purifyContent_groupsNoiseItemsIntoFoldedCapsules() =
+        runTest {
+            val normalSubject = sampleSubject.copy(id = 101, name = "正片动画")
+            val noiseSubject1 =
+                sampleSubject.copy(
+                    id = 102,
+                    name = "泡面短剧",
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag(name = "泡面番", count = 99),
+                        ),
+                )
+            val noiseSubject2 =
+                sampleSubject.copy(
+                    id = 103,
+                    name = "音乐映像",
+                    metaTags = listOf("MV"),
+                )
+            val normalSubject2 = sampleSubject.copy(id = 104, name = "另一部正片")
+
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult =
+                AppResult.Success(listOf(normalSubject, noiseSubject1, noiseSubject2, normalSubject2))
+            searchRepository.advancedSearchTotal = 4
+
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.purifyContent)
+            // 应该聚合为：Anime(101), FoldedGroup(102, [102, 103]), Anime(104) -> 3 个展示单元
+            assertEquals(3, state.displayItems.size)
+            assertTrue(state.displayItems[0] is SeasonalDisplayItem.Anime)
+            assertTrue(state.displayItems[1] is SeasonalDisplayItem.FoldedGroup)
+            assertTrue(state.displayItems[2] is SeasonalDisplayItem.Anime)
+
+            val folded = state.displayItems[1] as SeasonalDisplayItem.FoldedGroup
+            assertEquals("102", folded.groupKey)
+            assertEquals(2, folded.subjects.size)
+            assertFalse(folded.isExpanded)
+
+            // 就地展开
+            viewModel.toggleFoldedGroup("102")
+            val expandedState = viewModel.uiState.value
+            // 展开后：Anime(101), FoldedGroup(102, isExpanded=true), Anime(102), Anime(103), Anime(104) -> 5 个展示单元
+            assertEquals(5, expandedState.displayItems.size)
+            assertTrue((expandedState.displayItems[1] as SeasonalDisplayItem.FoldedGroup).isExpanded)
+
+            // 关闭净化开关：全部平铺为 4 个常规 Anime
+            viewModel.togglePurifyContent()
+            val unpurifiedState = viewModel.uiState.value
+            assertFalse(unpurifiedState.purifyContent)
+            assertEquals(4, unpurifiedState.displayItems.size)
+            assertTrue(unpurifiedState.displayItems.all { it is SeasonalDisplayItem.Anime })
+        }
 }

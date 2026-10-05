@@ -51,10 +51,12 @@ import com.infinitezerone.minibgm.core.designsystem.component.TagActionBottomShe
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.feature.search.SeasonalDisplayItem
 import com.infinitezerone.minibgm.feature.search.components.SeasonPickerBottomSheet
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeCard
 import com.infinitezerone.minibgm.feature.search.components.SeasonalAnimeRow
 import com.infinitezerone.minibgm.feature.search.components.SeasonalFilterBar
+import com.infinitezerone.minibgm.feature.search.components.SeasonalFoldedCapsule
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideEmptyState
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideErrorState
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeletonGrid
@@ -239,6 +241,7 @@ fun SeasonalGuideContent(
                     onClearSelectedTags = viewModel::clearSelectedTags,
                     onAddCustomTag = viewModel::addCustomFilterTag,
                     onRemoveCustomTag = viewModel::removeCustomFilterTag,
+                    onTogglePurifyContent = viewModel::togglePurifyContent,
                 )
 
                 // 仅在整体换挡重新拉取时在顶部展示进度，追加翻页由底部指示器表达
@@ -285,17 +288,29 @@ fun SeasonalGuideContent(
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(
-                                items = uiState.filteredSubjects,
-                                key = { it.id },
-                            ) { subject ->
-                                SeasonalAnimeRow(
-                                    subject = subject,
-                                    isWished = uiState.wishedSubjectIds.contains(subject.id),
-                                    isDoing = uiState.doingSubjectIds.contains(subject.id),
-                                    onSubjectClick = onSubjectClick,
-                                    onToggleCollection = viewModel::toggleCollection,
-                                    onTagClick = { activeTagForAction = it },
-                                )
+                                items = uiState.displayItems,
+                                key = { it.key },
+                            ) { item ->
+                                when (item) {
+                                    is SeasonalDisplayItem.Anime -> {
+                                        SeasonalAnimeRow(
+                                            subject = item.subject,
+                                            isWished = uiState.wishedSubjectIds.contains(item.subject.id),
+                                            isDoing = uiState.doingSubjectIds.contains(item.subject.id),
+                                            onSubjectClick = onSubjectClick,
+                                            onToggleCollection = viewModel::toggleCollection,
+                                            onTagClick = { activeTagForAction = it },
+                                        )
+                                    }
+
+                                    is SeasonalDisplayItem.FoldedGroup -> {
+                                        SeasonalFoldedCapsule(
+                                            subjects = item.subjects,
+                                            isExpanded = item.isExpanded,
+                                            onToggleExpand = { viewModel.toggleFoldedGroup(item.groupKey) },
+                                        )
+                                    }
+                                }
                             }
 
                             if (uiState.isLoadingMore) {
@@ -369,16 +384,36 @@ fun SeasonalGuideContent(
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(
-                                items = uiState.filteredSubjects,
-                                key = { it.id },
-                            ) { subject ->
-                                SeasonalAnimeCard(
-                                    subject = subject,
-                                    isWished = uiState.wishedSubjectIds.contains(subject.id),
-                                    isDoing = uiState.doingSubjectIds.contains(subject.id),
-                                    onSubjectClick = onSubjectClick,
-                                    onToggleCollection = viewModel::toggleCollection,
-                                )
+                                items = uiState.displayItems,
+                                key = { it.key },
+                                span = { item ->
+                                    if (item is SeasonalDisplayItem.FoldedGroup) {
+                                        GridItemSpan(maxLineSpan)
+                                    } else {
+                                        GridItemSpan(1)
+                                    }
+                                },
+                            ) { item ->
+                                when (item) {
+                                    is SeasonalDisplayItem.Anime -> {
+                                        SeasonalAnimeCard(
+                                            subject = item.subject,
+                                            isWished = uiState.wishedSubjectIds.contains(item.subject.id),
+                                            isDoing = uiState.doingSubjectIds.contains(item.subject.id),
+                                            onSubjectClick = onSubjectClick,
+                                            onToggleCollection = viewModel::toggleCollection,
+                                        )
+                                    }
+
+                                    is SeasonalDisplayItem.FoldedGroup -> {
+                                        SeasonalFoldedCapsule(
+                                            subjects = item.subjects,
+                                            isExpanded = item.isExpanded,
+                                            onToggleExpand = { viewModel.toggleFoldedGroup(item.groupKey) },
+                                            modifier = Modifier.padding(vertical = 4.dp),
+                                        )
+                                    }
+                                }
                             }
 
                             if (uiState.isLoadingMore) {

@@ -185,10 +185,18 @@ data class SeasonalGuideUiState(
     val selectedTags: Set<String> = emptySet(),
     /** 从当前季度已拉取番剧中动态聚合的高频标签及条目数量统计 */
     val seasonalHotTags: List<Pair<String, Int>> = emptyList(),
+    /** 是否开启内容净化（将短片、MV、泡面番、动态漫折叠为胶囊单元） */
+    val purifyContent: Boolean = true,
+    /** 当前已被用户就地展开的折叠胶囊组键集合 */
+    val expandedGroupKeys: Set<String> = emptySet(),
 ) {
     /** 筛选完全下推服务端，可见条目即服务端返回的原始条目 */
     val filteredSubjects: List<Subject>
         get() = subjects
+
+    /** 依净化规则与展开状态计算出的界面展示单元列表 */
+    val displayItems: List<SeasonalDisplayItem>
+        get() = buildSeasonalDisplayItems(subjects, purifyContent, expandedGroupKeys)
 
     /**
      * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 剧场版 · #百合」「全部」。
@@ -198,8 +206,79 @@ data class SeasonalGuideUiState(
             val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
             val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
             val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
-            return listOfNotNull(originLabel, formLabel, tagsLabel)
+            val purifyLabel = if (!purifyContent) "全部平铺" else null
+            return listOfNotNull(originLabel, formLabel, tagsLabel, purifyLabel)
                 .joinToString(" · ")
                 .ifEmpty { SeasonOriginFilter.ALL.label }
         }
+}
+
+/**
+ * 季度片单界面展示单元（常规条目 或 折叠胶囊）。
+ */
+sealed interface SeasonalDisplayItem {
+    val key: String
+
+    /** 常规条目展示 */
+    data class Anime(
+        val subject: Subject,
+        val isFromFoldedGroup: Boolean = false,
+    ) : SeasonalDisplayItem {
+        override val key: String get() = "anime_${subject.id}"
+    }
+
+    /** 连续非主流条目聚合成的折叠胶囊 */
+    data class FoldedGroup(
+        val groupKey: String,
+        val subjects: List<Subject>,
+        val isExpanded: Boolean,
+    ) : SeasonalDisplayItem {
+        override val key: String get() = "folded_$groupKey"
+    }
+}
+
+/**
+ * 将季度片单原始作品流按净化规则聚合为展示单元列表：
+ * 若开启净化 [purifyContent]，则将连续命中的 [Subject.isPurifiedNoise] 条目聚合为 [SeasonalDisplayItem.FoldedGroup]；
+ * 用户若在界面上就地展开了某组（[expandedGroupKeys] 包含其 groupKey），则将该组内的条目作为带折叠标记的普通条目紧随其后呈现；
+ * 若未开启净化，则全部平铺为 [SeasonalDisplayItem.Anime]。
+ */
+internal fun buildSeasonalDisplayItems(
+    subjects: List<Subject>,
+    purifyContent: Boolean,
+    expandedGroupKeys: Set<String>,
+): List<SeasonalDisplayItem> {
+    if (!purifyContent) {
+        return subjects.map { SeasonalDisplayItem.Anime(it) }
+    }
+
+    val result = mutableListOf<SeasonalDisplayItem>()
+    val currentNoiseBuffer = mutableListOf<Subject>()
+
+    fun flushNoiseBuffer() {
+        if (currentNoiseBuffer.isEmpty()) return
+        val groupKey = currentNoiseBuffer.first().id.toString()
+        val isExpanded = groupKey in expandedGroupKeys
+        val groupSubjects = currentNoiseBuffer.toList()
+        currentNoiseBuffer.clear()
+
+        result.add(SeasonalDisplayItem.FoldedGroup(groupKey, groupSubjects, isExpanded))
+        if (isExpanded) {
+            groupSubjects.forEach { sub ->
+                result.add(SeasonalDisplayItem.Anime(sub, isFromFoldedGroup = true))
+            }
+        }
+    }
+
+    for (subject in subjects) {
+        if (subject.isPurifiedNoise) {
+            currentNoiseBuffer.add(subject)
+        } else {
+            flushNoiseBuffer()
+            result.add(SeasonalDisplayItem.Anime(subject))
+        }
+    }
+    flushNoiseBuffer()
+
+    return result
 }

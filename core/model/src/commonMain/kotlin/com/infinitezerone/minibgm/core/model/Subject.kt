@@ -79,6 +79,16 @@ data class Subject(
      */
     val isShortForm: Boolean
         get() = platform == PLATFORM_OTHER || metaTags.any { it in SHORT_FORM_META_TAGS }
+
+    /**
+     * 是否为季度片单中容易冲淡正片叙事的非主流条目（短片、MV、CM、泡面番、动态漫）。
+     *
+     * 满足以下任一条件即判定为净化折叠对象：
+     * 1. 满足 [isShortForm]（平台为其他或元标签为片段类）；
+     * 2. 标签命中微型或衍生类型（"泡面番"、"泡面"、"动态漫"、"动态漫画"）。
+     */
+    val isPurifiedNoise: Boolean
+        get() = isShortForm || tags.any { it.name.trim() in PURIFIED_NOISE_TAGS }
 }
 
 /** `platform` 取「其他」的条目基本都是不占档期的片段映像 */
@@ -86,6 +96,9 @@ private const val PLATFORM_OTHER = "其他"
 
 /** 片段类元标签：这些不是一集一集放送的正片 */
 private val SHORT_FORM_META_TAGS = setOf("MV", "PV", "CM", "短片", "短片集")
+
+/** 易冲散正片排期的微型或衍生类型标签 */
+private val PURIFIED_NOISE_TAGS = setOf("泡面番", "泡面", "动态漫", "动态漫画")
 
 /** 与片名相关的 infobox 条目；`日文名` 常与 [Subject.name] 重复，去重时会被合并 */
 private val ALIAS_INFOBOX_KEYS = setOf("中文名", "别名", "第二中文名", "英文名", "罗马字", "日文名")
