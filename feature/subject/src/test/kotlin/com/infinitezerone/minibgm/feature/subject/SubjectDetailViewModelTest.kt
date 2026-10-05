@@ -24,6 +24,7 @@ import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
@@ -1692,5 +1693,38 @@ class SubjectDetailViewModelTest {
             assertEquals("神作！", state.collection?.comment)
             assertEquals(5, state.collection?.epStatus)
             assertEquals(customTags, state.collection?.tags)
+        }
+
+    @Test
+    fun toggleCustomFilterTag_addsAndRemovesTag() =
+        runTest {
+            val searchRepo = FakeSearchRepository()
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = FakeSubjectRepository().apply { sendSubject(sampleSubject) },
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    searchRepository = searchRepo,
+                )
+
+            viewModel.toggleCustomFilterTag("机战")
+            val event1 = viewModel.uiEvents.first()
+            assertTrue(event1 is SubjectDetailUiEvent.ShowMessage)
+            assertEquals("已将「#机战」添加至常用筛选标签", (event1 as SubjectDetailUiEvent.ShowMessage).message)
+            assertTrue(
+                viewModel.uiState.value.customFilterTags
+                    .contains("机战"),
+            )
+
+            viewModel.toggleCustomFilterTag("机战")
+            val event2 = viewModel.uiEvents.first()
+            assertTrue(event2 is SubjectDetailUiEvent.ShowMessage)
+            assertEquals("已从常用筛选标签中移除「#机战」", (event2 as SubjectDetailUiEvent.ShowMessage).message)
+            assertFalse(
+                viewModel.uiState.value.customFilterTags
+                    .contains("机战"),
+            )
         }
 }

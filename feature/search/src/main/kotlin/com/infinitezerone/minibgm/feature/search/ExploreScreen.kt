@@ -322,6 +322,8 @@ fun ExploreScreen(
                 onCategorySelect = exploreViewModel::onCategorySelect,
                 selectedTags = exploreUiState.selectedTags,
                 onTagToggle = exploreViewModel::onTagToggle,
+                customFilterTags = exploreUiState.customFilterTags,
+                onRemoveCustomTag = exploreViewModel::onRemoveCustomTag,
                 onClearAllTags = exploreViewModel::onClearAllTags,
                 onCustomTagSubmit = exploreViewModel::onCustomTagSubmit,
                 selectedSort = exploreUiState.selectedSort,

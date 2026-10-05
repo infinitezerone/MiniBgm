@@ -13,17 +13,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.SeasonFormFilter
 import com.infinitezerone.minibgm.feature.search.SeasonOriginFilter
@@ -33,8 +39,9 @@ import com.infinitezerone.minibgm.feature.search.SeasonalViewMode
 
 /**
  * 季度片单顶部常驻与可展开筛选条：
- * 档期胶囊 + 当前筛选摘要（展开产地/形式/排序） + 视图形态切换（紧凑列表/海报网格）
+ * 档期胶囊 + 当前筛选摘要（展开产地/形式/排序） + 视图形态切换（紧凑列表/海报网格） + 常用标签横滑栏
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeasonalFilterBar(
     uiState: SeasonalGuideUiState,
@@ -45,8 +52,15 @@ fun SeasonalFilterBar(
     onSelectOrigin: (SeasonOriginFilter) -> Unit,
     onSelectForm: (SeasonFormFilter) -> Unit,
     onSelectSort: (SeasonSortOption) -> Unit,
+    onToggleTag: (String) -> Unit,
+    onClearSelectedTags: () -> Unit,
+    onAddCustomTag: (String) -> Unit,
+    onRemoveCustomTag: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showAddTagSheet by remember { mutableStateOf(false) }
+    val addTagSheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
+
     Column(
         modifier =
             modifier
@@ -157,6 +171,57 @@ fun SeasonalFilterBar(
             }
         }
 
+        // 4. 常用标签横滑选择条（常驻展示，点击即下推筛选）
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 全部 胶囊
+            SeasonalGuideFilterChip(
+                label = "全部",
+                selected = uiState.selectedTags.isEmpty(),
+                onClick = onClearSelectedTags,
+            )
+
+            // 每一个自定义常用标签
+            uiState.customFilterTags.forEach { tag ->
+                val isSelected = tag in uiState.selectedTags
+                SeasonalGuideFilterChip(
+                    label = tag,
+                    selected = isSelected,
+                    onClick = { onToggleTag(tag) },
+                )
+            }
+
+            // ＋管理常用标签
+            Surface(
+                onClick = { showAddTagSheet = true },
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.height(32.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.Add,
+                        contentDescription = "管理常用标签",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = if (uiState.customFilterTags.isEmpty()) "常用标签" else "管理",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+
         AnimatedVisibility(visible = filterExpanded) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // 一级筛选：产地（单选）
@@ -202,5 +267,16 @@ fun SeasonalFilterBar(
                 }
             }
         }
+    }
+
+    if (showAddTagSheet) {
+        AddSeasonalTagBottomSheet(
+            sheetState = addTagSheetState,
+            customFilterTags = uiState.customFilterTags,
+            seasonalHotTags = uiState.seasonalHotTags,
+            onAddCustomTag = onAddCustomTag,
+            onRemoveCustomTag = onRemoveCustomTag,
+            onDismiss = { showAddTagSheet = false },
+        )
     }
 }

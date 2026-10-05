@@ -117,12 +117,14 @@ class ExploreViewModel(
             },
             loginPromptVisible,
             userMessage,
-        ) { base, (loggedIn, wishedIds), loginPrompt, msg ->
+            searchRepository.getCustomFilterTags(),
+        ) { base, (loggedIn, wishedIds), loginPrompt, msg, customTags ->
             base.copy(
                 isLoggedIn = loggedIn,
                 wishedSubjectIds = wishedIds,
                 showLoginPromptDialog = loginPrompt,
                 userMessage = msg,
+                customFilterTags = customTags,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -329,6 +331,19 @@ class ExploreViewModel(
         if (trimmed.isBlank()) return
         setQuery {
             it.copy(tags = it.tags + trimmed, mood = null)
+        }
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                searchRepository.addCustomFilterTag(trimmed)
+            }
+        }
+    }
+
+    fun onRemoveCustomTag(tag: String) {
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                searchRepository.removeCustomFilterTag(tag)
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CharacterDetail
@@ -128,6 +129,7 @@ data class SubjectDetailUiState(
     val playlists: List<com.infinitezerone.minibgm.core.model.PlaybackPlaylist> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
+    val customFilterTags: List<String> = emptyList(),
 )
 
 /** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
@@ -150,6 +152,7 @@ private data class RepoSnapshot(
     val hasMoreEpisodes: Boolean,
     val isLoggedIn: Boolean,
     val playback: SubjectPlaybackData,
+    val customFilterTags: List<String>,
 )
 
 /**
@@ -184,6 +187,7 @@ class SubjectDetailViewModel(
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
+    private val searchRepository: SearchRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
@@ -279,8 +283,9 @@ class SubjectDetailViewModel(
                 ) { rules, playlists, failures ->
                     SubjectPlaybackData(rules, playlists, failures)
                 },
-            ) { core, hasMore, loggedIn, playback ->
-                RepoSnapshot(core, hasMore, loggedIn, playback)
+                searchRepository?.getCustomFilterTags() ?: flowOf(emptyList()),
+            ) { core, hasMore, loggedIn, playback, customTags ->
+                RepoSnapshot(core, hasMore, loggedIn, playback, customTags)
             }.collect { snapshot ->
                 _uiState.update { state ->
                     val streamCollection = snapshot.core.collection
@@ -302,6 +307,7 @@ class SubjectDetailViewModel(
                         playbackRules = snapshot.playback.playbackRules,
                         playlists = snapshot.playback.playlists,
                         failedSourceReasons = snapshot.playback.failedSourceReasons,
+                        customFilterTags = snapshot.customFilterTags,
                         isLoading = if (snapshot.core.subject != null || state.subject != null) false else state.isLoading,
                         isEpisodesLoading = if (snapshot.core.episodes.isNotEmpty()) false else state.isEpisodesLoading,
                         episodesError = if (snapshot.core.episodes.isNotEmpty()) null else state.episodesError,
@@ -318,6 +324,20 @@ class SubjectDetailViewModel(
             .launchIn(viewModelScope)
         // 拉取条目详情与章节（写入本地库）；错误仅转为文案，不中断流程
         refresh(isUserPullToRefresh = false)
+    }
+
+    /** 切换自定义常用筛选标签（来源 2：随看随加） */
+    fun toggleCustomFilterTag(tag: String) {
+        viewModelScope.launch {
+            val current = _uiState.value.customFilterTags
+            if (tag in current) {
+                searchRepository?.removeCustomFilterTag(tag)
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("已从常用筛选标签中移除「#$tag」"))
+            } else {
+                searchRepository?.addCustomFilterTag(tag)
+                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("已将「#$tag」添加至常用筛选标签"))
+            }
+        }
     }
 
     private var detailsLoaded = false

@@ -36,7 +36,7 @@ import java.time.LocalDate
 private const val PAGE_SIZE = 20
 
 /**
- * 界面上的完整筛选条件：年份／季度／排序／产地／形式。
+ * 界面上的完整筛选条件：年份／季度／排序／产地／形式／自选标签。
  * 所有条件 100% 精确下推服务端，作为 UI 的单一输入源。
  */
 private data class SeasonQuery(
@@ -45,6 +45,7 @@ private data class SeasonQuery(
     val origin: SeasonOriginFilter,
     val form: SeasonFormFilter,
     val sort: SeasonSortOption,
+    val tags: Set<String> = emptySet(),
 )
 
 /**
@@ -57,6 +58,7 @@ private data class RequestKey(
     val quarter: SeasonQuarter,
     val sort: SeasonSortOption,
     val metaTags: List<String>,
+    val tags: List<String>,
 )
 
 private fun SeasonQuery.requestKey(): RequestKey =
@@ -65,7 +67,21 @@ private fun SeasonQuery.requestKey(): RequestKey =
         quarter = quarter,
         sort = sort,
         metaTags = listOfNotNull(origin.metaTag, form.metaTag),
+        tags = tags.toList().sorted(),
     )
+
+private val EXCLUDED_HOT_TAGS = setOf("日本", "中国", "TV", "WEB", "剧场版", "OVA", "动画", "动态漫画", "国产")
+
+private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
+    subjects
+        .flatMap { subject ->
+            subject.tags.map { it.name.trim() } + subject.metaTags.map { it.trim() }
+        }.filter { it.isNotBlank() && it.length <= 10 && it !in EXCLUDED_HOT_TAGS }
+        .groupingBy { it }
+        .eachCount()
+        .toList()
+        .sortedByDescending { it.second }
+        .take(25)
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)
@@ -76,6 +92,7 @@ private fun RequestKey.toRequest(): SearchSubjectsRequest {
                 type = listOf(2),
                 airDate = listOf(">=$startDay", "<=$endDay"),
                 metaTags = metaTags.ifEmpty { null },
+                tag = tags.ifEmpty { null },
             ),
     )
 }
@@ -194,6 +211,8 @@ class SeasonalGuideViewModel(
                     selectedOrigin = query.origin,
                     selectedForm = query.form,
                     selectedSort = query.sort,
+                    selectedTags = query.tags,
+                    seasonalHotTags = extractHotTags(pages.subjects),
                     viewMode = mode,
                     subjects = pages.subjects,
                     pageOffset = pages.pageOffset,
@@ -216,12 +235,14 @@ class SeasonalGuideViewModel(
                 )
             },
             loginPromptVisible,
-        ) { data, identity, prompt ->
+            searchRepository.getCustomFilterTags(),
+        ) { data, identity, prompt, customTags ->
             data.copy(
                 isLoggedIn = identity.isLoggedIn,
                 wishedSubjectIds = identity.wishedSubjectIds,
                 doingSubjectIds = identity.doingSubjectIds,
                 showLoginPromptDialog = prompt,
+                customFilterTags = customTags,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
@@ -256,6 +277,40 @@ class SeasonalGuideViewModel(
 
     /** 切换排序方式；服务端排序，切换即一次新查询 */
     fun selectSort(sort: SeasonSortOption) = setQuery { it.copy(sort = sort) }
+
+    /** 切换激活/反选某个标签（多选下推） */
+    fun toggleTag(tag: String) =
+        setQuery { current ->
+            val updated = if (tag in current.tags) current.tags - tag else current.tags + tag
+            current.copy(tags = updated)
+        }
+
+    /** 清空当前选中的所有标签 */
+    fun clearSelectedTags() =
+        setQuery { current ->
+            current.copy(tags = emptySet())
+        }
+
+    /** 添加自定义常用筛选标签（持久化） */
+    fun addCustomFilterTag(tag: String) {
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                searchRepository.addCustomFilterTag(tag)
+            }
+        }
+    }
+
+    /** 移除自定义常用筛选标签（持久化） */
+    fun removeCustomFilterTag(tag: String) {
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                searchRepository.removeCustomFilterTag(tag)
+            }
+            if (tag in seasonQuery.value.tags) {
+                toggleTag(tag)
+            }
+        }
+    }
 
     /** 一次改一个条件，且值未变时不发射——combine 的上游少一次无谓换挡 */
     private inline fun setQuery(transform: (SeasonQuery) -> SeasonQuery) {

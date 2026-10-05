@@ -179,19 +179,26 @@ data class SeasonalGuideUiState(
     val error: String? = null,
     val isLoggedIn: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
+    /** 持久化的自定义常用筛选标签 */
+    val customFilterTags: List<String> = emptyList(),
+    /** 当前已激活的标签筛选集合（多选下推） */
+    val selectedTags: Set<String> = emptySet(),
+    /** 从当前季度已拉取番剧中动态聚合的高频标签及条目数量统计 */
+    val seasonalHotTags: List<Pair<String, Int>> = emptyList(),
 ) {
     /** 筛选完全下推服务端，可见条目即服务端返回的原始条目 */
     val filteredSubjects: List<Subject>
         get() = subjects
 
     /**
-     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 剧场版」「剧场版」「全部」。
+     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 剧场版 · #百合」「全部」。
      */
     val filterSummary: String
         get() {
             val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
             val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
-            return listOfNotNull(originLabel, formLabel)
+            val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
+            return listOfNotNull(originLabel, formLabel, tagsLabel)
                 .joinToString(" · ")
                 .ifEmpty { SeasonOriginFilter.ALL.label }
         }

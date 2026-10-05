@@ -294,4 +294,25 @@ class UserPreferencesDataSource(
             current.copy(bingeSubjectIds = updated)
         }
     }
+
+    /** 添加自定义常用筛选标签（自动去重且保留有序列表） */
+    suspend fun addCustomFilterTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isBlank()) return
+        dataStore.updateData { current ->
+            if (current.customFilterTags.contains(trimmed)) {
+                current
+            } else {
+                current.copy(customFilterTags = current.customFilterTags + trimmed)
+            }
+        }
+    }
+
+    /** 移除自定义常用筛选标签 */
+    suspend fun removeCustomFilterTag(tag: String) {
+        val trimmed = tag.trim()
+        dataStore.updateData { current ->
+            current.copy(customFilterTags = current.customFilterTags - trimmed)
+        }
+    }
 }

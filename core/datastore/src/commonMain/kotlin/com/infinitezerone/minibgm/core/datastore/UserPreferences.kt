@@ -80,6 +80,8 @@ data class UserPreferences(
     val playbackPositionsJson: String = "",
     /** 上次成功起播的播放源标识（PlayerSourceTab.id / 规则 id；空串表示尚无记录），用于进页时优先选中 */
     val lastPlaybackSourceId: String = "",
+    /** 用户保存的季度导视与探索发现自定义常用筛选标签列表（有序） */
+    val customFilterTags: List<String> = emptyList(),
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

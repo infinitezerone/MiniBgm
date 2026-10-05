@@ -69,6 +69,7 @@ fun SeasonalAnimeRow(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleCollection: (Long, CollectionType) -> Unit,
     modifier: Modifier = Modifier,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val primaryTitle = subject.displayName
@@ -248,7 +249,10 @@ fun SeasonalAnimeRow(
                         modifier = Modifier.padding(vertical = 1.dp),
                     ) {
                         genres.forEach { genre ->
-                            GenreTag(label = genre)
+                            GenreTag(
+                                label = genre,
+                                onClick = onTagClick?.let { { it(genre) } },
+                            )
                         }
                     }
                 }
@@ -336,8 +340,13 @@ private fun QuickCollectionPill(
 
 /** 题材标签小药丸；宽度由短词上限保证，不挤占其他信息 */
 @Composable
-private fun GenreTag(label: String) {
+private fun GenreTag(
+    label: String,
+    onClick: (() -> Unit)? = null,
+) {
     Surface(
+        onClick = onClick ?: {},
+        enabled = onClick != null,
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {

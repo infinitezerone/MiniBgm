@@ -93,6 +93,20 @@ class FakeSearchRepository : SearchRepository {
         _blockedSubjectTags.value = tags
     }
 
+    private val _customFilterTags = MutableStateFlow<List<String>>(emptyList())
+
+    override fun getCustomFilterTags(): Flow<List<String>> = _customFilterTags.asStateFlow()
+
+    override suspend fun addCustomFilterTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isBlank() || _customFilterTags.value.contains(trimmed)) return
+        _customFilterTags.value = _customFilterTags.value + trimmed
+    }
+
+    override suspend fun removeCustomFilterTag(tag: String) {
+        _customFilterTags.value = _customFilterTags.value - tag.trim()
+    }
+
     var lastSort: String? = null
         private set
 

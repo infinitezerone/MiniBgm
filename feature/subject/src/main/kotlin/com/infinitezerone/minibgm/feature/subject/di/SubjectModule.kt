@@ -20,6 +20,7 @@ val subjectModule =
                 authRepository = get(),
                 settingsRepository = get(),
                 failureStore = get(),
+                searchRepository = getOrNull(),
             )
         }
 

@@ -634,4 +634,34 @@ class ExploreViewModelTest {
             assertEquals(ExploreSort.SCORE, viewModel.uiState.value.selectedSort)
             assertNull(viewModel.uiState.value.selectedMood)
         }
+
+    @Test
+    fun onCustomTagSubmit_persistsTagToCustomFilterTagsAndTogglesSelection() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            viewModel.onCustomTagSubmit("百合")
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.customFilterTags
+                    .contains("百合"),
+            )
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .contains("百合"),
+            )
+
+            viewModel.onRemoveCustomTag("百合")
+            advanceUntilIdle()
+
+            assertFalse(
+                viewModel.uiState.value.customFilterTags
+                    .contains("百合"),
+            )
+        }
 }

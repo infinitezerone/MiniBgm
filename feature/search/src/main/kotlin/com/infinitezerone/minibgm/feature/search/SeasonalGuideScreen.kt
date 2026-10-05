@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,6 +47,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDial
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.TagActionBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -157,8 +159,11 @@ fun SeasonalGuideContent(
         filterExpanded = false
     }
 
+    var activeTagForAction by remember { mutableStateOf<String?>(null) }
+    val tagActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     val currentFilterKey =
-        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}"
+        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}_${uiState.selectedTags.sorted().joinToString()}"
     var previousFilterKey by rememberSaveable { mutableStateOf(currentFilterKey) }
 
     LaunchedEffect(currentFilterKey) {
@@ -230,6 +235,10 @@ fun SeasonalGuideContent(
                         filterExpanded = false
                         viewModel.selectSort(sort)
                     },
+                    onToggleTag = viewModel::toggleTag,
+                    onClearSelectedTags = viewModel::clearSelectedTags,
+                    onAddCustomTag = viewModel::addCustomFilterTag,
+                    onRemoveCustomTag = viewModel::removeCustomFilterTag,
                 )
 
                 // 仅在整体换挡重新拉取时在顶部展示进度，追加翻页由底部指示器表达
@@ -285,6 +294,7 @@ fun SeasonalGuideContent(
                                     isDoing = uiState.doingSubjectIds.contains(subject.id),
                                     onSubjectClick = onSubjectClick,
                                     onToggleCollection = viewModel::toggleCollection,
+                                    onTagClick = { activeTagForAction = it },
                                 )
                             }
 
@@ -452,6 +462,26 @@ fun SeasonalGuideContent(
                     showSeasonPicker = false
                 },
                 onDismiss = { showSeasonPicker = false },
+            )
+        }
+
+        activeTagForAction?.let { tag ->
+            TagActionBottomSheet(
+                tag = tag,
+                isFavorite = uiState.customFilterTags.contains(tag),
+                isFiltered = uiState.selectedTags.contains(tag),
+                sheetState = tagActionSheetState,
+                onToggleFilter = {
+                    viewModel.toggleTag(tag)
+                },
+                onToggleFavorite = {
+                    if (uiState.customFilterTags.contains(tag)) {
+                        viewModel.removeCustomFilterTag(tag)
+                    } else {
+                        viewModel.addCustomFilterTag(tag)
+                    }
+                },
+                onDismiss = { activeTagForAction = null },
             )
         }
     }

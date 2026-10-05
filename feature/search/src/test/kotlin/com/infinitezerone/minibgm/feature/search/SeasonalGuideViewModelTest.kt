@@ -677,4 +677,57 @@ class SeasonalGuideViewModelTest {
             assertEquals(callsBeforeToggle, searchRepository.advancedSearchCallCount)
             assertFalse(viewModel.uiState.value.hasMore)
         }
+
+    @Test
+    fun tagFilter_togglesTagAndPushesToSearchFilter() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            val initialCalls = searchRepository.advancedSearchCallCount
+
+            viewModel.toggleTag("百合")
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .contains("百合"),
+            )
+            assertEquals(listOf("百合"), searchRepository.lastAdvancedRequest?.filter?.tag)
+            assertEquals(initialCalls + 1, searchRepository.advancedSearchCallCount)
+
+            viewModel.toggleTag("百合")
+            advanceUntilIdle()
+
+            assertFalse(
+                viewModel.uiState.value.selectedTags
+                    .contains("百合"),
+            )
+            assertNull(searchRepository.lastAdvancedRequest?.filter?.tag)
+        }
+
+    @Test
+    fun customFilterTags_addAndRemoveViaViewModel() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            viewModel.addCustomFilterTag("机战")
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.customFilterTags
+                    .contains("机战"),
+            )
+
+            viewModel.removeCustomFilterTag("机战")
+            advanceUntilIdle()
+
+            assertFalse(
+                viewModel.uiState.value.customFilterTags
+                    .contains("机战"),
+            )
+        }
 }

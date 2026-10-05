@@ -259,4 +259,25 @@ class SearchRepositoryImplTest {
             repo.setBlockedSubjectTags(listOf("耽美", "后宫"))
             assertEquals(listOf("耽美", "后宫"), repo.getBlockedSubjectTags().first())
         }
+
+    @Test
+    fun customFilterTags_addAndRemove() =
+        runTest {
+            val fakeApi = FakeApiService()
+            val userPrefs = createTestUserPreferencesDataSource()
+            val repo = SearchRepositoryImpl(fakeApi, userPrefs)
+
+            assertTrue(repo.getCustomFilterTags().first().isEmpty())
+
+            repo.addCustomFilterTag("百合")
+            repo.addCustomFilterTag("机战")
+            repo.addCustomFilterTag("百合") // 重复添加应保持去重
+
+            val tags = repo.getCustomFilterTags().first()
+            assertEquals(listOf("百合", "机战"), tags)
+
+            repo.removeCustomFilterTag("百合")
+            val updated = repo.getCustomFilterTags().first()
+            assertEquals(listOf("机战"), updated)
+        }
 }

@@ -27,6 +27,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,6 +55,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.TagActionBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -351,6 +353,8 @@ fun SubjectDetailScreen(
     val currentEpisodes = groupedEpisodes[activeGroup] ?: emptyList()
     var showSourcesBottomSheet by rememberSaveable { mutableStateOf(false) }
     var selectedEpisodeForSources by remember { mutableStateOf<Episode?>(null) }
+    var activeTagForAction by rememberSaveable { mutableStateOf<String?>(null) }
+    val tagActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Box(
         modifier =
@@ -569,7 +573,7 @@ fun SubjectDetailScreen(
                                     onToggleEpisodeWatched = onToggleEpisodeWatched,
                                     onSelectEpisodeForDetail = onSelectEpisodeForDetail,
                                     onSubjectClick = onSubjectClick,
-                                    onTagClick = onTagClick,
+                                    onTagClick = { tag -> activeTagForAction = tag },
                                     onCharacterClick = handleCharacterClick,
                                     onPersonClick = handlePersonClick,
                                     onPreviewCharacter = { previewCharacter = it },
@@ -709,6 +713,23 @@ fun SubjectDetailScreen(
         playlists = uiState.playlists,
         failedSourceReasons = uiState.failedSourceReasons,
     )
+
+    if (activeTagForAction != null) {
+        TagActionBottomSheet(
+            tag = activeTagForAction!!,
+            isFavorite = activeTagForAction!! in uiState.customFilterTags,
+            sheetState = tagActionSheetState,
+            onToggleFavorite = {
+                viewModel.toggleCustomFilterTag(activeTagForAction!!)
+            },
+            onDismiss = { activeTagForAction = null },
+            onViewAllWithTag = {
+                val t = activeTagForAction!!
+                activeTagForAction = null
+                onTagClick(t)
+            },
+        )
+    }
 
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()

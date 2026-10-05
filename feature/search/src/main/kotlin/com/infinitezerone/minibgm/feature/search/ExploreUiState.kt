@@ -246,6 +246,7 @@ data class ExploreUiState(
     val hotComments: Map<Long, SubjectComment> = emptyMap(),
     val error: String? = null,
     val userMessage: String? = null,
+    val customFilterTags: List<String> = emptyList(),
 )
 
 /**

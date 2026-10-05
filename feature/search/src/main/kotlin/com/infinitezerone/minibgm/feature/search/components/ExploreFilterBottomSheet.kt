@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.search.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -70,6 +71,8 @@ fun ExploreFilterBottomSheet(
     onResetAll: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    customFilterTags: List<String> = emptyList(),
+    onRemoveCustomTag: (String) -> Unit = {},
 ) {
     var customTagText by remember { mutableStateOf("") }
     var selectedTimeCategory by remember { mutableStateOf(selectedSeason.category) }
@@ -277,6 +280,44 @@ fun ExploreFilterBottomSheet(
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Section E0: 我的常用标签
+                if (customFilterTags.isNotEmpty()) {
+                    FilterSection(title = "★ 我的常用标签") {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            customFilterTags.forEach { tag ->
+                                val isSelected = tag in selectedTags
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onTagToggle(tag) },
+                                    label = { Text(text = tag, style = MaterialTheme.typography.labelSmall) },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = BgmIcons.Close,
+                                            contentDescription = "删除常用标签",
+                                            modifier =
+                                                Modifier
+                                                    .size(14.dp)
+                                                    .clickable { onRemoveCustomTag(tag) },
+                                        )
+                                    },
+                                    border = null,
+                                    colors =
+                                        FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        ),
+                                )
                             }
                         }
                     }

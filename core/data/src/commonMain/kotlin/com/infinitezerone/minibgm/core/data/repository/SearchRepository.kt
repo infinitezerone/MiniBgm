@@ -61,6 +61,15 @@ interface SearchRepository {
 
     /** 更新题材标签排除黑名单 */
     suspend fun setBlockedSubjectTags(tags: List<String>)
+
+    /** 观察自定义常用筛选标签列表（有序） */
+    fun getCustomFilterTags(): Flow<List<String>>
+
+    /** 添加自定义常用筛选标签 */
+    suspend fun addCustomFilterTag(tag: String)
+
+    /** 移除自定义常用筛选标签 */
+    suspend fun removeCustomFilterTag(tag: String)
 }
 
 internal class SearchRepositoryImpl(
@@ -100,6 +109,20 @@ internal class SearchRepositoryImpl(
     override suspend fun setBlockedSubjectTags(tags: List<String>) {
         withContext(NonCancellable) {
             userPreferences.setBlockedSubjectTags(tags)
+        }
+    }
+
+    override fun getCustomFilterTags(): Flow<List<String>> = userPreferences.userPreferences.map { it.customFilterTags }
+
+    override suspend fun addCustomFilterTag(tag: String) {
+        withContext(NonCancellable) {
+            userPreferences.addCustomFilterTag(tag)
+        }
+    }
+
+    override suspend fun removeCustomFilterTag(tag: String) {
+        withContext(NonCancellable) {
+            userPreferences.removeCustomFilterTag(tag)
         }
     }
 
