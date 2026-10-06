@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.SeasonAiringScope
 import com.infinitezerone.minibgm.feature.search.SeasonFormFilter
 import com.infinitezerone.minibgm.feature.search.SeasonOriginFilter
 import com.infinitezerone.minibgm.feature.search.SeasonSortOption
@@ -57,6 +58,7 @@ fun SeasonalFilterBar(
     onAddCustomTag: (String) -> Unit,
     onRemoveCustomTag: (String) -> Unit,
     onTogglePurifyContent: () -> Unit = {},
+    onSelectAiringScope: (SeasonAiringScope) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var showAddTagSheet by remember { mutableStateOf(false) }
@@ -225,6 +227,22 @@ fun SeasonalFilterBar(
 
         AnimatedVisibility(visible = filterExpanded) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 当季放送范围：全部在播 / 仅首播新番 / 仅跨季续播（仅在当季生效展示）
+                if (uiState.isCurrentSeason) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SeasonAiringScope.entries.forEach { scope ->
+                            SeasonalGuideFilterChip(
+                                label = scope.label,
+                                selected = uiState.selectedAiringScope == scope,
+                                onClick = { onSelectAiringScope(scope) },
+                            )
+                        }
+                    }
+                }
+
                 // 一级筛选：产地（单选）
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),

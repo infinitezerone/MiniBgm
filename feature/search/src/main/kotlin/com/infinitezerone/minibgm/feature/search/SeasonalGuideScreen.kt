@@ -165,7 +165,7 @@ fun SeasonalGuideContent(
     val tagActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val currentFilterKey =
-        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}_${uiState.selectedTags.sorted().joinToString()}"
+        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}_${uiState.selectedAiringScope}_${uiState.selectedTags.sorted().joinToString()}"
     var previousFilterKey by rememberSaveable { mutableStateOf(currentFilterKey) }
 
     LaunchedEffect(currentFilterKey) {
@@ -212,6 +212,11 @@ fun SeasonalGuideContent(
         }
     }
 
+    val seasonStartDay =
+        remember(uiState.selectedYear, uiState.selectedQuarter) {
+            uiState.selectedQuarter.getAirDateRange(uiState.selectedYear).first
+        }
+
     Box(modifier = modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
@@ -242,6 +247,10 @@ fun SeasonalGuideContent(
                     onAddCustomTag = viewModel::addCustomFilterTag,
                     onRemoveCustomTag = viewModel::removeCustomFilterTag,
                     onTogglePurifyContent = viewModel::togglePurifyContent,
+                    onSelectAiringScope = { scope ->
+                        filterExpanded = false
+                        viewModel.selectAiringScope(scope)
+                    },
                 )
 
                 // 仅在整体换挡重新拉取时在顶部展示进度，追加翻页由底部指示器表达
@@ -293,6 +302,17 @@ fun SeasonalGuideContent(
                             ) { item ->
                                 when (item) {
                                     is SeasonalDisplayItem.Anime -> {
+                                        val isContinuing =
+                                            uiState.isCurrentSeason &&
+                                                item.subject.airDate.isNotBlank() &&
+                                                item.subject.airDate < seasonStartDay
+                                        val nextEp = uiState.continuingNextEpisodes[item.subject.id]
+                                        val continuingEpText =
+                                            if (isContinuing) {
+                                                if (nextEp != null && nextEp > 1) "第 $nextEp 话起" else "跨季在播"
+                                            } else {
+                                                null
+                                            }
                                         SeasonalAnimeRow(
                                             subject = item.subject,
                                             isWished = uiState.wishedSubjectIds.contains(item.subject.id),
@@ -300,6 +320,8 @@ fun SeasonalGuideContent(
                                             onSubjectClick = onSubjectClick,
                                             onToggleCollection = viewModel::toggleCollection,
                                             onTagClick = { activeTagForAction = it },
+                                            isContinuing = isContinuing,
+                                            continuingEpisodeText = continuingEpText,
                                         )
                                     }
 
@@ -396,12 +418,25 @@ fun SeasonalGuideContent(
                             ) { item ->
                                 when (item) {
                                     is SeasonalDisplayItem.Anime -> {
+                                        val isContinuing =
+                                            uiState.isCurrentSeason &&
+                                                item.subject.airDate.isNotBlank() &&
+                                                item.subject.airDate < seasonStartDay
+                                        val nextEp = uiState.continuingNextEpisodes[item.subject.id]
+                                        val continuingEpText =
+                                            if (isContinuing) {
+                                                if (nextEp != null && nextEp > 1) "第 $nextEp 话起" else "跨季在播"
+                                            } else {
+                                                null
+                                            }
                                         SeasonalAnimeCard(
                                             subject = item.subject,
                                             isWished = uiState.wishedSubjectIds.contains(item.subject.id),
                                             isDoing = uiState.doingSubjectIds.contains(item.subject.id),
                                             onSubjectClick = onSubjectClick,
                                             onToggleCollection = viewModel::toggleCollection,
+                                            isContinuing = isContinuing,
+                                            continuingEpisodeText = continuingEpText,
                                         )
                                     }
 

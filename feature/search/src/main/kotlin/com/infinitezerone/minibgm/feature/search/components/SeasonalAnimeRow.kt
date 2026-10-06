@@ -70,6 +70,8 @@ fun SeasonalAnimeRow(
     onToggleCollection: (Long, CollectionType) -> Unit,
     modifier: Modifier = Modifier,
     onTagClick: ((String) -> Unit)? = null,
+    isContinuing: Boolean = false,
+    continuingEpisodeText: String? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val primaryTitle = subject.displayName
@@ -84,9 +86,15 @@ fun SeasonalAnimeRow(
             ?: subject.metaTags.firstOrNull { it in setOf("TV", "WEB", "剧场版", "OVA", "OAD") }
 
     val metaItems =
-        remember(subject) {
+        remember(subject, isContinuing, continuingEpisodeText) {
+            val dateLabel =
+                if (isContinuing) {
+                    continuingEpisodeText ?: "跨季在播"
+                } else {
+                    airDate.takeIf { it.isNotBlank() }?.let { if (it.length >= 5) it.substring(5) + " 首播" else it }
+                }
             listOfNotNull(
-                airDate.takeIf { it.isNotBlank() }?.let { if (it.length >= 5) it.substring(5) + " 首播" else it },
+                dateLabel,
                 "${subject.eps}话".takeIf { subject.eps > 0 },
                 subject.broadcastStation.takeIf { it.isNotBlank() },
                 if (rank > 0) "#$rank" else null,

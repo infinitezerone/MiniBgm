@@ -147,6 +147,25 @@ enum class SeasonSortOption(
 }
 
 /**
+ * 当季作品放送范围筛选：
+ * - [ALL] 全部在播（本季首播新作 + 跨季连载中续作，统一大盘混合横向对比）；
+ * - [NEW_ONLY] 仅首播新番（仅查看本季度第一话开播的作品）；
+ * - [CONTINUING_ONLY] 仅跨季续播（仅查看半年番后半、年番及接档连载作品）。
+ */
+enum class SeasonAiringScope(
+    val label: String,
+) {
+    ALL("全部在播"),
+    NEW_ONLY("仅首播新番"),
+    CONTINUING_ONLY("仅跨季续播"),
+    ;
+
+    companion object {
+        val DEFAULT = ALL
+    }
+}
+
+/**
  * 季度片单 UI 状态。
  *
  * 这是**投影**而非容器（方案 B·响应式派生流）：ViewModel 把筛选输入、分页结果与收藏仓的流
@@ -189,7 +208,15 @@ data class SeasonalGuideUiState(
     val purifyContent: Boolean = true,
     /** 当前已被用户就地展开的折叠胶囊组键集合 */
     val expandedGroupKeys: Set<String> = emptySet(),
+    /** 当季放送范围筛选（全部在播 / 仅首播新番 / 仅跨季续播） */
+    val selectedAiringScope: SeasonAiringScope = SeasonAiringScope.DEFAULT,
+    /** 跨季在播番的当前播出的下一话集数映射 (bgmId -> nextEpisodeNumber) */
+    val continuingNextEpisodes: Map<Long, Int> = emptyMap(),
 ) {
+    /** 当前所选年份和季度是否为真实当前季度（跨季续播仅在当季生效） */
+    val isCurrentSeason: Boolean
+        get() = selectedYear == currentYear && selectedQuarter == currentQuarter
+
     /** 筛选完全下推服务端，可见条目即服务端返回的原始条目 */
     val filteredSubjects: List<Subject>
         get() = subjects
@@ -199,15 +226,21 @@ data class SeasonalGuideUiState(
         get() = buildSeasonalDisplayItems(subjects, purifyContent, expandedGroupKeys)
 
     /**
-     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「日本 · 剧场版 · #百合」「全部」。
+     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「全部在播 · 日本 · 剧场版 · #百合」「全部」。
      */
     val filterSummary: String
         get() {
+            val scopeLabel =
+                if (isCurrentSeason && selectedAiringScope != SeasonAiringScope.ALL) {
+                    selectedAiringScope.label
+                } else {
+                    null
+                }
             val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
             val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
             val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
             val purifyLabel = if (!purifyContent) "全部平铺" else null
-            return listOfNotNull(originLabel, formLabel, tagsLabel, purifyLabel)
+            return listOfNotNull(scopeLabel, originLabel, formLabel, tagsLabel, purifyLabel)
                 .joinToString(" · ")
                 .ifEmpty { SeasonOriginFilter.ALL.label }
         }

@@ -1,11 +1,13 @@
 package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
@@ -35,15 +37,18 @@ class SeasonalGuideViewModelTest {
         searchRepository: FakeSearchRepository = FakeSearchRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
         initialYear: Int = 0,
         initialSeasonMonth: Int = 0,
+        timeProvider: () -> LocalDate = { fixedDate },
     ) = SeasonalGuideViewModel(
         searchRepository = searchRepository,
         collectionRepository = collectionRepository,
         authRepository = authRepository,
+        scheduleRepository = scheduleRepository,
         initialYear = initialYear,
         initialSeasonMonth = initialSeasonMonth,
-        timeProvider = { fixedDate },
+        timeProvider = timeProvider,
     )
 
     /** 订阅一次性事件流；backgroundScope 在测试结束时会自动取消，也不阻塞 advanceUntilIdle */
@@ -624,13 +629,7 @@ class SeasonalGuideViewModelTest {
         runTest {
             // 9/29 按业界口径已经是**秋季**（秋番自 9 月下旬开播），旧实现会算成夏季。
             // 这直接决定进页面时默认落在哪一档。
-            val viewModel =
-                SeasonalGuideViewModel(
-                    searchRepository = FakeSearchRepository(),
-                    collectionRepository = FakeCollectionRepository(),
-                    authRepository = FakeAuthRepository(),
-                    timeProvider = { LocalDate.of(2026, 9, 29) },
-                )
+            val viewModel = createViewModel(timeProvider = { LocalDate.of(2026, 9, 29) })
             advanceUntilIdle()
 
             assertEquals(SeasonQuarter.AUTUMN, viewModel.uiState.value.selectedQuarter)
@@ -787,5 +786,157 @@ class SeasonalGuideViewModelTest {
             assertFalse(unpurifiedState.purifyContent)
             assertEquals(4, unpurifiedState.displayItems.size)
             assertTrue(unpurifiedState.displayItems.all { it is SeasonalDisplayItem.Anime })
+        }
+
+    @Test
+    fun currentSeason_ongoingAnimeFromSchedule_mergedAndRankedWithSeasonalNew() =
+        runTest {
+            val newAnime =
+                sampleSubject.copy(
+                    id = 101,
+                    name = "冬季新番",
+                    airDate = "2026-01-10",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 7.5),
+                )
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(newAnime))
+            searchRepository.advancedSearchTotal = 1
+
+            val scheduleRepository = FakeScheduleRepository()
+            val continuingSchedule =
+                AirSchedule(
+                    bgmId = 201,
+                    title = "秋季半年番续播",
+                    titleCn = "秋季半年番续播",
+                    airDate = "2025-10-05",
+                    ratingScore = 8.8,
+                    nextEpisodeNumber = 16,
+                    weekday = 1,
+                )
+            scheduleRepository.sendSchedules(1, listOf(continuingSchedule))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertTrue(state.isCurrentSeason)
+            assertEquals(2, state.subjects.size)
+            assertEquals(16, state.continuingNextEpisodes[201L])
+
+            // 切换为 SCORE 高分优先：8.8 分的跨季番排在 7.5 分的新番前面
+            viewModel.selectSort(SeasonSortOption.SCORE)
+            val scoreState = viewModel.uiState.value
+            assertEquals(201L, scoreState.subjects[0].id)
+            assertEquals(101L, scoreState.subjects[1].id)
+        }
+
+    @Test
+    fun airingScopeFilter_switchesBetweenAll_newOnly_continuingOnly() =
+        runTest {
+            val newAnime =
+                sampleSubject.copy(
+                    id = 101,
+                    name = "冬季新番",
+                    airDate = "2026-01-10",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 7.0),
+                )
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(newAnime))
+            searchRepository.advancedSearchTotal = 1
+
+            val scheduleRepository = FakeScheduleRepository()
+            val continuingSchedule =
+                AirSchedule(
+                    bgmId = 201,
+                    title = "跨季在播番",
+                    titleCn = "跨季在播番",
+                    airDate = "2025-10-05",
+                    ratingScore = 8.0,
+                    nextEpisodeNumber = 14,
+                    weekday = 2,
+                )
+            scheduleRepository.sendSchedules(2, listOf(continuingSchedule))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            // 默认全部在播
+            assertEquals(SeasonAiringScope.ALL, viewModel.uiState.value.selectedAiringScope)
+            assertEquals(2, viewModel.uiState.value.subjects.size)
+
+            // 切换仅首播新番
+            viewModel.selectAiringScope(SeasonAiringScope.NEW_ONLY)
+            val newOnlyState = viewModel.uiState.value
+            assertEquals(SeasonAiringScope.NEW_ONLY, newOnlyState.selectedAiringScope)
+            assertEquals(listOf(101L), newOnlyState.subjects.map { it.id })
+
+            // 切换仅跨季续播
+            viewModel.selectAiringScope(SeasonAiringScope.CONTINUING_ONLY)
+            val continuingOnlyState = viewModel.uiState.value
+            assertEquals(SeasonAiringScope.CONTINUING_ONLY, continuingOnlyState.selectedAiringScope)
+            assertEquals(listOf(201L), continuingOnlyState.subjects.map { it.id })
+
+            // 切回全部在播
+            viewModel.selectAiringScope(SeasonAiringScope.ALL)
+            val allState = viewModel.uiState.value
+            assertEquals(2, allState.subjects.size)
+        }
+
+    @Test
+    fun pastSeason_doesNotIncludeOngoingSchedules() =
+        runTest {
+            val pastAnime =
+                sampleSubject.copy(
+                    id = 99,
+                    name = "2025夏季番",
+                    airDate = "2025-07-10",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 7.2),
+                )
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(pastAnime))
+            searchRepository.advancedSearchTotal = 1
+
+            val scheduleRepository = FakeScheduleRepository()
+            val continuingSchedule =
+                AirSchedule(
+                    bgmId = 201,
+                    title = "当前排期条目",
+                    titleCn = "当前排期条目",
+                    airDate = "2025-01-05",
+                    ratingScore = 8.5,
+                    nextEpisodeNumber = 20,
+                    weekday = 1,
+                )
+            scheduleRepository.sendSchedules(1, listOf(continuingSchedule))
+
+            // 指定历史季度 2025 年 7 月（非当前季度 2026 Q1）
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    initialYear = 2025,
+                    initialSeasonMonth = 7,
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isCurrentSeason)
+            // 历史季度只包含服务端搜索返回的条目，排期库中的当季条目不注入
+            assertEquals(1, state.subjects.size)
+            assertEquals(99L, state.subjects[0].id)
         }
 }

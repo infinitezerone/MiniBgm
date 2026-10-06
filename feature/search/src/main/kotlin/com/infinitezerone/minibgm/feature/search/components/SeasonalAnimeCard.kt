@@ -49,6 +49,8 @@ fun SeasonalAnimeCard(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleCollection: (Long, CollectionType) -> Unit,
     modifier: Modifier = Modifier,
+    isContinuing: Boolean = false,
+    continuingEpisodeText: String? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     val primaryTitle = subject.displayName
@@ -104,6 +106,23 @@ fun SeasonalAnimeCard(
                     shape = RoundedCornerShape(bottomEnd = 8.dp, topStart = 8.dp),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 3.dp),
                 )
+
+                // 跨季在播角标（右上角）
+                if (isContinuing) {
+                    androidx.compose.material3.Surface(
+                        shape = RoundedCornerShape(bottomStart = 8.dp, topEnd = 8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) {
+                        Text(
+                            text = continuingEpisodeText ?: "跨季在播",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                }
             }
 
             // 2. 标题与信息元数据区
@@ -129,10 +148,22 @@ fun SeasonalAnimeCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val displayDate =
+                        if (isContinuing) {
+                            continuingEpisodeText ?: "跨季在播"
+                        } else {
+                            airDate.ifBlank { "待定" }
+                        }
                     Text(
-                        text = airDate.ifBlank { "待定" },
+                        text = displayDate,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color =
+                            if (isContinuing) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        fontWeight = if (isContinuing) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),

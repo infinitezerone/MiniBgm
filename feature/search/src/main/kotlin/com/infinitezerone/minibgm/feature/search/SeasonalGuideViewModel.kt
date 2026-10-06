@@ -5,11 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.SubjectImages
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -37,7 +40,7 @@ import java.time.LocalDate
 private const val PAGE_SIZE = 20
 
 /**
- * 界面上的完整筛选条件：年份／季度／排序／产地／形式／自选标签。
+ * 界面上的完整筛选条件：年份／季度／排序／产地／形式／自选标签／放送范围。
  * 所有条件 100% 精确下推服务端，作为 UI 的单一输入源。
  */
 private data class SeasonQuery(
@@ -47,6 +50,7 @@ private data class SeasonQuery(
     val form: SeasonFormFilter,
     val sort: SeasonSortOption,
     val tags: Set<String> = emptySet(),
+    val airingScope: SeasonAiringScope = SeasonAiringScope.DEFAULT,
 )
 
 /**
@@ -140,6 +144,7 @@ class SeasonalGuideViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
+    private val scheduleRepository: ScheduleRepository,
     initialYear: Int = 0,
     initialSeasonMonth: Int = 0,
     timeProvider: () -> LocalDate = { LocalDate.now() },
@@ -207,7 +212,105 @@ class SeasonalGuideViewModel(
      */
     val uiState: StateFlow<SeasonalGuideUiState> =
         combine(
-            combine(pagedSubjects, seasonQuery, viewMode) { pages, query, mode ->
+            combine(pagedSubjects, seasonQuery, viewMode, scheduleRepository.getAllSchedulesStream()) { pages, query, mode, allSchedules ->
+                val (seasonStartDay, _) = query.quarter.getAirDateRange(query.year)
+                val isCurrent = query.year == stateTemplate.currentYear && query.quarter == stateTemplate.currentQuarter
+
+                // 提取当季跨季在播番剧（首播早于本季起始，且活跃在播）
+                val continuingSchedules =
+                    if (isCurrent) {
+                        allSchedules.filter { sched ->
+                            sched.airDate.isNotBlank() && sched.airDate < seasonStartDay && !sched.isUnmapped && sched.bgmId > 0
+                        }
+                    } else {
+                        emptyList()
+                    }
+
+                val continuingSubjects =
+                    continuingSchedules.map { sched ->
+                        Subject(
+                            id = sched.bgmId,
+                            type = 2,
+                            name = sched.title,
+                            nameCn = sched.titleCn,
+                            images =
+                                if (sched.coverUrl.isNotBlank()) {
+                                    SubjectImages(
+                                        large = sched.coverUrl,
+                                        common = sched.coverUrl,
+                                        medium = sched.coverUrl,
+                                        small = sched.coverUrl,
+                                        grid = sched.coverUrl,
+                                    )
+                                } else {
+                                    null
+                                },
+                            rating = if (sched.ratingScore > 0.0) Rating(score = sched.ratingScore) else null,
+                            airDate = sched.airDate,
+                            date = sched.airDate,
+                            eps = 0,
+                            tags = emptyList(),
+                            metaTags = listOf("TV", "日本"),
+                            platform = "TV",
+                        )
+                    }
+
+                // 产地与形式过滤
+                val filteredContinuing =
+                    continuingSubjects.filter { sub ->
+                        val originMatch =
+                            when (query.origin) {
+                                SeasonOriginFilter.ALL -> true
+                                SeasonOriginFilter.JAPAN -> sub.metaTags.contains("日本") || !sub.metaTags.contains("中国")
+                                SeasonOriginFilter.CHINA -> sub.metaTags.contains("中国")
+                            }
+                        val formMatch =
+                            when (query.form) {
+                                SeasonFormFilter.ALL -> true
+                                SeasonFormFilter.MOVIE -> sub.metaTags.contains("剧场版")
+                            }
+                        originMatch && formMatch
+                    }
+
+                // 根据放送范围合并条目池
+                val pooledSubjects =
+                    when (query.airingScope) {
+                        SeasonAiringScope.NEW_ONLY -> pages.subjects
+                        SeasonAiringScope.CONTINUING_ONLY -> filteredContinuing
+                        SeasonAiringScope.ALL -> {
+                            if (filteredContinuing.isEmpty()) {
+                                pages.subjects
+                            } else {
+                                val existingIds = pages.subjects.map { it.id }.toSet()
+                                val addition = filteredContinuing.filter { it.id !in existingIds }
+                                pages.subjects + addition
+                            }
+                        }
+                    }
+
+                // 统一大盘排序：若高分优先，按评分降序；若热度优先，按综合热度降序
+                val sortedSubjects =
+                    when (query.sort) {
+                        SeasonSortOption.SCORE -> {
+                            pooledSubjects.sortedWith(
+                                compareByDescending<Subject> { it.rating?.score ?: 0.0 }
+                                    .thenByDescending { it.rating?.total ?: 0 },
+                            )
+                        }
+                        SeasonSortOption.HEAT -> {
+                            if (query.airingScope == SeasonAiringScope.NEW_ONLY || filteredContinuing.isEmpty()) {
+                                pooledSubjects
+                            } else {
+                                pooledSubjects.sortedWith(
+                                    compareByDescending<Subject> { it.collection?.doing ?: 0 }
+                                        .thenByDescending { it.rating?.score ?: 0.0 },
+                                )
+                            }
+                        }
+                    }
+
+                val continuingNextEpMap = continuingSchedules.associate { it.bgmId to it.nextEpisodeNumber }
+
                 stateTemplate.copy(
                     selectedYear = query.year,
                     selectedQuarter = query.quarter,
@@ -215,9 +318,11 @@ class SeasonalGuideViewModel(
                     selectedForm = query.form,
                     selectedSort = query.sort,
                     selectedTags = query.tags,
+                    selectedAiringScope = query.airingScope,
+                    continuingNextEpisodes = continuingNextEpMap,
                     seasonalHotTags = extractHotTags(pages.subjects),
                     viewMode = mode,
-                    subjects = pages.subjects,
+                    subjects = sortedSubjects,
                     pageOffset = pages.pageOffset,
                     hasMore = pages.hasMore,
                     isLoading = pages.isLoading,
@@ -285,6 +390,9 @@ class SeasonalGuideViewModel(
 
     /** 切换排序方式；服务端排序，切换即一次新查询 */
     fun selectSort(sort: SeasonSortOption) = setQuery { it.copy(sort = sort) }
+
+    /** 切换放送范围（全部在播 / 仅首播新番 / 仅跨季续播） */
+    fun selectAiringScope(scope: SeasonAiringScope) = setQuery { it.copy(airingScope = scope) }
 
     /** 切换激活/反选某个标签（多选下推） */
     fun toggleTag(tag: String) =
