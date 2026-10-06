@@ -91,7 +91,7 @@ private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
         .eachCount()
         .toList()
         .sortedByDescending { it.second }
-        .take(25)
+        .take(60)
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)

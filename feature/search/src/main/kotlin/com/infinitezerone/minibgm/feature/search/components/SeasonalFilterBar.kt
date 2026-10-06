@@ -187,19 +187,19 @@ fun SeasonalFilterBar(
                 onClick = onClearSelectedTags,
             )
 
-            // 常驻最高频 AniList 核心题材（前 6 个）
-            val quickGenres = listOf("Action", "Fantasy", "Comedy", "Romance", "Sci-Fi", "Slice of Life")
-            quickGenres.forEach { genre ->
-                val isSelected = genre in uiState.selectedTags
+            // 动态展示本季高频热门题材与标签（前 8 个）
+            val topHotTags = uiState.seasonalHotTags.take(8).map { it.first }
+            topHotTags.forEach { tag ->
+                val isSelected = tag in uiState.selectedTags
                 SeasonalGuideFilterChip(
-                    label = genre,
+                    label = tag,
                     selected = isSelected,
-                    onClick = { onToggleTag(genre) },
+                    onClick = { onToggleTag(tag) },
                 )
             }
 
-            // 当前已选但不在上述快速题材中的其它已激活标签（高亮展示）
-            val extraSelectedTags = uiState.selectedTags.filter { it !in quickGenres }
+            // 当前已选但不在 Top 热门中的其它已激活标签（高亮展示）
+            val extraSelectedTags = uiState.selectedTags.filter { it !in topHotTags }
             extraSelectedTags.forEach { tag ->
                 SeasonalGuideFilterChip(
                     label = "#$tag",

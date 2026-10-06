@@ -38,7 +38,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.feature.search.ANILIST_PRIMARY_GENRES
 
 /**
  * 季度片单多维题材与标签筛选抽屉：
@@ -203,46 +202,6 @@ fun AddSeasonalTagBottomSheet(
                             shape = RoundedCornerShape(8.dp),
                         ) {
                             Text("筛选")
-                        }
-                    }
-                }
-
-                // Section 3: AniList 原生核心分类题材
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "AniList 核心题材分类",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        ANILIST_PRIMARY_GENRES.forEach { genre ->
-                            val isSelected = genre in selectedTags
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onToggleTag(genre) },
-                                label = {
-                                    Text(
-                                        text = genre,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                },
-                                border = null,
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    ),
-                                shape = RoundedCornerShape(8.dp),
-                            )
                         }
                     }
                 }
