@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
 import com.infinitezerone.minibgm.core.ai.wire.WireChatResponse
 import com.infinitezerone.minibgm.core.ai.wire.WireChoice
 import com.infinitezerone.minibgm.core.ai.wire.WireStreamOptions
+import com.infinitezerone.minibgm.core.ai.wire.WireToolCall
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -324,15 +326,7 @@ internal suspend fun runPiAgent(
                 tools = toolDefinitions,
                 temperature = temperature,
                 stream = true,
-                // stream_options 是 OpenAI 专有扩展：Gemini 兼容层 / Ollama 会拒绝未知字段，只对其它端点发送
-                streamOptions =
-                    if (config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) ||
-                        config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)
-                    ) {
-                        null
-                    } else {
-                        WireStreamOptions()
-                    },
+                streamOptions = streamOptionsFor(config.provider),
             )
 
         val turnStatusText = if (turns == 1) "AI 正在分析意图与调度工具..." else "AI 正在分析工具结果 (第 $turns 轮)..."
@@ -341,38 +335,15 @@ internal suspend fun runPiAgent(
         agentLogger.i { "🔄 Turn $turns/$maxTurns: 发送模型请求 (上下文消息数: ${messages.size})..." }
 
         val turnModelStart = TimeSource.Monotonic.markNow()
-        val response =
-            try {
-                // 切出调用方调度器：网络调用不能落在 runTest 的虚拟时钟上，否则测试会在
-                // 虚拟时间里等满单轮超时；生产上也让阻塞的网络层不占用调用方线程
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                    withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
-                        callTurnModel(wireClient, config, request)
-                    }
-                }
-            } catch (e: TimeoutCancellationException) {
-                // 外层总超时（AI_RUN_TIMEOUT_MS）与调用方取消同样以 TimeoutCancellationException 到达这里，
-                // 先确认当前协程仍活跃——只有真正属于本轮的超时才翻译成单轮超时文案，否则原样上抛
-                currentCoroutineContext().ensureActive()
-                val turnElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
-                agentLogger.w(e) { "⏱️ Turn $turns 单轮模型请求超时 (${turnElapsedMs}ms, 限制: ${AI_SINGLE_TURN_TIMEOUT_MS}ms)" }
-                throw IllegalStateException(
-                    "单轮模型响应超时（${AI_SINGLE_TURN_TIMEOUT_MS / 1000} 秒）：模型推理耗时过长或服务排队严重，建议切换更快的模型（如 DeepSeek-V3）或检查端点。",
-                    e,
-                )
-            }
+        val response = callTurnModelWithinTimeout(wireClient, config, request)
 
         val turnModelElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
         response.usage?.let { usage ->
-            if (usage.promptTokens != null || usage.completionTokens != null) {
-                sawUsage = true
-                usage.promptTokens?.let { promptTokens += it }
-                usage.completionTokens?.let { completionTokens += it }
-                usage.totalTokens?.let { totalTokens += it }
-                agentLogger.i {
-                    "📊 Turn $turns token 用量: prompt=${usage.promptTokens ?: "?"}, completion=${usage.completionTokens ?: "?"}, total=${usage.totalTokens ?: "?"}"
-                }
-            }
+            sawUsage = true
+            usage.promptTokens?.let { promptTokens += it }
+            usage.completionTokens?.let { completionTokens += it }
+            usage.totalTokens?.let { totalTokens += it }
+            logTurnUsage(turns, usage)
         }
         if (AiToolActivity.streamingText.value != null) streamedTurns++
 
@@ -417,84 +388,151 @@ internal suspend fun runPiAgent(
         }
         val repeatSignature = sigCount >= 2
 
-        var executedCalls = 0
-        for (call in toolCalls) {
-            val funcName = call.function.name
-            // 正常路径 id 已在解码层归一化；此兜底针对绕过归一化的构造方，合成 id 须全局唯一
-            val toolCallId =
-                @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
-                call.id
-                    ?: "call_${kotlin.uuid.Uuid.random()}"
-
-            if (executedCalls >= MAX_TOOL_CALLS_PER_TURN) {
-                agentLogger.w { "⚠️ Turn $turns 工具调用数超出单轮上限 $MAX_TOOL_CALLS_PER_TURN，[$funcName] 未执行" }
-                messages.add(
-                    WireChatMessage.tool(
-                        toolCallId = toolCallId,
-                        content = "【系统提示】：本轮工具调用数量超出上限（$MAX_TOOL_CALLS_PER_TURN），本次调用未执行。请合并或拆分到后续轮次再调用。",
-                    ),
-                )
-                continue
-            }
-
-            // 正常路径 arguments 已在解码层归一化；这里兜底 orEmpty 是对绕过归一化的构造方留余地
-            val rawArguments =
-                call.function.arguments
-                    .orEmpty()
-                    .ifBlank { "{}" }
-            val argsJson =
-                try {
-                    json.parseToJsonElement(rawArguments).jsonObject
-                } catch (e: Exception) {
-                    // 解析失败必须回显给模型：静默吞成空对象会让工具以空参执行，
-                    // 模型只看到无关报错、换着参数重试，永远不知道是自己的格式错了
-                    agentLogger.w { "⚠️ 工具 [$funcName] 入参解析失败: ${e.message}, raw=${rawArguments.take(80)}" }
-                    messages.add(
-                        WireChatMessage.tool(
-                            toolCallId = toolCallId,
-                            content = "【参数错误】工具 $funcName 的入参不是合法 JSON 对象（${e.message ?: "解析失败"}）。请以合法的 JSON 对象重发该调用。",
-                        ),
-                    )
-                    null
-                } ?: continue
-
-            val detailSummary = formatToolCallDetail(argsJson)
-            AiToolActivity.report(funcName, detailSummary)
-            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: ${rawArguments.take(200)}" }
-
-            val toolStart = TimeSource.Monotonic.markNow()
-            val toolResult =
-                if (repeatSignature) {
-                    agentLogger.w { "⚠️ 检测到重复工具调用 [$funcName]，注入引导提示防范死循环" }
-                    "【系统提示】：该工具入参与之前某一轮完全相同，再次执行不会有新结果。请不要重复提交完全相同的入参；改为更换关键词或调整参数，若已无新信息可基于已知结果直接向用户作答。"
-                } else {
-                    try {
-                        tools.execute(funcName, argsJson)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
-                        "Tool $funcName failed: ${e.message ?: "unknown error"}"
-                    }
-                }
-            executedCalls++
-            executedToolCalls++
-            val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
-            val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
-            agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (${toolElapsedMs}ms), 结果预览: $resultPreview" }
-
-            messages.add(
-                WireChatMessage.tool(
-                    toolCallId = toolCallId,
-                    content = truncateToolResult(toolResult),
-                ),
-            )
-        }
+        executedToolCalls += executeToolCallsTurn(toolCalls, tools, messages, json, repeatSignature)
         AiToolActivity.reportStatus("工具执行完毕，AI 正在分析结果...")
     }
 
     agentLogger.w { "⚠️ Agent 轮次结束 (已执行 $turns 轮)，发起最终总结" }
     return summarizeFinalOutcome(config, wireClient, effectiveModel, messages).also { publishStats() }
+}
+
+/** stream_options 是 OpenAI 专有扩展：Gemini 兼容层 / Ollama 会拒绝未知字段，只对其它端点发送 */
+internal fun streamOptionsFor(provider: String): WireStreamOptions? =
+    if (provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) ||
+        provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)
+    ) {
+        null
+    } else {
+        WireStreamOptions()
+    }
+
+private fun logTurnUsage(
+    turn: Int,
+    usage: com.infinitezerone.minibgm.core.ai.wire.WireUsage,
+) {
+    if (usage.promptTokens == null && usage.completionTokens == null) return
+    agentLogger.i {
+        "📊 Turn $turn token 用量: prompt=" + (usage.promptTokens ?: "?") +
+            ", completion=" + (usage.completionTokens ?: "?") +
+            ", total=" + (usage.totalTokens ?: "?")
+    }
+}
+
+/**
+ * 单轮模型调用 + 超时翻译：外层总超时（AI_RUN_TIMEOUT_MS）与调用方取消同样以
+ * TimeoutCancellationException 到达，先 ensureActive 确认当前协程仍活跃——只有真正
+ * 属于本轮的超时才翻译成单轮超时文案，否则原样上抛。
+ */
+internal suspend fun callTurnModelWithinTimeout(
+    wireClient: OpenAiWireClient,
+    config: AiConfig,
+    request: WireChatRequest,
+): WireChatResponse =
+    try {
+        // 切出调用方调度器：网络调用不能落在 runTest 的虚拟时钟上，否则测试会在
+        // 虚拟时间里等满单轮超时；生产上也让阻塞的网络层不占用调用方线程
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
+                callTurnModel(wireClient, config, request)
+            }
+        }
+    } catch (e: TimeoutCancellationException) {
+        currentCoroutineContext().ensureActive()
+        agentLogger.w(e) { "⏱️ 单轮模型请求超时 (限制: " + AI_SINGLE_TURN_TIMEOUT_MS + "ms)" }
+        throw IllegalStateException(
+            "单轮模型响应超时（" + (AI_SINGLE_TURN_TIMEOUT_MS / 1000) + " 秒）：模型推理耗时过长或服务排队严重，建议切换更快的模型（如 DeepSeek-V3）或检查端点。",
+            e,
+        )
+    }
+
+/**
+ * 执行单轮工具调用序列并追加 role="tool" 消息。收口：入参解析失败回显、重复签名注入
+ * 引导提示、单轮调用数上限、结果裁剪。返回真实执行的工具调用数（含注入提示，不含超限跳过）。
+ */
+internal suspend fun executeToolCallsTurn(
+    toolCalls: List<WireToolCall>,
+    tools: BgmToolRegistry,
+    messages: MutableList<WireChatMessage>,
+    json: Json,
+    repeatSignature: Boolean,
+    maxCalls: Int = MAX_TOOL_CALLS_PER_TURN,
+): Int {
+    var executedCalls = 0
+    for (call in toolCalls) {
+        val funcName = call.function.name
+        // 正常路径 id 已在解码层归一化；此兜底针对绕过归一化的构造方，合成 id 须全局唯一
+        val toolCallId =
+            @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
+            call.id
+                ?: "call_" +
+                kotlin.uuid.Uuid
+                    .random()
+                    .toString()
+
+        if (executedCalls >= maxCalls) {
+            agentLogger.w { "⚠️ 工具调用数超出单轮上限 $maxCalls，[$funcName] 未执行" }
+            messages.add(
+                WireChatMessage.tool(
+                    toolCallId = toolCallId,
+                    content = "【系统提示】：本轮工具调用数量超出上限（$maxCalls），本次调用未执行。请合并或拆分到后续轮次再调用。",
+                ),
+            )
+            continue
+        }
+
+        // 正常路径 arguments 已在解码层归一化；这里兜底 orEmpty 是对绕过归一化的构造方留余地
+        val rawArguments =
+            call.function.arguments
+                .orEmpty()
+                .ifBlank { "{}" }
+        val argsJson =
+            try {
+                json.parseToJsonElement(rawArguments).jsonObject
+            } catch (e: Exception) {
+                // 解析失败必须回显给模型：静默吞成空对象会让工具以空参执行，
+                // 模型只看到无关报错、换着参数重试，永远不知道是自己的格式错了
+                agentLogger.w { "⚠️ 工具 [$funcName] 入参解析失败: " + e.message + ", raw=" + rawArguments.take(80) }
+                messages.add(
+                    WireChatMessage.tool(
+                        toolCallId = toolCallId,
+                        content = "【参数错误】工具 $funcName 的入参不是合法 JSON 对象（" + (e.message ?: "解析失败") + "）。请以合法的 JSON 对象重发该调用。",
+                    ),
+                )
+                null
+            } ?: continue
+
+        val detailSummary = formatToolCallDetail(argsJson)
+        AiToolActivity.report(funcName, detailSummary)
+        agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: " + rawArguments.take(200) }
+
+        val toolStart = TimeSource.Monotonic.markNow()
+        val toolResult =
+            if (repeatSignature) {
+                agentLogger.w { "⚠️ 检测到重复工具调用 [$funcName]，注入引导提示防范死循环" }
+                "【系统提示】：该工具入参与之前某一轮完全相同，再次执行不会有新结果。请不要重复提交完全相同的入参；改为更换关键词或调整参数，若已无新信息可基于已知结果直接向用户作答。"
+            } else {
+                try {
+                    tools.execute(funcName, argsJson)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    agentLogger.w(e) { "Tool $funcName execution failed: " + e.message }
+                    "Tool $funcName failed: " + (e.message ?: "unknown error")
+                }
+            }
+        executedCalls++
+        val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
+        val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
+        agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (" + toolElapsedMs + "ms), 结果预览: $resultPreview" }
+
+        messages.add(
+            WireChatMessage.tool(
+                toolCallId = toolCallId,
+                content = truncateToolResult(toolResult),
+            ),
+        )
+    }
+    return executedCalls
 }
 
 /**
