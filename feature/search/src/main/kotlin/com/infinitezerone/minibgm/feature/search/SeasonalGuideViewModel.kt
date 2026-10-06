@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchFilter
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.util.Locale
 
 /**
  * Bangumi `POST /v0/search/subjects` 单页**硬上限**：limit 传更大不会报错，只会静默按 20 截断。
@@ -267,14 +269,50 @@ class SeasonalGuideViewModel(
                             it.equals("Hentai", ignoreCase = true)
                         }
 
-                // 1. 本地实时排期流（若为当季）
+                // 1. 静态 AniList 季度条目（全季度覆盖，季度名单与真值最权威来源）
+                val filteredStaticSubjects =
+                    staticSubjects.filter { sub ->
+                        val isAdult = sub.tags.any { it.name.equals("Hentai", ignoreCase = true) }
+                        allowsRestricted || !isAdult
+                    }
+                val staticIds = filteredStaticSubjects.map { it.id }.toSet()
+                val quarterCalendarStart =
+                    String.format(
+                        Locale.US,
+                        "%04d-%02d-01",
+                        query.year,
+                        query.quarter.month,
+                    )
+
+                // 2. 本地实时排期流（若为当季）
+                // 只有首播在当季的新番，或仍在在播状态的跨季番才具备当季准入资格；
+                // 往季已完结作品（如上一季末完结且留在数据库缓冲中的条目）坚决拦截，禁止污染当季片单。
                 val validSeasonSchedules =
                     if (isCurrent) {
                         allSchedules.filter { sched ->
-                            !sched.isUnmapped &&
-                                sched.bgmId > 0 &&
-                                (allowsRestricted || !sched.isAdult) &&
-                                (sched.airDate.isBlank() || sched.airDate <= seasonEndDay)
+                            if (sched.isUnmapped || sched.bgmId <= 0) return@filter false
+                            if (!allowsRestricted && sched.isAdult) return@filter false
+                            if (sched.airDate.isNotBlank() && sched.airDate > seasonEndDay) return@filter false
+
+                            val isPastPremiere = sched.airDate.isNotBlank() && sched.airDate < seasonStartDay
+                            if (isPastPremiere) {
+                                if (staticIds.isNotEmpty()) {
+                                    // 静态快照有效时，往季开播条目必须经 AniList 季度真值收录，才算当季跨季在播
+                                    sched.bgmId in staticIds
+                                } else {
+                                    // 无静态快照时降级依据排期事实判定：排除开季前已结播的条目
+                                    val isEndedBeforeQuarter =
+                                        sched.nextEpisodeKind == AirEventKind.ACTUAL &&
+                                            sched.nextEpisodeAtUtc.isNotBlank() &&
+                                            sched.nextEpisodeAtUtc < quarterCalendarStart
+                                    val hasActiveSchedule =
+                                        (sched.nextEpisodeAtUtc.isNotBlank() && sched.nextEpisodeAtUtc >= quarterCalendarStart) ||
+                                            (sched.nextEpisodeKind != AirEventKind.ACTUAL && sched.nextEpisodeNumber > 0)
+                                    !isEndedBeforeQuarter && hasActiveSchedule
+                                }
+                            } else {
+                                true
+                            }
                         }
                     } else {
                         emptyList()
@@ -312,13 +350,6 @@ class SeasonalGuideViewModel(
                         )
                     }
 
-                // 2. 静态 AniList 季度条目（全季度覆盖）
-                val filteredStaticSubjects =
-                    staticSubjects.filter { sub ->
-                        val isAdult = sub.tags.any { it.name.equals("Hentai", ignoreCase = true) }
-                        allowsRestricted || !isAdult
-                    }
-
                 // 3. AniList 整体条目池（当季合并本地与静态；往季以静态为主）
                 val aniListSubjects =
                     if (isCurrent) {
@@ -347,8 +378,15 @@ class SeasonalGuideViewModel(
                                     sub
                                 }
                             }
-                        val staticIds = filteredStaticSubjects.map { it.id }.toSet()
-                        val localOnlyAdditions = localSeasonSubjects.filter { it.id !in staticIds }
+                        val localOnlyAdditions =
+                            localSeasonSubjects.filter { sub ->
+                                sub.id !in staticIds &&
+                                    (
+                                        staticIds.isEmpty() ||
+                                            sub.airDate.isBlank() ||
+                                            (sub.airDate >= seasonStartDay && sub.airDate <= seasonEndDay)
+                                    )
+                            }
                         enrichedStatic + localOnlyAdditions
                     } else {
                         filteredStaticSubjects

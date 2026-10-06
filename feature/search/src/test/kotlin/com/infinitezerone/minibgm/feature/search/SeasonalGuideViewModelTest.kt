@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
+import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -1355,6 +1356,156 @@ class SeasonalGuideViewModelTest {
             assertTrue(
                 viewModel.uiState.value.selectedTags
                     .contains("Sci-Fi"),
+            )
+        }
+
+    @Test
+    fun currentSeason_excludesEndedPastSeasonAnimeFromContinuingAndList() =
+        runTest {
+            val autumnDate = LocalDate.of(2026, 10, 6) // Q4 Autumn 2026
+            val searchRepository = FakeSearchRepository()
+            val scheduleRepository = FakeScheduleRepository()
+
+            // 1. 夏季已完结番（如《尼古喵喵》）：7月开播、9月25日完结第12集，无后续排期
+            val endedSummerAnime =
+                AirSchedule(
+                    bgmId = 622206L,
+                    title = "ヤニねこ",
+                    titleCn = "尼古喵喵",
+                    airDate = "2026-07-02",
+                    nextEpisodeNumber = 12,
+                    nextEpisodeKind = AirEventKind.ACTUAL,
+                    nextEpisodeAtUtc = "2026-09-25T14:30:00Z",
+                    ratingScore = 7.0,
+                )
+
+            // 2. 真正的跨季连载番（如半年番）：7月开播，但在秋季静态名单中收录，且10月还有第14话
+            val continuingAnimeSubject =
+                sampleSubject.copy(
+                    id = 701L,
+                    name = "战国妖狐",
+                    airDate = "2026-07-10",
+                )
+            val continuingAnimeSchedule =
+                AirSchedule(
+                    bgmId = 701L,
+                    title = "战国妖狐",
+                    titleCn = "战国妖狐",
+                    airDate = "2026-07-10",
+                    nextEpisodeNumber = 14,
+                    nextEpisodeKind = AirEventKind.SCHEDULED,
+                    nextEpisodeAtUtc = "2026-10-10T14:30:00Z",
+                    ratingScore = 8.0,
+                )
+
+            // 3. 当季首播新番：10月开播
+            val newAnimeSubject =
+                sampleSubject.copy(
+                    id = 801L,
+                    name = "秋季新番",
+                    airDate = "2026-10-05",
+                )
+
+            // 静态 AniList 秋季快照：只有 701 (续播) 和 801 (新番)，官方已排除完结的 622206
+            scheduleRepository.seasonalAnimeListResult = listOf(continuingAnimeSubject, newAnimeSubject)
+            // 本地周时刻表包含缓冲中的完结番 622206 以及在播番 701
+            scheduleRepository.sendSchedules(1, listOf(endedSummerAnime, continuingAnimeSchedule))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    timeProvider = { autumnDate },
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            // 完结番坚决不可出现在当季全部列表中
+            val subjectIds = state.subjects.map { it.id }
+            assertTrue(subjectIds.contains(701L))
+            assertTrue(subjectIds.contains(801L))
+            assertFalse(subjectIds.contains(622206L))
+
+            // 完结番不可出现在跨季话数映射中
+            assertNull(state.continuingNextEpisodes[622206L])
+            assertEquals(14, state.continuingNextEpisodes[701L])
+
+            // 切换仅跨季续播：仅包含 701，绝无 622206
+            viewModel.selectAiringScope(SeasonAiringScope.CONTINUING_ONLY)
+            val continuingState = viewModel.uiState.value
+            assertEquals(listOf(701L), continuingState.subjects.map { it.id })
+
+            // 切换仅首播新番：仅包含 801
+            viewModel.selectAiringScope(SeasonAiringScope.NEW_ONLY)
+            val newState = viewModel.uiState.value
+            assertEquals(listOf(801L), newState.subjects.map { it.id })
+        }
+
+    @Test
+    fun currentSeason_withoutStaticSnapshot_excludesEndedPastSeasonAnime() =
+        runTest {
+            val autumnDate = LocalDate.of(2026, 10, 6) // Q4 Autumn 2026
+            val searchRepository = FakeSearchRepository()
+            val scheduleRepository = FakeScheduleRepository()
+
+            // 静态快照为空（离线或未命中快照）
+            scheduleRepository.seasonalAnimeListResult = emptyList()
+
+            // 本地周时刻表中有完结番与在播续播番
+            val endedSummerAnime =
+                AirSchedule(
+                    bgmId = 622206L,
+                    title = "ヤニねこ",
+                    titleCn = "尼古喵喵",
+                    airDate = "2026-07-02",
+                    nextEpisodeNumber = 12,
+                    nextEpisodeKind = AirEventKind.ACTUAL,
+                    nextEpisodeAtUtc = "2026-09-25T14:30:00Z",
+                    ratingScore = 7.0,
+                )
+            val activeContinuingSchedule =
+                AirSchedule(
+                    bgmId = 701L,
+                    title = "战国妖狐",
+                    titleCn = "战国妖狐",
+                    airDate = "2026-07-10",
+                    nextEpisodeNumber = 14,
+                    nextEpisodeKind = AirEventKind.SCHEDULED,
+                    nextEpisodeAtUtc = "2026-10-10T14:30:00Z",
+                    ratingScore = 8.0,
+                )
+            val autumnNewAnime =
+                AirSchedule(
+                    bgmId = 801L,
+                    title = "秋季新番",
+                    titleCn = "秋季新番",
+                    airDate = "2026-10-05",
+                    nextEpisodeNumber = 1,
+                    ratingScore = 7.5,
+                )
+
+            scheduleRepository.sendSchedules(1, listOf(endedSummerAnime, activeContinuingSchedule, autumnNewAnime))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    timeProvider = { autumnDate },
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            val subjectIds = state.subjects.map { it.id }
+            // 完结番被过滤，仅保留续播番与新番
+            assertEquals(listOf(701L, 801L).toSet(), subjectIds.toSet())
+            assertFalse(subjectIds.contains(622206L))
+
+            // 跨季续播筛选仅返回 701
+            viewModel.selectAiringScope(SeasonAiringScope.CONTINUING_ONLY)
+            assertEquals(
+                listOf(701L),
+                viewModel.uiState.value.subjects
+                    .map { it.id },
             )
         }
 }
