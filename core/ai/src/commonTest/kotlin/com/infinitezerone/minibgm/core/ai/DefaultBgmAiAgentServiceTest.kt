@@ -2,7 +2,10 @@ package com.infinitezerone.minibgm.core.ai
 
 import com.infinitezerone.minibgm.core.ai.di.aiModule
 import com.infinitezerone.minibgm.core.ai.tool.string
+import com.infinitezerone.minibgm.core.ai.wire.AiEndpointException
 import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
+import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
+import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -32,6 +35,11 @@ import kotlin.test.assertTrue
 
 /** 测试替身的非凭据标记值；用符号常量传递，避免在源码里出现凭据形状的字面量 */
 private const val STUB_TOKEN = "stub-token"
+
+private const val NL_DATA_DONE = "\n\ndata: [DONE]\n\n"
+
+/** 把单帧 chat.completion JSON 转成 SSE 响应体（message→delta），供 MockEngine 走流式路径 */
+private fun sseBody(chatJson: String): String = "data: " + chatJson.replace("message", "delta").lines().joinToString("") + NL_DATA_DONE
 
 class DefaultBgmAiAgentServiceTest : KoinTest {
     private val fakeSettingsRepository = FakeSettingsRepository()
@@ -590,7 +598,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                         }
 
                     respond(
-                        content = responseJson,
+                        content = sseBody(responseJson),
                         status = HttpStatusCode.OK,
                         headers = headersOf(HttpHeaders.ContentType, "application/json"),
                     )
@@ -770,31 +778,33 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     callCount++
                     respond(
                         content =
-                            """
-                            {
-                              "id": "chatcmpl-loop",
-                              "choices": [
+                            sseBody(
+                                """
                                 {
-                                  "index": 0,
-                                  "message": {
-                                    "role": "assistant",
-                                    "tool_calls": [
-                                      {
-                                        "id": "call_1",
-                                        "type": "function",
-                                        "function": {
-                                          "name": "mockTool",
-                                          "arguments": "{\"query\":\"test\"}"
-                                        }
+                                  "id": "chatcmpl-loop",
+                                  "choices": [
+                                    {
+                                      "index": 0,
+                                      "message": {
+                                        "role": "assistant",
+                                        "tool_calls": [
+                                          {
+                                            "id": "call_1",
+                                            "type": "function",
+                                            "function": {
+                                              "name": "mockTool",
+                                              "arguments": "{\"query\":\"test\"}"
+                                            }
+                                          }
+                                        ]
                                       }
-                                    ]
-                                  }
+                                    }
+                                  ]
                                 }
-                              ]
-                            }
-                            """.trimIndent(),
+                                """.trimIndent(),
+                            ),
                         status = HttpStatusCode.OK,
-                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
                     )
                 }
             val wireClient = OpenAiWireClient(HttpClient(engine))
@@ -854,7 +864,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                             """{"id":"chatcmpl-badargs-2","choices":[{"index":0,"message":{"role":"assistant","content":"done"}}]}"""
                         }
                     respond(
-                        content = responseJson,
+                        content = sseBody(responseJson),
                         status = HttpStatusCode.OK,
                         headers = headersOf(HttpHeaders.ContentType, "application/json"),
                     )
@@ -923,7 +933,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                             """{"id":"chatcmpl-alt-summary","choices":[{"index":0,"message":{"role":"assistant","content":"总结完成"}}]}"""
                         }
                     respond(
-                        content = responseJson,
+                        content = if (requestCount <= 5) sseBody(responseJson) else responseJson,
                         status = HttpStatusCode.OK,
                         headers = headersOf(HttpHeaders.ContentType, "application/json"),
                     )
@@ -1001,5 +1011,125 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             assertFailsWith<kotlinx.coroutines.CancellationException> {
                 summarizeFinalOutcome(config, OpenAiWireClient(HttpClient(engine)), "gpt-4o-mini", emptyList())
             }
+        }
+
+    @Test
+    fun chatCompletionStream_aggregates_sse_deltas_into_standard_response() =
+        runTest {
+            val sse =
+                """
+                data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"你好"}}]}
+
+                data: {"id":"c1","choices":[{"index":0,"delta":{"content":"，芙莉莲"}}]}
+
+                data: {"id":"c1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"mockTool","arguments":"{\"qu"}}]}}]}
+
+                data: {"id":"c1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ery\":\"x\"}"}}]}}]}
+
+                data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+                data: [DONE]
+
+                """.trimIndent()
+            val engine =
+                MockEngine { _ ->
+                    respond(
+                        content = sse,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
+                    )
+                }
+            val deltas = mutableListOf<String>()
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            val response =
+                OpenAiWireClient(HttpClient(engine)).chatCompletionStream(
+                    config,
+                    WireChatRequest(model = "gpt-4o", messages = listOf(WireChatMessage.user("hi")), stream = true),
+                ) { deltas.add(it) }
+
+            assertEquals(
+                "你好，芙莉莲",
+                response.choices
+                    .single()
+                    .message.content,
+                "content 分片必须按序聚合",
+            )
+            assertEquals(listOf("你好", "，芙莉莲"), deltas, "预览回调收到的是原始增量")
+            val call =
+                response.choices
+                    .single()
+                    .message.toolCalls!!
+                    .single()
+            assertEquals("mockTool", call.function.name)
+            assertEquals("{\"query\":\"x\"}", call.function.arguments, "跨 chunk 的 arguments 分片必须拼接")
+            assertEquals("call_1", call.id)
+            assertEquals("tool_calls", response.choices.single().finishReason)
+            assertEquals(10, response.usage?.promptTokens)
+            assertEquals(15, response.usage?.totalTokens)
+        }
+
+    @Test
+    fun callTurnModel_falls_back_to_non_streaming_when_endpoint_rejects_stream() =
+        runTest {
+            var requestCount = 0
+            val engine =
+                MockEngine { request ->
+                    requestCount++
+                    val body = (request.body as io.ktor.http.content.TextContent).text
+                    if (body.contains("\"stream\":true")) {
+                        respond(
+                            content = """{"error":{"message":"stream is not supported"}}""",
+                            status = HttpStatusCode.BadRequest,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    } else {
+                        respond(
+                            content = """{"id":"c2","choices":[{"index":0,"message":{"role":"assistant","content":"非流式回复"}}]}""",
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    }
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            val response =
+                callTurnModel(
+                    OpenAiWireClient(HttpClient(engine)),
+                    config,
+                    WireChatRequest(model = "gpt-4o", messages = listOf(WireChatMessage.user("hi")), stream = true),
+                )
+            assertEquals(
+                "非流式回复",
+                response.choices
+                    .single()
+                    .message.content,
+            )
+            assertEquals(2, requestCount, "流式被 400 拒绝后必须回退非流式")
+            // 回退请求必须剥掉 stream 标记
+        }
+
+    @Test
+    fun callTurnModel_does_not_retry_non_streaming_on_server_errors() =
+        runTest {
+            var requestCount = 0
+            val engine =
+                MockEngine { _ ->
+                    requestCount++
+                    respond(
+                        content = """{"error":{"message":"boom"}}""",
+                        status = HttpStatusCode.InternalServerError,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            assertFailsWith<AiEndpointException> {
+                callTurnModel(
+                    OpenAiWireClient(HttpClient(engine)),
+                    config,
+                    WireChatRequest(model = "gpt-4o", messages = listOf(WireChatMessage.user("hi")), stream = true),
+                )
+            }
+            // 5xx 不触发非流式回退：请求数只会来自 HTTP 层重试（HttpRequestRetry 2 次 + 首次），
+            // 若发生回退则必然多出一次非流式请求
+            assertTrue(requestCount <= 3, "5xx 不应触发非流式回退，实际请求数: $requestCount")
         }
 }

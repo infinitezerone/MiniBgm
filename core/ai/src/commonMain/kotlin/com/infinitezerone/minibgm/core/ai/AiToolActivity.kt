@@ -21,12 +21,20 @@ data class AiActivityEvent(
 object AiToolActivity {
     private val _events = MutableStateFlow<List<AiActivityEvent>>(emptyList())
     private val _current = MutableStateFlow<String?>(null)
+    private val _streamingText = MutableStateFlow<String?>(null)
 
     /** 本次运行的活动序列，按发生顺序排列；每次 [clear] 后重置 */
     val events: StateFlow<List<AiActivityEvent>> = _events.asStateFlow()
 
     /** 当前活动描述；null 表示无进行中的工具调用 */
     val current: StateFlow<String?> = _current.asStateFlow()
+
+    /**
+     * 当前轮次已流式产出的正文增量（累积文本）；null 表示本轮尚无流式输出。
+     * 每轮开始时重置——中途轮次的预览文本会随工具调用被下一轮覆盖，最终回复在运行结束时
+     * 由 UI 落成正式消息气泡。StateFlow 自带合并，高频 token 增量不会淹没收集方。
+     */
+    val streamingText: StateFlow<String?> = _streamingText.asStateFlow()
 
     private fun append(text: String) {
         _current.value = text
@@ -54,8 +62,18 @@ object AiToolActivity {
         append(status)
     }
 
+    fun appendStreamText(fragment: String) {
+        if (fragment.isEmpty()) return
+        _streamingText.value = (_streamingText.value ?: "") + fragment
+    }
+
+    fun resetStreamText() {
+        _streamingText.value = null
+    }
+
     fun clear() {
         _current.value = null
         _events.value = emptyList()
+        _streamingText.value = null
     }
 }

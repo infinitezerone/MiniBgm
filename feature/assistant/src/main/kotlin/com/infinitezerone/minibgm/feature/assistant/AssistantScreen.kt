@@ -472,6 +472,12 @@ fun AssistantScreenContent(
                         )
                     }
 
+                    if (uiState.isLoading && uiState.streamingContent != null) {
+                        item(key = "streaming_preview") {
+                            AssistantStreamingBubble(partialText = uiState.streamingContent)
+                        }
+                    }
+
                     if (uiState.isLoading) {
                         item(key = "loading_indicator") {
                             AssistantLoadingBubble(

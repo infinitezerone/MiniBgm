@@ -65,6 +65,8 @@ data class AssistantUiState(
     val toolActivity: String? = null,
     /** 本次运行已完成的活动步骤（按顺序），供 loading 气泡展示"第 N 步" */
     val activityEvents: List<String> = emptyList(),
+    /** 流式生成的正文增量（累积文本，null = 当前轮尚无输出）；仅 loading 期间展示预览 */
+    val streamingContent: String? = null,
 )
 
 sealed interface AssistantUiEvent {

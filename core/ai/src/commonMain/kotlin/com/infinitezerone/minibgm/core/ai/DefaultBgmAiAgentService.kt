@@ -10,7 +10,9 @@ import com.infinitezerone.minibgm.core.ai.wire.AiEndpointException
 import com.infinitezerone.minibgm.core.ai.wire.OpenAiWireClient
 import com.infinitezerone.minibgm.core.ai.wire.WireChatMessage
 import com.infinitezerone.minibgm.core.ai.wire.WireChatRequest
+import com.infinitezerone.minibgm.core.ai.wire.WireChatResponse
 import com.infinitezerone.minibgm.core.ai.wire.WireChoice
+import com.infinitezerone.minibgm.core.ai.wire.WireStreamOptions
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -274,10 +276,21 @@ internal suspend fun runPiAgent(
                 messages = messages,
                 tools = toolDefinitions,
                 temperature = temperature,
+                stream = true,
+                // stream_options 是 OpenAI 专有扩展：Gemini 兼容层 / Ollama 会拒绝未知字段，只对其它端点发送
+                streamOptions =
+                    if (config.provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) ||
+                        config.provider.equals(AiConfig.PROVIDER_OLLAMA, ignoreCase = true)
+                    ) {
+                        null
+                    } else {
+                        WireStreamOptions()
+                    },
             )
 
         val turnStatusText = if (turns == 1) "AI 正在分析意图与调度工具..." else "AI 正在分析工具结果 (第 $turns 轮)..."
         AiToolActivity.reportStatus(turnStatusText)
+        AiToolActivity.resetStreamText()
         agentLogger.i { "🔄 Turn $turns/$maxTurns: 发送模型请求 (上下文消息数: ${messages.size})..." }
 
         val turnModelStart = TimeSource.Monotonic.markNow()
@@ -287,7 +300,7 @@ internal suspend fun runPiAgent(
                 // 虚拟时间里等满单轮超时；生产上也让阻塞的网络层不占用调用方线程
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
-                        wireClient.chatCompletion(config, request)
+                        callTurnModel(wireClient, config, request)
                     }
                 }
             } catch (e: TimeoutCancellationException) {
@@ -330,6 +343,8 @@ internal suspend fun runPiAgent(
                 "✅ Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策直接回复 (回答字数: ${content.length}, 思考字数: ${reasoning.length})"
             }
             throwIfTruncatedEmptyReply(choice, content, reasoning)
+            // 正式消息即将由 UI 落成气泡，先撤掉流式预览避免短暂双显示
+            AiToolActivity.resetStreamText()
             return content.ifBlank { reasoning }
         }
 
@@ -429,6 +444,36 @@ internal suspend fun runPiAgent(
 }
 
 /**
+ * 单轮模型调用：优先走 SSE 流式（正文增量经 [AiToolActivity.streamingText] 逐 token 暴露给 UI），
+ * 未产出任何增量就失败时回退非流式——用户自配端点里总有代理不支持 stream:true，回退保证可用性。
+ * 聚合结果与非流式响应同构，下游逻辑两条路径完全共用。
+ */
+internal suspend fun callTurnModel(
+    wireClient: OpenAiWireClient,
+    config: AiConfig,
+    request: WireChatRequest,
+): WireChatResponse {
+    var receivedAnyDelta = false
+    return try {
+        wireClient.chatCompletionStream(config, request) { fragment ->
+            receivedAnyDelta = true
+            AiToolActivity.appendStreamText(fragment)
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        val endpointRejectedStream = e is AiEndpointException && e.status == 400
+        if (receivedAnyDelta || !endpointRejectedStream && e is AiEndpointException) {
+            // 已有增量没法重放（避免内容重复）；401/404/429/5xx 换非流式结局也一样，让上层按原语义处理
+            throw e
+        }
+        agentLogger.w(e) { "流式请求未产出增量（端点可能不支持 stream），回退非流式重试" }
+        // 必须剥掉 stream 标记：带着 stream:true 走非流式读法，会把 SSE 流当 JSON 解码
+        wireClient.chatCompletion(config, request.copy(stream = null, streamOptions = null))
+    }
+}
+
+/**
  * finish_reason=length 且无任何可读内容：显式失败而非把空气泡交给会话。
  * 独立成函数同时服务可读性与 CRAP 预算——runPiAgent 的复杂度已贴近门禁上限。
  */
@@ -470,6 +515,7 @@ internal suspend fun summarizeFinalOutcome(
     messages: List<WireChatMessage>,
 ): String {
     AiToolActivity.reportStatus("AI 正在总结结果...")
+    AiToolActivity.resetStreamText()
     val summaryRequest =
         WireChatRequest(
             model = effectiveModel,

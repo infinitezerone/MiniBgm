@@ -551,6 +551,39 @@ internal fun DeepResolveEntry(
     }
 }
 
+/**
+ * 流式生成预览气泡：逐 token 增量直接以纯文本展示，不做 Markdown 解析（预览文本高频
+ * 重组，Markdown 正则解析的开销会随每个增量重复）；正式回复落成气泡后才走完整渲染。
+ * 中途轮次（模型先说话再调工具）也会流到这里，随下一轮开始被覆盖。
+ */
+@Composable
+internal fun AssistantStreamingBubble(
+    partialText: String?,
+    modifier: Modifier = Modifier,
+) {
+    if (partialText.isNullOrBlank()) return
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp),
+        ) {
+            Text(
+                text = partialText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier
+                        .widthIn(max = 320.dp)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+        }
+    }
+}
+
 @Composable
 internal fun AssistantLoadingBubble(
     toolActivity: String? = null,

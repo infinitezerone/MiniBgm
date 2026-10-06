@@ -20,11 +20,14 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readUTF8Line
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
@@ -139,6 +142,148 @@ class OpenAiWireClient(
         }
     }
 
+    /**
+     * 流式对话：按 OpenAI SSE 协议（`data: {...}` 行 + `data: [DONE]` 终止）逐分片消费。
+     * [onContentDelta] 只回调 content 增量（推理模型的 reasoning_content 静默聚合，不进预览）。
+     * 返回值是把全部分片聚合后的标准响应——聚合结果与非流式 [chatCompletion] 同构，
+     * 调用方（runPiAgent）因此可以两条路径共用同一套下游逻辑。
+     */
+    suspend fun chatCompletionStream(
+        config: AiConfig,
+        request: WireChatRequest,
+        onContentDelta: (fragment: String) -> Unit,
+    ): WireChatResponse {
+        val chatUrl = buildChatCompletionsUrl(config.endpoint, config.provider)
+        val bodyText = json.encodeToString(WireChatRequest.serializer(), request)
+
+        val response =
+            httpClient.post(chatUrl) {
+                header(HttpHeaders.UserAgent, userAgent)
+                contentType(ContentType.Application.Json)
+                if (config.apiKey.isNotBlank()) {
+                    header("Authorization", "Bearer ${config.apiKey.trim()}")
+                }
+                setBody(bodyText)
+            }
+        val channel = response.bodyAsChannel()
+
+        if (!response.status.isSuccess()) {
+            val errorBody = StringBuilder()
+            while (!channel.isClosedForRead) {
+                errorBody.appendLine(channel.readUTF8Line() ?: break)
+            }
+            throw AiEndpointException(
+                status = response.status.value,
+                responseBody = errorBody.toString(),
+                retryAfterMs = response.retryAfterMs(),
+            )
+        }
+
+        return aggregateStream(channel, onContentDelta)
+    }
+
+    private suspend fun aggregateStream(
+        channel: ByteReadChannel,
+        onContentDelta: (String) -> Unit,
+    ): WireChatResponse {
+        var responseId: String? = null
+        var finishReason: String? = null
+        var usage: WireUsage? = null
+        var error: WireError? = null
+        val content = StringBuilder()
+        val reasoning = StringBuilder()
+        val toolCallAccumulators = sortedMapOf<Int, WireToolCallAccumulator>()
+        val dataLines = StringBuilder()
+        var sawDataLine = false
+
+        suspend fun processSseData(rawData: String) {
+            val payload = rawData.trim()
+            if (payload.isEmpty() || payload == "[DONE]") return
+            val chunk =
+                try {
+                    json.decodeFromString(WireStreamChunk.serializer(), payload)
+                } catch (e: Exception) {
+                    // 单个脏分片不致命：跳过，聚合靠其余分片（个别代理会插广告帧）
+                    return
+                }
+            if (responseId == null) responseId = chunk.id
+            chunk.error?.let { error = it }
+            chunk.usage?.let { usage = it }
+            for (choice in chunk.choices) {
+                if (choice.finishReason != null) finishReason = choice.finishReason
+                val delta = choice.delta
+                delta.content?.let { fragment ->
+                    if (fragment.isNotEmpty()) {
+                        content.append(fragment)
+                        onContentDelta(fragment)
+                    }
+                }
+                delta.reasoningContent?.let { reasoning.append(it) }
+                for (toolDelta in delta.toolCalls) {
+                    val acc = toolCallAccumulators.getOrPut(toolDelta.index) { WireToolCallAccumulator() }
+                    toolDelta.id?.let { acc.id = it }
+                    toolDelta.function?.name?.let { acc.name.append(it) }
+                    toolDelta.function?.arguments?.let { acc.arguments.append(it) }
+                }
+            }
+        }
+
+        while (!channel.isClosedForRead) {
+            val line = channel.readUTF8Line() ?: break
+            when {
+                line.startsWith("data:") -> {
+                    sawDataLine = true
+                    if (dataLines.isNotEmpty()) dataLines.append('\n')
+                    dataLines.append(line.removePrefix("data:").removePrefix(" "))
+                }
+                line.isBlank() -> {
+                    processSseData(dataLines.toString())
+                    dataLines.clear()
+                    if (error != null) break
+                }
+                // 注释行/事件名行（event:, : keep-alive）忽略
+            }
+        }
+        processSseData(dataLines.toString())
+
+        if (!sawDataLine) {
+            // 端点无视 stream:true 直接回了普通 JSON：聚合结果是一个空 choice，
+            // 会静默变成空气泡。显式报错让上层回退非流式。
+            throw IllegalStateException("AI 端点未返回 SSE 流（stream 请求被忽略）")
+        }
+
+        if (error != null && !error.message.isNullOrBlank()) {
+            throw IllegalStateException(error.message)
+        }
+
+        val toolCalls =
+            toolCallAccumulators.values
+                .map { acc ->
+                    WireToolCall(
+                        id = acc.id.ifBlank { null },
+                        function = WireFunctionCall(name = acc.name.toString(), arguments = acc.arguments.toString()),
+                    )
+                }.ifEmpty { null }
+        return WireChatResponse(
+            id = responseId,
+            choices =
+                listOf(
+                    WireChoice(
+                        index = 0,
+                        message =
+                            WireChatMessage(
+                                role = "assistant",
+                                content = content.toString().ifEmpty { null },
+                                reasoningContent = reasoning.toString().ifEmpty { null },
+                                toolCalls = toolCalls,
+                            ),
+                        finishReason = finishReason,
+                    ),
+                ),
+            usage = usage,
+        ).normalizeDirtyFields()
+    }
+
     suspend fun fetchModelsRaw(
         endpoint: String,
         apiKey: String,
@@ -188,4 +333,11 @@ class OpenAiWireClient(
         val base = resolveApiBase(endpoint, provider)
         return "$base/chat/completions"
     }
+}
+
+/** 流式分片聚合器：一次 tool_call 的增量跨多个 chunk，按 index 归组后拼接 */
+private class WireToolCallAccumulator {
+    var id: String = ""
+    val name = StringBuilder()
+    val arguments = StringBuilder()
 }

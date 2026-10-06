@@ -60,6 +60,7 @@ private data class AssistantRuntimeData(
     val toolActivity: String?,
     val activityEvents: List<String>,
     val failedSources: Map<String, String>,
+    val streamingContent: String?,
 )
 
 /**
@@ -135,12 +136,14 @@ class AssistantViewModel(
                 },
                 combine(
                     AiToolActivity.events,
+                    AiToolActivity.streamingText,
                     failureStore?.recentFailures ?: flowOf(emptyMap()),
-                ) { activityEvents, failures ->
+                ) { activityEvents, streamingText, failures ->
                     AssistantRuntimeData(
                         toolActivity = activityEvents.lastOrNull()?.text,
                         activityEvents = activityEvents.map { it.text },
                         failedSources = failures,
+                        streamingContent = streamingText,
                     )
                 },
                 conversationData(),
@@ -155,6 +158,7 @@ class AssistantViewModel(
                         toolActivity = snapshot.runtime.toolActivity,
                         activityEvents = snapshot.runtime.activityEvents,
                         failedSources = snapshot.runtime.failedSources,
+                        streamingContent = snapshot.runtime.streamingContent,
                         sessions = snapshot.conversation.sessions ?: state.sessions,
                         messages = snapshot.conversation.messages ?: state.messages,
                         activeSessionId = snapshot.conversation.activeSessionId ?: state.activeSessionId,

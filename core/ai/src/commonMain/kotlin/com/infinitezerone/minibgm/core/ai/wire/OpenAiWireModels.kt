@@ -12,6 +12,17 @@ data class WireChatRequest(
     val messages: List<WireChatMessage>,
     val tools: List<ToolDefinitionDto>? = null,
     val temperature: Double? = 0.3,
+    /** null 时不序列化（aiJson explicitNulls=false），请求保持非流式 */
+    val stream: Boolean? = null,
+    @SerialName("stream_options")
+    val streamOptions: WireStreamOptions? = null,
+)
+
+/** OpenAI 专有扩展：要求在最后一个流式分片里回传 usage；部分兼容端点不认识该字段，仅对声明的 provider 发送 */
+@Serializable
+data class WireStreamOptions(
+    @SerialName("include_usage")
+    val includeUsage: Boolean = true,
 )
 
 @Serializable
@@ -150,4 +161,46 @@ data class OllamaTagsResponse(
 @Serializable
 data class OllamaModelItem(
     val name: String,
+)
+
+// ---------- 流式（SSE）分片模型：仅由 [OpenAiWireClient.chatCompletionStream] 消费 ----------
+
+@Serializable
+internal data class WireStreamChunk(
+    val id: String? = null,
+    val choices: List<WireStreamChoice> = emptyList(),
+    val usage: WireUsage? = null,
+    val error: WireError? = null,
+)
+
+@Serializable
+internal data class WireStreamChoice(
+    val index: Int = 0,
+    val delta: WireStreamDelta = WireStreamDelta(),
+    @SerialName("finish_reason")
+    val finishReason: String? = null,
+)
+
+@Serializable
+internal data class WireStreamDelta(
+    val role: String? = null,
+    val content: String? = null,
+    @SerialName("reasoning_content")
+    val reasoningContent: String? = null,
+    @SerialName("tool_calls")
+    val toolCalls: List<WireStreamDeltaToolCall> = emptyList(),
+)
+
+@Serializable
+internal data class WireStreamDeltaToolCall(
+    /** 按 index 归组增量：同一调用的 arguments 分片跨多个 chunk 追加 */
+    val index: Int = 0,
+    val id: String? = null,
+    val function: WireStreamDeltaFunction? = null,
+)
+
+@Serializable
+internal data class WireStreamDeltaFunction(
+    val name: String? = null,
+    val arguments: String? = null,
 )
