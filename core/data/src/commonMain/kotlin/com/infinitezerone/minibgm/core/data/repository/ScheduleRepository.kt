@@ -114,6 +114,14 @@ interface ScheduleRepository {
 
     /** 持久化放送时刻表默认筛选 */
     suspend fun setScheduleDefaultOnlyWatching(onlyWatching: Boolean)
+
+    /**
+     * 获取指定年份与季度的静态全量番剧列表（全格式、含里番，优先本地缓存与 CDN 静态源）。
+     */
+    suspend fun getSeasonAnimeList(
+        year: Int,
+        seasonKey: String,
+    ): List<com.infinitezerone.minibgm.core.model.Subject>
 }
 
 internal class ScheduleRepositoryImpl(
@@ -125,6 +133,26 @@ internal class ScheduleRepositoryImpl(
     private val collectionRepository: CollectionRepository? = null,
     private val json: Json = BgmHttpClient.jsonConfig,
 ) : ScheduleRepository {
+    private val seasonalCache = mutableMapOf<String, List<com.infinitezerone.minibgm.core.model.Subject>>()
+    private val seasonalCacheMutex = kotlinx.coroutines.sync.Mutex()
+
+    override suspend fun getSeasonAnimeList(
+        year: Int,
+        seasonKey: String,
+    ): List<com.infinitezerone.minibgm.core.model.Subject> {
+        val cacheKey = "$year-$seasonKey"
+        seasonalCacheMutex.withLock {
+            val cached = seasonalCache[cacheKey]
+            if (cached != null) return cached
+        }
+        val snapshot = snapshotService.getSeasonSnapshot(year, seasonKey) ?: return emptyList()
+        val subjects = snapshot.items.map { it.toSubject() }
+        seasonalCacheMutex.withLock {
+            seasonalCache[cacheKey] = subjects
+        }
+        return subjects
+    }
+
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> =
         scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
             val nowMillis = TimeUtils.nowEpochMillis()

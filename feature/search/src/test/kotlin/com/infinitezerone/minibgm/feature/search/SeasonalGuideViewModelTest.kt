@@ -1069,4 +1069,71 @@ class SeasonalGuideViewModelTest {
             assertEquals("姐妹调教饲育者", state.subjects[0].nameCn)
             assertEquals("2026-03-06", state.subjects[0].airDate)
         }
+
+    @Test
+    fun pastSeason_prefersStaticSeasonalAniListSnapshot_withTagsAndAdultSupport() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val scheduleRepository = FakeScheduleRepository()
+
+            val pastRegularAnime =
+                sampleSubject.copy(
+                    id = 524986,
+                    name = "キャッツ♥アイ (2025)",
+                    nameCn = "猫眼三姐妹",
+                    airDate = "2025-09-25",
+                    metaTags = listOf("日本", "WEB"),
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("动作", 1),
+                        ),
+                )
+            val pastAdultAnime =
+                sampleSubject.copy(
+                    id = 575204,
+                    name = "シスターブリーダー",
+                    nameCn = "姐妹调教饲育者",
+                    airDate = "2025-09-26",
+                    metaTags = listOf("日本", "OVA", "里番", "R18"),
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("里番", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("R18", 1),
+                        ),
+                )
+
+            // 预置 2025 年秋季的 AniList 静态源数据
+            scheduleRepository.seasonalAnimeListResult = listOf(pastRegularAnime, pastAdultAnime)
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    initialYear = 2025,
+                    initialSeasonMonth = 10, // Autumn
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertFalse(state.isCurrentSeason)
+            // 静态 AniList 源秒开：无需 loading，无需触底加载
+            assertFalse(state.isLoading)
+            assertFalse(state.hasMore)
+            // 默认过滤成人条目
+            assertEquals(1, state.subjects.size)
+            assertEquals(524986L, state.subjects[0].id)
+            assertEquals("猫眼三姐妹", state.subjects[0].nameCn)
+
+            // 勾选「里番」标签：静态源中的成人条目立即可见
+            viewModel.toggleTag("里番")
+            advanceUntilIdle()
+
+            val adultState = viewModel.uiState.value
+            assertEquals(1, adultState.subjects.size)
+            assertEquals(575204L, adultState.subjects[0].id)
+            assertEquals("姐妹调教饲育者", adultState.subjects[0].nameCn)
+        }
 }

@@ -63,6 +63,36 @@ sealed interface ScheduleSnapshotResult {
     data object NotModified : ScheduleSnapshotResult
 }
 
+@Serializable
+data class SeasonSnapshotDto(
+    val schema: String = "minibgm-season-snapshot/1",
+    val year: Int = 0,
+    val season: String = "",
+    val generatedAt: String = "",
+    val total: Int = 0,
+    val mappedTotal: Int = 0,
+    val items: List<SeasonSnapshotItemDto> = emptyList(),
+)
+
+@Serializable
+data class SeasonSnapshotItemDto(
+    val anilistId: Long,
+    val bgmId: Long? = null,
+    val title: String,
+    val titleCn: String? = null,
+    val countryOfOrigin: String = "JP",
+    val format: String = "",
+    val status: String = "",
+    val isAdult: Boolean = false,
+    val coverUrl: String? = null,
+    val airDate: String? = null,
+    val ratingScore: Double = 0.0,
+    val popularity: Int = 0,
+    val episodes: Int = 0,
+    val tags: List<String> = emptyList(),
+    val sites: List<ScheduleSnapshotSiteDto> = emptyList(),
+)
+
 interface ScheduleSnapshotService {
     /** 拉取当前快照；所有 CDN 均不可达时抛出异常，由调用方降级到本地缓存。 */
     suspend fun getSnapshot(): ScheduleSnapshotDto =
@@ -73,6 +103,12 @@ interface ScheduleSnapshotService {
 
     /** 支持 ETag / 304 条件请求的快照拉取 */
     suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult
+
+    /** 支持按年+季拉取静态 JSON；CDN 逐个尝试 */
+    suspend fun getSeasonSnapshot(
+        year: Int,
+        seasonKey: String,
+    ): SeasonSnapshotDto? = null
 }
 
 internal class ScheduleSnapshotServiceImpl(
@@ -106,6 +142,32 @@ internal class ScheduleSnapshotServiceImpl(
             }
         }
         throw lastException ?: IllegalStateException("Failed to fetch schedule snapshot from CDN endpoints")
+    }
+
+    override suspend fun getSeasonSnapshot(
+        year: Int,
+        seasonKey: String,
+    ): SeasonSnapshotDto? {
+        val path = "data/seasons/$year-$seasonKey.json"
+        val urls = cdnUrls.map { it.replace("data/snapshot.json", path) }
+        for (url in urls) {
+            try {
+                val response =
+                    client.get(url) {
+                        timeout {
+                            requestTimeoutMillis = 6_000
+                            connectTimeoutMillis = 4_000
+                            socketTimeoutMillis = 6_000
+                        }
+                    }
+                if (response.status == HttpStatusCode.OK) {
+                    return response.body<SeasonSnapshotDto>()
+                }
+            } catch (_: Throwable) {
+                // 逐个 CDN 尝试
+            }
+        }
+        return null
     }
 
     companion object {

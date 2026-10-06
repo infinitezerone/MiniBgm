@@ -184,3 +184,57 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
         format = parseFormat(broadcastRule),
     )
 }
+
+internal fun com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto.toSubject(): com.infinitezerone.minibgm.core.model.Subject {
+    val metaTags = mutableListOf("日本")
+    val effectiveFormat = format.ifBlank { "TV" }
+    metaTags.add(effectiveFormat)
+    if (effectiveFormat.equals("MOVIE", ignoreCase = true)) {
+        metaTags.add("剧场版")
+    }
+    if (isAdult) {
+        metaTags.add("里番")
+        metaTags.add("R18")
+    }
+
+    val finalTags =
+        tags.map {
+            com.infinitezerone.minibgm.core.model
+                .Tag(name = it, count = 1)
+        }
+
+    val cover = coverUrl
+    val images =
+        if (!cover.isNullOrBlank()) {
+            com.infinitezerone.minibgm.core.model.SubjectImages(
+                large = cover,
+                common = cover,
+                medium = cover,
+                small = cover,
+                grid = cover,
+            )
+        } else {
+            null
+        }
+
+    return com.infinitezerone.minibgm.core.model.Subject(
+        id = bgmId ?: -anilistId,
+        type = 2,
+        name = title,
+        nameCn = titleCn.orEmpty(),
+        images = images,
+        rating =
+            if (ratingScore > 0.0) {
+                com.infinitezerone.minibgm.core.model
+                    .Rating(score = ratingScore)
+            } else {
+                null
+            },
+        airDate = airDate.orEmpty(),
+        date = airDate.orEmpty(),
+        eps = episodes,
+        tags = finalTags,
+        metaTags = metaTags,
+        platform = effectiveFormat,
+    )
+}

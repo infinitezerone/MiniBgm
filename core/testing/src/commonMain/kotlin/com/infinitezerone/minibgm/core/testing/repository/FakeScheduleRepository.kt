@@ -99,6 +99,13 @@ class FakeScheduleRepository : ScheduleRepository {
         return AppResult.Success(Unit)
     }
 
+    var seasonalAnimeListResult: List<com.infinitezerone.minibgm.core.model.Subject> = emptyList()
+
+    override suspend fun getSeasonAnimeList(
+        year: Int,
+        seasonKey: String,
+    ): List<com.infinitezerone.minibgm.core.model.Subject> = seasonalAnimeListResult
+
     override suspend fun searchLocalSubjects(
         query: String,
         limit: Int,

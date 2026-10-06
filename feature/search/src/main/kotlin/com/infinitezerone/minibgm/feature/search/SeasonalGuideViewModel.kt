@@ -206,6 +206,21 @@ class SeasonalGuideViewModel(
             isLoading = true,
         )
 
+    private val staticSeasonSubjects: Flow<List<Subject>> =
+        seasonQuery
+            .map { it.year to it.quarter }
+            .distinctUntilChanged()
+            .map { (year, quarter) ->
+                val seasonKey =
+                    when (quarter) {
+                        SeasonQuarter.WINTER -> "winter"
+                        SeasonQuarter.SPRING -> "spring"
+                        SeasonQuarter.SUMMER -> "summer"
+                        SeasonQuarter.AUTUMN -> "autumn"
+                    }
+                scheduleRepository.getSeasonAnimeList(year, seasonKey)
+            }
+
     /**
      * 对外只读投影：`combine` 出来的不可变快照。
      *
@@ -220,14 +235,19 @@ class SeasonalGuideViewModel(
                 pagedSubjects,
                 seasonQuery,
                 viewMode,
-                scheduleRepository.getAllSchedulesStream(),
-                settingsRepository?.settings?.map { it.showRestrictedContent } ?: flowOf(false),
-            ) { pages, query, mode, allSchedules, showRestricted ->
+                combine(
+                    scheduleRepository.getAllSchedulesStream(),
+                    settingsRepository?.settings?.map { it.showRestrictedContent } ?: flowOf(false),
+                    staticSeasonSubjects,
+                ) { allSchedules, showRestricted, staticSubjects ->
+                    Triple(allSchedules, showRestricted, staticSubjects)
+                },
+            ) { pages, query, mode, (allSchedules, showRestricted, staticSubjects) ->
                 val (seasonStartDay, seasonEndDay) = query.quarter.getAirDateRange(query.year)
                 val isCurrent = query.year == stateTemplate.currentYear && query.quarter == stateTemplate.currentQuarter
                 val allowsRestricted = showRestricted || query.tags.any { it in setOf("里番", "R18", "18禁") }
 
-                // 提取当季排期条目（AniList 本地第一数据源：涵盖当季首播新番与跨季在播番）
+                // 1. 本地实时排期流（若为当季）
                 val validSeasonSchedules =
                     if (isCurrent) {
                         allSchedules.filter { sched ->
@@ -277,9 +297,26 @@ class SeasonalGuideViewModel(
                         )
                     }
 
+                // 2. 静态 AniList 季度条目（全季度覆盖）
+                val filteredStaticSubjects =
+                    staticSubjects.filter { sub ->
+                        val isAdult = sub.tags.any { it.name in setOf("里番", "R18", "18禁") } || sub.metaTags.contains("里番")
+                        allowsRestricted || !isAdult
+                    }
+
+                // 3. AniList 整体条目池（当季合并本地与静态；往季以静态为主）
+                val aniListSubjects =
+                    if (isCurrent) {
+                        val knownIds = localSeasonSubjects.map { it.id }.toSet()
+                        val additions = filteredStaticSubjects.filter { it.id !in knownIds }
+                        localSeasonSubjects + additions
+                    } else {
+                        filteredStaticSubjects
+                    }
+
                 // 产地、形式与标签过滤
-                val filteredLocalSubjects =
-                    localSeasonSubjects.filter { sub ->
+                val filteredAniListSubjects =
+                    aniListSubjects.filter { sub ->
                         val originMatch =
                             when (query.origin) {
                                 SeasonOriginFilter.ALL -> true
@@ -301,9 +338,9 @@ class SeasonalGuideViewModel(
                         originMatch && formMatch && tagMatch
                     }
 
-                // 依据播出范围（全部 / 仅首播 / 仅续播）划分本地条目
-                val scopedLocalSubjects =
-                    filteredLocalSubjects.filter { sub ->
+                // 依据播出范围（全部 / 仅首播 / 仅续播）划分条目
+                val scopedAniListSubjects =
+                    filteredAniListSubjects.filter { sub ->
                         val isNew = sub.airDate.isBlank() || (sub.airDate >= seasonStartDay && sub.airDate <= seasonEndDay)
                         val isContinuing = sub.airDate.isNotBlank() && sub.airDate < seasonStartDay
                         when (query.airingScope) {
@@ -313,18 +350,18 @@ class SeasonalGuideViewModel(
                         }
                     }
 
-                // 条目池合并：当季优先以 AniList 本地数据为第一源；若有网络分页条目则平滑补全去重
-                val isLocalPrimary = isCurrent && localSeasonSubjects.isNotEmpty()
+                // 数据源判定：优先 AniList 全量数据源，若无则回退网络搜索
+                val isAniListPrimary = aniListSubjects.isNotEmpty()
                 val pooledSubjects =
-                    if (isLocalPrimary) {
-                        val localIds = scopedLocalSubjects.map { it.id }.toSet()
+                    if (isAniListPrimary) {
+                        val localIds = scopedAniListSubjects.map { it.id }.toSet()
                         val remoteAdditions =
                             if (query.airingScope == SeasonAiringScope.CONTINUING_ONLY) {
                                 emptyList()
                             } else {
                                 pages.subjects.filter { it.id !in localIds }
                             }
-                        scopedLocalSubjects + remoteAdditions
+                        scopedAniListSubjects + remoteAdditions
                     } else {
                         when (query.airingScope) {
                             SeasonAiringScope.NEW_ONLY -> pages.subjects
@@ -343,7 +380,7 @@ class SeasonalGuideViewModel(
                             )
                         }
                         SeasonSortOption.HEAT -> {
-                            if (!isLocalPrimary && query.airingScope == SeasonAiringScope.NEW_ONLY) {
+                            if (!isAniListPrimary && query.airingScope == SeasonAiringScope.NEW_ONLY) {
                                 pooledSubjects
                             } else {
                                 pooledSubjects.sortedWith(
@@ -371,12 +408,12 @@ class SeasonalGuideViewModel(
                     seasonalHotTags = extractHotTags(pooledSubjects),
                     viewMode = mode,
                     subjects = sortedSubjects,
-                    pageOffset = if (isLocalPrimary) pooledSubjects.size else pages.pageOffset,
-                    hasMore = if (isLocalPrimary) false else pages.hasMore,
-                    isLoading = if (isLocalPrimary) false else pages.isLoading,
+                    pageOffset = if (isAniListPrimary) pooledSubjects.size else pages.pageOffset,
+                    hasMore = if (isAniListPrimary) false else pages.hasMore,
+                    isLoading = if (isAniListPrimary) false else pages.isLoading,
                     isRefreshing = pages.isRefreshing,
-                    isLoadingMore = if (isLocalPrimary) false else pages.isLoadingMore,
-                    error = if (isLocalPrimary) null else pages.error,
+                    isLoadingMore = if (isAniListPrimary) false else pages.isLoadingMore,
+                    error = if (isAniListPrimary) null else pages.error,
                 )
             },
             combine(
