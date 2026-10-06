@@ -919,6 +919,69 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
+    fun aniListPrimary_doesNotAppendRemoteSearchAdditions() =
+        runTest {
+            val aniListSubject =
+                sampleSubject.copy(
+                    id = 101,
+                    name = "AniList季度新番",
+                    airDate = "2026-01-10",
+                )
+            val extraneousRemoteSubject =
+                sampleSubject.copy(
+                    id = 999,
+                    name = "网络搜索多余条目",
+                    airDate = "2026-01-15",
+                )
+            val searchRepository = FakeSearchRepository()
+            // 模拟服务端搜索返回了 AniList 中没有的额外条目
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(aniListSubject, extraneousRemoteSubject))
+            searchRepository.advancedSearchTotal = 2
+
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(aniListSubject)
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            // AniList 季度快照作为单一事实源时，不追加网络搜索多余条目
+            val state = viewModel.uiState.value
+            assertEquals(1, state.subjects.size)
+            assertEquals(101L, state.subjects[0].id)
+        }
+
+    @Test
+    fun switchingSeason_resetsAiringScopeToAll() =
+        runTest {
+            val anime =
+                sampleSubject.copy(
+                    id = 101,
+                    name = "冬番",
+                    airDate = "2026-01-10",
+                )
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(anime)
+
+            val viewModel =
+                createViewModel(
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            viewModel.selectAiringScope(SeasonAiringScope.CONTINUING_ONLY)
+            assertEquals(SeasonAiringScope.CONTINUING_ONLY, viewModel.uiState.value.selectedAiringScope)
+
+            // 切换季度应重置 airingScope 为 ALL
+            viewModel.selectSeason(2025, SeasonQuarter.AUTUMN)
+            advanceUntilIdle()
+            assertEquals(SeasonAiringScope.ALL, viewModel.uiState.value.selectedAiringScope)
+        }
+
+    @Test
     fun pastSeason_doesNotIncludeOngoingSchedules() =
         runTest {
             val pastAnime =

@@ -284,8 +284,8 @@ class SeasonalGuideViewModel(
                             val sched = scheduleMap[sub.id]
                             if (sched != null) {
                                 sub.copy(
-                                    airDate = sched.airDate.ifBlank { sub.airDate },
-                                    date = sched.airDate.ifBlank { sub.date },
+                                    airDate = sub.airDate.ifBlank { sched.airDate },
+                                    date = sub.date.ifBlank { sched.airDate },
                                     images =
                                         if (sched.coverUrl.isNotBlank()) {
                                             SubjectImages(
@@ -336,14 +336,14 @@ class SeasonalGuideViewModel(
                         originMatch && formMatch && tagIncludeMatch && tagExcludeMatch
                     }
 
-                // 依据播出范围（全部 / 仅首播 / 仅续播）划分条目
+                // 依据播出范围（全部 / 仅首播 / 仅续播）划分条目：
+                // AniList 季度快照内首播早于本季起始的即为跨季在播，其余均为当季首播
                 val scopedAniListSubjects =
                     filteredAniListSubjects.filter { sub ->
-                        val isNew = sub.airDate.isBlank() || (sub.airDate >= seasonStartDay && sub.airDate <= seasonEndDay)
                         val isContinuing = sub.airDate.isNotBlank() && sub.airDate < seasonStartDay
                         when (query.airingScope) {
                             SeasonAiringScope.ALL -> true
-                            SeasonAiringScope.NEW_ONLY -> isNew
+                            SeasonAiringScope.NEW_ONLY -> !isContinuing
                             SeasonAiringScope.CONTINUING_ONLY -> isContinuing
                         }
                     }
@@ -352,14 +352,7 @@ class SeasonalGuideViewModel(
                 val isAniListPrimary = aniListSubjects.isNotEmpty()
                 val pooledSubjects =
                     if (isAniListPrimary) {
-                        val localIds = scopedAniListSubjects.map { it.id }.toSet()
-                        val remoteAdditions =
-                            if (query.airingScope == SeasonAiringScope.CONTINUING_ONLY) {
-                                emptyList()
-                            } else {
-                                pages.subjects.filter { it.id !in localIds }
-                            }
-                        scopedAniListSubjects + remoteAdditions
+                        scopedAniListSubjects
                     } else {
                         when (query.airingScope) {
                             SeasonAiringScope.NEW_ONLY -> pages.subjects
@@ -391,7 +384,7 @@ class SeasonalGuideViewModel(
 
                 val continuingNextEpMap =
                     if (isCurrent) {
-                        filteredStaticSubjects
+                        aniListSubjects
                             .filter { it.airDate.isNotBlank() && it.airDate < seasonStartDay }
                             .mapNotNull { sub ->
                                 val sched = scheduleMap[sub.id]
@@ -476,14 +469,24 @@ class SeasonalGuideViewModel(
     private fun onPageSignals(key: RequestKey): Flow<PagingSignal> =
         pageTriggers.signals().onEach { signal -> runPagingSession(key, signal) }
 
-    fun selectYear(year: Int) = setQuery { it.copy(year = year, tags = emptySet(), excludedTags = emptySet()) }
+    fun selectYear(year: Int) =
+        setQuery { it.copy(year = year, tags = emptySet(), excludedTags = emptySet(), airingScope = SeasonAiringScope.ALL) }
 
-    fun selectQuarter(quarter: SeasonQuarter) = setQuery { it.copy(quarter = quarter, tags = emptySet(), excludedTags = emptySet()) }
+    fun selectQuarter(quarter: SeasonQuarter) =
+        setQuery { it.copy(quarter = quarter, tags = emptySet(), excludedTags = emptySet(), airingScope = SeasonAiringScope.ALL) }
 
     fun selectSeason(
         year: Int,
         quarter: SeasonQuarter,
-    ) = setQuery { it.copy(year = year, quarter = quarter, tags = emptySet(), excludedTags = emptySet()) }
+    ) = setQuery {
+        it.copy(
+            year = year,
+            quarter = quarter,
+            tags = emptySet(),
+            excludedTags = emptySet(),
+            airingScope = SeasonAiringScope.ALL,
+        )
+    }
 
     /** 切换产地筛选（全部 / 日本 / 国产）；100% 服务端下推，切换即重查 */
     fun selectOrigin(origin: SeasonOriginFilter) = setQuery { it.copy(origin = origin) }

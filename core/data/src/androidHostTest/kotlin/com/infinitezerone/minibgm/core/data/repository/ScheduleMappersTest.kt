@@ -32,7 +32,7 @@ class ScheduleMappersTest {
         assertEquals("Test Anime", subject.name)
         assertEquals("测试动画", subject.nameCn)
         assertEquals("TV", subject.platform)
-        assertEquals(listOf("TV"), subject.metaTags)
+        assertEquals(listOf("TV", "日本"), subject.metaTags)
         assertEquals("2026-04-01", subject.airDate)
         assertEquals(12, subject.eps)
         assertNotNull(subject.rating)

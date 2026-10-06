@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.model.CollectionCount
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.Subject
@@ -215,6 +216,12 @@ internal fun toSubjectImages(coverUrl: String?): SubjectImages? {
 
 internal fun SeasonSnapshotItemDto.toSubject(): Subject {
     val effectiveFormat = format.ifBlank { "TV" }
+    val effectiveOrigin =
+        when (countryOfOrigin.uppercase()) {
+            "CN" -> "中国"
+            "JP" -> "日本"
+            else -> null
+        }
     return Subject(
         id = bgmId ?: -anilistId,
         type = 2,
@@ -222,11 +229,12 @@ internal fun SeasonSnapshotItemDto.toSubject(): Subject {
         nameCn = titleCn.orEmpty(),
         images = toSubjectImages(coverUrl),
         rating = if (ratingScore > 0.0) Rating(score = ratingScore) else null,
+        collection = if (popularity > 0) CollectionCount(doing = popularity) else null,
         airDate = airDate.orEmpty(),
         date = airDate.orEmpty(),
         eps = episodes,
         tags = extractSubjectTags(genres, tags, isAdult),
-        metaTags = listOf(effectiveFormat),
+        metaTags = listOfNotNull(effectiveFormat, effectiveOrigin),
         platform = effectiveFormat,
     )
 }
