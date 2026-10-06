@@ -57,7 +57,7 @@ class DefaultBgmAiAgentService(
     httpClient: HttpClient? = null,
     wireClient: OpenAiWireClient? = null,
     private val coroutineDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
-    agentRunner: (suspend (config: AiConfig, prompt: String, tools: BgmToolRegistry) -> String)? = null,
+    agentRunner: (suspend (config: AiConfig, prompt: String, history: List<AiHistoryTurn>, tools: BgmToolRegistry) -> String)? = null,
 ) : BgmAiAgentService {
     constructor(
         settingsRepository: SettingsRepository,
@@ -71,7 +71,7 @@ class DefaultBgmAiAgentService(
         pendingActionExecutor = null,
         pendingActionStore = null,
         playableSourcesStore = null,
-        agentRunner = { config, prompt, _ -> agentRunner(config, prompt) },
+        agentRunner = { config, prompt, _, _ -> agentRunner(config, prompt) },
     )
 
     private val catalogLogger = bgmLogger("Bgm/AiHttp")
@@ -91,19 +91,21 @@ class DefaultBgmAiAgentService(
             ).flatten(),
         )
 
-    private val effectiveAgentRunner: suspend (config: AiConfig, prompt: String, tools: BgmToolRegistry) -> String =
-        agentRunner ?: { config, prompt, tools ->
+    private val effectiveAgentRunner:
+        suspend (config: AiConfig, prompt: String, history: List<AiHistoryTurn>, tools: BgmToolRegistry) -> String =
+        agentRunner ?: { config, prompt, history, tools ->
             runPiAgent(
                 wireClient = activeWireClient,
                 config = config,
                 prompt = prompt,
+                history = history,
                 tools = tools,
             )
         }
 
     override suspend fun execute(
         prompt: String,
-        history: List<Pair<String, String>>,
+        history: List<AiHistoryTurn>,
     ): AppResult<String> {
         if (prompt.isBlank()) {
             return AppResult.Error(IllegalArgumentException("Prompt must not be blank."))
@@ -118,15 +120,15 @@ class DefaultBgmAiAgentService(
         val effectiveModel = config.model.ifBlank { defaultModel(config) }
         agentLogger.i { "🚀 开始执行 Agent 任务: prompt=\"${prompt.take(60)}\", provider=${config.provider}, model=$effectiveModel" }
         val startMark = TimeSource.Monotonic.markNow()
-        val finalPrompt = buildFinalPrompt(prompt, history)
         AiToolActivity.clear()
         AiToolActivity.reportStatus("AI 正在思考意图与调度工具...")
+        val effectiveHistory = sanitizeAndBudgetHistory(history)
 
         return try {
             val response =
                 kotlinx.coroutines.withContext(coroutineDispatcher) {
                     withTimeout(AI_RUN_TIMEOUT_MS) {
-                        executeWithRetry(config, finalPrompt)
+                        executeWithRetry(config, prompt, effectiveHistory)
                     }
                 }
             val elapsedMs = startMark.elapsedNow().inWholeMilliseconds
@@ -153,13 +155,14 @@ class DefaultBgmAiAgentService(
 
     private suspend fun executeWithRetry(
         config: AiConfig,
-        finalPrompt: String,
+        prompt: String,
+        history: List<AiHistoryTurn>,
     ): String {
         var lastException: Exception? = null
         val maxAttempts = 3
         for (attempt in 1..maxAttempts) {
             try {
-                return effectiveAgentRunner(config, finalPrompt, toolRegistry)
+                return effectiveAgentRunner(config, prompt, history, toolRegistry)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -184,34 +187,6 @@ class DefaultBgmAiAgentService(
             }
         }
         throw (lastException ?: IllegalStateException("Agent execution failed"))
-    }
-
-    private fun buildFinalPrompt(
-        prompt: String,
-        history: List<Pair<String, String>>,
-    ): String {
-        val cleanHistory =
-            history.filterNot { (_, content) ->
-                content.contains("<tool_call>") ||
-                    content.contains("<toolcall>") ||
-                    content.contains("<param_key>") ||
-                    content.contains("<paramkey>") ||
-                    content.startsWith("❌ 执行出错") ||
-                    content.startsWith("执行出错")
-            }
-        if (cleanHistory.isEmpty()) {
-            return prompt
-        }
-        return buildString {
-            appendLine("以下是先前的会话历史记录（供参考上下文）：")
-            cleanHistory.forEach { (role, content) ->
-                val roleLabel = if (role.equals("user", ignoreCase = true)) "用户" else "助手"
-                appendLine("[$roleLabel] $content")
-            }
-            appendLine("---")
-            appendLine("用户当前最新输入：")
-            append(prompt)
-        }
     }
 
     override suspend fun fetchAvailableModels(
@@ -244,6 +219,53 @@ class DefaultBgmAiAgentService(
 }
 
 /**
+ * 历史注入的字符预算：CJK 约 1 字 1 token、英文约 4 字符 1 token，
+ * 8000 字符上限大约对应 4~8k token，给工具轮往返留足余量。
+ * 只截历史，不截当前输入与系统提示词。
+ */
+internal const val AI_HISTORY_CHAR_BUDGET = 8000
+
+/**
+ * 历史清洗 + 预算：剔除历史报错气泡与遗留伪工具标记（注入面），再按字符预算自最新往回保留。
+ * 在 execute() 边界统一应用——自定义 agentRunner 与内置循环拿到的是同一份干净历史。
+ */
+internal fun sanitizeAndBudgetHistory(history: List<AiHistoryTurn>): List<AiHistoryTurn> {
+    val cleanHistory =
+        history
+            .filter { it.content.isNotBlank() }
+            .filterNot { turn ->
+                turn.content.contains("<tool_call>") ||
+                    turn.content.contains("<toolcall>") ||
+                    turn.content.contains("<param_key>") ||
+                    turn.content.contains("<paramkey>") ||
+                    turn.content.startsWith("❌ 执行出错") ||
+                    turn.content.startsWith("执行出错")
+            }
+    val kept = mutableListOf<AiHistoryTurn>()
+    var used = 0
+    for (turn in cleanHistory.reversed()) {
+        if (used + turn.content.length > AI_HISTORY_CHAR_BUDGET && kept.isNotEmpty()) break
+        kept.add(turn)
+        used += turn.content.length
+    }
+    kept.reverse()
+    return kept
+}
+
+/** 构造首轮 messages 数组：system + 结构化历史（user/assistant 原生 role）+ 当前输入；历史须先经 [sanitizeAndBudgetHistory] */
+internal fun buildInitialMessages(
+    prompt: String,
+    history: List<AiHistoryTurn>,
+): List<WireChatMessage> {
+    val messages = mutableListOf(WireChatMessage.system(BGM_AGENT_SYSTEM_PROMPT))
+    for (turn in history) {
+        messages.add(if (turn.isUser) WireChatMessage.user(turn.content) else WireChatMessage.assistant(content = turn.content))
+    }
+    messages.add(WireChatMessage.user(prompt))
+    return messages
+}
+
+/**
  * Pi Agent 架构的极简 ReAct 循环：
  * 只要模型返回 tool_calls，立即派发执行并以 role="tool" 追加上下文，绝不因模型输出过程文本而早退。
  * 当无 tool_calls 时，提取 content（或兼容思考模型的 reasoning_content）作为最终回答。
@@ -252,12 +274,11 @@ internal suspend fun runPiAgent(
     wireClient: OpenAiWireClient,
     config: AiConfig,
     prompt: String,
+    history: List<AiHistoryTurn>,
     tools: BgmToolRegistry,
     maxTurns: Int = 10,
 ): String {
-    val messages = mutableListOf<WireChatMessage>()
-    messages.add(WireChatMessage.system(BGM_AGENT_SYSTEM_PROMPT))
-    messages.add(WireChatMessage.user(prompt))
+    val messages = buildInitialMessages(prompt, sanitizeAndBudgetHistory(history)).toMutableList()
 
     val toolDefinitions = tools.toDefinitions().ifEmpty { null }
     val json = aiJson

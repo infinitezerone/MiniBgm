@@ -3,6 +3,15 @@ package com.infinitezerone.minibgm.core.ai
 import com.infinitezerone.minibgm.core.common.AppResult
 
 /**
+ * 一轮结构化会话历史：以真实 user/assistant 角色进入模型 messages 数组，
+ * 不再拍平成文本拼接——role 结构保真是工具调用类任务表现的基础。
+ */
+data class AiHistoryTurn(
+    val isUser: Boolean,
+    val content: String,
+)
+
+/**
  * MiniBgm AI 智能体执行服务接口。
  * 基于 JetBrains Koog 框架构建，支持本地（Ollama）、云端 Google Gemini 与标准 OpenAI 兼容端点。
  */
@@ -10,12 +19,12 @@ interface BgmAiAgentService {
     /**
      * 执行智能体推理任务。
      * @param prompt 输入指令或问题
-     * @param history 会话历史列表，每项为 Pair(role, content)，如 ("user", "..."), ("assistant", "...")
+     * @param history 结构化会话历史（按时间正序）；由服务层做投毒清洗与预算裁剪后注入 messages 数组
      * @return 智能体执行结果
      */
     suspend fun execute(
         prompt: String,
-        history: List<Pair<String, String>> = emptyList(),
+        history: List<AiHistoryTurn> = emptyList(),
     ): AppResult<String>
 
     /**

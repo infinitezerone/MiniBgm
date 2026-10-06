@@ -286,6 +286,7 @@ class OpenAiWireDirtyResponseTest {
                         wireClient = OpenAiWireClient(HttpClient(engine)),
                         config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = "k", model = "gpt-4o-mini"),
                         prompt = "讲讲这部番",
+                        history = emptyList(),
                         tools = BgmToolRegistry(emptyList()),
                     )
                 }

@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.assistant
 
+import com.infinitezerone.minibgm.core.ai.AiHistoryTurn
 import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionExecutor
 import com.infinitezerone.minibgm.core.ai.PendingActionStore
@@ -62,7 +63,7 @@ class AssistantViewModelTest {
         var lastFetchApiKey: String? = null
         var lastFetchProvider: String? = null
 
-        var capturedHistories = mutableListOf<List<Pair<String, String>>>()
+        var capturedHistories = mutableListOf<List<AiHistoryTurn>>()
 
         /** 非 null 时 execute 挂起等待，用于模拟长时间运行的取消场景 */
         var executeGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
@@ -73,7 +74,7 @@ class AssistantViewModelTest {
 
         override suspend fun execute(
             prompt: String,
-            history: List<Pair<String, String>>,
+            history: List<AiHistoryTurn>,
         ): AppResult<String> {
             prompts.add(prompt)
             capturedHistories.add(history)
@@ -1142,8 +1143,10 @@ class AssistantViewModelTest {
             assertTrue(agentService.capturedHistories[0].isEmpty(), "首轮会话历史为空")
             val secondHistory = agentService.capturedHistories[1]
             assertEquals(2, secondHistory.size, "第二轮应包含首轮问答")
-            assertEquals("user" to "问题 1", secondHistory[0])
-            assertEquals("assistant" to "回答 1", secondHistory[1])
+            assertTrue(secondHistory[0].isUser)
+            assertEquals("问题 1", secondHistory[0].content)
+            assertFalse(secondHistory[1].isUser)
+            assertEquals("回答 1", secondHistory[1].content)
         }
 
     @Test

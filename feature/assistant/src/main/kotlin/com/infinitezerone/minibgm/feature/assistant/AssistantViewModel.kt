@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.assistant
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.ai.AiHistoryTurn
 import com.infinitezerone.minibgm.core.ai.AiToolActivity
 import com.infinitezerone.minibgm.core.ai.BgmAiAgentService
 import com.infinitezerone.minibgm.core.ai.PendingActionParser
@@ -331,14 +332,14 @@ class AssistantViewModel(
         }
     }
 
-    private fun buildHistoryContext(messages: List<AssistantMessage>): List<Pair<String, String>> =
+    /** 结构化历史轮次：只截单轮长度（角色保真），总量预算由 :core:ai 的 buildInitialMessages 统一控制 */
+    private fun buildHistoryContext(messages: List<AssistantMessage>): List<AiHistoryTurn> =
         messages
             .filter { !it.isError && it.content.isNotBlank() }
-            .takeLast(8)
+            .takeLast(12)
             .map { msg ->
-                val role = if (msg.role == MessageRole.USER) "user" else "assistant"
                 val text = if (msg.content.length > 600) msg.content.take(600) + "..." else msg.content
-                role to text
+                AiHistoryTurn(isUser = msg.role == MessageRole.USER, content = text)
             }
 
     fun toggleSessionSwitcher(show: Boolean) {
@@ -391,7 +392,7 @@ class AssistantViewModel(
 
     private fun runAgent(
         prompt: String,
-        history: List<Pair<String, String>>,
+        history: List<AiHistoryTurn>,
         retriedErrorId: String? = null,
     ) {
         val sessionId = activeSessionId.value

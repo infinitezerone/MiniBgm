@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.ai
 
+import com.infinitezerone.minibgm.core.ai.AiHistoryTurn
 import com.infinitezerone.minibgm.core.ai.di.aiModule
 import com.infinitezerone.minibgm.core.ai.tool.string
 import com.infinitezerone.minibgm.core.ai.wire.AiEndpointException
@@ -197,7 +198,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         }
 
     @Test
-    fun execute_passes_conversation_history_in_prompt() =
+    fun execute_passes_structured_history_turns_through() =
         runTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
@@ -207,30 +208,31 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     provider = "openai",
                 ),
             )
-            var capturedPrompt = ""
+            var capturedHistory: List<AiHistoryTurn>? = null
             val service =
                 DefaultBgmAiAgentService(
                     settingsRepository = fakeSettingsRepository,
-                    agentRunner = { _, prompt ->
-                        capturedPrompt = prompt
+                    agentRunner = { _, _, history, _ ->
+                        capturedHistory = history
                         "ok"
                     },
                 )
             val history =
                 listOf(
-                    "user" to "帮我分析 https://example.tv/",
-                    "assistant" to "正在分析",
+                    AiHistoryTurn(isUser = true, content = "帮我分析 https://example.tv/"),
+                    AiHistoryTurn(isUser = false, content = "正在分析"),
                 )
             val result = service.execute("继续执行", history)
             assertIs<AppResult.Success<String>>(result)
-            assertTrue(capturedPrompt.contains("以下是先前的会话历史记录"))
-            assertTrue(capturedPrompt.contains("[用户] 帮我分析 https://example.tv/"))
-            assertTrue(capturedPrompt.contains("[助手] 正在分析"))
-            assertTrue(capturedPrompt.contains("用户当前最新输入：\n继续执行"))
+            val captured = assertNotNull(capturedHistory)
+            assertEquals(2, captured.size)
+            assertTrue(captured[0].isUser)
+            assertEquals("帮我分析 https://example.tv/", captured[0].content)
+            assertFalse(captured[1].isUser)
         }
 
     @Test
-    fun execute_sanitizes_poisoned_history_from_prompt() =
+    fun execute_drops_poisoned_history_turns() =
         runTest {
             fakeSettingsRepository.setAiConfig(
                 AiConfig(
@@ -240,27 +242,27 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     provider = "openai",
                 ),
             )
-            var capturedPrompt = ""
+            var capturedHistory: List<AiHistoryTurn>? = null
             val service =
                 DefaultBgmAiAgentService(
                     settingsRepository = fakeSettingsRepository,
-                    agentRunner = { _, prompt ->
-                        capturedPrompt = prompt
+                    agentRunner = { _, _, history, _ ->
+                        capturedHistory = history
                         "ok"
                     },
                 )
             val dirtyHistory =
                 listOf(
-                    "assistant" to "<tool_call>searchWeb<param_key>query</param_key><param_value>test</param_value></tool_call>",
-                    "assistant" to "❌ 执行出错：AI 响应超时（180 秒）",
+                    AiHistoryTurn(isUser = false, content = "<tool_call>searchWeb</tool_call>"),
+                    AiHistoryTurn(isUser = false, content = "❌ 执行出错：AI 响应超时（180 秒）"),
+                    AiHistoryTurn(isUser = true, content = "正常的一轮提问"),
                 )
             val result = service.execute("再次搜索", dirtyHistory)
             assertIs<AppResult.Success<String>>(result)
-            // 毒化标签被全部清洗，若没有合法历史，直接以最新 prompt 发送
-            assertFalse(capturedPrompt.contains("<tool_call>"))
-            assertFalse(capturedPrompt.contains("<param_key>"))
-            assertFalse(capturedPrompt.contains("执行出错"))
-            assertEquals("再次搜索", capturedPrompt)
+            // 毒化轮次被整体剔除，正常轮次保留
+            val captured = assertNotNull(capturedHistory)
+            assertEquals(1, captured.size)
+            assertEquals("正常的一轮提问", captured[0].content)
         }
 
     @Test
@@ -291,7 +293,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val service =
                 DefaultBgmAiAgentService(
                     settingsRepository = fakeSettingsRepository,
-                    agentRunner = { _, _, _ -> throw kotlinx.coroutines.CancellationException("用户停止") },
+                    agentRunner = { _, _, _, _ -> throw kotlinx.coroutines.CancellationException("用户停止") },
                 )
             assertFailsWith<kotlinx.coroutines.CancellationException> {
                 service.execute("任意输入")
@@ -627,11 +629,12 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                 DefaultBgmAiAgentService(
                     settingsRepository = fakeSettingsRepository,
                     httpClient = HttpClient(engine),
-                    agentRunner = { config, prompt, _ ->
+                    agentRunner = { config, prompt, _, _ ->
                         runPiAgent(
                             wireClient = OpenAiWireClient(HttpClient(engine)),
                             config = config,
                             prompt = prompt,
+                            history = emptyList(),
                             tools =
                                 com.infinitezerone.minibgm.core.ai.tool
                                     .BgmToolRegistry(listOf(mockTool)),
@@ -820,7 +823,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             val tools =
                 com.infinitezerone.minibgm.core.ai.tool
                     .BgmToolRegistry(listOf(tool))
-            val result = runPiAgent(wireClient, config, "test prompt", tools, maxTurns = 5)
+            val result = runPiAgent(wireClient, config, "test prompt", emptyList(), tools, maxTurns = 5)
             assertEquals(DEFAULT_SUMMARY_FALLBACK, result)
             assertTrue(callCount <= 4)
         }
@@ -883,6 +886,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     OpenAiWireClient(HttpClient(engine)),
                     config,
                     "test prompt",
+                    emptyList(),
                     com.infinitezerone.minibgm.core.ai.tool
                         .BgmToolRegistry(listOf(tool)),
                     maxTurns = 5,
@@ -952,6 +956,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                     OpenAiWireClient(HttpClient(engine)),
                     config,
                     "test prompt",
+                    emptyList(),
                     com.infinitezerone.minibgm.core.ai.tool
                         .BgmToolRegistry(listOf(tool)),
                     maxTurns = 10,
@@ -981,6 +986,7 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
                         OpenAiWireClient(HttpClient(engine)),
                         config,
                         "test prompt",
+                        emptyList(),
                         com.infinitezerone.minibgm.core.ai.tool
                             .BgmToolRegistry(emptyList()),
                         maxTurns = 3,
@@ -1132,4 +1138,21 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             // 若发生回退则必然多出一次非流式请求
             assertTrue(requestCount <= 3, "5xx 不应触发非流式回退，实际请求数: $requestCount")
         }
+
+    @Test
+    fun buildInitialMessages_emits_role_faithful_array_within_budget() {
+        val history =
+            List(50) { i ->
+                AiHistoryTurn(isUser = i % 2 == 0, content = "轮次内容".repeat(200) + i)
+            }
+        val messages = buildInitialMessages("当前输入", sanitizeAndBudgetHistory(history))
+        assertEquals("system", messages.first().role)
+        assertEquals("当前输入", messages.last().content)
+        assertEquals("user", messages.last().role)
+        // 除 system 与当前输入外，历史轮次总量受字符预算约束
+        val historyChars = messages.drop(1).dropLast(1).sumOf { it.content.orEmpty().length }
+        assertTrue(historyChars <= AI_HISTORY_CHAR_BUDGET, "历史轮次总量必须受预算约束: $historyChars")
+        // role 保真：历史轮次只会是 user/assistant
+        assertTrue(messages.drop(1).dropLast(1).all { it.role == "user" || it.role == "assistant" })
+    }
 }
