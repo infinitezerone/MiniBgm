@@ -86,6 +86,25 @@ private val SITE_RESOLVERS: Map<String, Pair<String, (String) -> String>> =
         "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
     )
 
+internal fun buildBroadcastRule(
+    isAdult: Boolean,
+    format: String,
+): String {
+    val parts = mutableListOf<String>()
+    if (format.isNotBlank()) parts.add("format=$format")
+    if (isAdult) parts.add("adult=true")
+    return parts.joinToString(";")
+}
+
+internal fun parseIsAdult(rule: String): Boolean = rule.contains("adult=true") || rule.contains("ADULT")
+
+internal fun parseFormat(rule: String): String =
+    rule
+        .split(";")
+        .firstOrNull { it.startsWith("format=") }
+        ?.substringAfter("format=")
+        .orEmpty()
+
 internal fun AniListBgmMappingEntity.toAirScheduleEntity(
     item: AniListWeeklyScheduleItem,
     nowMillis: Long,
@@ -109,6 +128,7 @@ internal fun AniListBgmMappingEntity.toAirScheduleEntity(
         timeJst = jstTime,
         sitesJson = sitesJson,
         anilistId = anilistId,
+        broadcastRule = buildBroadcastRule(item.isAdult, item.format),
         source = AirScheduleEntity.SOURCE_BGM_DATA,
         nextEpisode = item.episode,
         nextEpisodeAtUtc = isoUtc,
@@ -160,5 +180,7 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
         nextEpisodeAtUtc = nextEpisodeAtUtc,
         nextEpisodeKind = nextEpisodeKind,
         isUnmapped = bgmId <= 0,
+        isAdult = parseIsAdult(broadcastRule),
+        format = parseFormat(broadcastRule),
     )
 }

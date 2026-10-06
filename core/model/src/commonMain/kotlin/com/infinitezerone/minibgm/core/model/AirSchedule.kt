@@ -31,6 +31,8 @@ data class AirSchedule(
     val isAiring: Boolean = true,
     /** 未映射到 bgmId 的占位条目（仅时刻表展示，不可进详情/追番/播放） */
     val isUnmapped: Boolean = false,
+    val isAdult: Boolean = false,
+    val format: String = "",
 ) {
     /** 展示标题：中文标题优先，空缺回退原日文标题 */
     val displayName: String

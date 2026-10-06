@@ -30,6 +30,7 @@ val searchModule =
                 collectionRepository = get(),
                 authRepository = get(),
                 scheduleRepository = get(),
+                settingsRepository = get(),
                 initialYear = initialYear,
                 initialSeasonMonth = initialSeasonMonth,
             )

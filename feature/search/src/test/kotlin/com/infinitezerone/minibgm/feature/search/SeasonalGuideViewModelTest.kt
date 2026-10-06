@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -38,6 +39,7 @@ class SeasonalGuideViewModelTest {
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
         scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
+        settingsRepository: SettingsRepository? = null,
         initialYear: Int = 0,
         initialSeasonMonth: Int = 0,
         timeProvider: () -> LocalDate = { fixedDate },
@@ -46,6 +48,7 @@ class SeasonalGuideViewModelTest {
         collectionRepository = collectionRepository,
         authRepository = authRepository,
         scheduleRepository = scheduleRepository,
+        settingsRepository = settingsRepository,
         initialYear = initialYear,
         initialSeasonMonth = initialSeasonMonth,
         timeProvider = timeProvider,
@@ -938,5 +941,70 @@ class SeasonalGuideViewModelTest {
             // 历史季度只包含服务端搜索返回的条目，排期库中的当季条目不注入
             assertEquals(1, state.subjects.size)
             assertEquals(99L, state.subjects[0].id)
+        }
+
+    @Test
+    fun continuingAdultSchedule_isIncludedWhenTagSelected_andExcludedWhenFilteredByOtherTags() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(emptyList())
+            searchRepository.advancedSearchTotal = 0
+
+            val scheduleRepository = FakeScheduleRepository()
+            val adultContinuing =
+                AirSchedule(
+                    bgmId = 575204,
+                    title = "シスターブリーダー",
+                    titleCn = "姐妹调教饲育者",
+                    airDate = "2025-09-01",
+                    ratingScore = 8.0,
+                    nextEpisodeNumber = 5,
+                    weekday = 5,
+                    isAdult = true,
+                    format = "OVA",
+                )
+            val regularContinuing =
+                AirSchedule(
+                    bgmId = 201,
+                    title = "名侦探柯南",
+                    titleCn = "名侦探柯南",
+                    airDate = "1996-01-08",
+                    ratingScore = 8.5,
+                    nextEpisodeNumber = 1100,
+                    weekday = 6,
+                    isAdult = false,
+                    format = "TV",
+                )
+            scheduleRepository.sendSchedules(1, listOf(adultContinuing, regularContinuing))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            // 1. 默认未开启限制级内容且未选择里番标签：成人条目被隐藏，普通跨季条目保留
+            var state = viewModel.uiState.value
+            assertEquals(1, state.subjects.size)
+            assertEquals(201L, state.subjects[0].id)
+
+            // 2. 勾选「里番」标签：成人跨季条目命中并展示，非里番的普通跨季条目被过滤剔除（杜绝标签污染）
+            viewModel.toggleTag("里番")
+            advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertEquals(1, state.subjects.size)
+            assertEquals(575204L, state.subjects[0].id)
+            assertTrue(state.subjects[0].tags.any { it.name == "里番" })
+            assertTrue(state.subjects[0].metaTags.contains("OVA"))
+
+            // 3. 反选里番标签，选择「科幻」标签：由于成人跨季条目没有科幻标签，两者均不应出现
+            viewModel.toggleTag("里番")
+            viewModel.toggleTag("科幻")
+            advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertEquals(0, state.subjects.size)
         }
 }

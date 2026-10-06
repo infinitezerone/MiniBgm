@@ -549,12 +549,9 @@ internal class ScheduleRepositoryImpl(
         nowMillis: Long,
         snapshot: ScheduleSnapshotDto,
     ): WeeklyResolution {
-        // 滚动 13 天时刻表（前 6 天 + 今天 + 后 6 天，留足前后 7 天窗口）：收录覆盖期内的全部在播条目
-        val windowStartSeconds = (nowMillis - 7 * DAY_MILLIS) / 1000
-        val windowEndSeconds = (nowMillis + 7 * DAY_MILLIS) / 1000
-        val showRestricted =
-            runCatching { userPreferences.userPreferences.firstOrNull()?.showRestrictedContent }
-                .getOrNull() ?: false
+        // 季度时刻表与逐话事件窗口（前 30 天 + 今天 + 后 120 天，覆盖当季全量在播与待播集数）
+        val windowStartSeconds = (nowMillis - 30 * DAY_MILLIS) / 1000
+        val windowEndSeconds = (nowMillis + 120 * DAY_MILLIS) / 1000
         val weeklyItems =
             snapshot.items
                 .flatMap { item ->
@@ -573,7 +570,7 @@ internal class ScheduleRepositoryImpl(
                                 isAdult = item.isAdult,
                             )
                         }
-                }.filter { showRestricted || !it.isAdult }
+                }
 
         if (weeklyItems.isEmpty()) return WeeklyResolution(currentEntities, emptySet())
 
@@ -702,11 +699,13 @@ internal class ScheduleRepositoryImpl(
             } else {
                 existing.airDate
             }
+        val targetBroadcastRule = buildBroadcastRule(ctx.item.isAdult, ctx.item.format)
         val needsUpdate =
             targetCoverUrl != existing.coverUrl ||
                 targetTitleCn != existing.titleCn ||
                 targetAirDate != existing.airDate ||
-                mergedSites != existing.sitesJson
+                mergedSites != existing.sitesJson ||
+                (targetBroadcastRule.isNotBlank() && targetBroadcastRule != existing.broadcastRule)
 
         if (needsUpdate) {
             val updated =
@@ -715,6 +714,7 @@ internal class ScheduleRepositoryImpl(
                     titleCn = targetTitleCn,
                     airDate = targetAirDate,
                     sitesJson = mergedSites,
+                    broadcastRule = if (targetBroadcastRule.isNotBlank()) targetBroadcastRule else existing.broadcastRule,
                 )
             state.entitiesByAnilistId[ctx.item.anilistId] = updated
             state.entitiesByBgmId[updated.bgmId] = updated
@@ -752,6 +752,7 @@ internal class ScheduleRepositoryImpl(
         val existing = state.entitiesByBgmId[mapping.bgmId]
         val targetTitleCn = if (ctx.titleCn.isNotBlank()) ctx.titleCn else existing?.titleCn?.ifBlank { mapping.titleCn }.orEmpty()
         val targetSites = mergeSites(existing?.sitesJson.orEmpty(), ctx.sitesJson.ifBlank { mapping.sitesJson })
+        val targetBroadcastRule = buildBroadcastRule(ctx.item.isAdult, ctx.item.format)
         val entity =
             existing?.copy(
                 anilistId = ctx.item.anilistId,
@@ -759,6 +760,7 @@ internal class ScheduleRepositoryImpl(
                 titleCn = targetTitleCn,
                 airDate = existing.airDate.ifBlank { mapping.beginIso.substringBefore("T") },
                 sitesJson = targetSites,
+                broadcastRule = if (targetBroadcastRule.isNotBlank()) targetBroadcastRule else existing.broadcastRule,
             ) ?: mapping.copy(titleCn = targetTitleCn, sitesJson = targetSites).toAirScheduleEntity(ctx.item, nowMillis)
         state.entitiesByBgmId[entity.bgmId] = entity
         state.entitiesByAnilistId[ctx.item.anilistId] = entity
@@ -784,6 +786,7 @@ internal class ScheduleRepositoryImpl(
                     (titlesRoughlyEqual(entity.title, ctx.item.titleNative) || titlesRoughlyEqual(entity.titleCn, ctx.item.titleNative))
             } ?: return false
         val targetTitleCn = if (ctx.titleCn.isNotBlank()) ctx.titleCn else localMatch.titleCn
+        val targetBroadcastRule = buildBroadcastRule(ctx.item.isAdult, ctx.item.format)
         val updated =
             localMatch.copy(
                 anilistId = ctx.item.anilistId,
@@ -791,6 +794,7 @@ internal class ScheduleRepositoryImpl(
                 titleCn = targetTitleCn,
                 airDate = localMatch.airDate.ifBlank { ctx.airDate.substringBefore("T") },
                 sitesJson = mergeSites(localMatch.sitesJson, ctx.sitesJson),
+                broadcastRule = if (targetBroadcastRule.isNotBlank()) targetBroadcastRule else localMatch.broadcastRule,
             )
         state.entitiesByBgmId[updated.bgmId] = updated
         state.entitiesByAnilistId[ctx.item.anilistId] = updated

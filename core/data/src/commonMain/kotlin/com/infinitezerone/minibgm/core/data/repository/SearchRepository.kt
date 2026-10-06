@@ -190,9 +190,12 @@ internal class SearchRepositoryImpl(
             AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
         }
 
-    private suspend fun resolveNsfwFilter(): Boolean? =
-        if (userPreferences.userPreferences.firstOrNull()?.showRestrictedContent == true) null else false
+    private suspend fun resolveNsfwFilter(request: SearchSubjectsRequest? = null): Boolean? {
+        val explicitlyRequestsNsfw = request?.filter?.tag?.any { it in setOf("里番", "R18", "18禁") } == true
+        if (explicitlyRequestsNsfw) return null
+        return if (userPreferences.userPreferences.firstOrNull()?.showRestrictedContent == true) null else false
+    }
 
     private suspend fun withNsfwPolicy(request: SearchSubjectsRequest): SearchSubjectsRequest =
-        request.copy(filter = (request.filter ?: SearchFilter()).copy(nsfw = resolveNsfwFilter()))
+        request.copy(filter = (request.filter ?: SearchFilter()).copy(nsfw = resolveNsfwFilter(request)))
 }

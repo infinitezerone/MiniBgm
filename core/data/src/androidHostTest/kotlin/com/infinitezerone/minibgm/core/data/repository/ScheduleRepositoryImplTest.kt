@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -2697,4 +2698,68 @@ class ScheduleRepositoryImplTest {
             )
         }
     }
+
+    @Test
+    fun syncAirEvents_retainsUpcomingEpisodesInSeasonWindow_andPreservesAdultMetadata() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val futureAirSeconds = (nowMillis + 25 * DAY_MILLIS) / 1000
+            val snapshotDto =
+                ScheduleSnapshotDto(
+                    schema = "minibgm-schedule-snapshot/1",
+                    generatedAt = TimeUtils.isoUtcFromEpochMillis(nowMillis),
+                    items =
+                        listOf(
+                            ScheduleSnapshotItemDto(
+                                anilistId = 196750L,
+                                bgmId = 575204L,
+                                title = "シスターブリーダー",
+                                titleCn = "姐妹调教饲育者",
+                                format = "OVA",
+                                isAdult = true,
+                                airDate = "2025-09-01",
+                                episodes =
+                                    listOf(
+                                        ScheduleSnapshotEpisodeDto(n = 5, t = futureAirSeconds),
+                                    ),
+                            ),
+                        ),
+                )
+
+            val snapshotService =
+                FakeScheduleSnapshotService().apply {
+                    customSnapshot = snapshotDto
+                }
+
+            val airScheduleDao = FakeAirScheduleDao()
+            val airEventDao = FakeAirEventDao()
+            val anilistMappingDao = FakeAniListMappingDao()
+
+            val repo =
+                createRepository(
+                    scheduleDao = airScheduleDao,
+                    airEventDao = airEventDao,
+                    anilistMappingDao = anilistMappingDao,
+                    snapshotService = snapshotService,
+                )
+
+            val result = repo.syncBangumiData()
+            assertIs<AppResult.Success<*>>(result)
+
+            val entities = airScheduleDao.getAllSchedulesList()
+            val sisterBreeder = entities.firstOrNull { it.bgmId == 575204L }
+            assertNotNull(sisterBreeder, "第 25 天发售的 OVA 应被完整收录于时刻表")
+            assertEquals("シスターブリーダー", sisterBreeder.title)
+            assertEquals("姐妹调教饲育者", sisterBreeder.titleCn)
+            assertEquals(5, sisterBreeder.nextEpisode)
+            assertTrue(sisterBreeder.broadcastRule.contains("adult=true"))
+            assertTrue(sisterBreeder.broadcastRule.contains("format=OVA"))
+
+            val model = sisterBreeder.toModel(Json { ignoreUnknownKeys = true })
+            assertTrue(model.isAdult)
+            assertEquals("OVA", model.format)
+
+            val events = airEventDao.getAllAirEvents()
+            assertTrue(events.any { it.subjectId == 575204L && it.episode == 5 })
+        }
 }

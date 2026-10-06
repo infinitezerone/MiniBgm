@@ -7,12 +7,14 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectImages
+import com.infinitezerone.minibgm.core.model.Tag
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -145,6 +148,7 @@ class SeasonalGuideViewModel(
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
     private val scheduleRepository: ScheduleRepository,
+    private val settingsRepository: SettingsRepository? = null,
     initialYear: Int = 0,
     initialSeasonMonth: Int = 0,
     timeProvider: () -> LocalDate = { LocalDate.now() },
@@ -212,15 +216,26 @@ class SeasonalGuideViewModel(
      */
     val uiState: StateFlow<SeasonalGuideUiState> =
         combine(
-            combine(pagedSubjects, seasonQuery, viewMode, scheduleRepository.getAllSchedulesStream()) { pages, query, mode, allSchedules ->
+            combine(
+                pagedSubjects,
+                seasonQuery,
+                viewMode,
+                scheduleRepository.getAllSchedulesStream(),
+                settingsRepository?.settings?.map { it.showRestrictedContent } ?: flowOf(false),
+            ) { pages, query, mode, allSchedules, showRestricted ->
                 val (seasonStartDay, _) = query.quarter.getAirDateRange(query.year)
                 val isCurrent = query.year == stateTemplate.currentYear && query.quarter == stateTemplate.currentQuarter
+                val allowsRestricted = showRestricted || query.tags.any { it in setOf("里番", "R18", "18禁") }
 
                 // 提取当季跨季在播番剧（首播早于本季起始，且活跃在播）
                 val continuingSchedules =
                     if (isCurrent) {
                         allSchedules.filter { sched ->
-                            sched.airDate.isNotBlank() && sched.airDate < seasonStartDay && !sched.isUnmapped && sched.bgmId > 0
+                            sched.airDate.isNotBlank() &&
+                                sched.airDate < seasonStartDay &&
+                                !sched.isUnmapped &&
+                                sched.bgmId > 0 &&
+                                (allowsRestricted || !sched.isAdult)
                         }
                     } else {
                         emptyList()
@@ -228,6 +243,14 @@ class SeasonalGuideViewModel(
 
                 val continuingSubjects =
                     continuingSchedules.map { sched ->
+                        val tags = if (sched.isAdult) listOf(Tag("里番", 1), Tag("R18", 1)) else emptyList()
+                        val metaTags = mutableListOf("日本")
+                        val effectiveFormat = sched.format.ifBlank { "TV" }
+                        metaTags.add(effectiveFormat)
+                        if (sched.isAdult) {
+                            metaTags.add("里番")
+                            metaTags.add("R18")
+                        }
                         Subject(
                             id = sched.bgmId,
                             type = 2,
@@ -249,13 +272,13 @@ class SeasonalGuideViewModel(
                             airDate = sched.airDate,
                             date = sched.airDate,
                             eps = 0,
-                            tags = emptyList(),
-                            metaTags = listOf("TV", "日本"),
-                            platform = "TV",
+                            tags = tags,
+                            metaTags = metaTags,
+                            platform = effectiveFormat,
                         )
                     }
 
-                // 产地与形式过滤
+                // 产地、形式与标签过滤
                 val filteredContinuing =
                     continuingSubjects.filter { sub ->
                         val originMatch =
@@ -269,7 +292,14 @@ class SeasonalGuideViewModel(
                                 SeasonFormFilter.ALL -> true
                                 SeasonFormFilter.MOVIE -> sub.metaTags.contains("剧场版")
                             }
-                        originMatch && formMatch
+                        val tagMatch =
+                            if (query.tags.isEmpty()) {
+                                true
+                            } else {
+                                val subAllTags = (sub.tags.map { it.name.trim() } + sub.metaTags.map { it.trim() }).toSet()
+                                query.tags.all { tag -> subAllTags.any { it.equals(tag, ignoreCase = true) } }
+                            }
+                        originMatch && formMatch && tagMatch
                     }
 
                 // 根据放送范围合并条目池
@@ -358,6 +388,9 @@ class SeasonalGuideViewModel(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, stateTemplate)
 
     init {
+        viewModelScope.launch {
+            scheduleRepository.refreshAllSchedules(force = false)
+        }
         // 分页链在 RequestKey 变化时换挡重查
         seasonQuery
             .map { it.requestKey() }
@@ -498,6 +531,9 @@ class SeasonalGuideViewModel(
 
     fun refresh() {
         pageTriggers.refresh()
+        viewModelScope.launch {
+            scheduleRepository.refreshAllSchedules(force = true)
+        }
     }
 
     fun retry() {

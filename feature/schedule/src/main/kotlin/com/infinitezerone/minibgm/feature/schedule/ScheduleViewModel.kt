@@ -276,7 +276,9 @@ class ScheduleViewModel(
         combine(
             scheduleRepository.getAllSchedulesStream(),
             scheduleRepository.getAllAirEventsStream(),
-        ) { allSchedules, allAirEvents ->
+            settingsRepository.settings,
+        ) { rawSchedules, allAirEvents, userSettings ->
+            val allSchedules = if (userSettings.showRestrictedContent) rawSchedules else rawSchedules.filter { !it.isAdult }
             val currentToday = today()
             val dateItems = calculateDateItems(currentToday)
             val todayWeekday = currentToday.dayOfWeek.value
