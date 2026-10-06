@@ -1262,4 +1262,51 @@ class SeasonalGuideViewModelTest {
                     .isEmpty(),
             )
         }
+
+    @Test
+    fun anilistDynamicTags_arePreservedAndExposedInSeasonalHotTags() =
+        runTest {
+            val regularAnime =
+                sampleSubject.copy(
+                    id = 201L,
+                    name = "Regular Anime",
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Action", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Romance", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Music", 1),
+                        ),
+                )
+            val adultAnime =
+                sampleSubject.copy(
+                    id = 202L,
+                    name = "Adult Anime",
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Hentai", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Romance", 1),
+                        ),
+                )
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(regularAnime, adultAnime)
+
+            val viewModel =
+                createViewModel(
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            val hotTagNames = state.seasonalHotTags.map { it.first }.toSet()
+            // 验证 AniList 动态下发的所有标签（包括 Music、Hentai 等）全部保留并展示，未被硬编码拉黑
+            assertTrue(hotTagNames.contains("Action"))
+            assertTrue(hotTagNames.contains("Romance"))
+            assertTrue(hotTagNames.contains("Music"))
+            assertTrue(hotTagNames.contains("Hentai"))
+        }
 }

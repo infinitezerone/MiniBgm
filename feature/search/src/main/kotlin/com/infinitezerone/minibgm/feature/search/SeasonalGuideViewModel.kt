@@ -79,36 +79,17 @@ private fun SeasonQuery.requestKey(): RequestKey =
         tags = tags.toList().sorted(),
     )
 
-private val EXCLUDED_HOT_TAGS =
-    setOf(
-        "日本",
-        "中国",
-        "TV",
-        "WEB",
-        "剧场版",
-        "OVA",
-        "动画",
-        "动态漫画",
-        "国产",
-        "MOVIE",
-        "TV_SHORT",
-        "ONA",
-        "SPECIAL",
-        "MUSIC",
-        "Hentai",
-    )
-
 private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
     subjects
         .flatMap { subject ->
             subject.tags.map { it.name.trim() }
         }.filter { tag ->
-            tag.isNotBlank() && tag.length <= 25 && EXCLUDED_HOT_TAGS.none { it.equals(tag, ignoreCase = true) }
+            tag.isNotBlank() && tag.length <= 25
         }.groupingBy { it }
         .eachCount()
         .toList()
         .sortedByDescending { it.second }
-        .take(60)
+        .take(100)
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)
@@ -454,7 +435,7 @@ class SeasonalGuideViewModel(
                     excludedTags = query.excludedTags,
                     selectedAiringScope = query.airingScope,
                     continuingNextEpisodes = continuingNextEpMap,
-                    seasonalHotTags = extractHotTags(pooledSubjects),
+                    seasonalHotTags = extractHotTags(if (staticSubjects.isNotEmpty()) staticSubjects else pooledSubjects),
                     viewMode = mode,
                     subjects = sortedSubjects,
                     pageOffset = if (isAniListPrimary) pooledSubjects.size else pages.pageOffset,
