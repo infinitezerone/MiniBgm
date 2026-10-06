@@ -186,21 +186,17 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
 }
 
 internal fun com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto.toSubject(): com.infinitezerone.minibgm.core.model.Subject {
-    val metaTags = mutableListOf("日本")
     val effectiveFormat = format.ifBlank { "TV" }
-    metaTags.add(effectiveFormat)
-    if (isAdult) {
-        metaTags.add("R18")
-        metaTags.add("里番")
+    val rawTags = (genres + tags).distinct().toMutableList()
+    if (isAdult && rawTags.none { it.equals("Hentai", ignoreCase = true) }) {
+        rawTags.add("Hentai")
     }
 
     val finalTags =
-        (genres + tags)
-            .distinct()
-            .map {
-                com.infinitezerone.minibgm.core.model
-                    .Tag(name = it, count = 1)
-            }
+        rawTags.map {
+            com.infinitezerone.minibgm.core.model
+                .Tag(name = it, count = 1)
+        }
 
     val cover = coverUrl
     val images =
@@ -233,7 +229,7 @@ internal fun com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto.toSub
         date = airDate.orEmpty(),
         eps = episodes,
         tags = finalTags,
-        metaTags = metaTags,
+        metaTags = listOf(effectiveFormat),
         platform = effectiveFormat,
     )
 }

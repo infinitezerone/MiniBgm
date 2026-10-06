@@ -84,7 +84,7 @@ private val EXCLUDED_HOT_TAGS =
 private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
     subjects
         .flatMap { subject ->
-            subject.tags.map { it.name.trim() } + subject.metaTags.map { it.trim() }
+            subject.tags.map { it.name.trim() }
         }.filter { tag ->
             tag.isNotBlank() && tag.length <= 25 && EXCLUDED_HOT_TAGS.none { it.equals(tag, ignoreCase = true) }
         }.groupingBy { it }
@@ -311,10 +311,9 @@ class SeasonalGuideViewModel(
                         val isAdult =
                             sub.tags.any {
                                 it.name.equals("Hentai", ignoreCase = true) ||
-                                    it.name in setOf("里番", "R18", "18禁")
-                            } ||
-                                sub.metaTags.contains("R18") ||
-                                sub.metaTags.contains("里番")
+                                    it.name.equals("R18", ignoreCase = true) ||
+                                    it.name == "里番"
+                            }
                         allowsRestricted || !isAdult
                     }
 
@@ -340,14 +339,13 @@ class SeasonalGuideViewModel(
                         val formMatch =
                             when (query.form) {
                                 SeasonFormFilter.ALL -> true
-                                SeasonFormFilter.MOVIE -> sub.metaTags.contains("剧场版") || sub.platform.equals("MOVIE", ignoreCase = true)
+                                SeasonFormFilter.MOVIE -> sub.platform.equals("MOVIE", ignoreCase = true)
                             }
                         val tagMatch =
                             if (query.tags.isEmpty()) {
                                 true
                             } else {
-                                val subAllTags = (sub.tags.map { it.name.trim() } + sub.metaTags.map { it.trim() }).toSet()
-                                query.tags.all { tag -> subAllTags.any { it.equals(tag, ignoreCase = true) } }
+                                query.tags.all { tag -> sub.tags.any { it.name.equals(tag, ignoreCase = true) } }
                             }
                         originMatch && formMatch && tagMatch
                     }
