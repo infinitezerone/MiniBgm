@@ -166,6 +166,33 @@ enum class SeasonAiringScope(
 }
 
 /**
+ * AniList 官方 Schema 定义的核心题材分类（Genres，共 18 个标准官方分类）。
+ * 仅用于将动态下发的条目标签在 UI 层分层呈现为「核心题材」与「特色标签」，不做任何静态数据过滤。
+ */
+val ANILIST_GENRES: Set<String> =
+    setOf(
+        "Action",
+        "Adventure",
+        "Comedy",
+        "Drama",
+        "Ecchi",
+        "Fantasy",
+        "Hentai",
+        "Horror",
+        "Mahou Shoujo",
+        "Mecha",
+        "Music",
+        "Mystery",
+        "Psychological",
+        "Romance",
+        "Sci-Fi",
+        "Slice of Life",
+        "Sports",
+        "Supernatural",
+        "Thriller",
+    )
+
+/**
  * 季度片单 UI 状态。
  *
  * 这是**投影**而非容器（方案 B·响应式派生流）：ViewModel 把筛选输入、分页结果与收藏仓的流
@@ -204,7 +231,9 @@ data class SeasonalGuideUiState(
     val selectedTags: Set<String> = emptySet(),
     /** 当前已激活排除的标签筛选集合（避雷） */
     val excludedTags: Set<String> = emptySet(),
-    /** 从当前季度已拉取番剧中动态聚合的高频标签及条目数量统计 */
+    /** 从当前季度已拉取番剧中动态聚合的原生 AniList 核心题材分类统计（大类） */
+    val seasonalGenres: List<Pair<String, Int>> = emptyList(),
+    /** 从当前季度已拉取番剧中动态聚合的原生 AniList 特色微观标签统计（小类） */
     val seasonalHotTags: List<Pair<String, Int>> = emptyList(),
     /** 是否开启内容净化（将短片、MV、泡面番、动态漫折叠为胶囊单元） */
     val purifyContent: Boolean = true,

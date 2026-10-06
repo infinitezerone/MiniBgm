@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.search.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -53,6 +55,7 @@ fun AddSeasonalTagBottomSheet(
     onClearSelectedTags: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    seasonalGenres: List<Pair<String, Int>> = emptyList(),
     excludedTags: Set<String> = emptySet(),
     onIncludeTag: (String) -> Unit = onToggleTag,
     onExcludeTag: (String) -> Unit = onToggleTag,
@@ -60,8 +63,39 @@ fun AddSeasonalTagBottomSheet(
     customFilterTags: List<String> = emptyList(),
     onAddCustomTag: (String) -> Unit = onToggleTag,
     onRemoveCustomTag: (String) -> Unit = onToggleTag,
+    onToggleFavoriteTag: (String) -> Unit = {},
 ) {
     var inputText by remember { mutableStateOf("") }
+    val trimmedQuery = inputText.trim()
+    val isFiltering = trimmedQuery.isNotBlank()
+
+    val displayFavoriteTags =
+        remember(customFilterTags, trimmedQuery) {
+            if (trimmedQuery.isBlank()) {
+                customFilterTags
+            } else {
+                customFilterTags.filter { it.contains(trimmedQuery, ignoreCase = true) }
+            }
+        }
+
+    val displayGenres =
+        remember(seasonalGenres, trimmedQuery) {
+            if (trimmedQuery.isBlank()) {
+                seasonalGenres
+            } else {
+                seasonalGenres.filter { it.first.contains(trimmedQuery, ignoreCase = true) }
+            }
+        }
+
+    val displayHotTags =
+        remember(seasonalHotTags, trimmedQuery) {
+            if (trimmedQuery.isBlank()) {
+                seasonalHotTags
+            } else {
+                seasonalHotTags.filter { it.first.contains(trimmedQuery, ignoreCase = true) }
+            }
+        }
+
     val totalActiveCount = selectedTags.size + excludedTags.size
 
     BgmModalBottomSheet(
@@ -116,9 +150,89 @@ fun AddSeasonalTagBottomSheet(
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                // Section 1: 当前已生效筛选（包含与排除）
+                // Section 1: 搜索框（置顶即时过滤 + 自填标签直接应用）
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        placeholder = {
+                            Text(
+                                text = "搜索或自填标签（实时过滤）",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = BgmIcons.Search,
+                                contentDescription = "搜索标签",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        trailingIcon = {
+                            if (inputText.isNotBlank()) {
+                                IconButton(onClick = { inputText = "" }) {
+                                    Icon(
+                                        imageVector = BgmIcons.Close,
+                                        contentDescription = "清除搜索词",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions =
+                            KeyboardActions(
+                                onDone = {
+                                    val trimmed = inputText.trim()
+                                    if (trimmed.isNotBlank()) {
+                                        onIncludeTag(trimmed)
+                                        inputText = ""
+                                    }
+                                },
+                            ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f),
+                    )
+
+                    Button(
+                        onClick = {
+                            val trimmed = inputText.trim()
+                            if (trimmed.isNotBlank()) {
+                                onIncludeTag(trimmed)
+                                inputText = ""
+                            }
+                        },
+                        enabled = inputText.isNotBlank(),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text("包含")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val trimmed = inputText.trim()
+                            if (trimmed.isNotBlank()) {
+                                onExcludeTag(trimmed)
+                                inputText = ""
+                            }
+                        },
+                        enabled = inputText.isNotBlank(),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text("排除")
+                    }
+                }
+
+                // Section 2: 当前已生效筛选（包含与排除）
                 if (totalActiveCount > 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
@@ -192,22 +306,127 @@ fun AddSeasonalTagBottomSheet(
                     }
                 }
 
-                // Section 2: 当季高频题材与标签（由当季数据动态统计聚合，零硬编码）
-                if (seasonalHotTags.isNotEmpty()) {
+                // Section 3: ★ 我的常用偏好（持久化跨季收藏）
+                if (displayFavoriteTags.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "本季热门题材与标签",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = "★ 我的常用偏好",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            if (isFiltering) {
+                                Text(
+                                    text = "(${displayFavoriteTags.size})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
 
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            seasonalHotTags.forEach { (tag, count) ->
+                            displayFavoriteTags.forEach { tag ->
+                                val chipState =
+                                    when {
+                                        tag in selectedTags -> SeasonalTagFilterState.INCLUDED
+                                        tag in excludedTags -> SeasonalTagFilterState.EXCLUDED
+                                        else -> SeasonalTagFilterState.NEUTRAL
+                                    }
+                                SeasonalGuideTriStateFilterChip(
+                                    label = tag,
+                                    state = chipState,
+                                    onClick = { onToggleTag(tag) },
+                                    isFavorite = true,
+                                    onToggleFavorite = { onToggleFavoriteTag(tag) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section 4: 核心题材分类（Genres 大类，数量精简明确）
+                if (displayGenres.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = "核心题材分类",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            if (isFiltering) {
+                                Text(
+                                    text = "(${displayGenres.size})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            displayGenres.forEach { (genre, count) ->
+                                val chipState =
+                                    when {
+                                        genre in selectedTags -> SeasonalTagFilterState.INCLUDED
+                                        genre in excludedTags -> SeasonalTagFilterState.EXCLUDED
+                                        else -> SeasonalTagFilterState.NEUTRAL
+                                    }
+                                SeasonalGuideTriStateFilterChip(
+                                    label = genre,
+                                    state = chipState,
+                                    onClick = { onToggleTag(genre) },
+                                    trailingCount = count,
+                                    isFavorite = genre in customFilterTags,
+                                    onToggleFavorite = { onToggleFavoriteTag(genre) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section 5: 特色微观标签（Tags 小类，设定/元素细节）
+                if (displayHotTags.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = "特色微观标签",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            if (isFiltering) {
+                                Text(
+                                    text = "(${displayHotTags.size})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            displayHotTags.forEach { (tag, count) ->
                                 val chipState =
                                     when {
                                         tag in selectedTags -> SeasonalTagFilterState.INCLUDED
@@ -219,77 +438,25 @@ fun AddSeasonalTagBottomSheet(
                                     state = chipState,
                                     onClick = { onToggleTag(tag) },
                                     trailingCount = count,
+                                    isFavorite = tag in customFilterTags,
+                                    onToggleFavorite = { onToggleFavoriteTag(tag) },
                                 )
                             }
                         }
                     }
                 }
 
-                // Section 3: 自填标签检索与输入
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "自填标签检索",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                // 搜索无匹配提示
+                if (isFiltering && displayFavoriteTags.isEmpty() && displayGenres.isEmpty() && displayHotTags.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            placeholder = {
-                                Text(
-                                    text = "输入标签检索词",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions =
-                                KeyboardActions(
-                                    onDone = {
-                                        val trimmed = inputText.trim()
-                                        if (trimmed.isNotBlank()) {
-                                            onIncludeTag(trimmed)
-                                            inputText = ""
-                                        }
-                                    },
-                                ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f),
+                        Text(
+                            text = "未找到匹配标签，可直接点击右上「包含」或「排除」自填添加",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-
-                        Button(
-                            onClick = {
-                                val trimmed = inputText.trim()
-                                if (trimmed.isNotBlank()) {
-                                    onIncludeTag(trimmed)
-                                    inputText = ""
-                                }
-                            },
-                            enabled = inputText.isNotBlank(),
-                            shape = RoundedCornerShape(8.dp),
-                        ) {
-                            Text("包含")
-                        }
-
-                        OutlinedButton(
-                            onClick = {
-                                val trimmed = inputText.trim()
-                                if (trimmed.isNotBlank()) {
-                                    onExcludeTag(trimmed)
-                                    inputText = ""
-                                }
-                            },
-                            enabled = inputText.isNotBlank(),
-                            shape = RoundedCornerShape(8.dp),
-                        ) {
-                            Text("排除")
-                        }
                     }
                 }
             }

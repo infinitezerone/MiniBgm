@@ -79,17 +79,33 @@ private fun SeasonQuery.requestKey(): RequestKey =
         tags = tags.toList().sorted(),
     )
 
-private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
-    subjects
-        .flatMap { subject ->
-            subject.tags.map { it.name.trim() }
-        }.filter { tag ->
-            tag.isNotBlank() && tag.length <= 25
-        }.groupingBy { it }
-        .eachCount()
-        .toList()
-        .sortedByDescending { it.second }
-        .take(100)
+private data class ExtractedSeasonalTags(
+    val genres: List<Pair<String, Int>>,
+    val hotTags: List<Pair<String, Int>>,
+)
+
+private fun extractSeasonalTags(subjects: List<Subject>): ExtractedSeasonalTags {
+    val allCounts =
+        subjects
+            .flatMap { subject ->
+                subject.tags.map { it.name.trim() }
+            }.filter { tag ->
+                tag.isNotBlank() && tag.length <= 25
+            }.groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedByDescending { it.second }
+
+    val genres =
+        allCounts.filter { (tag, _) ->
+            ANILIST_GENRES.any { it.equals(tag, ignoreCase = true) }
+        }
+    val hotTags =
+        allCounts.filter { (tag, _) ->
+            ANILIST_GENRES.none { it.equals(tag, ignoreCase = true) }
+        }
+    return ExtractedSeasonalTags(genres = genres, hotTags = hotTags)
+}
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)
@@ -425,6 +441,9 @@ class SeasonalGuideViewModel(
                         .filter { it.airDate.isNotBlank() && it.airDate < seasonStartDay }
                         .associate { it.bgmId to it.nextEpisodeNumber }
 
+                val extractedTags =
+                    extractSeasonalTags(if (staticSubjects.isNotEmpty()) staticSubjects else pooledSubjects)
+
                 stateTemplate.copy(
                     selectedYear = query.year,
                     selectedQuarter = query.quarter,
@@ -435,7 +454,8 @@ class SeasonalGuideViewModel(
                     excludedTags = query.excludedTags,
                     selectedAiringScope = query.airingScope,
                     continuingNextEpisodes = continuingNextEpMap,
-                    seasonalHotTags = extractHotTags(if (staticSubjects.isNotEmpty()) staticSubjects else pooledSubjects),
+                    seasonalGenres = extractedTags.genres,
+                    seasonalHotTags = extractedTags.hotTags,
                     viewMode = mode,
                     subjects = sortedSubjects,
                     pageOffset = if (isAniListPrimary) pooledSubjects.size else pages.pageOffset,
@@ -450,11 +470,13 @@ class SeasonalGuideViewModel(
                 authRepository.isLoggedIn,
                 collectionRepository.getCollectionsByTypeStream(CollectionType.WISH),
                 collectionRepository.getCollectionsByTypeStream(CollectionType.DOING),
-            ) { loggedIn, wish, doing ->
+                searchRepository.getCustomFilterTags(),
+            ) { loggedIn, wish, doing, customTags ->
                 stateTemplate.copy(
                     isLoggedIn = loggedIn,
                     wishedSubjectIds = wish.map { it.subjectId }.toSet(),
                     doingSubjectIds = doing.map { it.subjectId }.toSet(),
+                    customFilterTags = customTags,
                 )
             },
             loginPromptVisible,
@@ -464,6 +486,7 @@ class SeasonalGuideViewModel(
                 isLoggedIn = identity.isLoggedIn,
                 wishedSubjectIds = identity.wishedSubjectIds,
                 doingSubjectIds = identity.doingSubjectIds,
+                customFilterTags = identity.customFilterTags,
                 showLoginPromptDialog = prompt,
                 purifyContent = purifyData.first,
                 expandedGroupKeys = purifyData.second,
@@ -586,17 +609,41 @@ class SeasonalGuideViewModel(
             current.copy(tags = emptySet(), excludedTags = emptySet())
         }
 
-    /** 添加自定义标签（默认设为包含） */
+    /** 添加自定义常用/偏好标签（持久化存入 DataStore，并设为当前包含） */
     fun addCustomFilterTag(tag: String) {
         val trimmed = tag.trim()
         if (trimmed.isNotBlank()) {
+            viewModelScope.launch {
+                searchRepository.addCustomFilterTag(trimmed)
+            }
             includeTag(trimmed)
         }
     }
 
-    /** 移除筛选标签 */
+    /** 移除自定义偏好标签（持久化从 DataStore 移除，并取消当前筛选状态） */
     fun removeCustomFilterTag(tag: String) {
-        removeTagFilter(tag)
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank()) {
+            viewModelScope.launch {
+                searchRepository.removeCustomFilterTag(trimmed)
+            }
+            removeTagFilter(trimmed)
+        }
+    }
+
+    /** 切换偏好收藏状态（加入偏好 / 移出偏好，带持久化与交互反馈） */
+    fun toggleFavoriteTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            if (trimmed in uiState.value.customFilterTags) {
+                searchRepository.removeCustomFilterTag(trimmed)
+                postEffect(UiEffect.ShowMessage("已从常用偏好中移除「#$trimmed」"))
+            } else {
+                searchRepository.addCustomFilterTag(trimmed)
+                postEffect(UiEffect.ShowMessage("已添加「#$trimmed」至常用偏好"))
+            }
+        }
     }
 
     /** 一次改一个条件，且值未变时不发射——combine 的上游少一次无谓换挡 */

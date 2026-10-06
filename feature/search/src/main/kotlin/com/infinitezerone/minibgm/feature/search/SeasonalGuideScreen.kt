@@ -244,6 +244,7 @@ fun SeasonalGuideContent(
                     onClearSelectedTags = viewModel::clearSelectedTags,
                     onAddCustomTag = viewModel::addCustomFilterTag,
                     onRemoveCustomTag = viewModel::removeCustomFilterTag,
+                    onToggleFavoriteTag = viewModel::toggleFavoriteTag,
                     onTogglePurifyContent = viewModel::togglePurifyContent,
                     onSelectAiringScope = { scope ->
                         filterExpanded = false

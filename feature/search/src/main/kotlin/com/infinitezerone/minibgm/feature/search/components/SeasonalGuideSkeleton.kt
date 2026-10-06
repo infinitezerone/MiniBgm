@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -241,7 +242,7 @@ enum class SeasonalTagFilterState {
     EXCLUDED,
 }
 
-/** 导视三态筛选 chip：支持未选、包含（主色）、排除避雷（红底） */
+/** 导视三态筛选 chip：支持未选、包含（主色）、排除避雷（红底），可选偏好收藏星标 */
 @Composable
 fun SeasonalGuideTriStateFilterChip(
     label: String,
@@ -249,6 +250,8 @@ fun SeasonalGuideTriStateFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     trailingCount: Int? = null,
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
     val (containerColor, labelColor, prefix) =
         when (state) {
@@ -279,9 +282,9 @@ fun SeasonalGuideTriStateFilterChip(
         modifier = modifier.height(34.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
+            modifier = Modifier.padding(start = 10.dp, end = if (onToggleFavorite != null) 4.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = "$prefix$label${if (trailingCount != null) " · $trailingCount" else ""}",
@@ -289,6 +292,24 @@ fun SeasonalGuideTriStateFilterChip(
                 fontWeight = if (state != SeasonalTagFilterState.NEUTRAL) FontWeight.Bold else FontWeight.Normal,
                 color = labelColor,
             )
+            if (onToggleFavorite != null) {
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) BgmIcons.Star else BgmIcons.StarBorder,
+                        contentDescription = if (isFavorite) "取消偏好收藏" else "收藏为常用偏好",
+                        tint =
+                            if (isFavorite) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                labelColor.copy(alpha = 0.5f)
+                            },
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            }
         }
     }
 }

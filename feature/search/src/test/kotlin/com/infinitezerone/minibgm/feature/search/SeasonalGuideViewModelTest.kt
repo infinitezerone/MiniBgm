@@ -1264,7 +1264,7 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun anilistDynamicTags_arePreservedAndExposedInSeasonalHotTags() =
+    fun anilistDynamicTags_areCategorizedIntoGenresAndHotTags() =
         runTest {
             val regularAnime =
                 sampleSubject.copy(
@@ -1278,6 +1278,8 @@ class SeasonalGuideViewModelTest {
                                 .Tag("Romance", 1),
                             com.infinitezerone.minibgm.core.model
                                 .Tag("Music", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Isekai", 1),
                         ),
                 )
             val adultAnime =
@@ -1290,6 +1292,8 @@ class SeasonalGuideViewModelTest {
                                 .Tag("Hentai", 1),
                             com.infinitezerone.minibgm.core.model
                                 .Tag("Romance", 1),
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Magic", 1),
                         ),
                 )
             val scheduleRepository = FakeScheduleRepository()
@@ -1302,11 +1306,55 @@ class SeasonalGuideViewModelTest {
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
+            val genreNames = state.seasonalGenres.map { it.first }.toSet()
             val hotTagNames = state.seasonalHotTags.map { it.first }.toSet()
-            // 验证 AniList 动态下发的所有标签（包括 Music、Hentai 等）全部保留并展示，未被硬编码拉黑
-            assertTrue(hotTagNames.contains("Action"))
-            assertTrue(hotTagNames.contains("Romance"))
-            assertTrue(hotTagNames.contains("Music"))
-            assertTrue(hotTagNames.contains("Hentai"))
+
+            // 核心题材分类（Genres 大类）：Action, Romance, Music, Hentai
+            assertTrue(genreNames.contains("Action"))
+            assertTrue(genreNames.contains("Romance"))
+            assertTrue(genreNames.contains("Music"))
+            assertTrue(genreNames.contains("Hentai"))
+
+            // 特色微观标签（Tags 小类）：Isekai, Magic
+            assertTrue(hotTagNames.contains("Isekai"))
+            assertTrue(hotTagNames.contains("Magic"))
+        }
+
+    @Test
+    fun customFilterTags_persistsAndTogglesFavoriteState() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val viewModel = createViewModel(searchRepository = searchRepository)
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.customFilterTags
+                    .isEmpty(),
+            )
+
+            // 添加常用偏好标签
+            viewModel.toggleFavoriteTag("Romance")
+            advanceUntilIdle()
+
+            assertEquals(listOf("Romance"), viewModel.uiState.value.customFilterTags)
+
+            // 再次切换 -> 移出偏好
+            viewModel.toggleFavoriteTag("Romance")
+            advanceUntilIdle()
+
+            assertTrue(
+                viewModel.uiState.value.customFilterTags
+                    .isEmpty(),
+            )
+
+            // 使用 addCustomFilterTag: 持久化并自动包含
+            viewModel.addCustomFilterTag("Sci-Fi")
+            advanceUntilIdle()
+
+            assertEquals(listOf("Sci-Fi"), viewModel.uiState.value.customFilterTags)
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .contains("Sci-Fi"),
+            )
         }
 }
