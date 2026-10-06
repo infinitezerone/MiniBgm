@@ -89,6 +89,7 @@ data class SeasonSnapshotItemDto(
     val ratingScore: Double = 0.0,
     val popularity: Int = 0,
     val episodes: Int = 0,
+    val genres: List<String> = emptyList(),
     val tags: List<String> = emptyList(),
     val sites: List<ScheduleSnapshotSiteDto> = emptyList(),
 )

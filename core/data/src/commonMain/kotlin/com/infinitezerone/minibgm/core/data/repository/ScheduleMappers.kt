@@ -189,19 +189,18 @@ internal fun com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto.toSub
     val metaTags = mutableListOf("日本")
     val effectiveFormat = format.ifBlank { "TV" }
     metaTags.add(effectiveFormat)
-    if (effectiveFormat.equals("MOVIE", ignoreCase = true)) {
-        metaTags.add("剧场版")
-    }
     if (isAdult) {
-        metaTags.add("里番")
         metaTags.add("R18")
+        metaTags.add("里番")
     }
 
     val finalTags =
-        tags.map {
-            com.infinitezerone.minibgm.core.model
-                .Tag(name = it, count = 1)
-        }
+        (genres + tags)
+            .distinct()
+            .map {
+                com.infinitezerone.minibgm.core.model
+                    .Tag(name = it, count = 1)
+            }
 
     val cover = coverUrl
     val images =

@@ -78,14 +78,16 @@ private fun SeasonQuery.requestKey(): RequestKey =
         tags = tags.toList().sorted(),
     )
 
-private val EXCLUDED_HOT_TAGS = setOf("日本", "中国", "TV", "WEB", "剧场版", "OVA", "动画", "动态漫画", "国产")
+private val EXCLUDED_HOT_TAGS =
+    setOf("日本", "中国", "TV", "WEB", "剧场版", "OVA", "动画", "动态漫画", "国产", "MOVIE", "TV_SHORT", "ONA", "SPECIAL", "MUSIC")
 
 private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
     subjects
         .flatMap { subject ->
             subject.tags.map { it.name.trim() } + subject.metaTags.map { it.trim() }
-        }.filter { it.isNotBlank() && it.length <= 10 && it !in EXCLUDED_HOT_TAGS }
-        .groupingBy { it }
+        }.filter { tag ->
+            tag.isNotBlank() && tag.length <= 25 && EXCLUDED_HOT_TAGS.none { it.equals(tag, ignoreCase = true) }
+        }.groupingBy { it }
         .eachCount()
         .toList()
         .sortedByDescending { it.second }
@@ -245,7 +247,13 @@ class SeasonalGuideViewModel(
             ) { pages, query, mode, (allSchedules, showRestricted, staticSubjects) ->
                 val (seasonStartDay, seasonEndDay) = query.quarter.getAirDateRange(query.year)
                 val isCurrent = query.year == stateTemplate.currentYear && query.quarter == stateTemplate.currentQuarter
-                val allowsRestricted = showRestricted || query.tags.any { it in setOf("里番", "R18", "18禁") }
+                val allowsRestricted =
+                    showRestricted ||
+                        query.tags.any {
+                            it.equals("Hentai", ignoreCase = true) ||
+                                it.equals("R18", ignoreCase = true) ||
+                                it in setOf("里番", "18禁")
+                        }
 
                 // 1. 本地实时排期流（若为当季）
                 val validSeasonSchedules =
@@ -262,7 +270,7 @@ class SeasonalGuideViewModel(
 
                 val localSeasonSubjects =
                     validSeasonSchedules.map { sched ->
-                        val tags = if (sched.isAdult) listOf(Tag("里番", 1), Tag("R18", 1)) else emptyList()
+                        val tags = if (sched.isAdult) listOf(Tag("Hentai", 1), Tag("R18", 1), Tag("里番", 1)) else emptyList()
                         val metaTags = mutableListOf("日本")
                         val effectiveFormat = sched.format.ifBlank { "TV" }
                         metaTags.add(effectiveFormat)
@@ -300,7 +308,13 @@ class SeasonalGuideViewModel(
                 // 2. 静态 AniList 季度条目（全季度覆盖）
                 val filteredStaticSubjects =
                     staticSubjects.filter { sub ->
-                        val isAdult = sub.tags.any { it.name in setOf("里番", "R18", "18禁") } || sub.metaTags.contains("里番")
+                        val isAdult =
+                            sub.tags.any {
+                                it.name.equals("Hentai", ignoreCase = true) ||
+                                    it.name in setOf("里番", "R18", "18禁")
+                            } ||
+                                sub.metaTags.contains("R18") ||
+                                sub.metaTags.contains("里番")
                         allowsRestricted || !isAdult
                     }
 

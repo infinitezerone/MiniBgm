@@ -47,7 +47,7 @@ private val ROW_COVER_WIDTH = 84.dp
 private const val MAX_GENRE_TAGS = 3
 
 /** 题材标签长度上限 */
-private const val MAX_GENRE_TAG_LENGTH = 8
+private const val MAX_GENRE_TAG_LENGTH = 18
 
 /** 过滤非题材属性的泛化标签 */
 private val NON_GENRE_TAG_REGEX = Regex("""^(\d{4}年\d{1,2}月|TV|WEB|OVA|OAD|剧场版|电影)$""")
@@ -122,15 +122,17 @@ fun SeasonalAnimeRow(
 
     Card(
         onClick = {
-            onSubjectClick(
-                SubjectDetailRoute(
-                    subjectId = subject.id,
-                    initialName = primaryTitle,
-                    initialCoverUrl = subject.images?.bestImage.orEmpty(),
-                    initialScore = score,
-                    source = "seasonal_guide",
-                ),
-            )
+            if (subject.id > 0) {
+                onSubjectClick(
+                    SubjectDetailRoute(
+                        subjectId = subject.id,
+                        initialName = primaryTitle,
+                        initialCoverUrl = subject.images?.bestImage.orEmpty(),
+                        initialScore = score,
+                        source = "seasonal_guide",
+                    ),
+                )
+            }
         },
         shape = RoundedCornerShape(16.dp),
         colors =

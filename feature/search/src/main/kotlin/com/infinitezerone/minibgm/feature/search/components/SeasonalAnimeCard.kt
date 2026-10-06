@@ -60,15 +60,17 @@ fun SeasonalAnimeCard(
 
     Card(
         onClick = {
-            onSubjectClick(
-                SubjectDetailRoute(
-                    subjectId = subject.id,
-                    initialName = primaryTitle,
-                    initialCoverUrl = subject.images?.bestImage.orEmpty(),
-                    initialScore = score,
-                    source = "seasonal_guide",
-                ),
-            )
+            if (subject.id > 0) {
+                onSubjectClick(
+                    SubjectDetailRoute(
+                        subjectId = subject.id,
+                        initialName = primaryTitle,
+                        initialCoverUrl = subject.images?.bestImage.orEmpty(),
+                        initialScore = score,
+                        source = "seasonal_guide",
+                    ),
+                )
+            }
         },
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
