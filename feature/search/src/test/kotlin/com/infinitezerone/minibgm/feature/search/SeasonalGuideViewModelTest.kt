@@ -808,7 +808,17 @@ class SeasonalGuideViewModelTest {
             searchRepository.advancedSearchResult = AppResult.Success(listOf(newAnime))
             searchRepository.advancedSearchTotal = 1
 
+            val continuingAnime =
+                sampleSubject.copy(
+                    id = 201,
+                    name = "秋季半年番续播",
+                    airDate = "2025-10-05",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 8.8),
+                )
             val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(newAnime, continuingAnime)
             val continuingSchedule =
                 AirSchedule(
                     bgmId = 201,
@@ -852,11 +862,21 @@ class SeasonalGuideViewModelTest {
                         com.infinitezerone.minibgm.core.model
                             .Rating(score = 7.0),
                 )
+            val continuingAnime =
+                sampleSubject.copy(
+                    id = 201,
+                    name = "跨季在播番",
+                    airDate = "2025-10-05",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 8.0),
+                )
             val searchRepository = FakeSearchRepository()
             searchRepository.advancedSearchResult = AppResult.Success(listOf(newAnime))
             searchRepository.advancedSearchTotal = 1
 
             val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(newAnime, continuingAnime)
             val continuingSchedule =
                 AirSchedule(
                     bgmId = 201,
@@ -947,36 +967,37 @@ class SeasonalGuideViewModelTest {
     @Test
     fun continuingAdultSchedule_isIncludedWhenTagSelected_andExcludedWhenFilteredByOtherTags() =
         runTest {
-            val searchRepository = FakeSearchRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(emptyList())
-            searchRepository.advancedSearchTotal = 0
-
-            val scheduleRepository = FakeScheduleRepository()
-            val adultContinuing =
-                AirSchedule(
-                    bgmId = 575204,
-                    title = "シスターブリーダー",
-                    titleCn = "姐妹调教饲育者",
+            val adultSubject =
+                sampleSubject.copy(
+                    id = 575204,
+                    name = "姐妹调教饲育者",
+                    nameCn = "姐妹调教饲育者",
                     airDate = "2025-09-01",
-                    ratingScore = 8.0,
-                    nextEpisodeNumber = 5,
-                    weekday = 5,
-                    isAdult = true,
-                    format = "OVA",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 8.0),
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Hentai", 1),
+                        ),
+                    metaTags = listOf("OVA"),
+                    platform = "OVA",
                 )
-            val regularContinuing =
-                AirSchedule(
-                    bgmId = 201,
-                    title = "名侦探柯南",
-                    titleCn = "名侦探柯南",
+            val regularSubject =
+                sampleSubject.copy(
+                    id = 201,
+                    name = "名侦探柯南",
+                    nameCn = "名侦探柯南",
                     airDate = "1996-01-08",
-                    ratingScore = 8.5,
-                    nextEpisodeNumber = 1100,
-                    weekday = 6,
-                    isAdult = false,
-                    format = "TV",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 8.5),
+                    platform = "TV",
                 )
-            scheduleRepository.sendSchedules(1, listOf(adultContinuing, regularContinuing))
+            val searchRepository = FakeSearchRepository()
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(adultSubject, regularSubject)
 
             val viewModel =
                 createViewModel(
@@ -1013,37 +1034,37 @@ class SeasonalGuideViewModelTest {
     fun currentSeason_localAniListIsPrimarySource_includesUnairedSeasonalAdultAnime() =
         runTest {
             val searchRepository = FakeSearchRepository()
-            // 模拟网络搜索未返回或被服务端过滤
-            searchRepository.advancedSearchResult = AppResult.Success(emptyList())
-            searchRepository.advancedSearchTotal = 0
-
             val scheduleRepository = FakeScheduleRepository()
-            val unairedAdultAnime =
-                AirSchedule(
-                    bgmId = 575204,
-                    title = "シスターブリーダー",
-                    titleCn = "姐妹调教饲育者",
-                    // 2026年3月上旬开播（当季内，尚未播出）
+            val unairedAdultSubject =
+                sampleSubject.copy(
+                    id = 575204,
+                    name = "姐妹调教饲育者",
+                    nameCn = "姐妹调教饲育者",
                     airDate = "2026-03-06",
-                    ratingScore = 0.0,
-                    nextEpisodeNumber = 1,
-                    weekday = 5,
-                    isAdult = true,
-                    format = "OVA",
+                    date = "2026-03-06",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 0.0),
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Hentai", 1),
+                        ),
+                    platform = "OVA",
                 )
-            val regularNewAnime =
-                AirSchedule(
-                    bgmId = 301,
-                    title = "葬送的芙莉莲",
-                    titleCn = "葬送的芙莉莲",
+            val regularNewSubject =
+                sampleSubject.copy(
+                    id = 301,
+                    name = "葬送的芙莉莲",
+                    nameCn = "葬送的芙莉莲",
                     airDate = "2026-01-16",
-                    ratingScore = 9.2,
-                    nextEpisodeNumber = 1,
-                    weekday = 5,
-                    isAdult = false,
-                    format = "TV",
+                    date = "2026-01-16",
+                    rating =
+                        com.infinitezerone.minibgm.core.model
+                            .Rating(score = 9.2),
+                    platform = "TV",
                 )
-            scheduleRepository.sendSchedules(1, listOf(unairedAdultAnime, regularNewAnime))
+            scheduleRepository.seasonalAnimeListResult = listOf(unairedAdultSubject, regularNewSubject)
 
             val viewModel =
                 createViewModel(
@@ -1052,7 +1073,7 @@ class SeasonalGuideViewModelTest {
                 )
             advanceUntilIdle()
 
-            // 本地 AniList 作为第一数据源，秒开（isLoading == false）
+            // AniList 静态源秒开（isLoading == false）
             var state = viewModel.uiState.value
             assertFalse(state.isLoading)
             assertFalse(state.hasMore)
@@ -1439,73 +1460,5 @@ class SeasonalGuideViewModelTest {
             viewModel.selectAiringScope(SeasonAiringScope.NEW_ONLY)
             val newState = viewModel.uiState.value
             assertEquals(listOf(801L), newState.subjects.map { it.id })
-        }
-
-    @Test
-    fun currentSeason_withoutStaticSnapshot_excludesEndedPastSeasonAnime() =
-        runTest {
-            val autumnDate = LocalDate.of(2026, 10, 6) // Q4 Autumn 2026
-            val searchRepository = FakeSearchRepository()
-            val scheduleRepository = FakeScheduleRepository()
-
-            // 静态快照为空（离线或未命中快照）
-            scheduleRepository.seasonalAnimeListResult = emptyList()
-
-            // 本地周时刻表中有完结番与在播续播番
-            val endedSummerAnime =
-                AirSchedule(
-                    bgmId = 622206L,
-                    title = "ヤニねこ",
-                    titleCn = "尼古喵喵",
-                    airDate = "2026-07-02",
-                    nextEpisodeNumber = 12,
-                    nextEpisodeKind = AirEventKind.ACTUAL,
-                    nextEpisodeAtUtc = "2026-09-25T14:30:00Z",
-                    ratingScore = 7.0,
-                )
-            val activeContinuingSchedule =
-                AirSchedule(
-                    bgmId = 701L,
-                    title = "战国妖狐",
-                    titleCn = "战国妖狐",
-                    airDate = "2026-07-10",
-                    nextEpisodeNumber = 14,
-                    nextEpisodeKind = AirEventKind.SCHEDULED,
-                    nextEpisodeAtUtc = "2026-10-10T14:30:00Z",
-                    ratingScore = 8.0,
-                )
-            val autumnNewAnime =
-                AirSchedule(
-                    bgmId = 801L,
-                    title = "秋季新番",
-                    titleCn = "秋季新番",
-                    airDate = "2026-10-05",
-                    nextEpisodeNumber = 1,
-                    ratingScore = 7.5,
-                )
-
-            scheduleRepository.sendSchedules(1, listOf(endedSummerAnime, activeContinuingSchedule, autumnNewAnime))
-
-            val viewModel =
-                createViewModel(
-                    searchRepository = searchRepository,
-                    scheduleRepository = scheduleRepository,
-                    timeProvider = { autumnDate },
-                )
-            advanceUntilIdle()
-
-            val state = viewModel.uiState.value
-            val subjectIds = state.subjects.map { it.id }
-            // 完结番被过滤，仅保留续播番与新番
-            assertEquals(listOf(701L, 801L).toSet(), subjectIds.toSet())
-            assertFalse(subjectIds.contains(622206L))
-
-            // 跨季续播筛选仅返回 701
-            viewModel.selectAiringScope(SeasonAiringScope.CONTINUING_ONLY)
-            assertEquals(
-                listOf(701L),
-                viewModel.uiState.value.subjects
-                    .map { it.id },
-            )
         }
 }
