@@ -121,4 +121,9 @@ val dataModule =
                 assistantSessionDao = get(),
             )
         }
+        single<com.infinitezerone.minibgm.core.data.repository.UpdateRepository> {
+            com.infinitezerone.minibgm.core.data.repository.UpdateRepositoryImpl(
+                updateService = get(),
+            )
+        }
     }

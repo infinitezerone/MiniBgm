@@ -90,6 +90,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Tv
@@ -206,6 +207,7 @@ object BgmIcons {
     val Sync: ImageVector = Icons.Filled.Sync
     val Share: ImageVector = Icons.Filled.Share
     val Download: ImageVector = Icons.Filled.Download
+    val SystemUpdate: ImageVector = Icons.Filled.SystemUpdate
     val Upload: ImageVector = Icons.Filled.FileUpload
     val ContentCopy: ImageVector = Icons.Outlined.ContentCopy
     val ContentPaste: ImageVector = Icons.Filled.ContentPaste

@@ -10,9 +10,11 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
+import com.infinitezerone.minibgm.core.data.repository.UpdateRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -58,6 +60,7 @@ data class UserUiState(
     val dynamicColor: Boolean = false,
     val pipEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
+    val isCheckingUpdate: Boolean = false,
 )
 
 /** 认证域切片：登录态、活跃账号、账号池与登录进行中标记 */
@@ -82,6 +85,7 @@ private data class LocalSlice(
     val isCountsLoading: Boolean,
     val isRefreshing: Boolean,
     val trackingFootprint: TrackingFootprint?,
+    val isCheckingUpdate: Boolean,
 )
 
 /** 收藏统计域投影的局部状态：counts 快照 + 拉取中标记（flatMapLatest 链的产出） */
@@ -97,9 +101,11 @@ class UserViewModel(
     private val settingsRepository: SettingsRepository,
     private val syncManager: SyncManager,
     private val crashLogRepository: CrashLogRepository,
+    private val updateRepository: UpdateRepository,
 ) : ViewModel() {
     private val isManualSyncing = MutableStateFlow(false)
     private val isRefreshingFlow = MutableStateFlow(false)
+    private val isCheckingUpdateFlow = MutableStateFlow(false)
 
     /**
      * 用户意图：手动刷新代数。下拉刷新递增它来触发 counts 链换挡重拉（见
@@ -183,13 +189,15 @@ class UserViewModel(
             collectionCountsState,
             isRefreshingFlow,
             collectionRepository.observeTrackingFootprint(),
-        ) { manualSyncing, countsState, isRefreshing, trackingFootprint ->
+            isCheckingUpdateFlow,
+        ) { manualSyncing, countsState, isRefreshing, trackingFootprint, isCheckingUpdate ->
             LocalSlice(
                 manualSyncing,
                 countsState.collectionCounts,
                 countsState.isCountsLoading,
                 isRefreshing,
                 trackingFootprint,
+                isCheckingUpdate,
             )
         }
 
@@ -226,8 +234,19 @@ class UserViewModel(
                 dynamicColor = sync.settings.dynamicColor,
                 pipEnabled = sync.settings.pipEnabled,
                 showRestrictedContent = sync.settings.showRestrictedContent,
+                isCheckingUpdate = local.isCheckingUpdate,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState(isLoading = true))
+
+    /** 检查客户端新版本 */
+    suspend fun checkForUpdate(currentVersion: String): AppResult<AppUpdateInfo> {
+        isCheckingUpdateFlow.value = true
+        return try {
+            updateRepository.checkForUpdate(currentVersion)
+        } finally {
+            isCheckingUpdateFlow.value = false
+        }
+    }
 
     /** 刷新个人中心：同步最新个人资料并触发收藏统计链换挡重拉，再全量同步追番收藏 */
     fun refresh(onComplete: ((Boolean) -> Unit)? = null) {

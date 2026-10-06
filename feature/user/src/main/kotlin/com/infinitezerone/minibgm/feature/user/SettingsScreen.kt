@@ -51,6 +51,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -252,6 +253,58 @@ fun SettingsScreen(
                 }
             }
         },
+        onCheckForUpdate = {
+            val clientVersion =
+                runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+                    .getOrNull()
+                    .orEmpty()
+            coroutineScope.launch {
+                when (val result = viewModel.checkForUpdate(clientVersion)) {
+                    is AppResult.Success -> {
+                        val info = result.data
+                        if (info.hasUpdate) {
+                            val message =
+                                buildString {
+                                    append("最新版本：${info.latestVersion}")
+                                    if (info.publishedAt.isNotBlank()) {
+                                        append(" (${info.publishedAt.take(10)})")
+                                    }
+                                    if (info.releaseNotes.isNotBlank()) {
+                                        append("\n\n更新日志：\n")
+                                        append(info.releaseNotes.trim())
+                                    }
+                                }
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = "发现新版本 ${info.latestVersion}",
+                                        message = message,
+                                        confirmText = "前往下载",
+                                        dismissText = "暂不更新",
+                                        isPrimary = true,
+                                        icon = BgmIcons.Download,
+                                    ),
+                                )
+                            if (confirmed) {
+                                openWebUrl(info.downloadUrl ?: info.releaseUrl)
+                            }
+                        } else {
+                            snackbarHostState.showSnackbar(
+                                message = "当前已是最新版本 (v$clientVersion)",
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        snackbarHostState.showSnackbar(
+                            message = "检查更新失败: ${result.message}",
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
+                    is AppResult.Loading -> Unit
+                }
+            }
+        },
         onLogoutCurrent = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
@@ -406,6 +459,7 @@ fun SettingsScreenContent(
     onOpenCrashLog: () -> Unit = {},
     onLogoutCurrent: () -> Unit,
     onLogoutAll: () -> Unit,
+    onCheckForUpdate: () -> Unit = {},
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
@@ -545,6 +599,8 @@ fun SettingsScreenContent(
                     activeProfile = uiState.activeProfile,
                     savedAccountsCount = uiState.savedAccounts.size,
                     onOpenWebUrl = onOpenWebUrl,
+                    isCheckingUpdate = uiState.isCheckingUpdate,
+                    onCheckForUpdate = onCheckForUpdate,
                     onLogoutCurrentClick = {
                         val currentProfile = uiState.activeProfile
                         val message =

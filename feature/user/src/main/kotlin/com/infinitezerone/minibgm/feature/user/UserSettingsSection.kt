@@ -96,6 +96,8 @@ internal fun SettingsSection(
     onTogglePipEnabled: (Boolean) -> Unit = {},
     showRestrictedContent: Boolean = false,
     onToggleShowRestrictedContent: (Boolean) -> Unit = {},
+    isCheckingUpdate: Boolean = false,
+    onCheckForUpdate: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val lastSyncText =
@@ -177,6 +179,8 @@ internal fun SettingsSection(
             onOpenWebUrl = onOpenWebUrl,
             onLogoutCurrentClick = onLogoutCurrentClick,
             onLogoutAllClick = onLogoutAllClick,
+            isCheckingUpdate = isCheckingUpdate,
+            onCheckForUpdate = onCheckForUpdate,
         )
     }
 }
@@ -646,6 +650,8 @@ internal fun AboutAndSupportSettingsCard(
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isCheckingUpdate: Boolean = false,
+    onCheckForUpdate: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val clientVersion =
@@ -686,6 +692,34 @@ internal fun AboutAndSupportSettingsCard(
                     )
                 },
                 onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
+            )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
+
+            SettingsItemRow(
+                icon = BgmIcons.SystemUpdate,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = "检查新版本",
+                subtitle = if (isCheckingUpdate) "正在检查更新…" else "当前版本 v$clientVersion",
+                trailing = {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = BgmIcons.KeyboardArrowRight,
+                            contentDescription = "检查新版本",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                onClick = if (isCheckingUpdate) null else onCheckForUpdate,
             )
 
             HorizontalDivider(

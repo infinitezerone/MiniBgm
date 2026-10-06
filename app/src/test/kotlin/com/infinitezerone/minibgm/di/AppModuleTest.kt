@@ -6,12 +6,14 @@ import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.data.repository.UpdateRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeUpdateRepository
 import com.infinitezerone.minibgm.feature.search.SearchViewModel
 import com.infinitezerone.minibgm.feature.user.UserViewModel
 import kotlinx.coroutines.flow.first
@@ -58,7 +60,8 @@ class AppModuleTest : KoinTest {
                             com.infinitezerone.minibgm.core.testing.repository
                                 .FakeCrashLogRepository()
                         }
-                        single { UserViewModel(get(), get(), get(), get(), get(), get()) }
+                        single<UpdateRepository> { FakeUpdateRepository() }
+                        single { UserViewModel(get(), get(), get(), get(), get(), get(), get()) }
                     },
                 )
             }

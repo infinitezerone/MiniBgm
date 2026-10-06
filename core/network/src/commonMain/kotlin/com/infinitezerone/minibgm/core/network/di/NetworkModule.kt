@@ -82,4 +82,8 @@ fun networkModule(
             com.infinitezerone.minibgm.core.network
                 .CommunitySubscriptionServiceImpl(get(named("unauthenticated")))
         }
+        single<com.infinitezerone.minibgm.core.network.UpdateService> {
+            com.infinitezerone.minibgm.core.network
+                .UpdateServiceImpl(get(named("unauthenticated")))
+        }
     }

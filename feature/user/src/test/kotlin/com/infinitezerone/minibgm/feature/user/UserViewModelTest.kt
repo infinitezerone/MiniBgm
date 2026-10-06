@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.crash.CrashLog
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
@@ -14,6 +15,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCrashLogRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSyncManager
+import com.infinitezerone.minibgm.core.testing.repository.FakeUpdateRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -42,6 +44,7 @@ class UserViewModelTest {
         settingsRepo: FakeSettingsRepository = FakeSettingsRepository(),
         syncManager: FakeSyncManager = FakeSyncManager(),
         crashLogRepo: FakeCrashLogRepository = FakeCrashLogRepository(),
+        updateRepo: FakeUpdateRepository = FakeUpdateRepository(),
     ): Triple<UserViewModel, FakeScheduleRepository, FakeSettingsRepository> {
         val viewModel =
             UserViewModel(
@@ -51,6 +54,7 @@ class UserViewModelTest {
                 settingsRepository = settingsRepo,
                 syncManager = syncManager,
                 crashLogRepository = crashLogRepo,
+                updateRepository = updateRepo,
             )
         return Triple(viewModel, scheduleRepo, settingsRepo)
     }
@@ -518,5 +522,34 @@ class UserViewModelTest {
             assertEquals(25, updatedState.airingNotificationOffsetMinutes)
             assertEquals(0, updatedState.notifyBeforeAirMinutes)
             assertEquals(25, updatedState.airDelayOffsetMinutes)
+        }
+
+    @Test
+    fun checkForUpdate_delegatesToRepositoryAndReturnsResult() =
+        runTest {
+            val fakeUpdateRepo = FakeUpdateRepository()
+            fakeUpdateRepo.checkUpdateResult =
+                AppResult.Success(
+                    AppUpdateInfo(
+                        currentVersion = "0.2.8",
+                        latestVersion = "0.3.0",
+                        hasUpdate = true,
+                        releaseName = "v0.3.0",
+                        releaseNotes = "全新版本",
+                        releaseUrl = "https://github.com/infinitezerone/MiniBgm/releases/tag/v0.3.0",
+                    ),
+                )
+            val (viewModel, _, _) = createViewModel(updateRepo = fakeUpdateRepo)
+
+            assertFalse(viewModel.uiState.value.isCheckingUpdate)
+
+            val result = viewModel.checkForUpdate("0.2.8")
+            assertEquals(1, fakeUpdateRepo.checkForUpdateCallCount)
+            assertTrue(result is AppResult.Success)
+            val info = (result as AppResult.Success).data
+            assertTrue(info.hasUpdate)
+            assertEquals("0.3.0", info.latestVersion)
+
+            assertFalse(viewModel.uiState.value.isCheckingUpdate)
         }
 }
