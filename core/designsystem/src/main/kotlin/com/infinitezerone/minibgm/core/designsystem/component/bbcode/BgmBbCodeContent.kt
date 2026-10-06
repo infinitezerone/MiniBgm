@@ -23,12 +23,16 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -230,7 +234,8 @@ private fun BgmBbCodeImage(
     modifier: Modifier = Modifier,
 ) {
     var isRevealed by rememberSaveable(image.url) { mutableStateOf(!image.isMasked) }
-    var isLoadFailed by remember(image.url) { mutableStateOf(false) }
+    var retryCount by remember(image.url) { mutableIntStateOf(0) }
+    var isLoadFailed by remember(image.url, retryCount) { mutableStateOf(false) }
     val aspectRatio = image.aspectRatio
     val imageModifier =
         Modifier
@@ -260,11 +265,11 @@ private fun BgmBbCodeImage(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         onClick = {
-            if (isRevealed) {
+            if (isRevealed && !isLoadFailed) {
                 onUrlClick?.invoke(image.url)
             }
         },
-        enabled = isRevealed,
+        enabled = isRevealed && !isLoadFailed,
         modifier =
             modifier
                 .fillMaxWidth()
@@ -277,17 +282,16 @@ private fun BgmBbCodeImage(
             if (isLoadFailed && isRevealed) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = { onUrlClick?.invoke(image.url) },
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(110.dp),
+                            .heightIn(min = 120.dp),
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(14.dp),
                     ) {
                         Icon(
                             imageVector = BgmIcons.BrokenImage,
@@ -295,32 +299,63 @@ private fun BgmBbCodeImage(
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "图片加载失败",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "轻触在浏览器中尝试打开",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center,
-                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    retryCount++
+                                    isLoadFailed = false
+                                },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.height(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "点击重试",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            if (onUrlClick != null) {
+                                TextButton(
+                                    onClick = { onUrlClick.invoke(image.url) },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(32.dp),
+                                ) {
+                                    Text(
+                                        text = "浏览器打开",
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             } else {
-                AsyncImage(
-                    model = image.url,
-                    contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
-                    contentScale = ContentScale.Fit,
-                    onError = { isLoadFailed = true },
-                    onSuccess = { isLoadFailed = false },
-                    modifier = imageModifier,
-                )
+                key(retryCount) {
+                    AsyncImage(
+                        model = image.url,
+                        contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
+                        contentScale = ContentScale.Fit,
+                        onError = { isLoadFailed = true },
+                        onSuccess = { isLoadFailed = false },
+                        modifier = imageModifier,
+                    )
+                }
             }
 
             // X 风格遮罩：未显示时覆盖深色磨砂遮罩与居中警告提示

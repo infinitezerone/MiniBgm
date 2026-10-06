@@ -113,20 +113,29 @@ val imageLoaderModule =
                 ) {
                     install(HttpRedirect)
                     install(HttpTimeout) {
-                        connectTimeoutMillis = 8_000
-                        socketTimeoutMillis = 10_000
-                        requestTimeoutMillis = 15_000
+                        connectTimeoutMillis = 10_000
+                        socketTimeoutMillis = 15_000
+                        requestTimeoutMillis = 20_000
                     }
                     install(DefaultRequest) {
-                        header(HttpHeaders.Accept, "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                        header(HttpHeaders.Accept, "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
                     }
                 }.also { client ->
-                    // 动态 Referer：仅 Bangumi 官方图床（lain.bgm.tv 等）需要 Referer: https://bgm.tv/；
-                    // 评论区里的第三方外链图床（新浪、B站、Imgur 等）若携带 bgm.tv Referer 会直接被防盗链策略 403 阻断，
-                    // 因此第三方图床严格不发送该 Referer，确保评论区外链图片顺利直出。
+                    // 动态 Referer 与 User-Agent：
+                    // 1. Bangumi 官方图床（lain.bgm.tv 等）：需要 Referer: https://bgm.tv/，保留标准 appUserAgent；
+                    // 2. 评论区里的第三方外链图床（新浪、B站、Imgur 等）：
+                    //    严格不发送 bgm.tv Referer（会被防盗链策略 403 阻断）；
+                    //    必须将 User-Agent 伪装为移动端标准浏览器（Chrome UA），彻底消除第三方图床因判定为非浏览器/App爬虫导致的 403 阻断。
                     client.plugin(HttpSend).intercept { request ->
-                        if (request.url.host.isBgmDomain) {
+                        val host = request.url.host
+                        if (host.isBgmDomain) {
                             request.header("Referer", "https://bgm.tv/")
+                        } else {
+                            request.headers.remove(HttpHeaders.UserAgent)
+                            request.header(
+                                HttpHeaders.UserAgent,
+                                "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                            )
                         }
                         execute(request)
                     }
