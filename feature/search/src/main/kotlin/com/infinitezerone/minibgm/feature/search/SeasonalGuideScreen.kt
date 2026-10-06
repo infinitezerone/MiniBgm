@@ -160,7 +160,7 @@ fun SeasonalGuideContent(
     }
 
     val currentFilterKey =
-        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}_${uiState.selectedAiringScope}_${uiState.selectedTags.sorted().joinToString()}"
+        "${uiState.selectedYear}_${uiState.selectedQuarter}_${uiState.selectedSort}_${uiState.selectedOrigin}_${uiState.selectedForm}_${uiState.selectedAiringScope}_${uiState.selectedTags.sorted().joinToString()}_${uiState.excludedTags.sorted().joinToString()}"
     var previousFilterKey by rememberSaveable { mutableStateOf(currentFilterKey) }
 
     LaunchedEffect(currentFilterKey) {
@@ -238,6 +238,9 @@ fun SeasonalGuideContent(
                         viewModel.selectSort(sort)
                     },
                     onToggleTag = viewModel::toggleTag,
+                    onIncludeTag = viewModel::includeTag,
+                    onExcludeTag = viewModel::excludeTag,
+                    onRemoveTag = viewModel::removeTagFilter,
                     onClearSelectedTags = viewModel::clearSelectedTags,
                     onAddCustomTag = viewModel::addCustomFilterTag,
                     onRemoveCustomTag = viewModel::removeCustomFilterTag,

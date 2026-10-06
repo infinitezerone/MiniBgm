@@ -59,6 +59,9 @@ fun SeasonalFilterBar(
     onRemoveCustomTag: (String) -> Unit,
     onTogglePurifyContent: () -> Unit = {},
     onSelectAiringScope: (SeasonAiringScope) -> Unit = {},
+    onIncludeTag: (String) -> Unit = onToggleTag,
+    onExcludeTag: (String) -> Unit = onToggleTag,
+    onRemoveTag: (String) -> Unit = onToggleTag,
     modifier: Modifier = Modifier,
 ) {
     var showAddTagSheet by remember { mutableStateOf(false) }
@@ -183,27 +186,38 @@ fun SeasonalFilterBar(
             // 全部 胶囊
             SeasonalGuideFilterChip(
                 label = "全部",
-                selected = uiState.selectedTags.isEmpty(),
+                selected = uiState.selectedTags.isEmpty() && uiState.excludedTags.isEmpty(),
                 onClick = onClearSelectedTags,
             )
 
             // 动态展示本季高频热门题材与标签（前 8 个）
             val topHotTags = uiState.seasonalHotTags.take(8).map { it.first }
             topHotTags.forEach { tag ->
-                val isSelected = tag in uiState.selectedTags
-                SeasonalGuideFilterChip(
+                val chipState =
+                    when {
+                        tag in uiState.selectedTags -> SeasonalTagFilterState.INCLUDED
+                        tag in uiState.excludedTags -> SeasonalTagFilterState.EXCLUDED
+                        else -> SeasonalTagFilterState.NEUTRAL
+                    }
+                SeasonalGuideTriStateFilterChip(
                     label = tag,
-                    selected = isSelected,
+                    state = chipState,
                     onClick = { onToggleTag(tag) },
                 )
             }
 
-            // 当前已选但不在 Top 热门中的其它已激活标签（高亮展示）
-            val extraSelectedTags = uiState.selectedTags.filter { it !in topHotTags }
-            extraSelectedTags.forEach { tag ->
-                SeasonalGuideFilterChip(
-                    label = "#$tag",
-                    selected = true,
+            // 当前已激活但不在 Top 热门中的其它已选标签（包含或排除）
+            val extraActiveTags = (uiState.selectedTags + uiState.excludedTags).filter { it !in topHotTags }
+            extraActiveTags.forEach { tag ->
+                val chipState =
+                    when {
+                        tag in uiState.selectedTags -> SeasonalTagFilterState.INCLUDED
+                        tag in uiState.excludedTags -> SeasonalTagFilterState.EXCLUDED
+                        else -> SeasonalTagFilterState.NEUTRAL
+                    }
+                SeasonalGuideTriStateFilterChip(
+                    label = tag,
+                    state = chipState,
                     onClick = { onToggleTag(tag) },
                 )
             }
@@ -315,8 +329,12 @@ fun SeasonalFilterBar(
         AddSeasonalTagBottomSheet(
             sheetState = addTagSheetState,
             selectedTags = uiState.selectedTags,
+            excludedTags = uiState.excludedTags,
             seasonalHotTags = uiState.seasonalHotTags,
             onToggleTag = onToggleTag,
+            onIncludeTag = onIncludeTag,
+            onExcludeTag = onExcludeTag,
+            onRemoveTag = onRemoveTag,
             onClearSelectedTags = onClearSelectedTags,
             onDismiss = { showAddTagSheet = false },
         )

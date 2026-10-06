@@ -984,23 +984,23 @@ class SeasonalGuideViewModelTest {
                 )
             advanceUntilIdle()
 
-            // 1. 默认未开启限制级内容且未选择里番标签：成人条目被隐藏，普通跨季条目保留
+            // 1. 默认未开启限制级内容且未选择 Hentai 标签：成人条目被隐藏，普通跨季条目保留
             var state = viewModel.uiState.value
             assertEquals(1, state.subjects.size)
             assertEquals(201L, state.subjects[0].id)
 
-            // 2. 勾选「里番」标签：成人跨季条目命中并展示，非里番的普通跨季条目被过滤剔除（杜绝标签污染）
-            viewModel.toggleTag("里番")
+            // 2. 勾选「Hentai」标签：成人跨季条目命中并展示，非成人内容的普通跨季条目被过滤剔除
+            viewModel.toggleTag("Hentai")
             advanceUntilIdle()
 
             state = viewModel.uiState.value
             assertEquals(1, state.subjects.size)
             assertEquals(575204L, state.subjects[0].id)
-            assertTrue(state.subjects[0].tags.any { it.name == "里番" })
+            assertTrue(state.subjects[0].tags.any { it.name == "Hentai" })
             assertTrue(state.subjects[0].metaTags.contains("OVA"))
 
-            // 3. 反选里番标签，选择「科幻」标签：由于成人跨季条目没有科幻标签，两者均不应出现
-            viewModel.toggleTag("里番")
+            // 3. 反选 Hentai 标签，选择「科幻」标签：由于成人跨季条目没有科幻标签，两者均不应出现
+            viewModel.toggleTag("Hentai")
             viewModel.toggleTag("科幻")
             advanceUntilIdle()
 
@@ -1059,8 +1059,8 @@ class SeasonalGuideViewModelTest {
             assertEquals(1, state.subjects.size)
             assertEquals(301L, state.subjects[0].id)
 
-            // 选择「里番」标签：命中当季未开播里番
-            viewModel.toggleTag("里番")
+            // 选择「Hentai」标签：命中当季未开播里番
+            viewModel.toggleTag("Hentai")
             advanceUntilIdle()
 
             state = viewModel.uiState.value
@@ -1095,13 +1095,11 @@ class SeasonalGuideViewModelTest {
                     name = "シスターブリーダー",
                     nameCn = "姐妹调教饲育者",
                     airDate = "2025-09-26",
-                    metaTags = listOf("日本", "OVA", "里番", "R18"),
+                    metaTags = listOf("日本", "OVA"),
                     tags =
                         listOf(
                             com.infinitezerone.minibgm.core.model
-                                .Tag("里番", 1),
-                            com.infinitezerone.minibgm.core.model
-                                .Tag("R18", 1),
+                                .Tag("Hentai", 1),
                         ),
                 )
 
@@ -1127,13 +1125,141 @@ class SeasonalGuideViewModelTest {
             assertEquals(524986L, state.subjects[0].id)
             assertEquals("猫眼三姐妹", state.subjects[0].nameCn)
 
-            // 勾选「里番」标签：静态源中的成人条目立即可见
-            viewModel.toggleTag("里番")
+            // 勾选「Hentai」标签：静态源中的成人条目立即可见
+            viewModel.toggleTag("Hentai")
             advanceUntilIdle()
 
             val adultState = viewModel.uiState.value
             assertEquals(1, adultState.subjects.size)
             assertEquals(575204L, adultState.subjects[0].id)
             assertEquals("姐妹调教饲育者", adultState.subjects[0].nameCn)
+        }
+
+    @Test
+    fun triStateTagFilter_rotatesCorrectlyAndExcludesCorrectly() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val scheduleRepository = FakeScheduleRepository()
+
+            val actionAnime =
+                sampleSubject.copy(
+                    id = 101,
+                    name = "Action Anime",
+                    nameCn = "动作动画",
+                    airDate = "2025-10-01",
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Action", 10),
+                        ),
+                )
+            val romanceAnime =
+                sampleSubject.copy(
+                    id = 102,
+                    name = "Romance Anime",
+                    nameCn = "恋爱动画",
+                    airDate = "2025-10-02",
+                    tags =
+                        listOf(
+                            com.infinitezerone.minibgm.core.model
+                                .Tag("Romance", 10),
+                        ),
+                )
+
+            scheduleRepository.seasonalAnimeListResult = listOf(actionAnime, romanceAnime)
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                    initialYear = 2025,
+                    initialSeasonMonth = 10,
+                )
+            advanceUntilIdle()
+
+            // 初始状态：两部均可见，标签筛选均为空
+            assertEquals(2, viewModel.uiState.value.subjects.size)
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .isEmpty(),
+            )
+            assertTrue(
+                viewModel.uiState.value.excludedTags
+                    .isEmpty(),
+            )
+
+            // 第一次 toggle: 未选 -> 包含
+            viewModel.toggleTag("Action")
+            advanceUntilIdle()
+            assertEquals(setOf("Action"), viewModel.uiState.value.selectedTags)
+            assertTrue(
+                viewModel.uiState.value.excludedTags
+                    .isEmpty(),
+            )
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                101L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            // 第二次 toggle: 包含 -> 排除（避雷）
+            viewModel.toggleTag("Action")
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .isEmpty(),
+            )
+            assertEquals(setOf("Action"), viewModel.uiState.value.excludedTags)
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                102L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            // 第三次 toggle: 排除 -> 恢复默认未选
+            viewModel.toggleTag("Action")
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .isEmpty(),
+            )
+            assertTrue(
+                viewModel.uiState.value.excludedTags
+                    .isEmpty(),
+            )
+            assertEquals(2, viewModel.uiState.value.subjects.size)
+
+            // 显式排除与显式包含
+            viewModel.excludeTag("Action")
+            advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                102L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            viewModel.includeTag("Action")
+            advanceUntilIdle()
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                101L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            // 切换季度自动重置临时标签筛选
+            viewModel.selectQuarter(SeasonQuarter.SPRING)
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.selectedTags
+                    .isEmpty(),
+            )
+            assertTrue(
+                viewModel.uiState.value.excludedTags
+                    .isEmpty(),
+            )
         }
 }

@@ -19,6 +19,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -231,4 +232,63 @@ fun SeasonalGuideFilterChip(
                 selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
             ),
     )
+}
+
+/** 导视标签三态：默认未选 (NEUTRAL) / 包含 (INCLUDED) / 排除避雷 (EXCLUDED) */
+enum class SeasonalTagFilterState {
+    NEUTRAL,
+    INCLUDED,
+    EXCLUDED,
+}
+
+/** 导视三态筛选 chip：支持未选、包含（主色）、排除避雷（红底） */
+@Composable
+fun SeasonalGuideTriStateFilterChip(
+    label: String,
+    state: SeasonalTagFilterState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailingCount: Int? = null,
+) {
+    val (containerColor, labelColor, prefix) =
+        when (state) {
+            SeasonalTagFilterState.INCLUDED ->
+                Triple(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.onPrimaryContainer,
+                    "✓ ",
+                )
+            SeasonalTagFilterState.EXCLUDED ->
+                Triple(
+                    MaterialTheme.colorScheme.errorContainer,
+                    MaterialTheme.colorScheme.onErrorContainer,
+                    "✕ ",
+                )
+            SeasonalTagFilterState.NEUTRAL ->
+                Triple(
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    "",
+                )
+        }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = containerColor,
+        modifier = modifier.height(34.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "$prefix$label${if (trailingCount != null) " · $trailingCount" else ""}",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (state != SeasonalTagFilterState.NEUTRAL) FontWeight.Bold else FontWeight.Normal,
+                color = labelColor,
+            )
+        }
+    }
 }

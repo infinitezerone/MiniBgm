@@ -200,8 +200,10 @@ data class SeasonalGuideUiState(
     val showLoginPromptDialog: Boolean = false,
     /** 持久化的自定义常用筛选标签 */
     val customFilterTags: List<String> = emptyList(),
-    /** 当前已激活的标签筛选集合（多选下推） */
+    /** 当前已激活包含的标签筛选集合（多选） */
     val selectedTags: Set<String> = emptySet(),
+    /** 当前已激活排除的标签筛选集合（避雷） */
+    val excludedTags: Set<String> = emptySet(),
     /** 从当前季度已拉取番剧中动态聚合的高频标签及条目数量统计 */
     val seasonalHotTags: List<Pair<String, Int>> = emptyList(),
     /** 是否开启内容净化（将短片、MV、泡面番、动态漫折叠为胶囊单元） */
@@ -239,8 +241,9 @@ data class SeasonalGuideUiState(
             val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
             val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
             val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
+            val excludedTagsLabel = if (excludedTags.isNotEmpty()) excludedTags.joinToString(" · ") { "排除:$it" } else null
             val purifyLabel = if (!purifyContent) "全部平铺" else null
-            return listOfNotNull(scopeLabel, originLabel, formLabel, tagsLabel, purifyLabel)
+            return listOfNotNull(scopeLabel, originLabel, formLabel, tagsLabel, excludedTagsLabel, purifyLabel)
                 .joinToString(" · ")
                 .ifEmpty { SeasonOriginFilter.ALL.label }
         }

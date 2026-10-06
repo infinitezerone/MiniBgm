@@ -53,6 +53,7 @@ private data class SeasonQuery(
     val form: SeasonFormFilter,
     val sort: SeasonSortOption,
     val tags: Set<String> = emptySet(),
+    val excludedTags: Set<String> = emptySet(),
     val airingScope: SeasonAiringScope = SeasonAiringScope.DEFAULT,
 )
 
@@ -79,7 +80,23 @@ private fun SeasonQuery.requestKey(): RequestKey =
     )
 
 private val EXCLUDED_HOT_TAGS =
-    setOf("日本", "中国", "TV", "WEB", "剧场版", "OVA", "动画", "动态漫画", "国产", "MOVIE", "TV_SHORT", "ONA", "SPECIAL", "MUSIC")
+    setOf(
+        "日本",
+        "中国",
+        "TV",
+        "WEB",
+        "剧场版",
+        "OVA",
+        "动画",
+        "动态漫画",
+        "国产",
+        "MOVIE",
+        "TV_SHORT",
+        "ONA",
+        "SPECIAL",
+        "MUSIC",
+        "Hentai",
+    )
 
 private fun extractHotTags(subjects: List<Subject>): List<Pair<String, Int>> =
     subjects
@@ -250,9 +267,7 @@ class SeasonalGuideViewModel(
                 val allowsRestricted =
                     showRestricted ||
                         query.tags.any {
-                            it.equals("Hentai", ignoreCase = true) ||
-                                it.equals("R18", ignoreCase = true) ||
-                                it in setOf("里番", "18禁")
+                            it.equals("Hentai", ignoreCase = true)
                         }
 
                 // 1. 本地实时排期流（若为当季）
@@ -270,14 +285,9 @@ class SeasonalGuideViewModel(
 
                 val localSeasonSubjects =
                     validSeasonSchedules.map { sched ->
-                        val tags = if (sched.isAdult) listOf(Tag("Hentai", 1), Tag("R18", 1), Tag("里番", 1)) else emptyList()
-                        val metaTags = mutableListOf("日本")
                         val effectiveFormat = sched.format.ifBlank { "TV" }
-                        metaTags.add(effectiveFormat)
-                        if (sched.isAdult) {
-                            metaTags.add("里番")
-                            metaTags.add("R18")
-                        }
+                        val metaTags = listOf("日本", effectiveFormat)
+                        val tags = if (sched.isAdult) listOf(Tag("Hentai", 1)) else emptyList()
                         Subject(
                             id = sched.bgmId,
                             type = 2,
@@ -308,26 +318,46 @@ class SeasonalGuideViewModel(
                 // 2. 静态 AniList 季度条目（全季度覆盖）
                 val filteredStaticSubjects =
                     staticSubjects.filter { sub ->
-                        val isAdult =
-                            sub.tags.any {
-                                it.name.equals("Hentai", ignoreCase = true) ||
-                                    it.name.equals("R18", ignoreCase = true) ||
-                                    it.name == "里番"
-                            }
+                        val isAdult = sub.tags.any { it.name.equals("Hentai", ignoreCase = true) }
                         allowsRestricted || !isAdult
                     }
 
                 // 3. AniList 整体条目池（当季合并本地与静态；往季以静态为主）
                 val aniListSubjects =
                     if (isCurrent) {
-                        val knownIds = localSeasonSubjects.map { it.id }.toSet()
-                        val additions = filteredStaticSubjects.filter { it.id !in knownIds }
-                        localSeasonSubjects + additions
+                        val scheduleMap = validSeasonSchedules.associateBy { it.bgmId }
+                        val enrichedStatic =
+                            filteredStaticSubjects.map { sub ->
+                                val sched = scheduleMap[sub.id]
+                                if (sched != null) {
+                                    sub.copy(
+                                        airDate = sched.airDate.ifBlank { sub.airDate },
+                                        date = sched.airDate.ifBlank { sub.date },
+                                        images =
+                                            if (sched.coverUrl.isNotBlank()) {
+                                                SubjectImages(
+                                                    large = sched.coverUrl,
+                                                    common = sched.coverUrl,
+                                                    medium = sched.coverUrl,
+                                                    small = sched.coverUrl,
+                                                    grid = sched.coverUrl,
+                                                )
+                                            } else {
+                                                sub.images
+                                            },
+                                    )
+                                } else {
+                                    sub
+                                }
+                            }
+                        val staticIds = filteredStaticSubjects.map { it.id }.toSet()
+                        val localOnlyAdditions = localSeasonSubjects.filter { it.id !in staticIds }
+                        enrichedStatic + localOnlyAdditions
                     } else {
                         filteredStaticSubjects
                     }
 
-                // 产地、形式与标签过滤
+                // 产地、形式与标签过滤（支持包含与排除双向过滤）
                 val filteredAniListSubjects =
                     aniListSubjects.filter { sub ->
                         val originMatch =
@@ -341,13 +371,19 @@ class SeasonalGuideViewModel(
                                 SeasonFormFilter.ALL -> true
                                 SeasonFormFilter.MOVIE -> sub.platform.equals("MOVIE", ignoreCase = true)
                             }
-                        val tagMatch =
+                        val tagIncludeMatch =
                             if (query.tags.isEmpty()) {
                                 true
                             } else {
                                 query.tags.all { tag -> sub.tags.any { it.name.equals(tag, ignoreCase = true) } }
                             }
-                        originMatch && formMatch && tagMatch
+                        val tagExcludeMatch =
+                            if (query.excludedTags.isEmpty()) {
+                                true
+                            } else {
+                                query.excludedTags.none { tag -> sub.tags.any { it.name.equals(tag, ignoreCase = true) } }
+                            }
+                        originMatch && formMatch && tagIncludeMatch && tagExcludeMatch
                     }
 
                 // 依据播出范围（全部 / 仅首播 / 仅续播）划分条目
@@ -415,6 +451,7 @@ class SeasonalGuideViewModel(
                     selectedForm = query.form,
                     selectedSort = query.sort,
                     selectedTags = query.tags,
+                    excludedTags = query.excludedTags,
                     selectedAiringScope = query.airingScope,
                     continuingNextEpisodes = continuingNextEpMap,
                     seasonalHotTags = extractHotTags(pooledSubjects),
@@ -471,14 +508,14 @@ class SeasonalGuideViewModel(
     private fun onPageSignals(key: RequestKey): Flow<PagingSignal> =
         pageTriggers.signals().onEach { signal -> runPagingSession(key, signal) }
 
-    fun selectYear(year: Int) = setQuery { it.copy(year = year) }
+    fun selectYear(year: Int) = setQuery { it.copy(year = year, tags = emptySet(), excludedTags = emptySet()) }
 
-    fun selectQuarter(quarter: SeasonQuarter) = setQuery { it.copy(quarter = quarter) }
+    fun selectQuarter(quarter: SeasonQuarter) = setQuery { it.copy(quarter = quarter, tags = emptySet(), excludedTags = emptySet()) }
 
     fun selectSeason(
         year: Int,
         quarter: SeasonQuarter,
-    ) = setQuery { it.copy(year = year, quarter = quarter) }
+    ) = setQuery { it.copy(year = year, quarter = quarter, tags = emptySet(), excludedTags = emptySet()) }
 
     /** 切换产地筛选（全部 / 日本 / 国产）；100% 服务端下推，切换即重查 */
     fun selectOrigin(origin: SeasonOriginFilter) = setQuery { it.copy(origin = origin) }
@@ -492,34 +529,93 @@ class SeasonalGuideViewModel(
     /** 切换放送范围（全部在播 / 仅首播新番 / 仅跨季续播） */
     fun selectAiringScope(scope: SeasonAiringScope) = setQuery { it.copy(airingScope = scope) }
 
-    /** 切换激活/反选某个标签（多选下推） */
-    fun toggleTag(tag: String) =
-        setQuery { current ->
-            val updated = if (tag in current.tags) current.tags - tag else current.tags + tag
-            current.copy(tags = updated)
-        }
-
-    /** 清空当前选中的所有标签 */
-    fun clearSelectedTags() =
-        setQuery { current ->
-            current.copy(tags = emptySet())
-        }
-
-    /** 添加筛选标签（切换激活） */
-    fun addCustomFilterTag(tag: String) {
+    /**
+     * 循环切换标签的三态：
+     * 默认未选 (Neutral) -> 包含 (Included) -> 排除/避雷 (Excluded) -> 取消/恢复默认 (Neutral)
+     */
+    fun toggleTag(tag: String) {
         val trimmed = tag.trim()
-        if (trimmed.isNotBlank()) {
-            setQuery { current ->
-                current.copy(tags = current.tags + trimmed)
+        if (trimmed.isBlank()) return
+        setQuery { current ->
+            when {
+                trimmed in current.tags -> {
+                    // 已包含 -> 切换为排除
+                    current.copy(
+                        tags = current.tags - trimmed,
+                        excludedTags = current.excludedTags + trimmed,
+                    )
+                }
+                trimmed in current.excludedTags -> {
+                    // 已排除 -> 恢复默认
+                    current.copy(
+                        excludedTags = current.excludedTags - trimmed,
+                    )
+                }
+                else -> {
+                    // 未选 -> 切换为包含
+                    current.copy(
+                        tags = current.tags + trimmed,
+                        excludedTags = current.excludedTags - trimmed,
+                    )
+                }
             }
         }
     }
 
-    /** 移除筛选标签（取消激活） */
-    fun removeCustomFilterTag(tag: String) {
-        setQuery { current ->
-            current.copy(tags = current.tags - tag)
+    /** 显式设为包含标签 */
+    fun includeTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank()) {
+            setQuery { current ->
+                current.copy(
+                    tags = current.tags + trimmed,
+                    excludedTags = current.excludedTags - trimmed,
+                )
+            }
         }
+    }
+
+    /** 显式设为排除标签（避雷） */
+    fun excludeTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank()) {
+            setQuery { current ->
+                current.copy(
+                    tags = current.tags - trimmed,
+                    excludedTags = current.excludedTags + trimmed,
+                )
+            }
+        }
+    }
+
+    /** 移除指定标签的包含与排除状态 */
+    fun removeTagFilter(tag: String) {
+        val trimmed = tag.trim()
+        setQuery { current ->
+            current.copy(
+                tags = current.tags - trimmed,
+                excludedTags = current.excludedTags - trimmed,
+            )
+        }
+    }
+
+    /** 清空当前选中的所有标签（包含与排除均清空） */
+    fun clearSelectedTags() =
+        setQuery { current ->
+            current.copy(tags = emptySet(), excludedTags = emptySet())
+        }
+
+    /** 添加自定义标签（默认设为包含） */
+    fun addCustomFilterTag(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank()) {
+            includeTag(trimmed)
+        }
+    }
+
+    /** 移除筛选标签 */
+    fun removeCustomFilterTag(tag: String) {
+        removeTagFilter(tag)
     }
 
     /** 一次改一个条件，且值未变时不发射——combine 的上游少一次无谓换挡 */

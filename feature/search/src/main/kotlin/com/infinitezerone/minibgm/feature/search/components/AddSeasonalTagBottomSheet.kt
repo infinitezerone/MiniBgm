@@ -16,11 +16,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
@@ -40,9 +39,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomShee
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
- * 季度片单多维题材与标签筛选抽屉：
- * 纯粹对接 AniList 原生题材（Genres）与当季热门标签（Hot Tags），
- * 与淘番（Explore）中文社群标签完全解耦。
+ * 季度片单题材与标签筛选抽屉：
+ * 数据 100% 依当季数据动态呈现，客户端不硬编码任何静态题材与敏感分类标签。
+ * 支持三态筛选（包含 ✓ / 排除避雷 ✕ / 不限）。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -54,11 +53,16 @@ fun AddSeasonalTagBottomSheet(
     onClearSelectedTags: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    excludedTags: Set<String> = emptySet(),
+    onIncludeTag: (String) -> Unit = onToggleTag,
+    onExcludeTag: (String) -> Unit = onToggleTag,
+    onRemoveTag: (String) -> Unit = onToggleTag,
     customFilterTags: List<String> = emptyList(),
     onAddCustomTag: (String) -> Unit = onToggleTag,
     onRemoveCustomTag: (String) -> Unit = onToggleTag,
 ) {
     var inputText by remember { mutableStateOf("") }
+    val totalActiveCount = selectedTags.size + excludedTags.size
 
     BgmModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -75,20 +79,27 @@ fun AddSeasonalTagBottomSheet(
         ) {
             // 标题栏与清空操作
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = "题材与标签筛选",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                if (selectedTags.isNotEmpty()) {
+                Column {
+                    Text(
+                        text = "题材与标签筛选",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "点击切换：未选 → 包含(✓) → 排除(✕) → 未选",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (totalActiveCount > 0) {
                     TextButton(onClick = onClearSelectedTags) {
                         Text(
-                            text = "清空全部 (${selectedTags.size})",
+                            text = "清空全部 ($totalActiveCount)",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -107,8 +118,8 @@ fun AddSeasonalTagBottomSheet(
                         .padding(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
-                // Section 1: 当前已选标签
-                if (selectedTags.isNotEmpty()) {
+                // Section 1: 当前已生效筛选（包含与排除）
+                if (totalActiveCount > 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "当前已生效筛选",
@@ -122,9 +133,10 @@ fun AddSeasonalTagBottomSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
+                            // 包含标签
                             selectedTags.forEach { tag ->
                                 Surface(
-                                    onClick = { onToggleTag(tag) },
+                                    onClick = { onRemoveTag(tag) },
                                     shape = RoundedCornerShape(8.dp),
                                     color = MaterialTheme.colorScheme.primaryContainer,
                                 ) {
@@ -134,15 +146,43 @@ fun AddSeasonalTagBottomSheet(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
                                         Text(
-                                            text = "#$tag",
+                                            text = "✓ #$tag",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             fontWeight = FontWeight.Medium,
                                         )
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "取消选择",
+                                            contentDescription = "取消包含",
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 排除标签（避雷）
+                            excludedTags.forEach { tag ->
+                                Surface(
+                                    onClick = { onRemoveTag(tag) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = "✕ #$tag",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                        Icon(
+                                            imageVector = BgmIcons.Close,
+                                            contentDescription = "取消排除",
+                                            tint = MaterialTheme.colorScheme.onErrorContainer,
                                             modifier = Modifier.size(14.dp),
                                         )
                                     }
@@ -152,10 +192,43 @@ fun AddSeasonalTagBottomSheet(
                     }
                 }
 
-                // Section 2: 自由输入检索标签
+                // Section 2: 当季高频题材与标签（由当季数据动态统计聚合，零硬编码）
+                if (seasonalHotTags.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "本季热门题材与标签",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            seasonalHotTags.forEach { (tag, count) ->
+                                val chipState =
+                                    when {
+                                        tag in selectedTags -> SeasonalTagFilterState.INCLUDED
+                                        tag in excludedTags -> SeasonalTagFilterState.EXCLUDED
+                                        else -> SeasonalTagFilterState.NEUTRAL
+                                    }
+                                SeasonalGuideTriStateFilterChip(
+                                    label = tag,
+                                    state = chipState,
+                                    onClick = { onToggleTag(tag) },
+                                    trailingCount = count,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section 3: 自填标签检索与输入
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "自填标签",
+                        text = "自填标签检索",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
@@ -170,7 +243,7 @@ fun AddSeasonalTagBottomSheet(
                             onValueChange = { inputText = it },
                             placeholder = {
                                 Text(
-                                    text = "输入 AniList 标签（如 Magic、School、Mecha）",
+                                    text = "输入标签检索词",
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             },
@@ -181,7 +254,7 @@ fun AddSeasonalTagBottomSheet(
                                     onDone = {
                                         val trimmed = inputText.trim()
                                         if (trimmed.isNotBlank()) {
-                                            onToggleTag(trimmed)
+                                            onIncludeTag(trimmed)
                                             inputText = ""
                                         }
                                     },
@@ -194,56 +267,28 @@ fun AddSeasonalTagBottomSheet(
                             onClick = {
                                 val trimmed = inputText.trim()
                                 if (trimmed.isNotBlank()) {
-                                    onToggleTag(trimmed)
+                                    onIncludeTag(trimmed)
                                     inputText = ""
                                 }
                             },
                             enabled = inputText.isNotBlank(),
                             shape = RoundedCornerShape(8.dp),
                         ) {
-                            Text("筛选")
+                            Text("包含")
                         }
-                    }
-                }
 
-                // Section 4: 当季热门动态标签
-                if (seasonalHotTags.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = "本季高频热门标签",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth(),
+                        OutlinedButton(
+                            onClick = {
+                                val trimmed = inputText.trim()
+                                if (trimmed.isNotBlank()) {
+                                    onExcludeTag(trimmed)
+                                    inputText = ""
+                                }
+                            },
+                            enabled = inputText.isNotBlank(),
+                            shape = RoundedCornerShape(8.dp),
                         ) {
-                            seasonalHotTags.forEach { (tag, count) ->
-                                val isSelected = tag in selectedTags
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { onToggleTag(tag) },
-                                    label = {
-                                        Text(
-                                            text = "$tag · $count",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        )
-                                    },
-                                    border = null,
-                                    colors =
-                                        FilterChipDefaults.filterChipColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        ),
-                                    shape = RoundedCornerShape(8.dp),
-                                )
-                            }
+                            Text("排除")
                         }
                     }
                 }
