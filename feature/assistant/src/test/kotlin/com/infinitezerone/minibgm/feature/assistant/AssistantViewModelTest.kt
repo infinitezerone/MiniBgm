@@ -1340,4 +1340,47 @@ class AssistantViewModelTest {
                 "清空会话后 UIState 应为空",
             )
         }
+
+    @Test
+    fun runAgent_failure_keeps_pending_proposals_for_next_success() =
+        runTest {
+            val agentService =
+                FakeAgentService(
+                    pendingActionStore = actionStore,
+                    executeResult = AppResult.Error(IllegalStateException("boom"), message = "请求失败"),
+                )
+            val viewModel = AssistantViewModel(agentService, fakeSettingsRepository)
+
+            viewModel.onInputChanged("第一次提问")
+            viewModel.sendMessage()
+            advanceUntilIdle()
+            assertTrue(
+                viewModel.uiState.value.messages
+                    .last()
+                    .isError,
+            )
+
+            // 失败的 run 之前工具侧已生成的提案仍留在 store：失败即清空会让用户永远看不到卡片
+            actionStore.add(
+                PendingAction.UpdateEpisode(
+                    actionId = "act_keep_test",
+                    subjectId = 12345L,
+                    subjectTitle = "葬送的芙莉莲",
+                    episodeNumber = 5,
+                    isWatched = true,
+                    description = "Mark ep 5 watched",
+                ),
+            )
+            agentService.executeResult = AppResult.Success("第二条回复")
+            viewModel.onInputChanged("第二次提问")
+            viewModel.sendMessage()
+            advanceUntilIdle()
+
+            val secondReply =
+                viewModel.uiState.value.messages
+                    .last()
+            assertFalse(secondReply.isError)
+            assertTrue(secondReply.pendingActions.isNotEmpty(), "上次失败 run 产生的提案必须保留到下一次成功回复")
+            assertEquals("act_keep_test", secondReply.pendingActions[0].action.actionId)
+        }
 }

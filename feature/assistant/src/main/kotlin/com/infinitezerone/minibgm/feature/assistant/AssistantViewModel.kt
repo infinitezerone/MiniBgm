@@ -21,6 +21,7 @@ import com.infinitezerone.minibgm.core.model.PendingActionCard
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /** 找源工具"无结果"回复的稳定前缀格式：从中提取条目 id 供 WebView 深度解析入口使用 */
@@ -232,10 +234,14 @@ class AssistantViewModel(
             // sessions 可能尚未同步到 state（新建会话后的首次提问），此时同样命名——
             // isLoading 保证同一会话内不会并发发消息，不存在误改名竞态
             val session = _uiState.value.sessions.firstOrNull { it.id == sessionId }
-            if (session == null || session.title.isBlank() || session.title == NEW_SESSION_TITLE) {
-                assistantRepository?.renameSession(sessionId, trimmed.take(SESSION_TITLE_MAX_LENGTH))
+            // 用户发完消息立刻退出页面时 viewModelScope 会被取消：落库包 NonCancellable，
+            // 否则用户消息丢失、恢复后只剩一条没有回答的孤儿提问
+            withContext(NonCancellable) {
+                if (session == null || session.title.isBlank() || session.title == NEW_SESSION_TITLE) {
+                    assistantRepository?.renameSession(sessionId, trimmed.take(SESSION_TITLE_MAX_LENGTH))
+                }
+                assistantRepository?.saveMessage(sessionId, userMessage.toDomainModel())
             }
-            assistantRepository?.saveMessage(sessionId, userMessage.toDomainModel())
         }
 
         runAgent(trimmed, history)
@@ -254,12 +260,14 @@ class AssistantViewModel(
         return id
     }
 
-    /** 把消息持久化到当前激活会话 */
+    /** 把消息持久化到当前激活会话；包 NonCancellable——回复要么完整落库，要么根本不发 */
     private fun saveToActiveSession(message: AssistantMessage) {
         val sessionId = activeSessionId.value
         if (sessionId.isBlank()) return
         viewModelScope.launch {
-            assistantRepository?.saveMessage(sessionId, message.toDomainModel())
+            withContext(NonCancellable) {
+                assistantRepository?.saveMessage(sessionId, message.toDomainModel())
+            }
         }
     }
 
@@ -322,10 +330,10 @@ class AssistantViewModel(
     private fun buildHistoryContext(messages: List<AssistantMessage>): List<Pair<String, String>> =
         messages
             .filter { !it.isError && it.content.isNotBlank() }
-            .takeLast(4)
+            .takeLast(8)
             .map { msg ->
                 val role = if (msg.role == MessageRole.USER) "user" else "assistant"
-                val text = if (msg.content.length > 300) msg.content.take(300) + "..." else msg.content
+                val text = if (msg.content.length > 600) msg.content.take(600) + "..." else msg.content
                 role to text
             }
 
@@ -456,8 +464,10 @@ class AssistantViewModel(
                         }
                     }
                     is AppResult.Error -> {
-                        agentService.pendingActionStore?.clear()
-                        agentService.playableSourcesStore?.clear()
+                        // 不清空 store：本轮工具侧已生成的提案/播放清单是真实完成的工作，
+                        // 失败即清空会让用户永远看不到这些卡片。它们会随下一次成功的回复
+                        // 一并弹出（actionId 去重防止重复）。清空只属于用户显式操作
+                        // （切换/删除会话、停止生成）。
                         // 兜底不取 throwable.message——那是原始异常文本（可能是英文或类名），会直接进对话流。
                         // :feature:assistant 依赖不到 :core:network 的文案工具，认不出类型就给固定文案。
                         val errorMsg = result.message.ifBlank { "智能体执行失败" }
