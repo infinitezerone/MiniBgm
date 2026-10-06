@@ -174,7 +174,7 @@ fun SeasonalFilterBar(
             }
         }
 
-        // 4. 常用标签横滑选择条（常驻展示，点击即下推筛选）
+        // 4. AniList 核心题材与热门标签横滑选择条（常驻展示，点击即下推筛选）
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -187,17 +187,28 @@ fun SeasonalFilterBar(
                 onClick = onClearSelectedTags,
             )
 
-            // 每一个自定义常用标签
-            uiState.customFilterTags.forEach { tag ->
-                val isSelected = tag in uiState.selectedTags
+            // 常驻最高频 AniList 核心题材（前 6 个）
+            val quickGenres = listOf("Action", "Fantasy", "Comedy", "Romance", "Sci-Fi", "Slice of Life")
+            quickGenres.forEach { genre ->
+                val isSelected = genre in uiState.selectedTags
                 SeasonalGuideFilterChip(
-                    label = tag,
+                    label = genre,
                     selected = isSelected,
+                    onClick = { onToggleTag(genre) },
+                )
+            }
+
+            // 当前已选但不在上述快速题材中的其它已激活标签（高亮展示）
+            val extraSelectedTags = uiState.selectedTags.filter { it !in quickGenres }
+            extraSelectedTags.forEach { tag ->
+                SeasonalGuideFilterChip(
+                    label = "#$tag",
+                    selected = true,
                     onClick = { onToggleTag(tag) },
                 )
             }
 
-            // ＋管理常用标签
+            // ＋更多题材/标签
             Surface(
                 onClick = { showAddTagSheet = true },
                 shape = RoundedCornerShape(8.dp),
@@ -211,12 +222,12 @@ fun SeasonalFilterBar(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Add,
-                        contentDescription = "管理常用标签",
+                        contentDescription = "更多题材与标签",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = if (uiState.customFilterTags.isEmpty()) "常用标签" else "管理",
+                        text = "更多",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -303,10 +314,10 @@ fun SeasonalFilterBar(
     if (showAddTagSheet) {
         AddSeasonalTagBottomSheet(
             sheetState = addTagSheetState,
-            customFilterTags = uiState.customFilterTags,
+            selectedTags = uiState.selectedTags,
             seasonalHotTags = uiState.seasonalHotTags,
-            onAddCustomTag = onAddCustomTag,
-            onRemoveCustomTag = onRemoveCustomTag,
+            onToggleTag = onToggleTag,
+            onClearSelectedTags = onClearSelectedTags,
             onDismiss = { showAddTagSheet = false },
         )
     }

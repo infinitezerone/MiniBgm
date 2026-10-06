@@ -710,26 +710,26 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun customFilterTags_addAndRemoveViaViewModel() =
+    fun filterTags_addAndRemoveViaViewModel() =
         runTest {
             val searchRepository = FakeSearchRepository()
             val viewModel = createViewModel(searchRepository = searchRepository)
             advanceUntilIdle()
 
-            viewModel.addCustomFilterTag("机战")
+            viewModel.addCustomFilterTag("Mecha")
             advanceUntilIdle()
 
             assertTrue(
-                viewModel.uiState.value.customFilterTags
-                    .contains("机战"),
+                viewModel.uiState.value.selectedTags
+                    .contains("Mecha"),
             )
 
-            viewModel.removeCustomFilterTag("机战")
+            viewModel.removeCustomFilterTag("Mecha")
             advanceUntilIdle()
 
             assertFalse(
-                viewModel.uiState.value.customFilterTags
-                    .contains("机战"),
+                viewModel.uiState.value.selectedTags
+                    .contains("Mecha"),
             )
         }
 

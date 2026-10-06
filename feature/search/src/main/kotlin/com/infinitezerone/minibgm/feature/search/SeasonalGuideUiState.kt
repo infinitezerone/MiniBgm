@@ -166,6 +166,29 @@ enum class SeasonAiringScope(
 }
 
 /**
+ * AniList 原生核心分类题材清单（客观纯粹，直接匹配 AniList 原生 genres）。
+ */
+val ANILIST_PRIMARY_GENRES =
+    listOf(
+        "Action",
+        "Fantasy",
+        "Comedy",
+        "Romance",
+        "Sci-Fi",
+        "Slice of Life",
+        "Drama",
+        "Adventure",
+        "Supernatural",
+        "Mystery",
+        "Sports",
+        "Thriller",
+        "Mahou Shoujo",
+        "Mecha",
+        "Music",
+        "Psychological",
+    )
+
+/**
  * 季度片单 UI 状态。
  *
  * 这是**投影**而非容器（方案 B·响应式派生流）：ViewModel 把筛选输入、分页结果与收藏仓的流

@@ -442,15 +442,13 @@ class SeasonalGuideViewModel(
                 )
             },
             loginPromptVisible,
-            searchRepository.getCustomFilterTags(),
             combine(purifyContent, expandedGroupKeys) { purify, keys -> Pair(purify, keys) },
-        ) { data, identity, prompt, customTags, purifyData ->
+        ) { data, identity, prompt, purifyData ->
             data.copy(
                 isLoggedIn = identity.isLoggedIn,
                 wishedSubjectIds = identity.wishedSubjectIds,
                 doingSubjectIds = identity.doingSubjectIds,
                 showLoginPromptDialog = prompt,
-                customFilterTags = customTags,
                 purifyContent = purifyData.first,
                 expandedGroupKeys = purifyData.second,
             )
@@ -509,24 +507,20 @@ class SeasonalGuideViewModel(
             current.copy(tags = emptySet())
         }
 
-    /** 添加自定义常用筛选标签（持久化） */
+    /** 添加筛选标签（切换激活） */
     fun addCustomFilterTag(tag: String) {
-        viewModelScope.launch {
-            withContext(NonCancellable) {
-                searchRepository.addCustomFilterTag(tag)
+        val trimmed = tag.trim()
+        if (trimmed.isNotBlank()) {
+            setQuery { current ->
+                current.copy(tags = current.tags + trimmed)
             }
         }
     }
 
-    /** 移除自定义常用筛选标签（持久化） */
+    /** 移除筛选标签（取消激活） */
     fun removeCustomFilterTag(tag: String) {
-        viewModelScope.launch {
-            withContext(NonCancellable) {
-                searchRepository.removeCustomFilterTag(tag)
-            }
-            if (tag in seasonQuery.value.tags) {
-                toggleTag(tag)
-            }
+        setQuery { current ->
+            current.copy(tags = current.tags - tag)
         }
     }
 
