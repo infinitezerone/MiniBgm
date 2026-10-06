@@ -303,12 +303,42 @@ class PlaybackRuleDiagnosticsTools(
     ): String {
         val boundedDuration = durationSeconds.coerceIn(3, 15) * 1000L
         val result = playbackResolverRepository.auditPageTraffic(playbackPageUrl, boundedDuration)
-        return json.encodeToString(result)
+        return json.encodeToString(sanitizeTraceForModel(result))
     }
 
     suspend fun inspectPageStructure(url: String): String {
         val result: PageInspectionResult = playbackResolverRepository.inspectPage(url)
-        return json.encodeToString(result)
+        return json.encodeToString(
+            result.copy(
+                responseHeaders = redactSensitiveHeaders(result.responseHeaders),
+                videoAttrs = redactSensitiveHeaders(result.videoAttrs),
+            ),
+        )
+    }
+
+    /**
+     * 工具结果会原样发给用户配置的任意第三方 LLM 端点：审计轨迹里的 cookies 与
+     * Authorization 等credential 不能跟着出去。敏感值替换为固定占位符——规则若真的
+     * 依赖 cookie，testPlaybackRule 的实播探针会失败暴露出来，用户可在设置页手工补。
+     */
+    private fun sanitizeTraceForModel(trace: NetworkAuditTrace): NetworkAuditTrace =
+        trace.copy(
+            cookies = trace.cookies.mapValues { (_, _) -> REDACTED_VALUE },
+            calls =
+                trace.calls.map { call ->
+                    call.copy(requestHeaders = redactSensitiveHeaders(call.requestHeaders))
+                },
+        )
+
+    private fun redactSensitiveHeaders(headers: Map<String, String>): Map<String, String> =
+        headers.mapValues { (name, value) ->
+            if (name.lowercase().trim() in SENSITIVE_HEADER_NAMES) REDACTED_VALUE else value
+        }
+
+    private companion object {
+        const val REDACTED_VALUE = "__REDACTED__"
+        val SENSITIVE_HEADER_NAMES =
+            setOf("authorization", "cookie", "set-cookie", "x-api-key", "api-key", "token", "proxy-authorization")
     }
 
     suspend fun recordPlaybackRuleFromTrace(
