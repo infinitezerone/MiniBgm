@@ -48,7 +48,7 @@ internal class UpdateRepositoryImpl(
                 hasUpdate = hasUpdate,
                 releaseName = (release.name ?: release.tagName).ifBlank { "v$latestVersion" },
                 releaseNotes = release.body.orEmpty(),
-                releaseUrl = release.htmlUrl,
+                releaseUrl = release.htmlUrl.ifBlank { "https://github.com/infinitezerone/MiniBgm/releases/latest" },
                 downloadUrl = apkAsset?.browserDownloadUrl,
                 downloadSize = apkAsset?.size ?: 0L,
                 publishedAt = release.publishedAt.orEmpty(),

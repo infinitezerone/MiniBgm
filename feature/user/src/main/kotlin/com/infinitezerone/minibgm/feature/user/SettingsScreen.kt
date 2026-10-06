@@ -279,14 +279,19 @@ fun SettingsScreen(
                                     ConfirmDialogAction(
                                         title = "发现新版本 ${info.latestVersion}",
                                         message = message,
-                                        confirmText = "前往下载",
+                                        confirmText = "前往发布页",
                                         dismissText = "暂不更新",
                                         isPrimary = true,
-                                        icon = BgmIcons.Download,
+                                        icon = BgmIcons.OpenInNew,
                                     ),
                                 )
                             if (confirmed) {
-                                openWebUrl(info.downloadUrl ?: info.releaseUrl)
+                                val targetUrl =
+                                    info.releaseUrl.ifBlank {
+                                        info.downloadUrl
+                                            ?: "https://github.com/infinitezerone/MiniBgm/releases/latest"
+                                    }
+                                openWebUrl(targetUrl)
                             }
                         } else {
                             snackbarHostState.showSnackbar(
