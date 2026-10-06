@@ -1155,4 +1155,60 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
         // role 保真：历史轮次只会是 user/assistant
         assertTrue(messages.drop(1).dropLast(1).all { it.role == "user" || it.role == "assistant" })
     }
+
+    @Test
+    fun runPiAgent_publishes_run_stats_to_activity() =
+        runTest {
+            AiToolActivity.clear()
+            val sseTurn1 =
+                """
+                data: {"id":"s1","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"mockTool","arguments":"{}"}}]}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
+
+                data: [DONE]
+
+                """.trimIndent()
+            val sseTurn2 =
+                """
+                data: {"id":"s2","choices":[{"index":0,"delta":{"content":"搞定"},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":8,"total_tokens":28}}
+
+                data: [DONE]
+
+                """.trimIndent()
+            var engineHits = 0
+            val engine =
+                MockEngine { _ ->
+                    engineHits++
+                    respond(
+                        content = if (engineHits == 1) sseTurn1 else sseTurn2,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "text/event-stream"),
+                    )
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            val tool =
+                com.infinitezerone.minibgm.core.ai.tool.bgmTool(
+                    name = "mockTool",
+                    description = "desc",
+                ) { "result" }
+            val result =
+                runPiAgent(
+                    OpenAiWireClient(HttpClient(engine)),
+                    config,
+                    "test prompt",
+                    emptyList(),
+                    com.infinitezerone.minibgm.core.ai.tool
+                        .BgmToolRegistry(listOf(tool)),
+                    maxTurns = 5,
+                )
+            assertEquals("搞定", result)
+            val stats = AiToolActivity.lastRunStats.value
+            assertNotNull(stats, "运行结束必须发布统计")
+            assertEquals(2, stats.turns)
+            assertEquals(1, stats.toolCallCount)
+            assertEquals(1, stats.streamedTurns, "仅最终回复轮有正文流式增量")
+            assertEquals(30L, stats.promptTokens)
+            assertEquals(13L, stats.completionTokens)
+            assertEquals(43L, stats.totalTokens)
+            assertTrue(stats.elapsedMs >= 0)
+        }
 }

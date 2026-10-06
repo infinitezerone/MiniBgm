@@ -280,6 +280,14 @@ internal suspend fun runPiAgent(
 ): String {
     val messages = buildInitialMessages(prompt, sanitizeAndBudgetHistory(history)).toMutableList()
 
+    val runStart = TimeSource.Monotonic.markNow()
+    var executedToolCalls = 0
+    var streamedTurns = 0
+    var promptTokens = 0L
+    var completionTokens = 0L
+    var totalTokens = 0L
+    var sawUsage = false
+
     val toolDefinitions = tools.toDefinitions().ifEmpty { null }
     val json = aiJson
     val effectiveModel = config.model.ifBlank { defaultModel(config) }
@@ -290,6 +298,24 @@ internal suspend fun runPiAgent(
 
     var turns = 0
     val callsSigCounts = mutableMapOf<String, Int>()
+
+    fun publishStats() {
+        val stats =
+            AiRunStats(
+                turns = turns,
+                toolCallCount = executedToolCalls,
+                streamedTurns = streamedTurns,
+                promptTokens = if (sawUsage) promptTokens else null,
+                completionTokens = if (sawUsage) completionTokens else null,
+                totalTokens = if (sawUsage) totalTokens else null,
+                elapsedMs = runStart.elapsedNow().inWholeMilliseconds,
+            )
+        AiToolActivity.publishRunStats(stats)
+        agentLogger.i {
+            "📈 Agent 运行统计: turns=${stats.turns}, tools=${stats.toolCallCount}, streamed=${stats.streamedTurns}, " +
+                "tokens(in/out/total)=${stats.promptTokens ?: "-"}/${stats.completionTokens ?: "-"}/${stats.totalTokens ?: "-"}, elapsed=${stats.elapsedMs}ms"
+        }
+    }
     while (turns++ < maxTurns) {
         val request =
             WireChatRequest(
@@ -339,11 +365,16 @@ internal suspend fun runPiAgent(
         val turnModelElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
         response.usage?.let { usage ->
             if (usage.promptTokens != null || usage.completionTokens != null) {
+                sawUsage = true
+                usage.promptTokens?.let { promptTokens += it }
+                usage.completionTokens?.let { completionTokens += it }
+                usage.totalTokens?.let { totalTokens += it }
                 agentLogger.i {
                     "📊 Turn $turns token 用量: prompt=${usage.promptTokens ?: "?"}, completion=${usage.completionTokens ?: "?"}, total=${usage.totalTokens ?: "?"}"
                 }
             }
         }
+        if (AiToolActivity.streamingText.value != null) streamedTurns++
 
         if (response.error != null && !response.error.message.isNullOrBlank()) {
             agentLogger.e { "❌ Turn $turns 模型返回错误: ${response.error.message}" }
@@ -366,6 +397,7 @@ internal suspend fun runPiAgent(
             throwIfTruncatedEmptyReply(choice, content, reasoning)
             // 正式消息即将由 UI 落成气泡，先撤掉流式预览避免短暂双显示
             AiToolActivity.resetStreamText()
+            publishStats()
             return content.ifBlank { reasoning }
         }
 
@@ -446,6 +478,7 @@ internal suspend fun runPiAgent(
                     }
                 }
             executedCalls++
+            executedToolCalls++
             val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
             val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
             agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (${toolElapsedMs}ms), 结果预览: $resultPreview" }
@@ -461,7 +494,7 @@ internal suspend fun runPiAgent(
     }
 
     agentLogger.w { "⚠️ Agent 轮次结束 (已执行 $turns 轮)，发起最终总结" }
-    return summarizeFinalOutcome(config, wireClient, effectiveModel, messages)
+    return summarizeFinalOutcome(config, wireClient, effectiveModel, messages).also { publishStats() }
 }
 
 /**

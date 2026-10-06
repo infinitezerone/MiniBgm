@@ -22,6 +22,7 @@ object AiToolActivity {
     private val _events = MutableStateFlow<List<AiActivityEvent>>(emptyList())
     private val _current = MutableStateFlow<String?>(null)
     private val _streamingText = MutableStateFlow<String?>(null)
+    private val _lastRunStats = MutableStateFlow<AiRunStats?>(null)
 
     /** 本次运行的活动序列，按发生顺序排列；每次 [clear] 后重置 */
     val events: StateFlow<List<AiActivityEvent>> = _events.asStateFlow()
@@ -35,6 +36,11 @@ object AiToolActivity {
      * 由 UI 落成正式消息气泡。StateFlow 自带合并，高频 token 增量不会淹没收集方。
      */
     val streamingText: StateFlow<String?> = _streamingText.asStateFlow()
+
+    /**
+     * 最近一次完成运行的统计；不随 [clear] 重置——运行结束后 UI/日志仍可读取。
+     */
+    val lastRunStats: StateFlow<AiRunStats?> = _lastRunStats.asStateFlow()
 
     private fun append(text: String) {
         _current.value = text
@@ -69,6 +75,10 @@ object AiToolActivity {
 
     fun resetStreamText() {
         _streamingText.value = null
+    }
+
+    fun publishRunStats(stats: AiRunStats) {
+        _lastRunStats.value = stats
     }
 
     fun clear() {
