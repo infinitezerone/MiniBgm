@@ -17,7 +17,6 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -52,7 +51,9 @@ class OpenAiWireClient(
 
     companion object {
         const val DEFAULT_USER_AGENT = "MiniBgm (Android)"
-        private const val TIMEOUT_MS = 120_000L
+
+        /** 与 AI_SINGLE_TURN_TIMEOUT_MS 对齐：客户端超时大于单轮超时时永远轮不到生效，只会制造困惑 */
+        private const val TIMEOUT_MS = 90_000L
 
         internal fun HttpClientConfig<*>.applyBaseAiConfig() {
             val httpLogger = bgmLogger("Bgm/AiHttp")
@@ -123,9 +124,19 @@ class OpenAiWireClient(
             )
         }
 
-        return json
-            .decodeFromString(WireChatResponse.serializer(), responseText)
-            .normalizeDirtyFields()
+        return try {
+            json
+                .decodeFromString(WireChatResponse.serializer(), responseText)
+                .normalizeDirtyFields()
+        } catch (e: Exception) {
+            // 200 但响应体不是合法 chat.completion JSON（常见于代理把 HTML 错误页当 200 返回）：
+            // 给出可排查的明确报错，而不是掉进通用异常文案让用户摸不着头脑
+            throw IllegalStateException(
+                "AI 端点返回了无法解析的响应（HTTP 200，但不是标准的 chat.completion JSON）：" +
+                    "请确认 Base URL 指向 OpenAI 兼容接口。响应开头：${responseText.take(200)}",
+                e,
+            )
+        }
     }
 
     suspend fun fetchModelsRaw(
@@ -138,10 +149,9 @@ class OpenAiWireClient(
             httpClient.get(modelsUrl) {
                 header(HttpHeaders.UserAgent, userAgent)
                 if (apiKey.isNotBlank()) {
+                    // Gemini 兼容层同样接受 Bearer：密钥一律走 header，不进 URL query——
+                    // URL 会被日志/上报原样记录，query 传 key 有泄漏面
                     header(HttpHeaders.Authorization, "Bearer ${apiKey.trim()}")
-                }
-                if (provider.equals(AiConfig.PROVIDER_GEMINI, ignoreCase = true) && apiKey.isNotBlank()) {
-                    parameter("key", apiKey.trim())
                 }
             }
         val responseText = response.bodyAsText()
