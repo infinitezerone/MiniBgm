@@ -814,4 +814,192 @@ class DefaultBgmAiAgentServiceTest : KoinTest {
             assertEquals(DEFAULT_SUMMARY_FALLBACK, result)
             assertTrue(callCount <= 4)
         }
+
+    @Test
+    fun runPiAgent_reports_invalid_tool_arguments_back_to_model_instead_of_executing() =
+        runTest {
+            val requestBodies = mutableListOf<String>()
+            var requestCount = 0
+            var toolExecutions = 0
+            val engine =
+                MockEngine { request ->
+                    requestCount++
+                    requestBodies.add((request.body as io.ktor.http.content.TextContent).text)
+                    val responseJson =
+                        if (requestCount == 1) {
+                            """
+                            {
+                              "id": "chatcmpl-badargs",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "tool_calls": [
+                                      {
+                                        "id": "call_bad",
+                                        "type": "function",
+                                        "function": {
+                                          "name": "mockTool",
+                                          "arguments": "not-valid-json{{{"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        } else {
+                            """{"id":"chatcmpl-badargs-2","choices":[{"index":0,"message":{"role":"assistant","content":"done"}}]}"""
+                        }
+                    respond(
+                        content = responseJson,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val tool =
+                com.infinitezerone.minibgm.core.ai.tool.bgmTool(
+                    name = "mockTool",
+                    description = "desc",
+                ) { _ ->
+                    toolExecutions++
+                    "result"
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            val result =
+                runPiAgent(
+                    OpenAiWireClient(HttpClient(engine)),
+                    config,
+                    "test prompt",
+                    com.infinitezerone.minibgm.core.ai.tool
+                        .BgmToolRegistry(listOf(tool)),
+                    maxTurns = 5,
+                )
+            assertEquals("done", result)
+            assertEquals(0, toolExecutions, "解析失败的工具调用不应执行")
+            assertTrue(requestBodies.size >= 2)
+            // 解析错误必须回显给模型，否则它永远不知道是自己的入参格式错了
+            assertTrue(requestBodies[1].contains("参数错误"))
+            assertTrue(requestBodies[1].contains("mockTool"))
+        }
+
+    @Test
+    fun runPiAgent_breaks_alternating_tool_loop_before_max_turns() =
+        runTest {
+            var requestCount = 0
+            var toolExecutions = 0
+            val engine =
+                MockEngine { request ->
+                    requestCount++
+                    val query = if (requestCount % 2 == 1) "a" else "b"
+                    val responseJson =
+                        if (requestCount <= 5) {
+                            """
+                            {
+                              "id": "chatcmpl-alternating",
+                              "choices": [
+                                {
+                                  "index": 0,
+                                  "message": {
+                                    "role": "assistant",
+                                    "tool_calls": [
+                                      {
+                                        "id": "call_$query",
+                                        "type": "function",
+                                        "function": {
+                                          "name": "mockTool",
+                                          "arguments": "{\"query\":\"$query\"}"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent()
+                        } else {
+                            """{"id":"chatcmpl-alt-summary","choices":[{"index":0,"message":{"role":"assistant","content":"总结完成"}}]}"""
+                        }
+                    respond(
+                        content = responseJson,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val tool =
+                com.infinitezerone.minibgm.core.ai.tool.bgmTool(
+                    name = "mockTool",
+                    description = "desc",
+                ) { _ ->
+                    toolExecutions++
+                    "result"
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            val result =
+                runPiAgent(
+                    OpenAiWireClient(HttpClient(engine)),
+                    config,
+                    "test prompt",
+                    com.infinitezerone.minibgm.core.ai.tool
+                        .BgmToolRegistry(listOf(tool)),
+                    maxTurns = 10,
+                )
+            // A/B 交替循环在第 5 轮（A 签名第 3 次出现）被截断，而不是跑满 10 轮
+            assertEquals("总结完成", result)
+            assertEquals(6, requestCount, "5 轮循环 + 1 次总结")
+            assertEquals(2, toolExecutions, "仅第 1、2 轮真实执行，重复签名注入引导提示")
+        }
+
+    @Test
+    fun runPiAgent_propagates_outer_timeout_instead_of_single_turn_error() =
+        runTest {
+            val engine =
+                MockEngine { _ ->
+                    kotlinx.coroutines.delay(10_000)
+                    respond(
+                        content = """{"id":"c","choices":[{"index":0,"message":{"role":"assistant","content":"late"}}]}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            assertFailsWith<kotlinx.coroutines.TimeoutCancellationException> {
+                kotlinx.coroutines.withTimeout(100) {
+                    runPiAgent(
+                        OpenAiWireClient(HttpClient(engine)),
+                        config,
+                        "test prompt",
+                        com.infinitezerone.minibgm.core.ai.tool
+                            .BgmToolRegistry(emptyList()),
+                        maxTurns = 3,
+                    )
+                }
+            }
+        }
+
+    @Test
+    fun truncateToolResult_elides_middle_and_keeps_short_results_intact() {
+        assertEquals("ok", truncateToolResult("ok"))
+        val oversized = "a".repeat(TOOL_RESULT_MAX_CHARS + 1)
+        val truncated = truncateToolResult(oversized)
+        assertTrue(truncated.contains("已省略"))
+        assertTrue(truncated.length < TOOL_RESULT_MAX_CHARS + 200)
+        assertTrue(truncated.startsWith("a"))
+        assertTrue(truncated.endsWith("a"))
+    }
+
+    @Test
+    fun summarizeFinalOutcome_rethrows_cancellation() =
+        runTest {
+            val engine =
+                MockEngine { _ ->
+                    throw kotlinx.coroutines.CancellationException("用户停止")
+                }
+            val config = AiConfig(endpoint = "https://api.openai.com/v1", apiKey = STUB_TOKEN)
+            assertFailsWith<kotlinx.coroutines.CancellationException> {
+                summarizeFinalOutcome(config, OpenAiWireClient(HttpClient(engine)), "gpt-4o-mini", emptyList())
+            }
+        }
 }

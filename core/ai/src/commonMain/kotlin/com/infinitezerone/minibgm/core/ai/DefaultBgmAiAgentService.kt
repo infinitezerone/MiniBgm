@@ -16,13 +16,15 @@ import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AiConfig
 import io.ktor.client.HttpClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -156,6 +158,8 @@ class DefaultBgmAiAgentService(
         for (attempt in 1..maxAttempts) {
             try {
                 return effectiveAgentRunner(config, finalPrompt, toolRegistry)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
                 val raw = (e.message ?: "") + (e.cause?.message?.let { " $it" } ?: "")
@@ -166,7 +170,9 @@ class DefaultBgmAiAgentService(
                         (e as? AiEndpointException)?.retryAfterMs
                             ?: extractRetryDelayMs(raw)
                             ?: (attempt * 6000L)
-                    val boundedDelay = delayMs.coerceIn(1000L, 60_000L)
+                    // 退避上限压到 20s：总预算只有 AI_RUN_TIMEOUT_MS（180s），退避过长会让
+                    // 剩余尝试在总超时里根本跑不完，重试形同虚设
+                    val boundedDelay = delayMs.coerceIn(1000L, 20_000L)
                     val delaySec = (boundedDelay / 1000).coerceAtLeast(1)
                     AiToolActivity.reportStatus("AI 触发速率限制（429），等待重试（${delaySec}秒）...")
                     kotlinx.coroutines.delay(boundedDelay)
@@ -260,8 +266,7 @@ internal suspend fun runPiAgent(
     }
 
     var turns = 0
-    var previousCallsSig: String? = null
-    var duplicateCallCount = 0
+    val callsSigCounts = mutableMapOf<String, Int>()
     while (turns++ < maxTurns) {
         val request =
             WireChatRequest(
@@ -278,12 +283,17 @@ internal suspend fun runPiAgent(
         val turnModelStart = TimeSource.Monotonic.markNow()
         val response =
             try {
+                // 切出调用方调度器：网络调用不能落在 runTest 的虚拟时钟上，否则测试会在
+                // 虚拟时间里等满单轮超时；生产上也让阻塞的网络层不占用调用方线程
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     withTimeout(AI_SINGLE_TURN_TIMEOUT_MS) {
                         wireClient.chatCompletion(config, request)
                     }
                 }
             } catch (e: TimeoutCancellationException) {
+                // 外层总超时（AI_RUN_TIMEOUT_MS）与调用方取消同样以 TimeoutCancellationException 到达这里，
+                // 先确认当前协程仍活跃——只有真正属于本轮的超时才翻译成单轮超时文案，否则原样上抛
+                currentCoroutineContext().ensureActive()
                 val turnElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
                 agentLogger.w(e) { "⏱️ Turn $turns 单轮模型请求超时 (${turnElapsedMs}ms, 限制: ${AI_SINGLE_TURN_TIMEOUT_MS}ms)" }
                 throw IllegalStateException(
@@ -293,6 +303,13 @@ internal suspend fun runPiAgent(
             }
 
         val turnModelElapsedMs = turnModelStart.elapsedNow().inWholeMilliseconds
+        response.usage?.let { usage ->
+            if (usage.promptTokens != null || usage.completionTokens != null) {
+                agentLogger.i {
+                    "📊 Turn $turns token 用量: prompt=${usage.promptTokens ?: "?"}, completion=${usage.completionTokens ?: "?"}, total=${usage.totalTokens ?: "?"}"
+                }
+            }
+        }
 
         if (response.error != null && !response.error.message.isNullOrBlank()) {
             agentLogger.e { "❌ Turn $turns 模型返回错误: ${response.error.message}" }
@@ -321,21 +338,37 @@ internal suspend fun runPiAgent(
             "💡 Turn $turns 完成 (${turnModelElapsedMs}ms): 模型决策调用 ${toolCalls.size} 个工具 -> $callsDesc"
         }
 
+        // 死循环防护：按完整调用签名计数，能同时拦住连续重复（A,A,A）与交替循环（A,B,A,B）。
+        // 同一签名第 2 次出现时注入引导提示（不再执行），第 3 次直接跳出循环转入总结。
         val callsSig = toolCalls.joinToString("|") { "${it.function.name}:${it.function.arguments.orEmpty()}" }
-        if (callsSig == previousCallsSig) {
-            duplicateCallCount++
-        } else {
-            duplicateCallCount = 0
-            previousCallsSig = callsSig
-        }
-
-        if (duplicateCallCount >= 2) {
-            agentLogger.w { "⚠️ 检测到连续发起完全相同的工具调用，跳出死循环进行总结" }
+        val sigCount = callsSigCounts.getOrDefault(callsSig, 0) + 1
+        callsSigCounts[callsSig] = sigCount
+        if (sigCount >= 3) {
+            agentLogger.w { "⚠️ 检测到同一工具调用签名已出现 $sigCount 次（含交替循环），跳出死循环进行总结" }
             break
         }
+        val repeatSignature = sigCount >= 2
 
+        var executedCalls = 0
         for (call in toolCalls) {
             val funcName = call.function.name
+            // 正常路径 id 已在解码层归一化；此兜底针对绕过归一化的构造方，合成 id 须全局唯一
+            val toolCallId =
+                @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
+                call.id
+                    ?: "call_${kotlin.uuid.Uuid.random()}"
+
+            if (executedCalls >= MAX_TOOL_CALLS_PER_TURN) {
+                agentLogger.w { "⚠️ Turn $turns 工具调用数超出单轮上限 $MAX_TOOL_CALLS_PER_TURN，[$funcName] 未执行" }
+                messages.add(
+                    WireChatMessage.tool(
+                        toolCallId = toolCallId,
+                        content = "【系统提示】：本轮工具调用数量超出上限（$MAX_TOOL_CALLS_PER_TURN），本次调用未执行。请合并或拆分到后续轮次再调用。",
+                    ),
+                )
+                continue
+            }
+
             // 正常路径 arguments 已在解码层归一化；这里兜底 orEmpty 是对绕过归一化的构造方留余地
             val rawArguments =
                 call.function.arguments
@@ -345,41 +378,46 @@ internal suspend fun runPiAgent(
                 try {
                     json.parseToJsonElement(rawArguments).jsonObject
                 } catch (e: Exception) {
-                    buildJsonObject {}
-                }
+                    // 解析失败必须回显给模型：静默吞成空对象会让工具以空参执行，
+                    // 模型只看到无关报错、换着参数重试，永远不知道是自己的格式错了
+                    agentLogger.w { "⚠️ 工具 [$funcName] 入参解析失败: ${e.message}, raw=${rawArguments.take(80)}" }
+                    messages.add(
+                        WireChatMessage.tool(
+                            toolCallId = toolCallId,
+                            content = "【参数错误】工具 $funcName 的入参不是合法 JSON 对象（${e.message ?: "解析失败"}）。请以合法的 JSON 对象重发该调用。",
+                        ),
+                    )
+                    null
+                } ?: continue
 
             val detailSummary = formatToolCallDetail(argsJson)
             AiToolActivity.report(funcName, detailSummary)
-            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: $rawArguments" }
+            agentLogger.i { "🛠️ 开始执行工具 [$funcName], 入参: ${rawArguments.take(200)}" }
 
             val toolStart = TimeSource.Monotonic.markNow()
             val toolResult =
-                if (duplicateCallCount == 1) {
+                if (repeatSignature) {
                     agentLogger.w { "⚠️ 检测到重复工具调用 [$funcName]，注入引导提示防范死循环" }
-                    "【系统提示】：该工具入参与上一轮完全相同，再次执行不会有新结果。请不要重复提交完全相同的入参；改为更换关键词或调整参数，若已无新信息可基于已知结果直接向用户作答。"
+                    "【系统提示】：该工具入参与之前某一轮完全相同，再次执行不会有新结果。请不要重复提交完全相同的入参；改为更换关键词或调整参数，若已无新信息可基于已知结果直接向用户作答。"
                 } else {
                     try {
                         tools.execute(funcName, argsJson)
-                    } catch (e: kotlinx.coroutines.CancellationException) {
+                    } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         agentLogger.w(e) { "Tool $funcName execution failed: ${e.message}" }
                         "Tool $funcName failed: ${e.message ?: "unknown error"}"
                     }
                 }
+            executedCalls++
             val toolElapsedMs = toolStart.elapsedNow().inWholeMilliseconds
             val resultPreview = toolResult.take(120).replace("\r", "").replace("\n", " ")
             agentLogger.i { "🛠️ 工具 [$funcName] 执行完成 (${toolElapsedMs}ms), 结果预览: $resultPreview" }
 
-            // 正常路径 id 已在解码层归一化；此兜底针对绕过归一化的构造方，合成 id 须全局唯一
-            val toolCallId =
-                @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
-                call.id
-                    ?: "call_${kotlin.uuid.Uuid.random()}"
             messages.add(
                 WireChatMessage.tool(
                     toolCallId = toolCallId,
-                    content = toolResult,
+                    content = truncateToolResult(toolResult),
                 ),
             )
         }
@@ -401,6 +439,25 @@ internal fun throwIfTruncatedEmptyReply(
 ) {
     if (content.isNotBlank() || reasoning.isNotBlank() || choice.finishReason != "length") return
     throw IllegalStateException("模型回复因长度上限被截断（finish_reason=length），请重试、精简提问，或在 AI 设置更换模型。")
+}
+
+/** 单轮允许实际执行的工具调用上限：失控模型一轮塞入几十个调用会瞬间撑爆上下文 */
+internal const val MAX_TOOL_CALLS_PER_TURN = 8
+
+/** 单条工具结果进入模型上下文的上限（字符）：工具结果会随每轮全量重发，超长结果必须裁剪 */
+internal const val TOOL_RESULT_MAX_CHARS = 12_000
+
+/**
+ * 超长工具结果保留首尾、省略中段：首部通常是结构化数据的头部（字段名、前几条记录），
+ * 尾部常带收尾信息；两端信息密度最高。store（PendingActionStore/PlayableSourcesStore）
+ * 拿到的都是裁剪前的完整数据，客户端渲染不受影响。
+ */
+internal fun truncateToolResult(result: String): String {
+    if (result.length <= TOOL_RESULT_MAX_CHARS) return result
+    val headLen = TOOL_RESULT_MAX_CHARS * 3 / 4
+    val tailLen = TOOL_RESULT_MAX_CHARS / 4
+    val omitted = result.length - headLen - tailLen
+    return result.take(headLen) + "\n…【结果过长，中间 $omitted 字符已省略，仅保留首尾】…" + result.takeLast(tailLen)
 }
 
 internal const val DEFAULT_SUMMARY_FALLBACK =
@@ -437,6 +494,9 @@ internal suspend fun summarizeFinalOutcome(
                         ?.trim()
                 }
             }
+        } catch (e: CancellationException) {
+            // 用户停止或总超时触发的取消必须穿透：吞掉会顶着已取消的协程继续跑 fallback 请求
+            throw e
         } catch (_: Exception) {
             null
         }
