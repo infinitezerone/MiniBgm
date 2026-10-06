@@ -7,9 +7,14 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
 import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
+import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.SiteLink
+import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.SubjectImages
+import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
+import com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto
 import kotlinx.serialization.json.Json
 
 /**
@@ -185,50 +190,42 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
     )
 }
 
-internal fun com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto.toSubject(): com.infinitezerone.minibgm.core.model.Subject {
-    val effectiveFormat = format.ifBlank { "TV" }
+internal fun extractSubjectTags(
+    genres: List<String>,
+    tags: List<String>,
+    isAdult: Boolean,
+): List<Tag> {
     val rawTags = (genres + tags).distinct().toMutableList()
     if (isAdult && rawTags.none { it.equals("Hentai", ignoreCase = true) }) {
         rawTags.add("Hentai")
     }
+    return rawTags.map { Tag(name = it, count = 1) }
+}
 
-    val finalTags =
-        rawTags.map {
-            com.infinitezerone.minibgm.core.model
-                .Tag(name = it, count = 1)
-        }
+internal fun toSubjectImages(coverUrl: String?): SubjectImages? {
+    if (coverUrl.isNullOrBlank()) return null
+    return SubjectImages(
+        large = coverUrl,
+        common = coverUrl,
+        medium = coverUrl,
+        small = coverUrl,
+        grid = coverUrl,
+    )
+}
 
-    val cover = coverUrl
-    val images =
-        if (!cover.isNullOrBlank()) {
-            com.infinitezerone.minibgm.core.model.SubjectImages(
-                large = cover,
-                common = cover,
-                medium = cover,
-                small = cover,
-                grid = cover,
-            )
-        } else {
-            null
-        }
-
-    return com.infinitezerone.minibgm.core.model.Subject(
+internal fun SeasonSnapshotItemDto.toSubject(): Subject {
+    val effectiveFormat = format.ifBlank { "TV" }
+    return Subject(
         id = bgmId ?: -anilistId,
         type = 2,
         name = title,
         nameCn = titleCn.orEmpty(),
-        images = images,
-        rating =
-            if (ratingScore > 0.0) {
-                com.infinitezerone.minibgm.core.model
-                    .Rating(score = ratingScore)
-            } else {
-                null
-            },
+        images = toSubjectImages(coverUrl),
+        rating = if (ratingScore > 0.0) Rating(score = ratingScore) else null,
         airDate = airDate.orEmpty(),
         date = airDate.orEmpty(),
         eps = episodes,
-        tags = finalTags,
+        tags = extractSubjectTags(genres, tags, isAdult),
         metaTags = listOf(effectiveFormat),
         platform = effectiveFormat,
     )
