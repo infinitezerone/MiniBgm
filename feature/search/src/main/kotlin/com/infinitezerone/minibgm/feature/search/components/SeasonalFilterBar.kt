@@ -191,6 +191,49 @@ fun SeasonalFilterBar(
                 onClick = onClearSelectedTags,
             )
 
+            // 全部标签与即时搜索展开入口（前置常驻，免去向右滑动到底的痛点）
+            val activeTagsCount = uiState.selectedTags.size + uiState.excludedTags.size
+            Surface(
+                onClick = { showAddTagSheet = true },
+                shape = RoundedCornerShape(8.dp),
+                color =
+                    if (activeTagsCount > 0) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                modifier = Modifier.height(34.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.FilterList,
+                        contentDescription = "全部题材与标签筛选",
+                        modifier = Modifier.size(15.dp),
+                        tint =
+                            if (activeTagsCount > 0) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                    )
+                    Text(
+                        text = if (activeTagsCount > 0) "全部标签 ($activeTagsCount)" else "全部标签",
+                        style = MaterialTheme.typography.labelSmall,
+                        color =
+                            if (activeTagsCount > 0) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+
             // 1. 常驻展示用户的偏好标签（若有）
             uiState.customFilterTags.forEach { tag ->
                 val chipState =
