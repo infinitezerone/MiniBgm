@@ -223,26 +223,25 @@ class SeasonalGuideViewModel(
                 scheduleRepository.getAllSchedulesStream(),
                 settingsRepository?.settings?.map { it.showRestrictedContent } ?: flowOf(false),
             ) { pages, query, mode, allSchedules, showRestricted ->
-                val (seasonStartDay, _) = query.quarter.getAirDateRange(query.year)
+                val (seasonStartDay, seasonEndDay) = query.quarter.getAirDateRange(query.year)
                 val isCurrent = query.year == stateTemplate.currentYear && query.quarter == stateTemplate.currentQuarter
                 val allowsRestricted = showRestricted || query.tags.any { it in setOf("里番", "R18", "18禁") }
 
-                // 提取当季跨季在播番剧（首播早于本季起始，且活跃在播）
-                val continuingSchedules =
+                // 提取当季排期条目（AniList 本地第一数据源：涵盖当季首播新番与跨季在播番）
+                val validSeasonSchedules =
                     if (isCurrent) {
                         allSchedules.filter { sched ->
-                            sched.airDate.isNotBlank() &&
-                                sched.airDate < seasonStartDay &&
-                                !sched.isUnmapped &&
+                            !sched.isUnmapped &&
                                 sched.bgmId > 0 &&
-                                (allowsRestricted || !sched.isAdult)
+                                (allowsRestricted || !sched.isAdult) &&
+                                (sched.airDate.isBlank() || sched.airDate <= seasonEndDay)
                         }
                     } else {
                         emptyList()
                     }
 
-                val continuingSubjects =
-                    continuingSchedules.map { sched ->
+                val localSeasonSubjects =
+                    validSeasonSchedules.map { sched ->
                         val tags = if (sched.isAdult) listOf(Tag("里番", 1), Tag("R18", 1)) else emptyList()
                         val metaTags = mutableListOf("日本")
                         val effectiveFormat = sched.format.ifBlank { "TV" }
@@ -279,8 +278,8 @@ class SeasonalGuideViewModel(
                     }
 
                 // 产地、形式与标签过滤
-                val filteredContinuing =
-                    continuingSubjects.filter { sub ->
+                val filteredLocalSubjects =
+                    localSeasonSubjects.filter { sub ->
                         val originMatch =
                             when (query.origin) {
                                 SeasonOriginFilter.ALL -> true
@@ -290,7 +289,7 @@ class SeasonalGuideViewModel(
                         val formMatch =
                             when (query.form) {
                                 SeasonFormFilter.ALL -> true
-                                SeasonFormFilter.MOVIE -> sub.metaTags.contains("剧场版")
+                                SeasonFormFilter.MOVIE -> sub.metaTags.contains("剧场版") || sub.platform.equals("MOVIE", ignoreCase = true)
                             }
                         val tagMatch =
                             if (query.tags.isEmpty()) {
@@ -302,19 +301,35 @@ class SeasonalGuideViewModel(
                         originMatch && formMatch && tagMatch
                     }
 
-                // 根据放送范围合并条目池
+                // 依据播出范围（全部 / 仅首播 / 仅续播）划分本地条目
+                val scopedLocalSubjects =
+                    filteredLocalSubjects.filter { sub ->
+                        val isNew = sub.airDate.isBlank() || (sub.airDate >= seasonStartDay && sub.airDate <= seasonEndDay)
+                        val isContinuing = sub.airDate.isNotBlank() && sub.airDate < seasonStartDay
+                        when (query.airingScope) {
+                            SeasonAiringScope.ALL -> true
+                            SeasonAiringScope.NEW_ONLY -> isNew
+                            SeasonAiringScope.CONTINUING_ONLY -> isContinuing
+                        }
+                    }
+
+                // 条目池合并：当季优先以 AniList 本地数据为第一源；若有网络分页条目则平滑补全去重
+                val isLocalPrimary = isCurrent && localSeasonSubjects.isNotEmpty()
                 val pooledSubjects =
-                    when (query.airingScope) {
-                        SeasonAiringScope.NEW_ONLY -> pages.subjects
-                        SeasonAiringScope.CONTINUING_ONLY -> filteredContinuing
-                        SeasonAiringScope.ALL -> {
-                            if (filteredContinuing.isEmpty()) {
-                                pages.subjects
+                    if (isLocalPrimary) {
+                        val localIds = scopedLocalSubjects.map { it.id }.toSet()
+                        val remoteAdditions =
+                            if (query.airingScope == SeasonAiringScope.CONTINUING_ONLY) {
+                                emptyList()
                             } else {
-                                val existingIds = pages.subjects.map { it.id }.toSet()
-                                val addition = filteredContinuing.filter { it.id !in existingIds }
-                                pages.subjects + addition
+                                pages.subjects.filter { it.id !in localIds }
                             }
+                        scopedLocalSubjects + remoteAdditions
+                    } else {
+                        when (query.airingScope) {
+                            SeasonAiringScope.NEW_ONLY -> pages.subjects
+                            SeasonAiringScope.CONTINUING_ONLY -> emptyList()
+                            SeasonAiringScope.ALL -> pages.subjects
                         }
                     }
 
@@ -328,7 +343,7 @@ class SeasonalGuideViewModel(
                             )
                         }
                         SeasonSortOption.HEAT -> {
-                            if (query.airingScope == SeasonAiringScope.NEW_ONLY || filteredContinuing.isEmpty()) {
+                            if (!isLocalPrimary && query.airingScope == SeasonAiringScope.NEW_ONLY) {
                                 pooledSubjects
                             } else {
                                 pooledSubjects.sortedWith(
@@ -339,7 +354,10 @@ class SeasonalGuideViewModel(
                         }
                     }
 
-                val continuingNextEpMap = continuingSchedules.associate { it.bgmId to it.nextEpisodeNumber }
+                val continuingNextEpMap =
+                    validSeasonSchedules
+                        .filter { it.airDate.isNotBlank() && it.airDate < seasonStartDay }
+                        .associate { it.bgmId to it.nextEpisodeNumber }
 
                 stateTemplate.copy(
                     selectedYear = query.year,
@@ -350,15 +368,15 @@ class SeasonalGuideViewModel(
                     selectedTags = query.tags,
                     selectedAiringScope = query.airingScope,
                     continuingNextEpisodes = continuingNextEpMap,
-                    seasonalHotTags = extractHotTags(pages.subjects),
+                    seasonalHotTags = extractHotTags(pooledSubjects),
                     viewMode = mode,
                     subjects = sortedSubjects,
-                    pageOffset = pages.pageOffset,
-                    hasMore = pages.hasMore,
-                    isLoading = pages.isLoading,
+                    pageOffset = if (isLocalPrimary) pooledSubjects.size else pages.pageOffset,
+                    hasMore = if (isLocalPrimary) false else pages.hasMore,
+                    isLoading = if (isLocalPrimary) false else pages.isLoading,
                     isRefreshing = pages.isRefreshing,
-                    isLoadingMore = pages.isLoadingMore,
-                    error = pages.error,
+                    isLoadingMore = if (isLocalPrimary) false else pages.isLoadingMore,
+                    error = if (isLocalPrimary) null else pages.error,
                 )
             },
             combine(

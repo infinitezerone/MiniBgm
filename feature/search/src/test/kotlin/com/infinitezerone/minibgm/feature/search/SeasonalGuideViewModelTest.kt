@@ -1007,4 +1007,66 @@ class SeasonalGuideViewModelTest {
             state = viewModel.uiState.value
             assertEquals(0, state.subjects.size)
         }
+
+    @Test
+    fun currentSeason_localAniListIsPrimarySource_includesUnairedSeasonalAdultAnime() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            // 模拟网络搜索未返回或被服务端过滤
+            searchRepository.advancedSearchResult = AppResult.Success(emptyList())
+            searchRepository.advancedSearchTotal = 0
+
+            val scheduleRepository = FakeScheduleRepository()
+            val unairedAdultAnime =
+                AirSchedule(
+                    bgmId = 575204,
+                    title = "シスターブリーダー",
+                    titleCn = "姐妹调教饲育者",
+                    // 2026年3月上旬开播（当季内，尚未播出）
+                    airDate = "2026-03-06",
+                    ratingScore = 0.0,
+                    nextEpisodeNumber = 1,
+                    weekday = 5,
+                    isAdult = true,
+                    format = "OVA",
+                )
+            val regularNewAnime =
+                AirSchedule(
+                    bgmId = 301,
+                    title = "葬送的芙莉莲",
+                    titleCn = "葬送的芙莉莲",
+                    airDate = "2026-01-16",
+                    ratingScore = 9.2,
+                    nextEpisodeNumber = 1,
+                    weekday = 5,
+                    isAdult = false,
+                    format = "TV",
+                )
+            scheduleRepository.sendSchedules(1, listOf(unairedAdultAnime, regularNewAnime))
+
+            val viewModel =
+                createViewModel(
+                    searchRepository = searchRepository,
+                    scheduleRepository = scheduleRepository,
+                )
+            advanceUntilIdle()
+
+            // 本地 AniList 作为第一数据源，秒开（isLoading == false）
+            var state = viewModel.uiState.value
+            assertFalse(state.isLoading)
+            assertFalse(state.hasMore)
+            // 默认只展示常规新番
+            assertEquals(1, state.subjects.size)
+            assertEquals(301L, state.subjects[0].id)
+
+            // 选择「里番」标签：命中当季未开播里番
+            viewModel.toggleTag("里番")
+            advanceUntilIdle()
+
+            state = viewModel.uiState.value
+            assertEquals(1, state.subjects.size)
+            assertEquals(575204L, state.subjects[0].id)
+            assertEquals("姐妹调教饲育者", state.subjects[0].nameCn)
+            assertEquals("2026-03-06", state.subjects[0].airDate)
+        }
 }
