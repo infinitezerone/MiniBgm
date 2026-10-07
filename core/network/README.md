@@ -3,10 +3,9 @@
 ## 🎯 模块职责
 负责应用与外部网络的通信交互，包括：
 1. Bangumi REST v0 API 调用；
-2. bangumi-data CDN 数据抓取（作为跨平台关系与播放链接字典）；
-3. AniList GraphQL 逐话真实播出时刻查询 (`AniListService`)；
-4. Bilibili Web API 逐话真实 `pub_time` 查询 (`BilibiliService`)；
-5. 经 Cloudflare Worker 代理的 OAuth Token 交换与刷新。
+2. 放送时刻表与季度片单快照拉取（minibgm-schedule-data）；
+3. 经 Cloudflare Worker 代理的 OAuth Token 交换与刷新；
+4. 社区论坛与第三方网页解析。
 
 ## 🏛️ 依赖关系
 * **依赖的上游**：`:core:model`, `:core:common`

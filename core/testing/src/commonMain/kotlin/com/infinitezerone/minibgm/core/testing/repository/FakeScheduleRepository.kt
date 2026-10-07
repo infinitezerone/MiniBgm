@@ -90,7 +90,6 @@ class FakeScheduleRepository : ScheduleRepository {
     }
 
     override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
-        // 全量管线现在就是 syncBangumiData（AniList 周排期 + 按需月切片）
         refreshAllCalls += 1
         refreshCallCount++
         syncBangumiDataCallCount++

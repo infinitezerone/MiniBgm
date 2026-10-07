@@ -4,8 +4,6 @@ import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BangumiApiServiceImpl
 import com.infinitezerone.minibgm.core.network.BangumiCommunityService
 import com.infinitezerone.minibgm.core.network.BangumiCommunityServiceImpl
-import com.infinitezerone.minibgm.core.network.BangumiDataService
-import com.infinitezerone.minibgm.core.network.BangumiDataServiceImpl
 import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.BgmTokenPair
@@ -74,7 +72,6 @@ fun networkModule(
             )
         }
         single<BangumiApiService> { BangumiApiServiceImpl(client = get(), authConfig = get()) }
-        single<BangumiDataService> { BangumiDataServiceImpl(get(named("unauthenticated"))) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<ScheduleSnapshotService> { ScheduleSnapshotServiceImpl(get(named("unauthenticated"))) }
         single<PageFetchService> { PageFetchServiceImpl(get(named("unauthenticated"))) }

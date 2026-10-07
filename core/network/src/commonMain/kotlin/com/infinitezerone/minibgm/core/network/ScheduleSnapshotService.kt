@@ -183,7 +183,7 @@ internal class ScheduleSnapshotServiceImpl(
     }
 }
 
-// ---------- 快照 → 排期管线的桥接载体（原 AniListService 域模型，语义不变） ----------
+// ---------- 快照 → 排期管线的桥接载体 ----------
 
 /** AniList 逐话播出排期节点 */
 data class AniListAiringEpisode(
@@ -208,7 +208,7 @@ data class AniListWeeklyScheduleItem(
     val titleRomaji: String = "",
     val coverUrl: String? = null,
     val format: String = "",
-    /** 条目开播年（0 = AniList 未提供）；用于按需定位 bangumi-data 的 begin 月切片 */
+    /** 条目开播年（0 = AniList 未提供） */
     val startYear: Int = 0,
     /** 条目开播月（0/13 = 未知） */
     val startMonth: Int = 0,

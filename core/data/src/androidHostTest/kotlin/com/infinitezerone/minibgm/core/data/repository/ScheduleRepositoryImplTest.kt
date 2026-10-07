@@ -11,8 +11,6 @@ import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
 import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.model.AirEventKind
 import com.infinitezerone.minibgm.core.model.AirSchedule
-import com.infinitezerone.minibgm.core.model.BangumiDataItem
-import com.infinitezerone.minibgm.core.model.BangumiDataSite
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
@@ -24,14 +22,12 @@ import com.infinitezerone.minibgm.core.network.AniListAiringEpisode
 import com.infinitezerone.minibgm.core.network.AniListMediaSchedule
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.BangumiApiService
-import com.infinitezerone.minibgm.core.network.BangumiDataMonthResult
-import com.infinitezerone.minibgm.core.network.BangumiDataResult
-import com.infinitezerone.minibgm.core.network.BangumiDataService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotEpisodeDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotResult
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
+import com.infinitezerone.minibgm.core.network.ScheduleSnapshotSiteDto
 import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
@@ -175,7 +171,8 @@ class ScheduleRepositoryImplTest {
         var weeklySchedules: List<AniListWeeklyScheduleItem> = emptyList()
         var bgmIdByAnilistId: Map<Long, Long> = emptyMap()
         var titleCnByAnilistId: Map<Long, String> = emptyMap()
-        var dataService: FakeBangumiDataService? = null
+        var airDateByAnilistId: Map<Long, String> = emptyMap()
+        var sitesByAnilistId: Map<Long, List<ScheduleSnapshotSiteDto>> = emptyMap()
         var customSnapshot: ScheduleSnapshotDto? = null
         var snapshot: ScheduleSnapshotDto?
             get() = customSnapshot
@@ -217,25 +214,10 @@ class ScheduleRepositoryImplTest {
                     items =
                         episodesById.map { (id, eps) ->
                             val m = meta[id]
-                            val mappedItem =
-                                dataService?.let { ds ->
-                                    (ds.dataResult as? BangumiDataResult.Success)?.items?.firstOrNull { item ->
-                                        item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
-                                    } ?: ds.monthItems.values.flatMap { it.first }.firstOrNull { item ->
-                                        item.sites.any { it.site.equals("anilist", ignoreCase = true) && it.id == id.toString() }
-                                    }
-                                }
-                            val bgmId = bgmIdByAnilistId[id] ?: mappedItem?.bgmSubjectId
-                            val titleCn = titleCnByAnilistId[id] ?: mappedItem?.chineseTitle
-                            val airDate = mappedItem?.begin?.substringBefore("T")
-                            val sites =
-                                mappedItem?.sites?.map {
-                                    com.infinitezerone.minibgm.core.network.ScheduleSnapshotSiteDto(
-                                        site = it.site,
-                                        id = it.id,
-                                        url = it.url,
-                                    )
-                                } ?: emptyList()
+                            val bgmId = bgmIdByAnilistId[id]
+                            val titleCn = titleCnByAnilistId[id]
+                            val airDate = airDateByAnilistId[id]
+                            val sites = sitesByAnilistId[id] ?: emptyList()
                             ScheduleSnapshotItemDto(
                                 anilistId = id,
                                 bgmId = bgmId,
@@ -333,38 +315,6 @@ class ScheduleRepositoryImplTest {
         ) = error("Not implemented")
     }
 
-    private class FakeBangumiDataService : BangumiDataService {
-        var dataResult: BangumiDataResult = BangumiDataResult.NotModified
-        var calledEtag: String? = null
-        var callCount: Int = 0
-
-        /** `YYYY-MM` → 该月条目与 ETag */
-        var monthItems: Map<String, Pair<List<BangumiDataItem>, String?>> = emptyMap()
-        val requestedMonths: MutableList<String> = mutableListOf()
-
-        override suspend fun getBangumiData(etag: String?): BangumiDataResult {
-            callCount++
-            calledEtag = etag
-            return dataResult
-        }
-
-        override suspend fun getMonthItems(
-            year: Int,
-            month: Int,
-            etag: String?,
-        ): BangumiDataMonthResult {
-            val key = "$year-${month.toString().padStart(2, '0')}"
-            requestedMonths += key
-            monthItems[key]?.let { return BangumiDataMonthResult.Success(it.first, it.second) }
-            // 旧测试只设置 dataResult：把全量结果当作任意月切片返回，避免逐个改写旧用例
-            val legacy = dataResult as? BangumiDataResult.Success
-            if (legacy != null && legacy.items.isNotEmpty()) {
-                return BangumiDataMonthResult.Success(legacy.items, legacy.etag)
-            }
-            return BangumiDataMonthResult.NotFound
-        }
-    }
-
     private class FakeAniListMappingDao : AniListMappingDao {
         val mappings = MutableStateFlow<List<AniListBgmMappingEntity>>(emptyList())
         val monthEtags = mutableMapOf<String, BangumiDataMonthEtagEntity>()
@@ -390,16 +340,14 @@ class ScheduleRepositoryImplTest {
 
     private fun createRepository(
         apiService: FakeBangumiApiService = FakeBangumiApiService(),
-        dataService: FakeBangumiDataService = FakeBangumiDataService(),
         scheduleDao: FakeAirScheduleDao = FakeAirScheduleDao(),
         airEventDao: FakeAirEventDao = FakeAirEventDao(),
         anilistMappingDao: FakeAniListMappingDao = FakeAniListMappingDao(),
         snapshotService: FakeScheduleSnapshotService = FakeScheduleSnapshotService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
         collectionRepository: CollectionRepository? = null,
-    ): ScheduleRepositoryImpl {
-        snapshotService.dataService = dataService
-        return ScheduleRepositoryImpl(
+    ): ScheduleRepositoryImpl =
+        ScheduleRepositoryImpl(
             scheduleDao = scheduleDao,
             airEventDao = airEventDao,
             anilistMappingDao = anilistMappingDao,
@@ -407,7 +355,6 @@ class ScheduleRepositoryImplTest {
             userPreferences = userPreferences,
             collectionRepository = collectionRepository,
         )
-    }
 
     @Test
     fun syncBangumiData_updatesRoomOnSuccess() =
@@ -499,42 +446,10 @@ class ScheduleRepositoryImplTest {
     @Test
     fun syncBangumiData_mapsUnmappedWeeklyAnimeViaOnDemandMonthFile() =
         runTest {
-            // 新模型：名单不再由 bgm-data 窗口补齐；网播番 633836 由 AniList 周排期发现，
-            // 再按条目 startDate 拉 bangumi-data 月切片（sites 桥）映射出 bgmId 并入库。
             val beginMillis = TimeUtils.nowEpochMillis() - 10 * DAY_MILLIS
             val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
             val (currentYear, currentMonth) = TimeUtils.currentCstYearMonth()
 
-            val apiService =
-                FakeBangumiApiService().apply {
-                }
-            val dataService =
-                FakeBangumiDataService().apply {
-                    dataResult =
-                        BangumiDataResult.Success(
-                            items =
-                                listOf(
-                                    BangumiDataItem(
-                                        title = "無職転生 III",
-                                        titleTranslate = mapOf("zh-Hans" to listOf("无职转生 第三季")),
-                                        begin = beginIso,
-                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "1001")),
-                                    ),
-                                    BangumiDataItem(
-                                        title = "Re:ゼロから始める異世界生活 4th season 奪還編",
-                                        titleTranslate = mapOf("zh-Hans" to listOf("Re：从零开始的异世界生活 第四季 夺还篇")),
-                                        begin = beginIso,
-                                        sites =
-                                            listOf(
-                                                BangumiDataSite(site = "bangumi", id = "633836"),
-                                                BangumiDataSite(site = "anilist", id = "189046"),
-                                                BangumiDataSite(site = "gamer", id = "144453"),
-                                            ),
-                                    ),
-                                ),
-                            etag = "W/\"etag-webonly\"",
-                        )
-                }
             val anilist =
                 FakeScheduleSnapshotService().apply {
                     weeklySchedules =
@@ -548,16 +463,25 @@ class ScheduleRepositoryImplTest {
                                 startMonth = currentMonth,
                             ),
                         )
+                    bgmIdByAnilistId = mapOf(189046L to 633836L)
+                    titleCnByAnilistId = mapOf(189046L to "Re：从零开始的异世界生活 第四季 夺还篇")
+                    airDateByAnilistId = mapOf(189046L to beginIso.substringBefore("T"))
+                    sitesByAnilistId =
+                        mapOf(
+                            189046L to
+                                listOf(
+                                    ScheduleSnapshotSiteDto(site = "bangumi", id = "633836"),
+                                    ScheduleSnapshotSiteDto(site = "anilist", id = "189046"),
+                                    ScheduleSnapshotSiteDto(site = "gamer", id = "144453"),
+                                ),
+                        )
                 }
             val dao = FakeAirScheduleDao()
             val userPrefs = createTestUserPreferencesDataSource()
 
             val repo =
                 createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
                     scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
                     userPreferences = userPrefs,
                 )
@@ -584,44 +508,11 @@ class ScheduleRepositoryImplTest {
     fun syncBangumiData_mapsLongRunningAnimeBeyondMonthWindowViaStartDate() =
         runTest {
             val nowMillis = TimeUtils.nowEpochMillis()
-            // 开播 192 天（超出旧 90 天窗口）但仍周更：靠 AniList startDate 定位到老月切片
             val beginMillis = nowMillis - 192 * DAY_MILLIS
-            val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
             val beginDate = TimeUtils.formatEpochSecondsToDate(beginMillis / 1000)
             val beginYear = beginDate.substring(0, 4).toInt()
             val beginMonth = beginDate.substring(5, 7).toInt()
 
-            val dataService =
-                FakeBangumiDataService().apply {
-                    dataResult =
-                        BangumiDataResult.Success(
-                            items =
-                                listOf(
-                                    // 长档番：开播 192 天（超出旧窗口）但仍在周更
-                                    BangumiDataItem(
-                                        title = "スティール・ボール・ラン ジョジョの奇妙な冒険",
-                                        titleTranslate = mapOf("zh-Hans" to listOf("飙马野郎 JOJO的奇妙冒险")),
-                                        begin = beginIso,
-                                        sites =
-                                            listOf(
-                                                BangumiDataSite(site = "bangumi", id = "551918"),
-                                                BangumiDataSite(site = "anilist", id = "210482"),
-                                            ),
-                                    ),
-                                    // 不在 AniList 周排期的已完结条目：不应被收录
-                                    BangumiDataItem(
-                                        title = "終わった番組",
-                                        begin = beginIso,
-                                        end = TimeUtils.isoUtcFromEpochMillis(nowMillis - 150 * DAY_MILLIS),
-                                        sites = listOf(BangumiDataSite(site = "bangumi", id = "551919")),
-                                    ),
-                                ),
-                            etag = "W/\"etag-longrunning\"",
-                        )
-                }
-            val apiService =
-                FakeBangumiApiService().apply {
-                }
             val anilist =
                 FakeScheduleSnapshotService().apply {
                     weeklySchedules =
@@ -635,15 +526,15 @@ class ScheduleRepositoryImplTest {
                                 startMonth = beginMonth,
                             ),
                         )
+                    bgmIdByAnilistId = mapOf(210482L to 551918L)
+                    titleCnByAnilistId = mapOf(210482L to "飙马野郎 JOJO的奇妙冒险")
+                    airDateByAnilistId = mapOf(210482L to beginDate)
                 }
             val dao = FakeAirScheduleDao()
 
             val repo =
                 createRepository(
-                    apiService = apiService,
-                    dataService = dataService,
                     scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
@@ -784,7 +675,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -866,7 +756,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -912,7 +801,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1058,7 +946,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -1131,7 +1018,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -1203,7 +1089,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -1254,7 +1139,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1306,7 +1190,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1328,7 +1211,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = FakeAirScheduleDao(),
                     airEventDao = FakeAirEventDao(),
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1410,7 +1292,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1475,7 +1356,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1539,7 +1419,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -1616,7 +1495,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -1764,7 +1642,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = FakeScheduleSnapshotService(),
@@ -1834,7 +1711,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -1920,7 +1796,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = airEventDao,
                     snapshotService = anilist,
@@ -2061,7 +1936,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = FakeBangumiApiService(),
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = FakeScheduleSnapshotService(),
@@ -2114,7 +1988,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2229,7 +2102,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2284,7 +2156,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2337,7 +2208,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2388,7 +2258,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2451,7 +2320,6 @@ class ScheduleRepositoryImplTest {
             val repo =
                 createRepository(
                     apiService = apiService,
-                    dataService = FakeBangumiDataService(),
                     scheduleDao = dao,
                     airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
@@ -2468,65 +2336,36 @@ class ScheduleRepositoryImplTest {
     @Test
     fun syncBangumiData_appliesSplitCourOffset_replacingRawWeeklyEpisode() =
         runTest {
-            val nowMillis = TimeUtils.nowEpochMillis()
-            val beginMillis = nowMillis - 2 * DAY_MILLIS
+            val beginMillis = TimeUtils.nowEpochMillis()
             val beginIso = TimeUtils.isoUtcFromEpochMillis(beginMillis)
-            val (currentYear, currentMonth) = TimeUtils.currentCstYearMonth()
+
             val anilist =
                 FakeScheduleSnapshotService().apply {
-                    weeklySchedules =
-                        listOf(
-                            AniListWeeklyScheduleItem(
-                                anilistId = 111L,
-                                episode = 13,
-                                airAtEpochSeconds = TimeUtils.cstWeekStartEpochMillis(nowMillis) / 1000 + 12 * 3600,
-                                titleNative = "分割クール作品",
-                                startYear = currentYear,
-                                startMonth = currentMonth,
-                            ),
-                        )
-                    // AniList 整季连续编号：第 13 话 = Bangumi 第二季第 1 话
-                    mediaSchedules =
+                    schedules =
                         mapOf(
                             111L to
-                                AniListMediaSchedule(
-                                    episodes =
-                                        (1..13).map { ep ->
-                                            AniListAiringEpisode(
-                                                episode = ep,
-                                                airAtEpochSeconds = (beginMillis - (13 - ep) * 7 * DAY_MILLIS) / 1000,
-                                            )
-                                        },
-                                ),
+                                (1..13).map { ep ->
+                                    AniListAiringEpisode(
+                                        episode = ep,
+                                        airAtEpochSeconds = (beginMillis - (13 - ep) * 7 * DAY_MILLIS) / 1000,
+                                    )
+                                },
                         )
-                }
-            val dataService =
-                FakeBangumiDataService().apply {
-                    monthItems =
+                    bgmIdByAnilistId = mapOf(111L to 222L)
+                    airDateByAnilistId = mapOf(111L to beginIso.substringBefore("T"))
+                    sitesByAnilistId =
                         mapOf(
-                            "$currentYear-${currentMonth.toString().padStart(2, '0')}" to
-                                (
-                                    listOf(
-                                        BangumiDataItem(
-                                            title = "分割クール作品",
-                                            begin = beginIso,
-                                            sites =
-                                                listOf(
-                                                    BangumiDataSite(site = "bangumi", id = "222"),
-                                                    BangumiDataSite(site = "anilist", id = "111"),
-                                                ),
-                                        ),
-                                    ) to "W/\"x\""
+                            111L to
+                                listOf(
+                                    ScheduleSnapshotSiteDto(site = "bangumi", id = "222"),
+                                    ScheduleSnapshotSiteDto(site = "anilist", id = "111"),
                                 ),
                         )
                 }
             val dao = FakeAirScheduleDao()
             val repo =
                 createRepository(
-                    apiService = FakeBangumiApiService(),
-                    dataService = dataService,
                     scheduleDao = dao,
-                    airEventDao = FakeAirEventDao(),
                     snapshotService = anilist,
                     userPreferences = createTestUserPreferencesDataSource(),
                 )
