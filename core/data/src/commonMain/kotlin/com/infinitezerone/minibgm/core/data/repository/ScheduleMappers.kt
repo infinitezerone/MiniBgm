@@ -15,7 +15,6 @@ import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.network.AniListWeeklyScheduleItem
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotItemDto
-import com.infinitezerone.minibgm.core.network.SeasonSnapshotItemDto
 import kotlinx.serialization.json.Json
 
 /**
@@ -196,7 +195,7 @@ internal fun extractSubjectTags(
     isAdult: Boolean,
 ): List<Tag> {
     val rawTags = (genres + tags).distinct().toMutableList()
-    if (isAdult && rawTags.none { it.equals("Hentai", ignoreCase = true) }) {
+    if (isAdult && rawTags.none { it.equals("Hentai", ignoreCase = true) || it == "里番" }) {
         rawTags.add("Hentai")
     }
     return rawTags.map { Tag(name = it, count = 1) }
@@ -213,7 +212,7 @@ internal fun toSubjectImages(coverUrl: String?): SubjectImages? {
     )
 }
 
-internal fun SeasonSnapshotItemDto.toSubject(): Subject? {
+internal fun ScheduleSnapshotItemDto.toSubject(): Subject? {
     val validBgmId = bgmId?.takeIf { it > 0 } ?: return null
     val effectiveFormat = format.ifBlank { "TV" }
     val effectiveOrigin =
@@ -222,6 +221,8 @@ internal fun SeasonSnapshotItemDto.toSubject(): Subject? {
             "JP" -> "日本"
             else -> null
         }
+    val effectiveAirDate = airDate ?: snapshotAirDateOf(this)
+    val effectiveEps = if (totalEpisodes > 0) totalEpisodes else episodes.size
     return Subject(
         id = validBgmId,
         type = 2,
@@ -230,9 +231,9 @@ internal fun SeasonSnapshotItemDto.toSubject(): Subject? {
         images = toSubjectImages(coverUrl),
         rating = if (ratingScore > 0.0) Rating(score = ratingScore) else null,
         collection = if (popularity > 0) CollectionCount(doing = popularity) else null,
-        airDate = airDate.orEmpty(),
-        date = airDate.orEmpty(),
-        eps = episodes,
+        airDate = effectiveAirDate,
+        date = effectiveAirDate,
+        eps = effectiveEps,
         tags = extractSubjectTags(genres, tags, isAdult),
         metaTags = listOfNotNull(effectiveFormat, effectiveOrigin),
         platform = effectiveFormat,

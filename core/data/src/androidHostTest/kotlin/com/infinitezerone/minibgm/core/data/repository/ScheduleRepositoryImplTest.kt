@@ -239,6 +239,13 @@ class ScheduleRepositoryImplTest {
             return ScheduleSnapshotResult.Modified(snapshotDto, etag = "fake-etag")
         }
 
+        var customSeasonSnapshot: com.infinitezerone.minibgm.core.network.SeasonSnapshotDto? = null
+
+        override suspend fun getSeasonSnapshot(
+            year: Int,
+            seasonKey: String,
+        ): com.infinitezerone.minibgm.core.network.SeasonSnapshotDto? = customSeasonSnapshot
+
         override suspend fun getSnapshot(): ScheduleSnapshotDto = (getSnapshot(null) as ScheduleSnapshotResult.Modified).snapshot
     }
 
@@ -346,6 +353,7 @@ class ScheduleRepositoryImplTest {
         snapshotService: FakeScheduleSnapshotService = FakeScheduleSnapshotService(),
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
         collectionRepository: CollectionRepository? = null,
+        seasonalDiskCache: com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache? = null,
     ): ScheduleRepositoryImpl =
         ScheduleRepositoryImpl(
             scheduleDao = scheduleDao,
@@ -354,6 +362,7 @@ class ScheduleRepositoryImplTest {
             snapshotService = snapshotService,
             userPreferences = userPreferences,
             collectionRepository = collectionRepository,
+            seasonalDiskCache = seasonalDiskCache,
         )
 
     @Test
@@ -2600,5 +2609,120 @@ class ScheduleRepositoryImplTest {
 
             val events = airEventDao.getAllAirEvents()
             assertTrue(events.any { it.subjectId == 575204L && it.episode == 5 })
+        }
+
+    @Test
+    fun getSeasonAnimeList_diskCacheHit_returnsCachedWithoutNetwork() =
+        runTest {
+            val fakeDiskCache =
+                object : com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache {
+                    val store = mutableMapOf<String, String>()
+
+                    override suspend fun get(seasonKey: String): String? = store[seasonKey]
+
+                    override suspend fun put(
+                        seasonKey: String,
+                        jsonContent: String,
+                    ) {
+                        store[seasonKey] = jsonContent
+                    }
+
+                    override suspend fun clear() {
+                        store.clear()
+                    }
+                }
+            val cachedJson =
+                """
+                {
+                    "schema": "minibgm-season-snapshot/1",
+                    "year": 2026,
+                    "season": "autumn",
+                    "total": 1,
+                    "mappedTotal": 1,
+                    "items": [
+                        {
+                            "anilistId": 101,
+                            "bgmId": 202,
+                            "title": "Frieren",
+                            "titleCn": "芙莉莲",
+                            "totalEpisodes": 12,
+                            "ratingScore": 9.2,
+                            "tags": ["奇幻", "冒险"]
+                        }
+                    ]
+                }
+                """.trimIndent()
+            fakeDiskCache.put("2026-autumn", cachedJson)
+
+            val snapshotService = FakeScheduleSnapshotService()
+            val repo =
+                createRepository(
+                    snapshotService = snapshotService,
+                    seasonalDiskCache = fakeDiskCache,
+                )
+
+            val subjects = repo.getSeasonAnimeList(2026, "autumn")
+            assertEquals(1, subjects.size)
+            assertEquals(202L, subjects.first().id)
+            assertEquals("芙莉莲", subjects.first().nameCn)
+            assertEquals(listOf("奇幻", "冒险"), subjects.first().tags.map { it.name })
+        }
+
+    @Test
+    fun getSeasonAnimeList_networkFetch_writesToDiskCache() =
+        runTest {
+            val fakeDiskCache =
+                object : com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache {
+                    val store = mutableMapOf<String, String>()
+
+                    override suspend fun get(seasonKey: String): String? = store[seasonKey]
+
+                    override suspend fun put(
+                        seasonKey: String,
+                        jsonContent: String,
+                    ) {
+                        store[seasonKey] = jsonContent
+                    }
+
+                    override suspend fun clear() {
+                        store.clear()
+                    }
+                }
+            val snapshotDto =
+                com.infinitezerone.minibgm.core.network.SeasonSnapshotDto(
+                    year = 2026,
+                    season = "winter",
+                    total = 1,
+                    mappedTotal = 1,
+                    items =
+                        listOf(
+                            ScheduleSnapshotItemDto(
+                                anilistId = 301L,
+                                bgmId = 401L,
+                                title = "Winter Anime",
+                                titleCn = "冬季动画",
+                                totalEpisodes = 12,
+                                tags = listOf("日常"),
+                            ),
+                        ),
+                )
+            val snapshotService =
+                FakeScheduleSnapshotService().apply {
+                    customSeasonSnapshot = snapshotDto
+                }
+            val repo =
+                createRepository(
+                    snapshotService = snapshotService,
+                    seasonalDiskCache = fakeDiskCache,
+                )
+
+            val subjects = repo.getSeasonAnimeList(2026, "winter")
+            assertEquals(1, subjects.size)
+            assertEquals(401L, subjects.first().id)
+
+            // 验证已异步写入磁盘缓存
+            val cached = fakeDiskCache.get("2026-winter")
+            assertNotNull(cached)
+            assertTrue(cached.contains("冬季动画"))
         }
 }

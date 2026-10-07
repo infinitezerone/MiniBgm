@@ -130,6 +130,7 @@ internal class ScheduleRepositoryImpl(
     private val snapshotService: ScheduleSnapshotService,
     private val userPreferences: UserPreferencesDataSource,
     private val collectionRepository: CollectionRepository? = null,
+    private val seasonalDiskCache: com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache? = null,
     private val json: Json = BgmHttpClient.jsonConfig,
 ) : ScheduleRepository {
     private val seasonalCache = mutableMapOf<String, List<com.infinitezerone.minibgm.core.model.Subject>>()
@@ -144,11 +145,39 @@ internal class ScheduleRepositoryImpl(
             val cached = seasonalCache[cacheKey]
             if (cached != null) return cached
         }
+
+        // 尝试从本地磁盘 LRU 缓存命中（离线秒开，免网）
+        if (seasonalDiskCache != null) {
+            val cachedJson = runCatchingCancellable { seasonalDiskCache.get(cacheKey) }.getOrNull()
+            if (!cachedJson.isNullOrBlank()) {
+                val cachedSnapshot =
+                    runCatching {
+                        json.decodeFromString<com.infinitezerone.minibgm.core.network.SeasonSnapshotDto>(cachedJson)
+                    }.getOrNull()
+                if (cachedSnapshot != null && cachedSnapshot.items.isNotEmpty()) {
+                    val subjects = cachedSnapshot.items.mapNotNull { it.toSubject() }
+                    seasonalCacheMutex.withLock {
+                        seasonalCache[cacheKey] = subjects
+                    }
+                    return subjects
+                }
+            }
+        }
+
         val snapshot = snapshotService.getSeasonSnapshot(year, seasonKey) ?: return emptyList()
         val subjects = snapshot.items.mapNotNull { it.toSubject() }
         seasonalCacheMutex.withLock {
             seasonalCache[cacheKey] = subjects
         }
+
+        // 写入本地磁盘 LRU 缓存
+        if (seasonalDiskCache != null && snapshot.items.isNotEmpty()) {
+            runCatchingCancellable {
+                val serialized = json.encodeToString(snapshot)
+                seasonalDiskCache.put(cacheKey, serialized)
+            }
+        }
+
         return subjects
     }
 

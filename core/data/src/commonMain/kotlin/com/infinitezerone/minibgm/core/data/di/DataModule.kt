@@ -54,6 +54,7 @@ val dataModule =
                 snapshotService = get<ScheduleSnapshotService>(),
                 userPreferences = get<UserPreferencesDataSource>(),
                 collectionRepository = getOrNull<CollectionRepository>(),
+                seasonalDiskCache = getOrNull<com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache>(),
             )
         }
         single<SubjectRepository> {

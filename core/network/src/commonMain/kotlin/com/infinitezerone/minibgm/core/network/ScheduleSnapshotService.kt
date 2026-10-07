@@ -39,11 +39,16 @@ data class ScheduleSnapshotItemDto(
     val countryOfOrigin: String = "JP",
     val format: String = "",
     val status: String = "",
-    val coverUrl: String? = null,
     val isAdult: Boolean = false,
+    val coverUrl: String? = null,
     val startYear: Int = 0,
     val startMonth: Int = 0,
     val airDate: String? = null,
+    val ratingScore: Double = 0.0,
+    val popularity: Int = 0,
+    val totalEpisodes: Int = 0,
+    val genres: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
     val sites: List<ScheduleSnapshotSiteDto> = emptyList(),
     val episodes: List<ScheduleSnapshotEpisodeDto> = emptyList(),
 )
@@ -71,28 +76,10 @@ data class SeasonSnapshotDto(
     val generatedAt: String = "",
     val total: Int = 0,
     val mappedTotal: Int = 0,
-    val items: List<SeasonSnapshotItemDto> = emptyList(),
+    val items: List<ScheduleSnapshotItemDto> = emptyList(),
 )
 
-@Serializable
-data class SeasonSnapshotItemDto(
-    val anilistId: Long,
-    val bgmId: Long? = null,
-    val title: String,
-    val titleCn: String? = null,
-    val countryOfOrigin: String = "JP",
-    val format: String = "",
-    val status: String = "",
-    val isAdult: Boolean = false,
-    val coverUrl: String? = null,
-    val airDate: String? = null,
-    val ratingScore: Double = 0.0,
-    val popularity: Int = 0,
-    val episodes: Int = 0,
-    val genres: List<String> = emptyList(),
-    val tags: List<String> = emptyList(),
-    val sites: List<ScheduleSnapshotSiteDto> = emptyList(),
-)
+typealias SeasonSnapshotItemDto = ScheduleSnapshotItemDto
 
 interface ScheduleSnapshotService {
     /** 拉取当前快照；所有 CDN 均不可达时抛出异常，由调用方降级到本地缓存。 */

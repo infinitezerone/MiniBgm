@@ -19,7 +19,7 @@ class ScheduleMappersTest {
                 coverUrl = "https://example.com/cover.jpg",
                 format = "TV",
                 airDate = "2026-04-01",
-                episodes = 12,
+                totalEpisodes = 12,
                 genres = listOf("Action", "Comedy"),
                 tags = listOf("School", "Comedy"),
                 ratingScore = 8.5,
@@ -56,7 +56,7 @@ class ScheduleMappersTest {
                 coverUrl = "",
                 format = "",
                 airDate = null,
-                episodes = 2,
+                totalEpisodes = 2,
                 genres = listOf("Romance"),
                 tags = emptyList(),
                 ratingScore = 0.0,
@@ -77,7 +77,7 @@ class ScheduleMappersTest {
                 coverUrl = "",
                 format = "",
                 airDate = null,
-                episodes = 2,
+                totalEpisodes = 2,
                 genres = listOf("Romance"),
                 tags = emptyList(),
                 ratingScore = 0.0,
@@ -90,6 +90,13 @@ class ScheduleMappersTest {
         val tagNames = subject.tags.map { it.name }
         assertTrue(tagNames.contains("Hentai"))
         assertTrue(tagNames.contains("Romance"))
+    }
+
+    @Test
+    fun extractSubjectTags_chineseAdultTag_doesNotDuplicate() {
+        val tags = extractSubjectTags(listOf("里番"), emptyList(), isAdult = true)
+        assertEquals(1, tags.size)
+        assertEquals("里番", tags.first().name)
     }
 
     @Test
