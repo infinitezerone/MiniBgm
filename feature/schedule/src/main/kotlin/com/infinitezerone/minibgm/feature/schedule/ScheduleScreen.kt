@@ -1,15 +1,12 @@
 package com.infinitezerone.minibgm.feature.schedule
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -22,9 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -33,7 +28,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,9 +110,6 @@ fun ScheduleScreen(
 
     val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
 
-    // 登录引导横幅：核心循环（打卡/收藏/个人页）依赖登录，未登录时给一次轻量主动引导
-    var loginBannerDismissed by rememberSaveable { mutableStateOf(false) }
-
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     if (scrollToTop != null) {
         ObserveAsEvents(scrollToTop) {
@@ -192,23 +183,6 @@ fun ScheduleScreen(
                         uiState.getWatchingCountForPage(it)
                     }
                 }
-
-            // 登录引导横幅：核心循环（打卡/收藏/个人页）依赖登录，未登录时给一次轻量主动引导
-            AnimatedVisibility(visible = !uiState.isLoggedIn && !loginBannerDismissed) {
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ScheduleLoginNudgeBanner(
-                        onLogin = {
-                            loginBannerDismissed = true
-                            viewModel.promptLogin()
-                        },
-                        onDismiss = { loginBannerDismissed = true },
-                        modifier = Modifier.widthIn(max = 840.dp),
-                    )
-                }
-            }
 
             // 顶部星期胶囊导航（指示器 + 快速点击锚点）
             Box(
@@ -428,45 +402,6 @@ private fun DayScheduleList(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-/** 登录引导横幅：低侵入的一次性引导，登录动作走既有登录弹窗与登录路由 */
-@Composable
-private fun ScheduleLoginNudgeBanner(
-    onLogin: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = MaterialTheme.shapes.medium,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-        ) {
-            Text(
-                text = "登录 Bangumi，开启追番打卡",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onLogin) {
-                Text(text = "登录")
-            }
-            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = BgmIcons.Close,
-                    contentDescription = "关闭引导",
-                    modifier = Modifier.size(16.dp),
-                )
             }
         }
     }
