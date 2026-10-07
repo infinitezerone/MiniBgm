@@ -32,7 +32,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.Collator
 import java.time.LocalDate
+import java.util.Locale
 
 /**
  * Bangumi `POST /v0/search/subjects` 单页**硬上限**：limit 传更大不会报错，只会静默按 20 截断。
@@ -83,32 +85,40 @@ private data class ExtractedSeasonalTags(
 )
 
 private fun extractSeasonalTags(subjects: List<Subject>): ExtractedSeasonalTags {
-    val allCounts =
+    val genreCounts =
+        subjects
+            .flatMap { subject ->
+                subject.genres.map { it.trim() }
+            }.filter { it.isNotBlank() && it.length <= 25 }
+            .groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedByDescending { it.second }
+
+    val genreNames = genreCounts.map { it.first.lowercase() }.toSet()
+    val hotTagCounts =
         subjects
             .flatMap { subject ->
                 subject.tags.map { it.name.trim() }
             }.filter { tag ->
-                tag.isNotBlank() && tag.length <= 25
+                tag.isNotBlank() && tag.length <= 25 && tag.lowercase() !in genreNames
             }.groupingBy { it }
             .eachCount()
             .toList()
             .sortedByDescending { it.second }
 
-    val genres =
-        allCounts.filter { (tag, _) ->
-            ANILIST_GENRES.any { it.equals(tag, ignoreCase = true) }
-        }
-    val hotTags =
-        allCounts.filter { (tag, _) ->
-            ANILIST_GENRES.none { it.equals(tag, ignoreCase = true) }
-        }
-    return ExtractedSeasonalTags(genres = genres, hotTags = hotTags)
+    return ExtractedSeasonalTags(genres = genreCounts, hotTags = hotTagCounts)
 }
 
 private fun RequestKey.toRequest(): SearchSubjectsRequest {
     val (startDay, endDay) = quarter.getAirDateRange(year)
+    val sortApi =
+        when (sort) {
+            SeasonSortOption.SCORE -> "score"
+            else -> "heat"
+        }
     return SearchSubjectsRequest(
-        sort = sort.apiValue,
+        sort = sortApi,
         filter =
             SearchFilter(
                 type = listOf(2),
@@ -313,8 +323,10 @@ class SeasonalGuideViewModel(
                         val originMatch =
                             when (query.origin) {
                                 SeasonOriginFilter.ALL -> true
-                                SeasonOriginFilter.JAPAN -> sub.metaTags.contains("日本") || !sub.metaTags.contains("中国")
-                                SeasonOriginFilter.CHINA -> sub.metaTags.contains("中国")
+                                SeasonOriginFilter.JAPAN ->
+                                    sub.metaTags.contains("日本") ||
+                                        (!sub.metaTags.contains("中国") && !sub.genres.contains("国产动画"))
+                                SeasonOriginFilter.CHINA -> sub.metaTags.contains("中国") || sub.genres.contains("国产动画")
                             }
                         val formMatch =
                             when (query.form) {
@@ -361,7 +373,7 @@ class SeasonalGuideViewModel(
                         }
                     }
 
-                // 统一大盘排序：若高分优先，按评分降序；若热度优先，按综合热度降序
+                // 统一大盘排序
                 val sortedSubjects =
                     when (query.sort) {
                         SeasonSortOption.SCORE -> {
@@ -379,6 +391,24 @@ class SeasonalGuideViewModel(
                                         .thenByDescending { it.rating?.score ?: 0.0 },
                                 )
                             }
+                        }
+                        SeasonSortOption.AIR_DATE_DESC -> {
+                            pooledSubjects.sortedWith(
+                                compareByDescending<Subject> { it.airDate.ifBlank { it.date } }
+                                    .thenByDescending { it.collection?.doing ?: 0 },
+                            )
+                        }
+                        SeasonSortOption.AIR_DATE_ASC -> {
+                            pooledSubjects.sortedWith(
+                                compareBy<Subject> { (it.airDate.ifBlank { it.date }).ifBlank { "9999-99-99" } }
+                                    .thenByDescending { it.collection?.doing ?: 0 },
+                            )
+                        }
+                        SeasonSortOption.TITLE -> {
+                            val collator = Collator.getInstance(Locale.CHINA)
+                            pooledSubjects.sortedWith(
+                                compareBy(collator) { it.displayName },
+                            )
                         }
                     }
 

@@ -851,6 +851,90 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
+    fun selectSort_multipleSortingOptions_sortCorrectly() =
+        runTest {
+            val animeEarly =
+                sampleSubject.copy(
+                    id = 101L,
+                    name = "Alpha",
+                    nameCn = "阿尔法",
+                    airDate = "2026-01-05",
+                )
+            val animeLate =
+                sampleSubject.copy(
+                    id = 102L,
+                    name = "Beta",
+                    nameCn = "贝塔",
+                    airDate = "2026-01-25",
+                )
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(animeEarly, animeLate)
+
+            val viewModel = createViewModel(scheduleRepository = scheduleRepository)
+            advanceUntilIdle()
+
+            // 开播时间：新到旧
+            viewModel.selectSort(SeasonSortOption.AIR_DATE_DESC)
+            val descState = viewModel.uiState.value
+            assertEquals(102L, descState.subjects[0].id)
+            assertEquals(101L, descState.subjects[1].id)
+
+            // 开播时间：早到晚
+            viewModel.selectSort(SeasonSortOption.AIR_DATE_ASC)
+            val ascState = viewModel.uiState.value
+            assertEquals(101L, ascState.subjects[0].id)
+            assertEquals(102L, ascState.subjects[1].id)
+
+            // 标题 A-Z (阿尔法 -> 贝塔)
+            viewModel.selectSort(SeasonSortOption.TITLE)
+            val titleState = viewModel.uiState.value
+            assertEquals(101L, titleState.subjects[0].id)
+            assertEquals(102L, titleState.subjects[1].id)
+        }
+
+    @Test
+    fun originFilter_chineseAnime_matchesByMetaTagsOrGenres() =
+        runTest {
+            val jpAnime =
+                sampleSubject.copy(
+                    id = 101L,
+                    name = "JP Anime",
+                    metaTags = listOf("TV", "日本"),
+                )
+            val cnAnimeMeta =
+                sampleSubject.copy(
+                    id = 102L,
+                    name = "CN Anime Meta",
+                    metaTags = listOf("WEB", "中国"),
+                )
+            val cnAnimeGenre =
+                sampleSubject.copy(
+                    id = 103L,
+                    name = "CN Anime Genre",
+                    genres = listOf("国产动画"),
+                    metaTags = listOf("WEB"),
+                )
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(jpAnime, cnAnimeMeta, cnAnimeGenre)
+
+            val viewModel = createViewModel(scheduleRepository = scheduleRepository)
+            advanceUntilIdle()
+
+            // 筛选国产：同时匹配带有 "中国" metaTag 或 "国产动画" genre 的条目
+            viewModel.selectOrigin(SeasonOriginFilter.CHINA)
+            val cnState = viewModel.uiState.value
+            assertEquals(2, cnState.subjects.size)
+            assertTrue(cnState.subjects.any { it.id == 102L })
+            assertTrue(cnState.subjects.any { it.id == 103L })
+
+            // 筛选日本：排除国创条目
+            viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
+            val jpState = viewModel.uiState.value
+            assertEquals(1, jpState.subjects.size)
+            assertEquals(101L, jpState.subjects[0].id)
+        }
+
+    @Test
     fun airingScopeFilter_switchesBetweenAll_newOnly_continuingOnly() =
         runTest {
             val newAnime =
@@ -1355,6 +1439,7 @@ class SeasonalGuideViewModelTest {
                 sampleSubject.copy(
                     id = 201L,
                     name = "Regular Anime",
+                    genres = listOf("Action", "Romance", "Music"),
                     tags =
                         listOf(
                             com.infinitezerone.minibgm.core.model
@@ -1371,6 +1456,7 @@ class SeasonalGuideViewModelTest {
                 sampleSubject.copy(
                     id = 202L,
                     name = "Adult Anime",
+                    genres = listOf("Hentai", "Romance"),
                     tags =
                         listOf(
                             com.infinitezerone.minibgm.core.model

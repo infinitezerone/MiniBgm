@@ -24,6 +24,7 @@ data class Subject(
     val rating: Rating? = null,
     val collection: CollectionCount? = null,
     val tags: List<Tag> = emptyList(),
+    val genres: List<String> = emptyList(),
     /**
      * Bangumi 官方元标签：除题材外还携带**产地**（日本 / 中国 / 美国 / 欧美 …）与
      * **放送形式**（TV / WEB / 剧场版 / OVA / MV / PV / CM / 短片）。

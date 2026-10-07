@@ -31,7 +31,7 @@ data class ScheduleSnapshotSiteDto(
 
 @Serializable
 data class ScheduleSnapshotItemDto(
-    val anilistId: Long,
+    val anilistId: Long? = null,
     /** bgmId 可空：CI 侧桥接/搜索兜底未覆盖时为 null，由客户端降级解析 */
     val bgmId: Long? = null,
     val title: String,

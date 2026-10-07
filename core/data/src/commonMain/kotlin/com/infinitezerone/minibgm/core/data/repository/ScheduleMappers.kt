@@ -234,6 +234,7 @@ internal fun ScheduleSnapshotItemDto.toSubject(): Subject? {
         airDate = effectiveAirDate,
         date = effectiveAirDate,
         eps = effectiveEps,
+        genres = genres,
         tags = extractSubjectTags(genres, tags, isAdult),
         metaTags = listOfNotNull(effectiveFormat, effectiveOrigin),
         platform = effectiveFormat,

@@ -103,9 +103,10 @@ fun SeasonalAnimeRow(
         }
 
     val genres =
-        remember(subject.id, subject.tags) {
-            subject.tags
-                .map { it.name.trim() }
+        remember(subject.id, subject.genres, subject.tags) {
+            val list = if (subject.genres.isNotEmpty()) subject.genres else subject.tags.map { it.name }
+            list
+                .map { it.trim() }
                 .filter {
                     it.isNotBlank() && it.length <= MAX_GENRE_TAG_LENGTH && !NON_GENRE_TAG_REGEX.matches(it)
                 }.distinct()

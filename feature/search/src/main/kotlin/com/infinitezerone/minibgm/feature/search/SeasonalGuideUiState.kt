@@ -127,18 +127,22 @@ enum class SeasonFormFilter(
 }
 
 /**
- * 排序方式。只有服务端真实支持的取值才进得来：
- * - `heat` 混合热度（默认）；
- * - `score` 评分降序——注意服务端会让只有个位数打分的 10 分小样本排在最前，这是 API 固有行为；
- * - `rank` **不可用**：实测服务端把无排名（rank=0）的条目排在最前，对季度筛选场景是坏的；
- * - `air_date` 服务端 400 拒绝，客户端排序又会破坏无限翻页的完整性，故不提供。
+ * 排序方式。
+ * - `HEAT` 综合热度（默认）；
+ * - `SCORE` 评分最高；
+ * - `AIR_DATE_DESC` 开播时间（新到旧）；
+ * - `AIR_DATE_ASC` 开播时间（早到晚）；
+ * - `TITLE` 标题拼音/英文升序（A-Z）。
  */
 enum class SeasonSortOption(
     val label: String,
     val apiValue: String,
 ) {
-    HEAT("热度", "heat"),
-    SCORE("评分", "score"),
+    HEAT("综合热度", "heat"),
+    SCORE("评分最高", "score"),
+    AIR_DATE_DESC("首播(新到旧)", "air_date_desc"),
+    AIR_DATE_ASC("首播(早到晚)", "air_date_asc"),
+    TITLE("标题A-Z", "title"),
     ;
 
     companion object {
@@ -164,33 +168,6 @@ enum class SeasonAiringScope(
         val DEFAULT = ALL
     }
 }
-
-/**
- * AniList 官方 Schema 定义的核心题材分类（Genres，共 18 个标准官方分类）。
- * 仅用于将动态下发的条目标签在 UI 层分层呈现为「核心题材」与「特色标签」，不做任何静态数据过滤。
- */
-val ANILIST_GENRES: Set<String> =
-    setOf(
-        "Action",
-        "Adventure",
-        "Comedy",
-        "Drama",
-        "Ecchi",
-        "Fantasy",
-        "Hentai",
-        "Horror",
-        "Mahou Shoujo",
-        "Mecha",
-        "Music",
-        "Mystery",
-        "Psychological",
-        "Romance",
-        "Sci-Fi",
-        "Slice of Life",
-        "Sports",
-        "Supernatural",
-        "Thriller",
-    )
 
 /**
  * 季度片单 UI 状态。

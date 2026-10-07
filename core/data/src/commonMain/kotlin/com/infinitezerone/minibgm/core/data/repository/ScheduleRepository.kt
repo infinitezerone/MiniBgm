@@ -514,13 +514,15 @@ internal class ScheduleRepositoryImpl(
     ): Triple<List<AirEventEntity>, Set<Long>, Map<Long, String>> {
         val withAnilistId = entities.filter { it.anilistId != null }
         val schedulesByAnilistId =
-            snapshot.items.associate { item ->
-                item.anilistId to
-                    AniListMediaSchedule(
-                        episodes = item.episodes.map { AniListAiringEpisode(episode = it.n, airAtEpochSeconds = it.t) },
-                        coverUrl = item.coverUrl,
-                    )
-            }
+            snapshot.items
+                .filter { it.anilistId != null }
+                .associate { item ->
+                    item.anilistId!! to
+                        AniListMediaSchedule(
+                            episodes = item.episodes.map { AniListAiringEpisode(episode = it.n, airAtEpochSeconds = it.t) },
+                            coverUrl = item.coverUrl,
+                        )
+                }
         val anilistEvents = mutableListOf<AirEventEntity>()
         val coveredSubjects = mutableSetOf<Long>()
         val coversBySubjectId = mutableMapOf<Long, String>()
@@ -611,11 +613,12 @@ internal class ScheduleRepositoryImpl(
         val weeklyItems =
             snapshot.items
                 .flatMap { item ->
+                    val aId = item.anilistId ?: return@flatMap emptyList()
                     item.episodes
                         .filter { it.t in windowStartSeconds..windowEndSeconds }
                         .map { ep ->
                             AniListWeeklyScheduleItem(
-                                anilistId = item.anilistId,
+                                anilistId = aId,
                                 episode = ep.n,
                                 airAtEpochSeconds = ep.t,
                                 titleNative = item.title,
@@ -640,7 +643,10 @@ internal class ScheduleRepositoryImpl(
                 entitiesByBgmId = currentEntities.associateBy { it.bgmId }.toMutableMap(),
                 mappingCache = loadMappingCache(weeklyItems.map { it.anilistId }),
             )
-        val snapshotItemByAnilistId = snapshot.items.associateBy { it.anilistId }
+        val snapshotItemByAnilistId =
+            snapshot.items
+                .filter { it.anilistId != null }
+                .associateBy { it.anilistId!! }
 
         for (item in weeklyItems) {
             val ctx = weeklyItemContextOf(item, snapshotItemByAnilistId[item.anilistId])
@@ -672,7 +678,7 @@ internal class ScheduleRepositoryImpl(
             snapshot.items
                 .filter { item ->
                     item.status != "FINISHED" || item.episodes.any { it.t >= windowStartSeconds }
-                }.map { it.anilistId }
+                }.mapNotNull { it.anilistId }
                 .toSet()
 
         persistWeeklyResolution(state)
