@@ -34,18 +34,17 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATI
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 
-private val SEASONAL_FOCUS_LIMIT = 12
+private val ROW_LIMIT = 12
 
 /**
- * 「本季新番」横滑分区（B站首页 / Netflix Rows 形态）：
- * 区块标题 + 「更多」入口（跳转季度片单页） + 横滑海报卡，作为探索单流 feed 的第一区块。
+ * 探索首页通用横滑行（B站首页 / Netflix Rows 形态）：
+ * 区块标题 + 可选「更多」入口 + 横滑海报卡；加载中显示骨架卡，无数据且不在加载则整行隐藏（fail-open）。
  *
  * [horizontalPadding] 默认 16dp；嵌入瀑布流网格（自带 12dp 水平内边距）时传 4dp 以对齐卡片区。
  */
 @Composable
-fun SeasonalFocusRow(
-    year: Int,
-    quarterLabel: String,
+fun ExploreSubjectRow(
+    title: String,
     subjects: List<Subject>,
     isLoading: Boolean,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
@@ -62,7 +61,7 @@ fun SeasonalFocusRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "本季新番 · $year $quarterLabel",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -72,7 +71,7 @@ fun SeasonalFocusRow(
                     Text(text = "更多", style = MaterialTheme.typography.labelMedium)
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = "查看完整季度片单",
+                        contentDescription = "查看「$title」完整榜单",
                         modifier = Modifier.size(16.dp).padding(start = 2.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -85,10 +84,10 @@ fun SeasonalFocusRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (isLoading && subjects.isEmpty()) {
-                items(4) { SeasonalFocusSkeletonCard() }
+                items(4) { RowSkeletonCard() }
             } else {
-                items(subjects.take(SEASONAL_FOCUS_LIMIT), key = { it.id }) { subject ->
-                    SeasonalFocusCard(
+                items(subjects.take(ROW_LIMIT), key = { it.id }) { subject ->
+                    RowSubjectCard(
                         subject = subject,
                         onSubjectClick = onSubjectClick,
                     )
@@ -99,7 +98,7 @@ fun SeasonalFocusRow(
 }
 
 @Composable
-private fun SeasonalFocusCard(
+private fun RowSubjectCard(
     subject: Subject,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
@@ -157,7 +156,7 @@ private fun SeasonalFocusCard(
 }
 
 @Composable
-private fun SeasonalFocusSkeletonCard(modifier: Modifier = Modifier) {
+private fun RowSkeletonCard(modifier: Modifier = Modifier) {
     Column(modifier = modifier.width(108.dp)) {
         Box(
             modifier =

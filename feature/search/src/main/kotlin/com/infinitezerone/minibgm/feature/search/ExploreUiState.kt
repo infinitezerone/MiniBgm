@@ -224,6 +224,28 @@ val ALL_TIME_SEASON =
         ?: SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL)
 val CURRENT_SEASON = ALL_TIME_SEASON
 
+/** 探索首页的横滑行定义（B站/AniList 式客观维度榜单：时间 × 热度，题材留给筛选器） */
+enum class ExploreRow(
+    val label: String,
+) {
+    HOT("热门流行"),
+    MASTERPIECE("封神必看"),
+    UPCOMING("即将开播"),
+}
+
+/** 单个横滑行的数据状态；失败即空列表（行级 fail-open，不阻塞其他区块） */
+@Immutable
+data class ExploreRowState(
+    val subjects: List<Subject> = emptyList(),
+    val isLoading: Boolean = false,
+)
+
+/** 探索页浏览模式：ROWS = 榜单行区块（默认）；FULL_LIST = 心境胶囊 + 全量瀑布流 */
+enum class ExploreBrowseMode {
+    ROWS,
+    FULL_LIST,
+}
+
 /** 探索发现界面的单一不可变 UI 状态 */
 @Immutable
 data class ExploreUiState(
@@ -233,6 +255,8 @@ data class ExploreUiState(
     val customTagInput: String = "",
     val selectedSort: ExploreSort = ExploreSort.RANK,
     val selectedMood: ExploreMood? = ExploreMood.MASTERPIECE,
+    val browseMode: ExploreBrowseMode = ExploreBrowseMode.ROWS,
+    val rowStates: Map<ExploreRow, ExploreRowState> = emptyMap(),
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val isLoadingMore: Boolean = false,

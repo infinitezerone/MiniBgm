@@ -12,6 +12,8 @@ import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,10 +25,14 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val PAGE_SIZE = 20
+
+/** 首页榜单行的小页尺寸：行只做快速发现，深度浏览交给瀑布流（服务端单页上限 20） */
+private const val ROW_PAGE_SIZE = 15
 
 /** 一次探索查询的完整条件；任一变化都构成一次新查询换挡 */
 private data class ExploreQuery(
@@ -65,11 +71,14 @@ class ExploreViewModel(
 ) : ViewModel() {
     // ── 输入：用户意图（仅有的可变状态）──
     private val exploreQuery = MutableStateFlow(ExploreQuery())
+    private val browseMode = MutableStateFlow(ExploreBrowseMode.ROWS)
+    private val rowStates = MutableStateFlow<Map<ExploreRow, ExploreRowState>>(emptyMap())
     private val loginPromptVisible = MutableStateFlow(false)
     private val userMessage = MutableStateFlow<String?>(null)
 
     // ── 延迟加载控制：Tab 首次展示时才激活拉取 ──
     private var hasStarted = false
+    private var hasRowsStarted = false
     private val startTrigger = MutableSharedFlow<Unit>(replay = 1)
 
     // ── 取页信号源 ──
@@ -81,13 +90,15 @@ class ExploreViewModel(
     /** 对外只读快照：响应式组合 */
     val uiState: StateFlow<ExploreUiState> =
         combine(
-            combine(pagedSubjects, exploreQuery) { pages, query ->
+            combine(pagedSubjects, exploreQuery, rowStates, browseMode) { pages, query, rows, mode ->
                 ExploreUiState(
                     selectedSeason = query.season,
                     selectedCategory = query.category,
                     selectedTags = query.tags,
                     selectedSort = query.sort,
                     selectedMood = query.mood,
+                    browseMode = mode,
+                    rowStates = rows,
                     subjects = pages.subjects,
                     pageOffset = pages.pageOffset,
                     hasMore = pages.hasMore,
@@ -156,6 +167,56 @@ class ExploreViewModel(
             startTrigger.tryEmit(Unit)
         }
     }
+
+    /**
+     * 拉取首页榜单行（热门/封神/即将开播），每行一次小页查询、并行且行级独立加载：
+     * 失败的行保持空列表（UI 整行隐藏，fail-open），不阻塞其他行与瀑布流。
+     */
+    fun loadRowsIfNeeded() {
+        if (hasRowsStarted) return
+        hasRowsStarted = true
+        viewModelScope.launch {
+            ExploreRow.entries
+                .map { row ->
+                    async { loadRow(row) }
+                }.awaitAll()
+        }
+    }
+
+    private suspend fun loadRow(row: ExploreRow) {
+        rowStates.update { it + (row to ExploreRowState(isLoading = true)) }
+        val result = searchRepository.searchSubjectsAdvanced(request = buildRowRequest(row), limit = ROW_PAGE_SIZE)
+        val next =
+            when (result) {
+                is AppResult.Success -> ExploreRowState(subjects = result.data.list)
+                else -> ExploreRowState()
+            }
+        rowStates.update { it + (row to next) }
+    }
+
+    private fun buildRowRequest(row: ExploreRow): SearchSubjectsRequest =
+        when (row) {
+            ExploreRow.HOT ->
+                SearchSubjectsRequest(
+                    sort = ExploreSort.HEAT.sortKey,
+                    filter = SearchFilter(type = listOf(ExploreCategory.ANIME.type!!)),
+                )
+            ExploreRow.MASTERPIECE ->
+                SearchSubjectsRequest(
+                    sort = ExploreSort.RANK.sortKey,
+                    filter = SearchFilter(type = listOf(ExploreCategory.ANIME.type!!), rank = listOf(">0")),
+                )
+            ExploreRow.UPCOMING ->
+                SearchSubjectsRequest(
+                    // 首播时间升序：最先开播的排最前
+                    sort = "air_date_asc",
+                    filter =
+                        SearchFilter(
+                            type = listOf(ExploreCategory.ANIME.type!!),
+                            airDate = listOf(">=${java.time.LocalDate.now().plusDays(1)}"),
+                        ),
+                )
+        }
 
     private fun onPageSignals(query: ExploreQuery): Flow<PagingSignal> =
         pageTriggers.signals().onEach { signal -> runPagingSession(query, signal) }
@@ -273,17 +334,53 @@ class ExploreViewModel(
         }
     }
 
+    /** 从榜单行「更多」进入对应心境/档期的全量瀑布流 */
+    fun openFullListFromRow(row: ExploreRow) {
+        when (row) {
+            ExploreRow.HOT -> {
+                browseMode.value = ExploreBrowseMode.FULL_LIST
+                onMoodSelect(ExploreMood.HOT)
+            }
+            ExploreRow.MASTERPIECE -> {
+                browseMode.value = ExploreBrowseMode.FULL_LIST
+                onMoodSelect(ExploreMood.MASTERPIECE)
+            }
+            ExploreRow.UPCOMING -> {
+                browseMode.value = ExploreBrowseMode.FULL_LIST
+                setQuery { it.copy(season = upcomingSeasonOption(), mood = null) }
+            }
+        }
+    }
+
+    /** 返回首页榜单行模式：查询重置为默认，瀑布流让位给行区块 */
+    fun resetToRows() {
+        browseMode.value = ExploreBrowseMode.ROWS
+        setQuery { ExploreQuery() }
+    }
+
+    /** 即将开播档期：以「明天」为起点的动态区间，不进静态档期列表 */
+    private fun upcomingSeasonOption(): SeasonOption =
+        SeasonOption(
+            id = "upcoming",
+            label = "即将开播",
+            airDateFilter = listOf(">=${java.time.LocalDate.now().plusDays(1)}"),
+            category = TimeCategory.ALL,
+        )
+
     fun onSeasonSelect(season: SeasonOption) {
+        browseMode.value = ExploreBrowseMode.FULL_LIST
         if (exploreQuery.value.season == season) return
         setQuery { it.copy(season = season, mood = null) }
     }
 
     fun onCategorySelect(category: ExploreCategory) {
+        browseMode.value = ExploreBrowseMode.FULL_LIST
         if (exploreQuery.value.category == category) return
         setQuery { it.copy(category = category, mood = null) }
     }
 
     fun onTagToggle(tag: String) {
+        browseMode.value = ExploreBrowseMode.FULL_LIST
         setQuery {
             val newTags = if (tag in it.tags) it.tags - tag else it.tags + tag
             it.copy(tags = newTags, mood = null)
@@ -298,6 +395,7 @@ class ExploreViewModel(
     fun onCustomTagSubmit(customTag: String) {
         val trimmed = customTag.trim()
         if (trimmed.isBlank()) return
+        browseMode.value = ExploreBrowseMode.FULL_LIST
         setQuery {
             it.copy(tags = it.tags + trimmed, mood = null)
         }
@@ -317,6 +415,7 @@ class ExploreViewModel(
     }
 
     fun onSortSelect(sort: ExploreSort) {
+        browseMode.value = ExploreBrowseMode.FULL_LIST
         if (exploreQuery.value.sort == sort) return
         setQuery { it.copy(sort = sort, mood = null) }
         viewModelScope.launch {
@@ -365,6 +464,9 @@ class ExploreViewModel(
 
     fun refresh() {
         loadIfNeeded()
+        // 下拉刷新强制重拉榜单行
+        hasRowsStarted = false
+        loadRowsIfNeeded()
         pageTriggers.refresh()
     }
 

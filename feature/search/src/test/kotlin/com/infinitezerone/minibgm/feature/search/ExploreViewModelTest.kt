@@ -388,7 +388,8 @@ class ExploreViewModelTest {
             viewModel.refresh()
             advanceUntilIdle()
 
-            assertEquals(2, searchRepository.advancedSearchCallCount)
+            // 初始主流 1 次 + refresh 主流 1 次 + 下拉刷新重拉榜单 3 行（热门/封神/即将开播）
+            assertEquals(5, searchRepository.advancedSearchCallCount)
             assertFalse(viewModel.uiState.value.isRefreshing)
             assertEquals(1, viewModel.uiState.value.subjects.size)
         }
@@ -584,5 +585,50 @@ class ExploreViewModelTest {
                 viewModel.uiState.value.customFilterTags
                     .contains("百合"),
             )
+        }
+
+    @Test
+    fun loadRowsIfNeeded_populatesAllRowStates() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            viewModel.loadRowsIfNeeded()
+            advanceUntilIdle()
+
+            val rowStates = viewModel.uiState.value.rowStates
+            assertEquals(3, rowStates.size)
+            assertTrue(rowStates.containsKey(ExploreRow.HOT))
+            assertTrue(rowStates.containsKey(ExploreRow.MASTERPIECE))
+            assertTrue(rowStates.containsKey(ExploreRow.UPCOMING))
+            assertEquals(1, rowStates[ExploreRow.HOT]?.subjects?.size)
+            assertFalse(rowStates[ExploreRow.HOT]?.isLoading ?: true)
+        }
+
+    @Test
+    fun openFullListFromRow_switchesToFullListAndAppliesPreset() =
+        runTest {
+            val searchRepository = FakeSearchRepository()
+            val collectionRepository = FakeCollectionRepository()
+            val authRepository = FakeAuthRepository()
+            val viewModel = ExploreViewModel(searchRepository, collectionRepository, authRepository)
+            advanceUntilIdle()
+
+            assertEquals(ExploreBrowseMode.ROWS, viewModel.uiState.value.browseMode)
+
+            viewModel.openFullListFromRow(ExploreRow.HOT)
+            advanceUntilIdle()
+
+            assertEquals(ExploreBrowseMode.FULL_LIST, viewModel.uiState.value.browseMode)
+            assertEquals(ExploreMood.HOT, viewModel.uiState.value.selectedMood)
+
+            viewModel.resetToRows()
+            advanceUntilIdle()
+
+            assertEquals(ExploreBrowseMode.ROWS, viewModel.uiState.value.browseMode)
         }
 }
