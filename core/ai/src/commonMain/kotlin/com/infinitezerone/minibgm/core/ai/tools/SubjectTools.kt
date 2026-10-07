@@ -50,10 +50,17 @@ data class EpisodeDto(
     val airDate: String,
 )
 
+/** getSubjectDetail 的 summary 截断长度 */
+private const val SUMMARY_MAX_CHARS = 600
+
+/** getSubjectEpisodes 单次返回的剧集条目上限（超出保留首尾） */
+private const val EPISODES_LIST_LIMIT = 200
+
 /**
  * 条目详情与搜索相关智能体工具。
  * 支持按关键字搜索动画条目、获取条目完整详情与剧集列表。
  */
+
 class SubjectTools(
     private val searchRepository: SearchRepository,
     private val subjectRepository: SubjectRepository,
@@ -160,7 +167,8 @@ class SubjectTools(
                         id = subject.id,
                         name = subject.name,
                         nameCn = subject.nameCn,
-                        summary = subject.summary,
+                        // summary 可能长达数千字符且随每轮全量重发：截断保留开头主信息
+                        summary = subject.summary.take(SUMMARY_MAX_CHARS),
                         score = subject.rating?.score ?: 0.0,
                         rank = subject.rating?.rank ?: 0,
                         totalEpisodes = subject.eps.takeIf { it > 0 } ?: subject.totalEpisodes,
@@ -197,6 +205,13 @@ class SubjectTools(
                     }
                 if (episodes.isEmpty()) {
                     "No episodes found for subject ID $subjectId."
+                } else if (episodes.size > EPISODES_LIST_LIMIT) {
+                    // 长篇条目（数百集）超限：保留首尾，保证总集数与最新集信息可见
+                    val head = episodes.take(10)
+                    val tail = episodes.takeLast(EPISODES_LIST_LIMIT - 10)
+                    val omitted = episodes.size - head.size - tail.size
+                    "[Note] Total ${episodes.size} episodes, omitting $omitted middle entries.\n" +
+                        json.encodeToString(head + tail)
                 } else {
                     json.encodeToString(episodes)
                 }

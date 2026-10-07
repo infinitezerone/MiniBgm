@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.ai.tool
 
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -133,7 +134,16 @@ fun JsonObject.longList(key: String): List<Long> = this[key]?.jsonArray?.mapNotN
 class BgmToolRegistry(
     val tools: List<BgmTool> = emptyList(),
 ) {
-    private val toolMap: Map<String, BgmTool> = tools.associateBy { it.name }
+    private val toolMap: Map<String, BgmTool> =
+        tools
+            .associateBy { it.name }
+            .also { map ->
+                // 重名工具会被静默覆盖：注册期就告警，避免"模型调用到的不是预期实现"
+                val duplicates = tools.map { it.name }.filter { name -> tools.count { it.name == name } > 1 }.distinct()
+                if (duplicates.isNotEmpty()) {
+                    bgmLogger("Bgm/AiTools").w { "⚠️ 工具注册表存在重名工具，后者覆盖前者: $duplicates" }
+                }
+            }
 
     fun toDefinitions(): List<ToolDefinitionDto> = tools.map { it.toDefinition() }
 

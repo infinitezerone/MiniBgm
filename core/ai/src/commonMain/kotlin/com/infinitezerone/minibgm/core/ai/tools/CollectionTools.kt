@@ -24,6 +24,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 @Serializable
 data class UserCollectionDto(
@@ -37,12 +39,19 @@ data class UserCollectionDto(
     val updatedAt: String = "",
 )
 
+/** getWatchingList 单次返回的条目上限：防超大结果每轮重发挤爆上下文 */
+private const val WATCHING_LIST_LIMIT = 80
+
+/** 追番短评回传给模型的截断长度：用户私人内容不整段出境 */
+private const val WATCHING_COMMENT_MAX_CHARS = 120
+
 /**
  * 追番与收藏进度相关智能体工具。
  * 包含严密的 Human-In-The-Loop (HITL) 安全机制：
  * - 只读操作（查询收藏、获取在看列表）自动安全执行；
  * - 写操作（修改条目收藏状态、更新单集打卡进度）严禁静默执行，必须生成 [PendingAction] 提案等待用户在客户端确认后方可执行。
  */
+
 class CollectionTools(
     private val collectionRepository: CollectionRepository,
     private val json: Json = aiJson,
@@ -177,22 +186,34 @@ class CollectionTools(
         if (collections.isEmpty()) {
             return "User has no anime marked as currently watching (DOING)."
         }
+        // 短评是用户私人内容：截断到 120 字符既保留"我给这部写过什么"的问答能力，
+        // 又避免整段原文出境到第三方 LLM 端点；列表按最近更新取前 80 条防止超大结果
         val dtos =
-            collections.map {
-                UserCollectionDto(
-                    subjectId = it.subjectId,
-                    title = it.subject?.name.orEmpty(),
-                    titleCn = it.subject?.nameCn.orEmpty(),
-                    collectionType = CollectionType.DOING.name,
-                    epStatus = it.epStatus,
-                    rating = it.rate,
-                    comment = it.comment,
-                    updatedAt = it.updatedAt,
-                )
+            collections
+                .sortedByDescending { it.updatedAt }
+                .take(WATCHING_LIST_LIMIT)
+                .map {
+                    UserCollectionDto(
+                        subjectId = it.subjectId,
+                        title = it.subject?.name.orEmpty(),
+                        titleCn = it.subject?.nameCn.orEmpty(),
+                        collectionType = CollectionType.DOING.name,
+                        epStatus = it.epStatus,
+                        rating = it.rate,
+                        comment = it.comment.take(WATCHING_COMMENT_MAX_CHARS),
+                        updatedAt = it.updatedAt,
+                    )
+                }
+        val header =
+            if (collections.size > WATCHING_LIST_LIMIT) {
+                "[Note] Total ${collections.size} watching items, showing the $WATCHING_LIST_LIMIT most recently updated.\n"
+            } else {
+                ""
             }
-        return json.encodeToString(dtos)
+        return header + json.encodeToString(dtos)
     }
 
+    @OptIn(ExperimentalUuidApi::class)
     suspend fun proposeUpdateCollection(
         subjectId: Long,
         subjectTitle: String = "",
@@ -224,7 +245,7 @@ class CollectionTools(
             return "Invalid rating: $rating. Rating must be an integer between 1 and 10."
         }
 
-        val actionId = "act_coll_${TimeUtils.nowEpochMillis()}_$subjectId"
+        val actionId = "act_coll_${TimeUtils.nowEpochMillis()}_${Uuid.random()}_$subjectId"
         val desc =
             "Update collection status for '$subjectTitle' (ID: $subjectId) to ${resolvedType.name}" +
                 (rating?.let { ", rating: $it/10" } ?: "") +
@@ -254,6 +275,7 @@ class CollectionTools(
         return json.encodeToString(proposal)
     }
 
+    @OptIn(ExperimentalUuidApi::class)
     suspend fun proposeUpdateEpisodeProgress(
         subjectId: Long,
         subjectTitle: String = "",
@@ -268,7 +290,7 @@ class CollectionTools(
         }
         AiToolActivity.report("生成打卡提案", "条目 $subjectId 第 $episodeNumber 集")
 
-        val actionId = "act_ep_${TimeUtils.nowEpochMillis()}_${subjectId}_ep$episodeNumber"
+        val actionId = "act_ep_${TimeUtils.nowEpochMillis()}_${Uuid.random()}_${subjectId}_ep$episodeNumber"
         val statusText = if (isWatched) "watched" else "unwatched"
         val desc = "Mark episode $episodeNumber of '$subjectTitle' (ID: $subjectId) as $statusText"
 

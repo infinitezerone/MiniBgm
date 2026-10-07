@@ -301,7 +301,8 @@ class PlaybackRuleDiagnosticsTools(
         playbackPageUrl: String,
         durationSeconds: Int = 8,
     ): String {
-        val boundedDuration = durationSeconds.coerceIn(3, 15) * 1000L
+        // 与 WebView 捕获层的上限（3..20s）保持一致，避免工具描述与真实行为漂移
+        val boundedDuration = durationSeconds.coerceIn(3, 20) * 1000L
         val result = playbackResolverRepository.auditPageTraffic(playbackPageUrl, boundedDuration)
         return json.encodeToString(sanitizeTraceForModel(result))
     }
@@ -334,12 +335,6 @@ class PlaybackRuleDiagnosticsTools(
         headers.mapValues { (name, value) ->
             if (name.lowercase().trim() in SENSITIVE_HEADER_NAMES) REDACTED_VALUE else value
         }
-
-    private companion object {
-        const val REDACTED_VALUE = "__REDACTED__"
-        val SENSITIVE_HEADER_NAMES =
-            setOf("authorization", "cookie", "set-cookie", "x-api-key", "api-key", "token", "proxy-authorization")
-    }
 
     suspend fun recordPlaybackRuleFromTrace(
         traceJson: String,
@@ -445,6 +440,13 @@ class PlaybackRuleDiagnosticsTools(
                 )
             if (sources.isNotEmpty()) {
                 val verification = verifyFirstPlayable(sources)
+                // 全是 PAGE 占位时明示"没有直链"，防止模型据 success=true 断言规则可播
+                val pageOnlyNote =
+                    if (sources.none { it.kind == PlaylistEntryKind.DIRECT }) {
+                        "解析到的 ${sources.size} 条全部是 PAGE 页面占位，没有任何直链。"
+                    } else {
+                        null
+                    }
                 json.encodeToString(
                     RuleTestOutput(
                         success = true,
@@ -455,11 +457,11 @@ class PlaybackRuleDiagnosticsTools(
                                 StreamOutput(
                                     url = it.url,
                                     label = it.label,
-                                    headers = it.headers,
+                                    headers = redactSensitiveHeaders(it.headers),
                                 )
                             },
                         playbackVerified = verification is StreamVerification.Playable,
-                        verificationNote = verification.note(),
+                        verificationNote = pageOnlyNote ?: verification.note(),
                     ),
                 )
             } else {
@@ -563,7 +565,7 @@ class PlaybackRuleDiagnosticsTools(
 
         val action =
             PendingAction.ImportPlaybackRules(
-                actionId = "act_rules_${TimeUtils.nowEpochMillis()}",
+                actionId = "act_rules_${TimeUtils.nowEpochMillis()}" + Uuid.random().toString(),
                 sourceName = rule.name,
                 rules =
                     listOf(

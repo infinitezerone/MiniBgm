@@ -211,7 +211,8 @@ class PlayableSourceTools(
                     headers = rule.headers,
                 )
             }
-        return "第三方动漫站点" to sources
+        // 明示 PAGE 条目只是页面占位而非直链：避免模型把它当"可播放地址"向用户宣称
+        return "页面规则（PAGE 占位，需继续打开页面而非直链）" to sources
     }
 
     /**
@@ -242,7 +243,8 @@ class PlayableSourceTools(
                 episodes = episodes.distinctBy { it.url },
             )
         playableSourcesStore?.set(list)
-        return json.encodeToString(list)
+        // 回传给模型的副本脱敏：播放器从 Store 拿原始 headers
+        return json.encodeToString(list.copy(episodes = list.episodes.map { it.copy(headers = redactSensitiveHeaders(it.headers)) }))
     }
 
     /** 排期记录里的片名（优先中文名）；没有记录时为空 */

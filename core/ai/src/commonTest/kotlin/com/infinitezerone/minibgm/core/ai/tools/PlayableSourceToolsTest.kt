@@ -385,7 +385,8 @@ class PlayableSourceToolsTest {
 
             val result = decode(tools(FakePlaybackResolverRepository()).findPlayableSources(subjectId = 1001L))
 
-            assertTrue(result.source.contains("第三方动漫站点"))
+            assertTrue(result.source.contains("页面规则"))
+            assertTrue(result.source.contains("非直链"), "来源标注必须明示 PAGE 占位不是直链")
             assertEquals(1, result.episodes.size)
             assertTrue(
                 result.episodes
