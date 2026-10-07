@@ -82,10 +82,9 @@ interface ScheduleRepository {
     ): List<AirSchedule>
 
     /**
-     * 全量刷新管线（UX_REMEDIATION 诉求：所有数据源获取完再更新 UI 列表）：
-     * 拉齐 AniList 周排期（名单发现 + 逐话真值）、bangumi-data 播放源与事件仲裁，
+     * 全量刷新管线：
+     * 下载放送时刻表快照（minibgm-schedule-data CI 定时扫描产物），
      * 期间对外流被闸门扣住，全部完成后才以最终状态对外发一次。
-     * 各数据源失败不互相中断，错误信息聚合返回。
      *
      * [force] = false 时按 [REFRESH_THROTTLE_MILLIS] 节流：距上次成功同步不足阈值直接返回，
      * 页面重建（冷启动/切 Tab）不应重复跑全量管线；下拉刷新等用户显式动作传 true。
@@ -94,8 +93,8 @@ interface ScheduleRepository {
 
     /**
      * 后台 / 手动同步：
-     * 1) 按条目 begin 月按需拉取 bangumi-data 月切片补全播放源/中文名；
-     * 2) AniList 周排期发现新番、补全逐话真值并仲裁回写。
+     * 下载放送时刻表快照（minibgm-schedule-data CI 快照）补全播放源与中文名，
+     * 并仲裁回写逐话播出事实。
      */
     suspend fun syncBangumiData(): AppResult<Unit>
 
