@@ -423,7 +423,7 @@ class ScheduleViewModel(
                     val initialToday = today()
                     val initialWeekday = initialToday.dayOfWeek.value
                     ScheduleUiState(
-                        isLoading = true,
+                        isLoading = false,
                         isRefreshing = false,
                         selectedPageIndex = TODAY_PAGE_INDEX,
                         selectedWeekday = initialWeekday,
