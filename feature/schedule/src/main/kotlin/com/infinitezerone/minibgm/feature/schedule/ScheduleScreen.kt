@@ -52,10 +52,14 @@ import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleS
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
+import com.infinitezerone.minibgm.feature.schedule.components.ScheduleNowIndicator
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleTimelineSkeleton
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleUntimedSection
+import com.infinitezerone.minibgm.feature.schedule.components.TIMELINE_SLOT_SPACING
 import com.infinitezerone.minibgm.feature.schedule.components.TimelineSlotRow
+import com.infinitezerone.minibgm.feature.schedule.components.getCurrentMinutesCst
+import com.infinitezerone.minibgm.feature.schedule.components.parseTimeMinutesCst
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -352,6 +356,24 @@ private fun DayScheduleList(
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
+    // 「现在」指示线的插入位置：上一个已开播时段与下一个未开播时段之间（仅今天页）
+    val nowMinutes = remember { getCurrentMinutesCst() }
+    val nowSlotIndex =
+        if (isTodayPage) {
+            timeGrouped.entries.count { (parseTimeMinutesCst(it.key) ?: Int.MIN_VALUE) <= nowMinutes }
+        } else {
+            -1
+        }
+
+    // 首次进入今天页时直接定位到「现在」附近，而不是永远停在第 0 个时段
+    val hasAnchoredToNow = remember { mutableStateOf(false) }
+    LaunchedEffect(isTodayPage, timeGrouped) {
+        if (!isTodayPage || hasAnchoredToNow.value || timeGrouped.isEmpty()) return@LaunchedEffect
+        val headerItemCount = if (uiState.isOfflineCache) 1 else 0
+        listState.scrollToItem(headerItemCount + nowSlotIndex)
+        hasAnchoredToNow.value = true
+    }
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
@@ -359,7 +381,7 @@ private fun DayScheduleList(
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(TIMELINE_SLOT_SPACING),
             modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
         ) {
             if (uiState.isOfflineCache) {
@@ -378,16 +400,29 @@ private fun DayScheduleList(
                 }
             } else {
                 // ==================== 时间线排播节点（时间醒目 + 聚合防冗余） ====================
-                timeGrouped.forEach { (time, animeList) ->
-                    item(key = "timeslot_${pageIndex}_$time") {
+                var emittedNowLine = false
+                timeGrouped.entries.forEachIndexed { slotIndex, entry ->
+                    if (slotIndex == nowSlotIndex) {
+                        item(key = "now_line_$pageIndex") {
+                            ScheduleNowIndicator(nowMinutesCst = nowMinutes)
+                        }
+                        emittedNowLine = true
+                    }
+                    item(key = "timeslot_${pageIndex}_${entry.key}") {
                         TimelineSlotRow(
-                            time = time,
-                            schedules = animeList,
+                            time = entry.key,
+                            schedules = entry.value,
                             isToday = isTodayPage,
                             watchingSubjectIds = uiState.watchingSubjectIds,
                             onSubjectClick = onSubjectClick,
                             onShowSources = onShowSources,
                         )
+                    }
+                }
+                // 已过全天所有时段时，指示线自然收尾到最后一个时段之后
+                if (isTodayPage && !emittedNowLine && timeGrouped.isNotEmpty()) {
+                    item(key = "now_line_$pageIndex") {
+                        ScheduleNowIndicator(nowMinutesCst = nowMinutes)
                     }
                 }
 

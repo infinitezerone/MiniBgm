@@ -16,9 +16,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -205,15 +206,13 @@ fun FilterAndMetaBar(
     isLoggedIn: Boolean = true,
     onPromptLogin: () -> Unit = {},
 ) {
-    Row(
+    SingleChoiceSegmentedButtonRow(
         modifier =
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        FilterChip(
+        SegmentedButton(
             selected = onlyWatching,
             onClick = {
                 if (!isLoggedIn) {
@@ -222,6 +221,7 @@ fun FilterAndMetaBar(
                     onToggleOnlyWatching()
                 }
             },
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             label = {
                 Text(
                     text = if (!isLoggedIn) "我的追番 (未登录)" else "我的追番 ($watchingCount)",
@@ -229,20 +229,12 @@ fun FilterAndMetaBar(
                     fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
                 )
             },
-            shape = RoundedCornerShape(12.dp),
-            border = null,
-            colors =
-                FilterChipDefaults.filterChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
         )
 
-        FilterChip(
+        SegmentedButton(
             selected = !onlyWatching,
             onClick = { if (onlyWatching) onToggleOnlyWatching() },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
             label = {
                 Text(
                     text = "全网开播 ($totalCount)",
@@ -250,15 +242,6 @@ fun FilterAndMetaBar(
                     fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
                 )
             },
-            shape = RoundedCornerShape(12.dp),
-            border = null,
-            colors =
-                FilterChipDefaults.filterChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                ),
         )
     }
 }
