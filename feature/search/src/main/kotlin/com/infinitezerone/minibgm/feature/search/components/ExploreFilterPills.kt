@@ -38,7 +38,7 @@ import com.infinitezerone.minibgm.feature.search.ExploreUiState
 import com.infinitezerone.minibgm.feature.search.SeasonOption
 import com.infinitezerone.minibgm.feature.search.customFilterSummary
 
-/** 心境/场景快捷胶囊筛选栏 */
+/** 心境/场景快捷胶囊筛选栏（嵌入瀑布流网格时水平 4dp，与网格 12dp 内边距合成 16dp 视觉对齐） */
 @Composable
 fun MoodFilterRow(
     selectedMood: ExploreMood?,
@@ -46,7 +46,7 @@ fun MoodFilterRow(
     modifier: Modifier = Modifier,
 ) {
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier,
     ) {
@@ -96,7 +96,7 @@ fun ActiveCustomFilterBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(

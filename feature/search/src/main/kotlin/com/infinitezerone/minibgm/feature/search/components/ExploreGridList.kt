@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridScope
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -27,7 +28,11 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-/** 双列瀑布流列表（支持上滑触底自动分页加载） */
+/**
+ * 双列瀑布流列表（支持上滑触底自动分页加载）：
+ * [headerContent] 允许在流的最前面注入整行区块（如本季新番横滑区、筛选条），
+ * [emptyContent] 在无数据时以整行条目渲染空态（保留头部区块可见）。
+ */
 @Composable
 fun WaterfallGridList(
     subjects: List<Subject>,
@@ -39,6 +44,8 @@ fun WaterfallGridList(
     onToggleWish: (Long) -> Unit,
     gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     modifier: Modifier = Modifier,
+    headerContent: LazyStaggeredGridScope.() -> Unit = {},
+    emptyContent: (@Composable () -> Unit)? = null,
 ) {
     // 监听触底自动触发加载下一页
     LaunchedEffect(gridState, subjects.size, hasMore) {
@@ -68,6 +75,17 @@ fun WaterfallGridList(
         verticalItemSpacing = 10.dp,
         modifier = modifier,
     ) {
+        // 0. 头部注入区块（本季新番横滑区 / 筛选条等）
+        headerContent()
+
+        // 无数据空态（头部区块仍然可见）
+        if (subjects.isEmpty()) {
+            if (emptyContent != null) {
+                item(span = StaggeredGridItemSpan.FullLine) { emptyContent() }
+            }
+            return@LazyVerticalStaggeredGrid
+        }
+
         // 1. 顶部焦点力荐大卡（打破千篇一律的网格货架，赋予视觉落脚点与情绪安利）
         if (subjects.isNotEmpty()) {
             item(span = StaggeredGridItemSpan.FullLine) {

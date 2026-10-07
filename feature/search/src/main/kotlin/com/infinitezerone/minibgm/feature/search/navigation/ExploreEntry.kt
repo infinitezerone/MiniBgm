@@ -12,6 +12,7 @@ fun EntryProviderScope<NavKey>.exploreEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
     onLoginRequest: () -> Unit = {},
+    onOpenSeasonalGuide: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -20,6 +21,7 @@ fun EntryProviderScope<NavKey>.exploreEntry(
             onSubjectClick = onSubjectClick,
             onSearchClick = onSearchClick,
             onLoginRequest = onLoginRequest,
+            onOpenSeasonalGuide = onOpenSeasonalGuide,
             scrollToTop = scrollToTop,
         )
     }
