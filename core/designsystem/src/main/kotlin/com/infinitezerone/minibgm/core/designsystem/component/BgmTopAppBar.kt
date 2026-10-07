@@ -19,8 +19,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -30,6 +33,9 @@ import androidx.compose.ui.unit.dp
  * 相比 Material 3 默认笨重庞大的 64dp 顶栏，采用 48dp 紧凑高度设计，
  * 大幅减少上下留白，完美居中 48dp 标准点击区域的图标按钮与精致加粗标题，
  * 最大程度释放手机纵向首屏的黄金浏览空间。
+ *
+ * 传入 [scrollBehavior] 时支持滚动收合（如 enterAlways）：内容区高度随滚动从 [height]
+ * 收合至 0（仅保留状态栏内边距），调用方需自行挂接 `scrollBehavior.nestedScrollConnection`。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,16 +49,31 @@ fun BgmTopAppBar(
     scrollBehavior: TopAppBarScrollBehavior? = null,
     height: Dp = 48.dp,
 ) {
+    val density = LocalDensity.current
+    val contentHeightPx = with(density) { height.toPx() }
+
+    // 收合上限以自身实际高度为准（覆盖 M3 默认的 56dp 假设）
+    if (scrollBehavior != null) {
+        SideEffect { scrollBehavior.state.heightOffsetLimit = -contentHeightPx }
+    }
+
+    val contentHeight =
+        if (scrollBehavior != null) {
+            with(density) { (contentHeightPx + scrollBehavior.state.heightOffset).coerceAtLeast(0f).toDp() }
+        } else {
+            height
+        }
+
     Surface(
         color = colors.containerColor,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().clipToBounds(),
     ) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(windowInsets)
-                    .height(height)
+                    .height(contentHeight)
                     .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

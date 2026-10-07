@@ -1,11 +1,14 @@
 package com.infinitezerone.minibgm.feature.schedule
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +28,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -32,7 +36,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
@@ -83,6 +95,10 @@ fun ScheduleScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val filterBarHeight = 44.dp
+    val filterBarHeightPx = with(density) { filterBarHeight.toPx() }
+    val filterCollapseState = remember { FilterBarCollapseState(filterBarHeightPx) }
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
     val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -120,6 +136,7 @@ fun ScheduleScreen(
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     if (scrollToTop != null) {
         ObserveAsEvents(scrollToTop) {
+            coroutineScope.launch { filterCollapseState.animateTo(0f) }
             if (pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX) {
                 pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
             } else {
@@ -182,7 +199,8 @@ fun ScheduleScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    .nestedScroll(filterCollapseState),
         ) {
             val watchingCountMap =
                 remember(uiState.daySchedules, uiState.watchingSubjectIds) {
@@ -220,9 +238,11 @@ fun ScheduleScreen(
             val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
             val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
 
+            // 随列表滚动收起的筛选条：收起时内容向上平移并裁剪，视效为滑入日期条之下
+            val filterVisibleHeight = with(density) { (filterBarHeightPx - filterCollapseState.offset).coerceAtLeast(0f).toDp() }
             Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth().height(filterVisibleHeight).clipToBounds(),
+                contentAlignment = Alignment.TopCenter,
             ) {
                 FilterAndMetaBar(
                     totalCount = currentPageTotal,
@@ -231,7 +251,10 @@ fun ScheduleScreen(
                     onToggleOnlyWatching = viewModel::toggleOnlyWatching,
                     isLoggedIn = uiState.isLoggedIn,
                     onPromptLogin = viewModel::promptLogin,
-                    modifier = Modifier.widthIn(max = 840.dp),
+                    modifier =
+                        Modifier
+                            .widthIn(max = 840.dp)
+                            .graphicsLayer { translationY = -filterCollapseState.offset },
                 )
             }
 
@@ -447,6 +470,52 @@ private fun DayScheduleList(
                     }
                 }
             }
+        }
+    }
+}
+
+/** 筛选条滚动收起控制器（enterAlways 模式）：上滑先收起再滚列表，下滑先展开（B站时间表模式），松手后吸附到两端 */
+private class FilterBarCollapseState(
+    private val limitPx: Float,
+) : NestedScrollConnection {
+    var offset by mutableFloatStateOf(0f)
+        private set
+
+    override fun onPreScroll(
+        available: Offset,
+        source: NestedScrollSource,
+    ): Offset =
+        when {
+            // 手指上滑：先收起筛选条，剩余位移才交给列表
+            available.y < 0f -> {
+                val prev = offset
+                offset = (prev - available.y).coerceIn(0f, limitPx)
+                Offset(0f, prev - offset)
+            }
+            // 手指下滑：先展开筛选条
+            available.y > 0f && offset > 0f -> {
+                val prev = offset
+                offset = (prev - available.y).coerceIn(0f, limitPx)
+                Offset(0f, prev - offset)
+            }
+            else -> Offset.Zero
+        }
+
+    override suspend fun onPostFling(
+        consumed: Velocity,
+        available: Velocity,
+    ): Velocity {
+        animateTo(if (offset > limitPx / 2f) limitPx else 0f)
+        return super.onPostFling(consumed, available)
+    }
+
+    suspend fun animateTo(target: Float) {
+        animate(
+            initialValue = offset,
+            targetValue = target,
+            animationSpec = tween(durationMillis = 150),
+        ) { value, _ ->
+            offset = value
         }
     }
 }

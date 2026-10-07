@@ -27,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,6 +76,7 @@ fun ExploreScreen(
     val filterSheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val exploreGridState = rememberLazyStaggeredGridState()
     var customFilterExpanded by rememberSaveable { mutableStateOf(false) }
+    val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     val isFilterActive = exploreUiState.isCustomFilterActive
 
@@ -145,6 +147,7 @@ fun ExploreScreen(
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                     ),
+                scrollBehavior = topBarScrollBehavior,
             )
         },
         snackbarHost = {
@@ -153,7 +156,7 @@ fun ExploreScreen(
                 isTopLevel = true,
             )
         },
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().nestedScroll(topBarScrollBehavior.nestedScrollConnection),
     ) { innerPadding ->
         Box(
             modifier =
