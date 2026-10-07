@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.ai.tool.schemaObject
 import com.infinitezerone.minibgm.core.ai.tool.schemaProperty
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -44,6 +45,7 @@ data class AiringEventDto(
  */
 class ScheduleTools(
     private val scheduleRepository: ScheduleRepository,
+    private val settingsRepository: SettingsRepository? = null,
     private val json: Json = aiJson,
 ) {
     fun tools(): List<BgmTool> =
@@ -85,17 +87,29 @@ class ScheduleTools(
                                     "hoursAhead",
                                     schemaProperty("integer", "Hours ahead to look into the future, default 72 hours"),
                                 )
+                                put(
+                                    "lookbackHours",
+                                    schemaProperty(
+                                        "integer",
+                                        "Optional hours to look BACK, e.g. to check an episode that just aired (default 0)",
+                                    ),
+                                )
                             },
                         required = listOf("subjectIds"),
                     ),
             ) { args ->
                 val subjectIds = args.longList("subjectIds")
                 val hoursAhead = args.long("hoursAhead", 72L)
-                getNextEpisodeAiring(subjectIds, hoursAhead)
+                val lookbackHours = args.long("lookbackHours", 0L)
+                getNextEpisodeAiring(subjectIds, hoursAhead, lookbackHours)
             },
         )
 
     suspend fun getSchedule(weekday: Int = 0): String {
+        // 越界值显式报错而非静默回落"今日"：静默改写会让模型以错误的日期口径作答
+        if (weekday !in 0..7) {
+            return "Invalid weekday $weekday. Use 1-7 for Mon-Sun, or 0/omit for today."
+        }
         val targetWeekday =
             if (weekday in 1..7) {
                 weekday
@@ -110,9 +124,15 @@ class ScheduleTools(
         if (schedules.isEmpty()) {
             return "No broadcast anime scheduled for weekday $targetWeekday."
         }
+        // 与时刻表页面的家长控制语义对齐：用户未放开成人内容时过滤 isAdult 条目
+        val allowAdult = settingsRepository?.settings?.first()?.showRestrictedContent ?: false
+        val visibleSchedules = if (allowAdult) schedules else schedules.filterNot { it.isAdult }
+        if (visibleSchedules.isEmpty()) {
+            return "No broadcast anime scheduled for weekday $targetWeekday."
+        }
 
         val dtos =
-            schedules.map {
+            visibleSchedules.map {
                 ScheduleItemDto(
                     bgmId = it.bgmId,
                     title = it.title,
@@ -129,17 +149,20 @@ class ScheduleTools(
     suspend fun getNextEpisodeAiring(
         subjectIds: List<Long>,
         hoursAhead: Long = 72,
+        lookbackHours: Long = 0,
     ): String {
         val validSubjectIds = subjectIds.filter { it > 0 }
         if (validSubjectIds.isEmpty()) {
             return "No valid subject IDs provided."
         }
-        AiToolActivity.report("查询单集更新时间", "条目 $validSubjectIds")
+        val lookbackDesc = if (lookbackHours > 0) "+回溯${lookbackHours.coerceAtMost(48L)}h" else ""
+        AiToolActivity.report("查询单集更新时间", "条目 $validSubjectIds$lookbackDesc")
         val resolvedHours = if (hoursAhead <= 0) 72L else hoursAhead.coerceAtMost(720L)
         val airings =
             scheduleRepository.getUpcomingAiringForSubjects(
                 subjectIds = validSubjectIds,
                 hoursAhead = resolvedHours,
+                lookbackHours = lookbackHours.coerceIn(0L, 48L),
             )
         if (airings.isEmpty()) {
             return "No upcoming air events found for subject IDs $validSubjectIds within the next $resolvedHours hours."

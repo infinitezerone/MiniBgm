@@ -73,6 +73,13 @@ object BgmHttpClient {
                 randomizationMs = 500,
             )
         }
+        // 基座默认超时：unauth client（AniList / bangumi-data / bilibili / 订阅 / 第三方页面抓取）
+        // 服务的恰恰是响应最不可控的端点，绝不能裸奔；业务 client 在 create() 里装 15s 覆盖此默认
+        install(HttpTimeout) {
+            requestTimeoutMillis = 30_000
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 30_000
+        }
         val networkLogger = bgmLogger(loggerTag)
         install(Logging) {
             logger =
