@@ -96,30 +96,50 @@ enum class SeasonalViewMode {
 /**
  * 一级筛选：作品产地。
  *
- * 100% 服务端下推（`filter.meta_tags`），零客户端过滤，分页游标与 total 严格对齐。
+ * 支持按标准 ISO 产地代码（`countryOfOrigin`）精确匹配，同时携带服务端下推的 `metaTag` 备选。
  */
 enum class SeasonOriginFilter(
     val label: String,
+    val code: String?,
     val metaTag: String?,
 ) {
-    ALL("全部", null),
-    JAPAN("日本", "日本"),
-    CHINA("国产", "中国"),
+    ALL("全部", null, null),
+    JAPAN("日本", "JP", "日本"),
+    CHINA("国产", "CN", "中国"),
+    ;
+
+    fun matches(subject: Subject): Boolean {
+        if (code == null) return true
+        if (subject.countryOfOrigin.isNotBlank()) {
+            return subject.countryOfOrigin.equals(code, ignoreCase = true)
+        }
+        return metaTag != null && subject.metaTags.contains(metaTag)
+    }
 }
 
 /**
  * 二级筛选：放送形式。
  *
- * 仅保留全集与官方 API 唯一下推精确支持的「剧场版」（`filter.meta_tags: ["剧场版"]`）。
- * 100% 服务端下推，无需任何客户端补筛。
+ * 覆盖所有核心动画形式（TV / 剧场版 / 网络动画 / OVA），支持多代码集合自适应匹配。
  */
 enum class SeasonFormFilter(
     val label: String,
+    val formats: Set<String>,
     val metaTag: String?,
 ) {
-    ALL("全部", null),
-    MOVIE("剧场版", "剧场版"),
+    ALL("全部", emptySet(), null),
+    TV("TV 动画", setOf("TV", "TV_SHORT"), "TV"),
+    MOVIE("剧场版", setOf("MOVIE", "剧场版"), "剧场版"),
+    WEB("网络动画", setOf("WEB", "ONA"), "WEB"),
+    OVA("OVA / OAD", setOf("OVA", "OAD"), "OVA"),
     ;
+
+    fun matches(subject: Subject): Boolean {
+        if (formats.isEmpty()) return true
+        val p = subject.platform.uppercase()
+        if (p in formats) return true
+        return subject.metaTags.any { it.uppercase() in formats }
+    }
 
     companion object {
         val DEFAULT = ALL

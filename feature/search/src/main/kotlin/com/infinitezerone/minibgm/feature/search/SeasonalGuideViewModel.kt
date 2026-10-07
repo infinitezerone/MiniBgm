@@ -320,19 +320,8 @@ class SeasonalGuideViewModel(
                 // 产地、形式与标签过滤（支持包含与排除双向过滤）
                 val filteredAniListSubjects =
                     aniListSubjects.filter { sub ->
-                        val originMatch =
-                            when (query.origin) {
-                                SeasonOriginFilter.ALL -> true
-                                SeasonOriginFilter.JAPAN ->
-                                    sub.metaTags.contains("日本") ||
-                                        (!sub.metaTags.contains("中国") && !sub.genres.contains("国产动画"))
-                                SeasonOriginFilter.CHINA -> sub.metaTags.contains("中国") || sub.genres.contains("国产动画")
-                            }
-                        val formMatch =
-                            when (query.form) {
-                                SeasonFormFilter.ALL -> true
-                                SeasonFormFilter.MOVIE -> sub.platform.equals("MOVIE", ignoreCase = true)
-                            }
+                        val originMatch = query.origin.matches(sub)
+                        val formMatch = query.form.matches(sub)
                         val tagIncludeMatch =
                             if (query.tags.isEmpty()) {
                                 true

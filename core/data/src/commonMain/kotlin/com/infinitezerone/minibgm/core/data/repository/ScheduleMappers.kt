@@ -236,6 +236,7 @@ internal fun ScheduleSnapshotItemDto.toSubject(): Subject? {
         eps = effectiveEps,
         genres = genres,
         tags = extractSubjectTags(genres, tags, isAdult),
+        countryOfOrigin = countryOfOrigin.ifBlank { "JP" },
         metaTags = listOfNotNull(effectiveFormat, effectiveOrigin),
         platform = effectiveFormat,
     )

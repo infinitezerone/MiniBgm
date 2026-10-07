@@ -893,34 +893,36 @@ class SeasonalGuideViewModelTest {
         }
 
     @Test
-    fun originFilter_chineseAnime_matchesByMetaTagsOrGenres() =
+    fun originFilter_chineseAnime_matchesByCountryOfOriginOrMetaTagFallback() =
         runTest {
             val jpAnime =
                 sampleSubject.copy(
                     id = 101L,
                     name = "JP Anime",
+                    countryOfOrigin = "JP",
                     metaTags = listOf("TV", "日本"),
                 )
-            val cnAnimeMeta =
+            val cnAnimeCode =
                 sampleSubject.copy(
                     id = 102L,
-                    name = "CN Anime Meta",
-                    metaTags = listOf("WEB", "中国"),
-                )
-            val cnAnimeGenre =
-                sampleSubject.copy(
-                    id = 103L,
-                    name = "CN Anime Genre",
-                    genres = listOf("国产动画"),
+                    name = "CN Anime Code",
+                    countryOfOrigin = "CN",
                     metaTags = listOf("WEB"),
                 )
+            val cnAnimeFallback =
+                sampleSubject.copy(
+                    id = 103L,
+                    name = "CN Anime Fallback",
+                    countryOfOrigin = "",
+                    metaTags = listOf("WEB", "中国"),
+                )
             val scheduleRepository = FakeScheduleRepository()
-            scheduleRepository.seasonalAnimeListResult = listOf(jpAnime, cnAnimeMeta, cnAnimeGenre)
+            scheduleRepository.seasonalAnimeListResult = listOf(jpAnime, cnAnimeCode, cnAnimeFallback)
 
             val viewModel = createViewModel(scheduleRepository = scheduleRepository)
             advanceUntilIdle()
 
-            // 筛选国产：同时匹配带有 "中国" metaTag 或 "国产动画" genre 的条目
+            // 筛选国产：同时匹配 countryOfOrigin=CN 或 metaTag="中国" 的条目
             viewModel.selectOrigin(SeasonOriginFilter.CHINA)
             val cnState = viewModel.uiState.value
             assertEquals(2, cnState.subjects.size)
@@ -932,6 +934,75 @@ class SeasonalGuideViewModelTest {
             val jpState = viewModel.uiState.value
             assertEquals(1, jpState.subjects.size)
             assertEquals(101L, jpState.subjects[0].id)
+        }
+
+    @Test
+    fun formFilter_matchesMultipleFormatsCorrectly() =
+        runTest {
+            val tvAnime =
+                sampleSubject.copy(
+                    id = 101L,
+                    name = "TV Anime",
+                    platform = "TV",
+                )
+            val movieAnime =
+                sampleSubject.copy(
+                    id = 102L,
+                    name = "Movie Anime",
+                    platform = "MOVIE",
+                )
+            val webAnime =
+                sampleSubject.copy(
+                    id = 103L,
+                    name = "Web Anime",
+                    platform = "WEB",
+                )
+            val ovaAnime =
+                sampleSubject.copy(
+                    id = 104L,
+                    name = "OVA Anime",
+                    platform = "OVA",
+                )
+            val scheduleRepository = FakeScheduleRepository()
+            scheduleRepository.seasonalAnimeListResult = listOf(tvAnime, movieAnime, webAnime, ovaAnime)
+
+            val viewModel = createViewModel(scheduleRepository = scheduleRepository)
+            advanceUntilIdle()
+
+            viewModel.selectForm(SeasonFormFilter.TV)
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                101L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            viewModel.selectForm(SeasonFormFilter.MOVIE)
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                102L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            viewModel.selectForm(SeasonFormFilter.WEB)
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                103L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            viewModel.selectForm(SeasonFormFilter.OVA)
+            assertEquals(1, viewModel.uiState.value.subjects.size)
+            assertEquals(
+                104L,
+                viewModel.uiState.value.subjects[0]
+                    .id,
+            )
+
+            viewModel.selectForm(SeasonFormFilter.ALL)
+            assertEquals(4, viewModel.uiState.value.subjects.size)
         }
 
     @Test
