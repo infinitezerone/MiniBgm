@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.search
 
-import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,7 +60,6 @@ import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeleto
 import com.infinitezerone.minibgm.feature.search.components.SeasonalGuideSkeletonList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -137,7 +135,6 @@ fun SeasonalGuideContent(
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
     var showSeasonPicker by remember { mutableStateOf(false) }
-    var filterExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(scrollToTop, uiState.viewMode) {
         scrollToTop?.collect {
@@ -146,17 +143,6 @@ fun SeasonalGuideContent(
                 SeasonalViewMode.POSTER -> gridState.animateScrollToItem(0)
             }
         }
-    }
-
-    LaunchedEffect(filterExpanded, uiState.viewMode) {
-        if (!filterExpanded) return@LaunchedEffect
-        val scrollable: ScrollableState =
-            when (uiState.viewMode) {
-                SeasonalViewMode.LIST -> listState
-                SeasonalViewMode.POSTER -> gridState
-            }
-        snapshotFlow { scrollable.isScrollInProgress }.first { it }
-        filterExpanded = false
     }
 
     val currentFilterKey =
@@ -221,22 +207,11 @@ fun SeasonalGuideContent(
             Column(modifier = Modifier.fillMaxSize()) {
                 SeasonalFilterBar(
                     uiState = uiState,
-                    filterExpanded = filterExpanded,
-                    onToggleFilterExpanded = { filterExpanded = !filterExpanded },
                     onOpenSeasonPicker = { showSeasonPicker = true },
                     onToggleViewMode = viewModel::toggleViewMode,
-                    onSelectOrigin = { origin ->
-                        filterExpanded = false
-                        viewModel.selectOrigin(origin)
-                    },
-                    onSelectForm = { form ->
-                        filterExpanded = false
-                        viewModel.selectForm(form)
-                    },
-                    onSelectSort = { sort ->
-                        filterExpanded = false
-                        viewModel.selectSort(sort)
-                    },
+                    onSelectOrigin = viewModel::selectOrigin,
+                    onSelectForm = viewModel::selectForm,
+                    onSelectSort = viewModel::selectSort,
                     onToggleTag = viewModel::toggleTag,
                     onIncludeTag = viewModel::includeTag,
                     onExcludeTag = viewModel::excludeTag,
@@ -246,10 +221,7 @@ fun SeasonalGuideContent(
                     onRemoveCustomTag = viewModel::removeCustomFilterTag,
                     onToggleFavoriteTag = viewModel::toggleFavoriteTag,
                     onTogglePurifyContent = viewModel::togglePurifyContent,
-                    onSelectAiringScope = { scope ->
-                        filterExpanded = false
-                        viewModel.selectAiringScope(scope)
-                    },
+                    onSelectAiringScope = viewModel::selectAiringScope,
                 )
 
                 // 仅在整体换挡重新拉取时在顶部展示进度，追加翻页由底部指示器表达

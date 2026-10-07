@@ -291,9 +291,6 @@ fun ExploreScreen(
                                             WaterfallGridList(
                                                 subjects = exploreUiState.subjects,
                                                 wishedSubjectIds = exploreUiState.wishedSubjectIds,
-                                                hotComments = exploreUiState.hotComments,
-                                                selectedTags = exploreUiState.selectedTags,
-                                                onTagClick = exploreViewModel::onTagToggle,
                                                 hasMore = exploreUiState.hasMore,
                                                 isLoadingMore = exploreUiState.isLoadingMore,
                                                 onLoadMore = exploreViewModel::loadMore,

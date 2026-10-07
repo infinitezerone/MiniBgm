@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
-import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -33,9 +32,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun WaterfallGridList(
     subjects: List<Subject>,
     wishedSubjectIds: Set<Long>,
-    hotComments: Map<Long, SubjectComment>,
-    selectedTags: Set<String>,
-    onTagClick: (String) -> Unit,
     hasMore: Boolean,
     isLoadingMore: Boolean,
     onLoadMore: () -> Unit,
@@ -79,9 +75,6 @@ fun WaterfallGridList(
                 ExploreSpotlightCard(
                     subject = featured,
                     isWished = wishedSubjectIds.contains(featured.id),
-                    hotComment = hotComments[featured.id],
-                    selectedTags = selectedTags,
-                    onTagClick = onTagClick,
                     onSubjectClick = onSubjectClick,
                     onToggleWish = onToggleWish,
                     modifier = Modifier.padding(bottom = 6.dp),
@@ -98,9 +91,6 @@ fun WaterfallGridList(
             WaterfallSubjectCard(
                 subject = subject,
                 isWished = wishedSubjectIds.contains(subject.id),
-                hotComment = hotComments[subject.id],
-                selectedTags = selectedTags,
-                onTagClick = onTagClick,
                 onSubjectClick = onSubjectClick,
                 onToggleWish = onToggleWish,
             )

@@ -60,8 +60,6 @@ fun ExploreSpotlightCard(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWish: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    selectedTags: Set<String> = emptySet(),
-    onTagClick: (String) -> Unit = {},
     hotComment: SubjectComment? = null,
 ) {
     val rating = subject.rating
@@ -136,9 +134,9 @@ fun ExploreSpotlightCard(
                             Brush.verticalGradient(
                                 colors =
                                     listOf(
-                                        Color.Black.copy(alpha = 0.32f),
-                                        Color.Black.copy(alpha = 0.65f),
-                                        Color.Black.copy(alpha = 0.92f),
+                                        Color.Black.copy(alpha = 0.55f),
+                                        Color.Black.copy(alpha = 0.7f),
+                                        Color.Black.copy(alpha = 0.95f),
                                     ),
                             ),
                         ),
@@ -278,41 +276,12 @@ fun ExploreSpotlightCard(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // 底部操作按钮
+                    // 底部操作按钮（右对齐）
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // 社区精选标签
-                        val highValueTags =
-                            subject.tags
-                                .filter { it.name !in setOf("TV", "日本", "动画", "原创", "漫画改") }
-                                .take(3)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            highValueTags.forEach { tag ->
-                                val isTagSelected = tag.name in selectedTags
-                                Surface(
-                                    onClick = { onTagClick(tag.name) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color =
-                                        if (isTagSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            Color.White.copy(alpha = 0.25f)
-                                        },
-                                ) {
-                                    Text(
-                                        text = (if (isTagSelected) "✓ " else "#") + tag.name,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White,
-                                        fontWeight = if (isTagSelected) FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    )
-                                }
-                            }
-                        }
-
                         // 追番按钮
                         val wishButtonColor by animateColorAsState(
                             targetValue =
