@@ -50,6 +50,7 @@ fun WaterfallSubjectCard(
     val primaryTitle = subject.displayName
     val rating = subject.rating
     val score = rating?.score ?: 0.0
+    val rank = rating?.rank ?: 0
     val doingCount = subject.collection?.doing ?: 0
 
     Card(
@@ -101,6 +102,23 @@ fun WaterfallSubjectCard(
                             .padding(6.dp)
                             .align(Alignment.TopStart),
                 )
+
+                // 榜单排名徽标（豆瓣榜单 / AniList Trending 的权威感锚点）：全站排名前 100 才展示
+                if (rank in 1..100) {
+                    Surface(
+                        shape = RoundedCornerShape(topEnd = 8.dp),
+                        color = Color.Black.copy(alpha = 0.55f),
+                        modifier = Modifier.align(Alignment.BottomStart),
+                    ) {
+                        Text(
+                            text = "#$rank",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                }
 
                 WishFAB(
                     isWished = isWished,

@@ -96,6 +96,21 @@ fun getAirStatus(
     }
 }
 
+/** 「还有多久开播」倒计时文案（对标 AniList / LiveChart 的播出表），remaining <= 0 时返回 null */
+fun countdownLabel(
+    slotMinutes: Int,
+    nowMinutes: Int,
+): String? {
+    val remaining = slotMinutes - nowMinutes
+    if (remaining <= 0) return null
+    val hour = remaining / 60
+    val minute = remaining % 60
+    return when {
+        hour >= 1 -> if (minute > 0) "${hour}时${minute}分后" else "${hour}时后"
+        else -> "${minute}分后"
+    }
+}
+
 /** 时间线单行插槽：左侧醒目时间轴轨道 + 右侧番剧卡片/聚合卡片 */
 @Composable
 fun TimelineSlotRow(
@@ -106,8 +121,15 @@ fun TimelineSlotRow(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
+    currentMinutesCst: Int = getCurrentMinutesCst(),
 ) {
-    val airStatus = getAirStatus(time, isToday = isToday)
+    val airStatus = getAirStatus(time, isToday = isToday, currentMinutesCst = currentMinutesCst)
+    val upcomingCountdown =
+        if (airStatus == AirStatus.UPCOMING) {
+            parseTimeMinutesCst(time)?.let { countdownLabel(it, currentMinutesCst) }
+        } else {
+            null
+        }
     val jstTime = schedules.firstOrNull()?.timeJst
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     val statusColor =
@@ -177,6 +199,7 @@ fun TimelineSlotRow(
             airStatus = airStatus,
             jstTime = jstTime,
             count = schedules.size,
+            upcomingCountdown = upcomingCountdown,
             modifier = Modifier.width(52.dp),
         )
 
@@ -196,7 +219,7 @@ fun TimelineSlotRow(
     }
 }
 
-/** 垂直时间线轨道：醒目的时间数值、状态标识、连接线与节点 */
+/** 垂直时间线轨道：醒目的时间数值、状态标识（待播时显示实时倒计时）、连接线与节点 */
 @Composable
 fun TimelineTrackRail(
     time: String,
@@ -204,6 +227,7 @@ fun TimelineTrackRail(
     jstTime: String?,
     count: Int,
     modifier: Modifier = Modifier,
+    upcomingCountdown: String? = null,
 ) {
     val statusColor =
         when (airStatus) {
@@ -245,7 +269,7 @@ fun TimelineTrackRail(
                         when (airStatus) {
                             AirStatus.AIRED -> "已播"
                             AirStatus.AIRING -> "热播"
-                            AirStatus.UPCOMING -> "待播"
+                            AirStatus.UPCOMING -> upcomingCountdown ?: "待播"
                             AirStatus.NORMAL -> ""
                         },
                     style = MaterialTheme.typography.labelSmall,

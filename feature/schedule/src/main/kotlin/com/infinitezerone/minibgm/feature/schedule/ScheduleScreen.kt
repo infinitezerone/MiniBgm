@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -60,7 +61,9 @@ import com.infinitezerone.minibgm.feature.schedule.components.TIMELINE_SLOT_SPAC
 import com.infinitezerone.minibgm.feature.schedule.components.TimelineSlotRow
 import com.infinitezerone.minibgm.feature.schedule.components.getCurrentMinutesCst
 import com.infinitezerone.minibgm.feature.schedule.components.parseTimeMinutesCst
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -356,8 +359,13 @@ private fun DayScheduleList(
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
-    // 「现在」指示线的插入位置：上一个已开播时段与下一个未开播时段之间（仅今天页）
-    val nowMinutes = remember { getCurrentMinutesCst() }
+    // 当前时刻（按东八区），每 30 秒心跳一次，驱动「现在」指示与待播倒计时保持实时
+    val nowMinutes by produceState(initialValue = getCurrentMinutesCst()) {
+        while (isActive) {
+            delay(30_000)
+            value = getCurrentMinutesCst()
+        }
+    }
     val nowSlotIndex =
         if (isTodayPage) {
             timeGrouped.entries.count { (parseTimeMinutesCst(it.key) ?: Int.MIN_VALUE) <= nowMinutes }
@@ -416,6 +424,7 @@ private fun DayScheduleList(
                             watchingSubjectIds = uiState.watchingSubjectIds,
                             onSubjectClick = onSubjectClick,
                             onShowSources = onShowSources,
+                            currentMinutesCst = nowMinutes,
                         )
                     }
                 }
