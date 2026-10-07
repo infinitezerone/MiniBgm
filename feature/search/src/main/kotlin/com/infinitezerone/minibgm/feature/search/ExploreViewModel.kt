@@ -5,13 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
-import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchSubjectsRequest
 import com.infinitezerone.minibgm.core.model.Subject
-import com.infinitezerone.minibgm.core.model.SubjectComment
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -56,22 +54,19 @@ private data class ExplorePagedSubjects(
  * 状态是底层数据流与用户意图的数学映射：
  * - 可变状态收敛于用户意图（查询条件、登录弹窗标记、临时消息提示）；
  * - 列表数据由 [exploreQuery] 经 `flatMapLatest` 驱动，查询一变自动换挡并重置游标；
- * - 登录态与用户收藏直接来自仓库流（Room / Flow）在 `combine` 汇入，彻底消除手动乐观回滚；
- * - 社区热评由焦点条目按需异步派生。
+ * - 登录态与用户收藏直接来自仓库流（Room / Flow）在 `combine` 汇入，彻底消除手动乐观回滚。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExploreViewModel(
     private val searchRepository: SearchRepository,
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
-    private val communityRepository: CommunityRepository? = null,
     autoStart: Boolean = true,
 ) : ViewModel() {
     // ── 输入：用户意图（仅有的可变状态）──
     private val exploreQuery = MutableStateFlow(ExploreQuery())
     private val loginPromptVisible = MutableStateFlow(false)
     private val userMessage = MutableStateFlow<String?>(null)
-    private val hotComments = MutableStateFlow<Map<Long, SubjectComment>>(emptyMap())
 
     // ── 延迟加载控制：Tab 首次展示时才激活拉取 ──
     private var hasStarted = false
@@ -86,7 +81,7 @@ class ExploreViewModel(
     /** 对外只读快照：响应式组合 */
     val uiState: StateFlow<ExploreUiState> =
         combine(
-            combine(pagedSubjects, exploreQuery, hotComments) { pages, query, comments ->
+            combine(pagedSubjects, exploreQuery) { pages, query ->
                 ExploreUiState(
                     selectedSeason = query.season,
                     selectedCategory = query.category,
@@ -100,7 +95,6 @@ class ExploreViewModel(
                     isRefreshing = pages.isRefreshing,
                     isLoadingMore = pages.isLoadingMore,
                     error = pages.error,
-                    hotComments = comments,
                 )
             },
             combine(
@@ -149,7 +143,6 @@ class ExploreViewModel(
                 exploreQuery
                     .onEach {
                         pagedSubjects.value = ExplorePagedSubjects(isLoading = true)
-                        hotComments.value = emptyMap()
                     }.flatMapLatest { query -> onPageSignals(query) }
             }.launchIn(viewModelScope)
     }
@@ -181,10 +174,6 @@ class ExploreViewModel(
         val isRefresh = signal is PagingSignal.Refresh
         val isInitial = signal is PagingSignal.Initial || signal is PagingSignal.Retry
         val isMore = signal is PagingSignal.More
-
-        if (isRefresh) {
-            hotComments.value = emptyMap()
-        }
 
         pagedSubjects.value =
             current.copy(
@@ -220,9 +209,6 @@ class ExploreViewModel(
                         hasMore = hasMore,
                         error = null,
                     )
-                if (!isMore) {
-                    fetchHotCommentForFirstSubject(newSubjects.firstOrNull())
-                }
             }
 
             is AppResult.Error -> {
@@ -243,23 +229,6 @@ class ExploreViewModel(
             is AppResult.Loading -> Unit
         }
     }
-
-    private suspend fun fetchHotCommentForFirstSubject(firstSubject: Subject?) {
-        val repo = communityRepository ?: return
-        val subject = firstSubject ?: return
-        if (hotComments.value.containsKey(subject.id)) return
-        val result = repo.getSubjectComments(subject.id, limit = 5)
-        if (result is AppResult.Success) {
-            val best = selectBestComment(result.data.data)
-            if (best != null) {
-                hotComments.value = hotComments.value + (subject.id to best)
-            }
-        }
-    }
-
-    private fun selectBestComment(comments: List<SubjectComment>): SubjectComment? =
-        comments.firstOrNull { it.comment.isNotBlank() && it.comment.length in 8..120 }
-            ?: comments.firstOrNull { it.comment.isNotBlank() }
 
     private fun buildExploreRequest(query: ExploreQuery): SearchSubjectsRequest {
         val rankFilter =

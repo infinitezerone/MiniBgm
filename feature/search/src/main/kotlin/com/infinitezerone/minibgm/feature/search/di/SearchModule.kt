@@ -11,7 +11,7 @@ import org.koin.dsl.module
 val searchModule =
     module {
         viewModelOf(::SearchViewModel)
-        viewModel { ExploreViewModel(get(), get(), get(), getOrNull(), autoStart = false) }
+        viewModel { ExploreViewModel(get(), get(), get(), autoStart = false) }
         viewModel { params ->
             val tag = runCatching { params.get<String>(0) }.getOrDefault("")
             val initialType = runCatching { params.get<Int>(1) }.getOrDefault(0)

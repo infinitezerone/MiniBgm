@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.search
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -170,9 +171,25 @@ fun ExploreScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 when {
-                    // 首次全屏骨架屏（本季新番区随数据就绪后并入单流）
+                    // 首屏加载骨架：分区结构与成片一致（本季新番横滑骨架 + 筛选条 + 网格骨架），
+                    // 季度数据已就绪时横滑区直接显示真实内容
                     exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
-                        ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            SeasonalFocusRow(
+                                year = seasonalUiState.selectedYear,
+                                quarterLabel = seasonalUiState.selectedQuarter.displayLabel,
+                                subjects = seasonalUiState.subjects,
+                                isLoading = seasonalUiState.isLoading,
+                                onSubjectClick = onSubjectClick,
+                                onOpenMore = onOpenSeasonalGuide,
+                            )
+                            MoodFilterRow(
+                                selectedMood = exploreUiState.selectedMood,
+                                onMoodSelect = exploreViewModel::onMoodSelect,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
+                        }
                     }
 
                     // 错误重试态

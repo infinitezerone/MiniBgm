@@ -1,13 +1,9 @@
 package com.infinitezerone.minibgm.feature.search
 
 import com.infinitezerone.minibgm.core.common.AppResult
-import com.infinitezerone.minibgm.core.model.CommentUser
-import com.infinitezerone.minibgm.core.model.SubjectComment
-import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -528,81 +524,6 @@ class ExploreViewModelTest {
             viewModel.dismissLoginPrompt()
 
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
-        }
-
-    @Test
-    fun initialLoadWithCommunityRepositoryFetchesHotComments() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            val collectionRepository = FakeCollectionRepository()
-            val authRepository = FakeAuthRepository(initialLoggedIn = true)
-            val communityRepository = FakeCommunityRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val sampleComment =
-                SubjectComment(
-                    id = 101L,
-                    comment = "公路旅行与时间流逝的沉淀，顶级作画和音乐！",
-                    rate = 10,
-                    user = CommentUser(id = 1L, username = "frieren_fan", nickname = "芙莉莲天下第一"),
-                )
-            communityRepository.setSubjectComments(
-                subjectId = sampleSubject.id,
-                page = SubjectCommentPage(total = 1, data = listOf(sampleComment)),
-            )
-
-            val viewModel =
-                ExploreViewModel(
-                    searchRepository = searchRepository,
-                    collectionRepository = collectionRepository,
-                    authRepository = authRepository,
-                    communityRepository = communityRepository,
-                )
-            advanceUntilIdle()
-
-            val state = viewModel.uiState.value
-            assertTrue(state.hotComments.containsKey(sampleSubject.id))
-            val comment = state.hotComments[sampleSubject.id]
-            assertEquals("公路旅行与时间流逝的沉淀，顶级作画和音乐！", comment?.comment)
-            assertEquals(10, comment?.rate)
-            assertEquals("芙莉莲天下第一", comment?.user?.displayName)
-        }
-
-    @Test
-    fun fetchHotCommentsPrefersSubstantialComments() =
-        runTest {
-            val searchRepository = FakeSearchRepository()
-            val collectionRepository = FakeCollectionRepository()
-            val authRepository = FakeAuthRepository(initialLoggedIn = true)
-            val communityRepository = FakeCommunityRepository()
-            searchRepository.advancedSearchResult = AppResult.Success(listOf(sampleSubject))
-
-            val blankComment = SubjectComment(id = 1L, comment = "   ", rate = 8)
-            val shortComment = SubjectComment(id = 2L, comment = "神", rate = 9)
-            val substantialComment =
-                SubjectComment(
-                    id = 3L,
-                    comment = "制作水准极高，对原作氛围的还原无可挑剔。",
-                    rate = 10,
-                    user = CommentUser(username = "critic"),
-                )
-            communityRepository.setSubjectComments(
-                subjectId = sampleSubject.id,
-                page = SubjectCommentPage(total = 3, data = listOf(blankComment, shortComment, substantialComment)),
-            )
-
-            val viewModel =
-                ExploreViewModel(
-                    searchRepository = searchRepository,
-                    collectionRepository = collectionRepository,
-                    authRepository = authRepository,
-                    communityRepository = communityRepository,
-                )
-            advanceUntilIdle()
-
-            val comment = viewModel.uiState.value.hotComments[sampleSubject.id]
-            assertEquals(3L, comment?.id)
-            assertEquals("制作水准极高，对原作氛围的还原无可挑剔。", comment?.comment)
         }
 
     @Test

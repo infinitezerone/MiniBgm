@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.search.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -179,7 +180,7 @@ private fun buildCardMetaLine(
     return parts.joinToString(" · ")
 }
 
-/** 封面右下角的悬浮「想看」圆形按钮 */
+/** 封面右下角的悬浮「想看」按钮：视觉 30dp，触控判定区 44dp（满足最小触控目标） */
 @Composable
 private fun WishFAB(
     isWished: Boolean,
@@ -196,19 +197,26 @@ private fun WishFAB(
         label = "WishFABColor",
     )
 
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = containerColor,
-        modifier = modifier.size(30.dp),
+    Box(
+        modifier =
+            modifier
+                .size(44.dp)
+                .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = if (isWished) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                contentDescription = if (isWished) "已想看" else "想看",
-                tint = Color.White,
-                modifier = Modifier.size(16.dp),
-            )
+        Surface(
+            shape = CircleShape,
+            color = containerColor,
+            modifier = Modifier.size(30.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (isWished) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                    contentDescription = if (isWished) "已想看" else "想看",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }

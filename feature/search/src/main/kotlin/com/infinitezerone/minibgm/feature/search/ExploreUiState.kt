@@ -2,7 +2,6 @@ package com.infinitezerone.minibgm.feature.search
 
 import androidx.compose.runtime.Immutable
 import com.infinitezerone.minibgm.core.model.Subject
-import com.infinitezerone.minibgm.core.model.SubjectComment
 import java.time.LocalDate
 
 /** 季度/年份/年代时间筛选选项 */
@@ -243,7 +242,6 @@ data class ExploreUiState(
     val showLoginPromptDialog: Boolean = false,
     val subjects: List<Subject> = emptyList(),
     val wishedSubjectIds: Set<Long> = emptySet(),
-    val hotComments: Map<Long, SubjectComment> = emptyMap(),
     val error: String? = null,
     val userMessage: String? = null,
     val customFilterTags: List<String> = emptyList(),

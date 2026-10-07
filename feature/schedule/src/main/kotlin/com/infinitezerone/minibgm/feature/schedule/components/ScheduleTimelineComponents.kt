@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -458,22 +459,30 @@ fun ScheduleTimelineSingleCard(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
 
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onShowSources(schedule)
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(30.dp),
+                    // 播放按钮：视觉 30dp，触控判定区 40dp
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(40.dp)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onShowSources(schedule)
+                                },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = BgmIcons.Play,
-                                contentDescription = "播放",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(15.dp),
-                            )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(30.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = BgmIcons.Play,
+                                    contentDescription = "播放",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
                         }
                     }
                 }
