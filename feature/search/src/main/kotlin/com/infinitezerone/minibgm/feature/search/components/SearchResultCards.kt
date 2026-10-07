@@ -6,8 +6,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -36,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -66,7 +65,6 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 
 /** 高质感详细卡片（多品类自适应徽章、关键词高亮、度量适配与 1-Tap 快捷三态打卡） */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchResultCard(
     subject: Subject,
@@ -108,13 +106,6 @@ fun SearchResultCard(
     val rating = subject.rating
     val rank = rating?.rank ?: 0
 
-    val topTags =
-        remember(subject.tags) {
-            subject.tags
-                .filter { it.name !in setOf("TV", "日本", "动画", "原创", "漫改", "轻改") && !it.name.all { c -> c.isDigit() } }
-                .take(3)
-        }
-
     Card(
         onClick = {
             onSubjectClick(
@@ -135,12 +126,8 @@ fun SearchResultCard(
             modifier = Modifier.padding(10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // 74dp 封面直接承载共享元素，消除嵌套 Box 与比例冲突
-            CoverImage(
-                url = subject.images?.bestImage.orEmpty(),
-                contentDescription = primaryTitle,
-                cornerRadius = 8.dp,
-                aspectRatio = BGM_POSTER_ASPECT_RATIO,
+            // 封面（承载共享元素 + 评分角标，与瀑布流卡片一致）
+            Box(
                 modifier =
                     Modifier
                         .width(74.dp)
@@ -148,7 +135,24 @@ fun SearchResultCard(
                             key = BgmSharedElementKeys.subjectCover(subject.id, "search_list"),
                             clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
-            )
+            ) {
+                CoverImage(
+                    url = subject.images?.bestImage.orEmpty(),
+                    contentDescription = primaryTitle,
+                    cornerRadius = 8.dp,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                ScoreBadge(
+                    score = rating?.score ?: 0.0,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                    shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
+                    starSize = 9.dp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                )
+            }
 
             // 右侧内容区
             Column(
@@ -234,91 +238,33 @@ fun SearchResultCard(
                     }
                 }
 
-                // 4. 社区同好标签
-                if (topTags.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.padding(top = 1.dp),
-                    ) {
-                        topTags.forEach { tag ->
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
-                            ) {
-                                Text(
-                                    text = "#${tag.name}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.85f,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 5. 评分与 1-Tap 追番三态胶囊
+                // 4. 1-Tap 追番三态胶囊（右对齐）
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.End,
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 ) {
-                    // 评分
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    ) {
-                        if (rating != null && rating.score > 0.0) {
-                            Icon(
-                                imageVector = BgmIcons.Star,
-                                contentDescription = null,
-                                tint = RatingGold,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = rating.score.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = RatingGold,
-                            )
-                        } else {
-                            Text(
-                                text = "暂无评分",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.9f,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
-                    }
-
-                    // 1-Tap 快捷胶囊组（想看/想读/想听/想玩）
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        // 想看 / 想读 / 想听 / 想玩
-                        QuickCapsuleButton(
-                            label = subjectType.actionWish,
-                            isActive = currentStatus == CollectionType.WISH,
-                            activeColor = ActionWish,
-                            onClick = { onToggleCollection(CollectionType.WISH) },
-                        )
-                        // 在看 / 在读 / 在听 / 在玩
-                        QuickCapsuleButton(
-                            label = subjectType.actionDoing,
-                            isActive = currentStatus == CollectionType.DOING,
-                            activeColor = ActionDoing,
-                            onClick = { onToggleCollection(CollectionType.DOING) },
-                        )
-                        // 看过 / 读过 / 听过 / 玩过
-                        QuickCapsuleButton(
-                            label = subjectType.actionCollect,
-                            isActive = currentStatus == CollectionType.COLLECT,
-                            activeColor = ActionCollect,
-                            onClick = { onToggleCollection(CollectionType.COLLECT) },
-                        )
-                    }
+                    // 想看 / 想读 / 想听 / 想玩
+                    QuickCapsuleButton(
+                        label = subjectType.actionWish,
+                        isActive = currentStatus == CollectionType.WISH,
+                        activeColor = ActionWish,
+                        onClick = { onToggleCollection(CollectionType.WISH) },
+                    )
+                    // 在看 / 在读 / 在听 / 在玩
+                    QuickCapsuleButton(
+                        label = subjectType.actionDoing,
+                        isActive = currentStatus == CollectionType.DOING,
+                        activeColor = ActionDoing,
+                        onClick = { onToggleCollection(CollectionType.DOING) },
+                    )
+                    // 看过 / 读过 / 听过 / 玩过
+                    QuickCapsuleButton(
+                        label = subjectType.actionCollect,
+                        isActive = currentStatus == CollectionType.COLLECT,
+                        activeColor = ActionCollect,
+                        onClick = { onToggleCollection(CollectionType.COLLECT) },
+                    )
                 }
             }
         }

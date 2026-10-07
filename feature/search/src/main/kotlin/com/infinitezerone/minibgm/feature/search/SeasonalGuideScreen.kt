@@ -290,7 +290,6 @@ fun SeasonalGuideContent(
                                             isDoing = uiState.doingSubjectIds.contains(item.subject.id),
                                             onSubjectClick = onSubjectClick,
                                             onToggleCollection = viewModel::toggleCollection,
-                                            onTagClick = viewModel::toggleTag,
                                             isContinuing = isContinuing,
                                             continuingEpisodeText = continuingEpText,
                                         )

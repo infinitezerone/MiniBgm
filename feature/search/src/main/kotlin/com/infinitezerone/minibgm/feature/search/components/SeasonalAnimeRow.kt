@@ -69,7 +69,6 @@ fun SeasonalAnimeRow(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleCollection: (Long, CollectionType) -> Unit,
     modifier: Modifier = Modifier,
-    onTagClick: ((String) -> Unit)? = null,
     isContinuing: Boolean = false,
     continuingEpisodeText: String? = null,
 ) {
@@ -253,19 +252,15 @@ fun SeasonalAnimeRow(
                     )
                 }
 
-                // 题材标签小药丸
+                // 题材行（LiveChart 式纯文本，保持扫读信息但避免 chips 误触与视觉噪音）
                 if (genres.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(vertical = 1.dp),
-                    ) {
-                        genres.forEach { genre ->
-                            GenreTag(
-                                label = genre,
-                                onClick = onTagClick?.let { { it(genre) } },
-                            )
-                        }
-                    }
+                    Text(
+                        text = genres.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
 
                 // 剧情梗概简介（扫读找番的核心利器，限 2 行）
@@ -346,28 +341,5 @@ private fun QuickCollectionPill(
                 color = style.contentColor,
             )
         }
-    }
-}
-
-/** 题材标签小药丸；宽度由短词上限保证，不挤占其他信息 */
-@Composable
-private fun GenreTag(
-    label: String,
-    onClick: (() -> Unit)? = null,
-) {
-    Surface(
-        onClick = onClick ?: {},
-        enabled = onClick != null,
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-        )
     }
 }
