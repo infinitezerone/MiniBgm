@@ -292,17 +292,15 @@ fun ScheduleTimelineSingleCard(
 
     Card(
         onClick = {
-            if (!schedule.isUnmapped) {
-                onSubjectClick(
-                    SubjectDetailRoute(
-                        subjectId = schedule.bgmId,
-                        initialName = displayName,
-                        initialCoverUrl = schedule.coverUrl,
-                        initialScore = score,
-                        source = "schedule",
-                    ),
-                )
-            }
+            onSubjectClick(
+                SubjectDetailRoute(
+                    subjectId = schedule.bgmId,
+                    initialName = displayName,
+                    initialCoverUrl = schedule.coverUrl,
+                    initialScore = score,
+                    source = "schedule",
+                ),
+            )
         },
         shape = RoundedCornerShape(16.dp),
         colors =
@@ -445,39 +443,31 @@ fun ScheduleTimelineSingleCard(
                         Spacer(modifier = Modifier.width(1.dp))
                     }
 
-                    if (schedule.isUnmapped) {
-                        Text(
-                            text = "AniList 在播 · 暂未收录",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        )
-                    } else {
-                        Surface(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onShowSources(schedule)
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                    Surface(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onShowSources(schedule)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Play,
-                                    contentDescription = "播放",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(15.dp),
-                                )
-                                Text(
-                                    text = "播放",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
+                            Icon(
+                                imageVector = BgmIcons.Play,
+                                contentDescription = "播放",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                text = "播放",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
                         }
                     }
                 }

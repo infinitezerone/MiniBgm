@@ -145,7 +145,7 @@ internal class ScheduleRepositoryImpl(
             if (cached != null) return cached
         }
         val snapshot = snapshotService.getSeasonSnapshot(year, seasonKey) ?: return emptyList()
-        val subjects = snapshot.items.map { it.toSubject() }
+        val subjects = snapshot.items.mapNotNull { it.toSubject() }
         seasonalCacheMutex.withLock {
             seasonalCache[cacheKey] = subjects
         }

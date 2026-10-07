@@ -275,7 +275,7 @@ class SeasonalGuideViewModel(
                 // 2. 本地实时排期字典（仅用于为在播条目丰富最新封面与更新播出时刻）
                 val scheduleMap =
                     allSchedules
-                        .filter { !it.isUnmapped && it.bgmId > 0 }
+                        .filter { it.bgmId > 0 }
                         .associateBy { it.bgmId }
 
                 val aniListSubjects =

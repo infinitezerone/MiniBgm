@@ -2114,7 +2114,7 @@ class ScheduleRepositoryImplTest {
             assertTrue(stored.none { it.bgmId == 1L || it.bgmId == 2L }, "无唯一候选时不得绑定任何条目")
             assertTrue(stored.none { it.bgmId == -555L }, "映射不到的条目不得入库")
             val visible = repo.getAllSchedulesStream().first()
-            assertTrue(visible.none { it.isUnmapped }, "未映射条目不应出现在时刻表流中")
+            assertTrue(visible.none { it.bgmId <= 0 }, "未映射条目不应出现在时刻表流中")
         }
 
     @Test

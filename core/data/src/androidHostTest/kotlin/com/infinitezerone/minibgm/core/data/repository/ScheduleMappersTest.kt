@@ -27,6 +27,7 @@ class ScheduleMappersTest {
             )
 
         val subject = dto.toSubject()
+        assertNotNull(subject)
 
         assertEquals(2002L, subject.id)
         assertEquals("Test Anime", subject.name)
@@ -45,7 +46,7 @@ class ScheduleMappersTest {
     }
 
     @Test
-    fun seasonSnapshotItemDto_toSubject_unmappedFallbackAndAdultTag() {
+    fun seasonSnapshotItemDto_toSubject_unmappedReturnsNull() {
         val dto =
             SeasonSnapshotItemDto(
                 anilistId = 5005L,
@@ -62,16 +63,30 @@ class ScheduleMappersTest {
                 isAdult = true,
             )
 
+        assertNull(dto.toSubject())
+    }
+
+    @Test
+    fun seasonSnapshotItemDto_toSubject_mappedAdultAddsHentaiTag() {
+        val dto =
+            SeasonSnapshotItemDto(
+                anilistId = 5005L,
+                bgmId = 5005L,
+                title = "Adult OVA",
+                titleCn = null,
+                coverUrl = "",
+                format = "",
+                airDate = null,
+                episodes = 2,
+                genres = listOf("Romance"),
+                tags = emptyList(),
+                ratingScore = 0.0,
+                isAdult = true,
+            )
+
         val subject = dto.toSubject()
-
-        assertEquals(-5005L, subject.id)
-        assertEquals("Adult OVA", subject.name)
-        assertEquals("", subject.nameCn)
-        assertEquals("TV", subject.platform) // format fallback
-        assertEquals("", subject.airDate)
-        assertNull(subject.images)
-        assertNull(subject.rating)
-
+        assertNotNull(subject)
+        assertEquals(5005L, subject.id)
         val tagNames = subject.tags.map { it.name }
         assertTrue(tagNames.contains("Hentai"))
         assertTrue(tagNames.contains("Romance"))

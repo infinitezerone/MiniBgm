@@ -142,7 +142,7 @@ internal fun AniListBgmMappingEntity.toAirScheduleEntity(
     )
 }
 
-/** 映射不到 bgmId 时的占位条目：只进时刻表展示，bgmId 用 `-anilistId` 作哨兵值。 */
+/** 将时刻表实体转换为 AniList 与 Bangumi 的本地映射缓存实体。 */
 internal fun AirScheduleEntity.toAniListBgmMapping(
     anilistId: Long,
     nowMillis: Long,
@@ -185,7 +185,6 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
         nextEpisodeNumber = calculatedEp,
         nextEpisodeAtUtc = nextEpisodeAtUtc,
         nextEpisodeKind = nextEpisodeKind,
-        isUnmapped = bgmId <= 0,
         isAdult = parseIsAdult(broadcastRule),
         format = parseFormat(broadcastRule),
     )
@@ -214,7 +213,8 @@ internal fun toSubjectImages(coverUrl: String?): SubjectImages? {
     )
 }
 
-internal fun SeasonSnapshotItemDto.toSubject(): Subject {
+internal fun SeasonSnapshotItemDto.toSubject(): Subject? {
+    val validBgmId = bgmId?.takeIf { it > 0 } ?: return null
     val effectiveFormat = format.ifBlank { "TV" }
     val effectiveOrigin =
         when (countryOfOrigin.uppercase()) {
@@ -223,7 +223,7 @@ internal fun SeasonSnapshotItemDto.toSubject(): Subject {
             else -> null
         }
     return Subject(
-        id = bgmId ?: -anilistId,
+        id = validBgmId,
         type = 2,
         name = title,
         nameCn = titleCn.orEmpty(),
