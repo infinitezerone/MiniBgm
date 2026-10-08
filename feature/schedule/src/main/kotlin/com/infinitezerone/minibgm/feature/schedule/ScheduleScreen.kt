@@ -161,10 +161,10 @@ fun ScheduleScreen(
         snackbarHostState.showSnackbar(message)
     }
 
-    // 滑动 Pager 时，双向同步选中的天索引；切天时平滑复位展开筛选条
-    LaunchedEffect(pagerState.currentPage) {
-        if (uiState.selectedPageIndex != pagerState.currentPage) {
-            viewModel.selectPage(pagerState.currentPage)
+    // 滑动 Pager 时，双向同步选中的天索引；切天完成时平滑复位展开筛选条
+    LaunchedEffect(pagerState.settledPage) {
+        if (uiState.selectedPageIndex != pagerState.settledPage) {
+            viewModel.selectPage(pagerState.settledPage)
         }
         if (filterCollapseState.offset > 0f) {
             filterCollapseState.animateTo(0f)
@@ -235,10 +235,12 @@ fun ScheduleScreen(
                     onSelectPage = { page ->
                         if (page == pagerState.currentPage) {
                             coroutineScope.launch {
+                                launch { filterCollapseState.animateTo(0f) }
                                 pageListStates.getOrNull(page)?.animateScrollToItem(0)
                             }
                         } else {
                             viewModel.selectPage(page)
+                            filterCollapseState.snapTo(0f)
                             coroutineScope.launch {
                                 pagerState.scrollToPage(page)
                             }
@@ -553,6 +555,10 @@ private class FilterBarCollapseState(
             animateTo(target)
         }
         return super.onPostFling(consumed, available)
+    }
+
+    fun snapTo(target: Float) {
+        offset = target.coerceIn(0f, limitPx)
     }
 
     suspend fun animateTo(target: Float) {
