@@ -134,7 +134,6 @@ fun TimelineSlotRow(
         } else {
             null
         }
-    val jstTime = schedules.firstOrNull()?.timeJst
     val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     val statusColor =
         when (airStatus) {
@@ -201,7 +200,6 @@ fun TimelineSlotRow(
         TimelineTrackRail(
             time = time,
             airStatus = airStatus,
-            jstTime = jstTime,
             count = schedules.size,
             upcomingCountdown = upcomingCountdown,
             modifier = Modifier.width(56.dp),
@@ -228,7 +226,6 @@ fun TimelineSlotRow(
 fun TimelineTrackRail(
     time: String,
     airStatus: AirStatus,
-    jstTime: String?,
     count: Int,
     modifier: Modifier = Modifier,
     upcomingCountdown: String? = null,
@@ -300,16 +297,6 @@ fun TimelineTrackRail(
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
-            }
-
-            if (!jstTime.isNullOrBlank() && jstTime != time) {
-                Text(
-                    text = "JP $jstTime",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    maxLines = 1,
-                    modifier = Modifier.padding(top = 1.dp),
-                )
             }
         }
 
@@ -552,39 +539,52 @@ fun ScheduleNowIndicator(
     modifier: Modifier = Modifier,
 ) {
     val nowLabel = String.format(java.util.Locale.US, "%02d:%02d", nowMinutesCst / 60, nowMinutesCst % 60)
+    val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
 
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(22.dp)
+                .height(24.dp)
                 .drawBehind {
-                    // 左侧轨道延续：竖线贯穿 + 实心节点标记当前时刻
                     val trackCenterX = 50.dp.toPx()
+                    val dotCenterY = size.height / 2f
+
+                    // 1. 垂直主轨道线：贯穿全高并向下延伸 TIMELINE_SLOT_SPACING，与相邻行完全连通无断点
                     drawLine(
-                        color = StatusAiring,
+                        color = outlineVariant,
                         start = Offset(trackCenterX, 0f),
-                        end = Offset(trackCenterX, size.height),
+                        end = Offset(trackCenterX, size.height + TIMELINE_SLOT_SPACING.toPx()),
                         strokeWidth = 2.dp.toPx(),
+                    )
+
+                    // 2. 状态节点（发光外环 + 实心圆点）
+                    drawCircle(
+                        color = StatusAiring.copy(alpha = 0.25f),
+                        radius = 6.dp.toPx(),
+                        center = Offset(trackCenterX, dotCenterY),
                     )
                     drawCircle(
                         color = StatusAiring,
-                        radius = 4.dp.toPx(),
-                        center = Offset(trackCenterX, size.height / 2f),
+                        radius = 3.5.dp.toPx(),
+                        center = Offset(trackCenterX, dotCenterY),
                     )
                 },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(modifier = Modifier.width(56.dp))
+        // 占位正好到 trackCenterX（50.dp），横线直接从垂直节点圆心出发
+        Spacer(modifier = Modifier.width(50.dp))
 
+        // 紧贴垂直节点圆心横向拉出的指示线，与垂直轨道无缝相交
         Box(
             modifier =
                 Modifier
                     .weight(1f)
                     .height(1.5.dp)
-                    .background(StatusAiring.copy(alpha = 0.45f), RoundedCornerShape(1.dp)),
+                    .background(StatusAiring.copy(alpha = 0.6f)),
         )
+
+        Spacer(modifier = Modifier.width(6.dp))
 
         Surface(
             shape = RoundedCornerShape(10.dp),
