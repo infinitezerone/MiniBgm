@@ -258,7 +258,7 @@ fun ScheduleSourcesBottomSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = "其他外部平台（大陆多无版权或需代理）(${otherLinks.size})",
+                                text = "其他外部平台 (${otherLinks.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
