@@ -145,7 +145,7 @@ internal fun SubjectDetailContent(
         }
 
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
-    val gridColumns = if (adaptiveInfo.isWide) 7 else 6
+    val gridColumns = if (adaptiveInfo.isWide) 7 else 5
 
     val tabHeaderIndex = if (uiState.error != null) 2 else 1
 
@@ -461,18 +461,6 @@ internal fun SubjectDetailContent(
                                 groupedEpisodes = groupedEpisodes,
                                 selectedGroup = activeGroup,
                                 onGroupSelected = onSelectGroup,
-                            )
-                        }
-                    }
-
-                    // 高光吐槽直达卡片：置顶呈现续看/最新话吐槽入口与热烈讨论氛围
-                    val spotlightEpisode = nextUpEpisode ?: currentEpisodes.firstOrNull()
-                    if (spotlightEpisode != null) {
-                        item(key = "spotlight_episode_tucao") {
-                            SpotlightEpisodeTucaoCard(
-                                episode = spotlightEpisode,
-                                onClick = { onSelectEpisodeForDetail(spotlightEpisode) },
-                                modifier = Modifier.padding(bottom = 6.dp),
                             )
                         }
                     }

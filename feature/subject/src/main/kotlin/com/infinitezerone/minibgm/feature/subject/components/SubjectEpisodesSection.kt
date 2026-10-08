@@ -75,6 +75,7 @@ fun EpisodesSectionHeader(
     onJumpToNextUp: (() -> Unit)? = null,
     group: EpisodeGroup = EpisodeGroup.MAIN,
     hasMoreEpisodes: Boolean = false,
+    showPlaybackCard: Boolean = false,
 ) {
     val headerTitle =
         when (subjectType) {
@@ -169,8 +170,8 @@ fun EpisodesSectionHeader(
             }
         }
 
-        // 第二行：续看与播放源通栏卡片
-        if (hasPlaybackEntry) {
+        // 第二行：续看与播放源通栏卡片（按需展示，避免与顶层个人追番卡片重复）
+        if (showPlaybackCard && hasPlaybackEntry) {
             Card(
                 modifier =
                     Modifier
@@ -787,7 +788,7 @@ fun EpisodeGrid(
                                 }
                             "$prefix${episode.sort.toInt()}"
                         }
-                    val cellShape = BgmShapes.small
+                    val cellShape = RoundedCornerShape(10.dp)
                     val cellBorder =
                         when {
                             isNextToWatch -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
