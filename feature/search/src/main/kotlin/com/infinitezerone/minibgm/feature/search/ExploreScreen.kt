@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -116,6 +117,10 @@ fun ExploreScreen(
         }
     }
 
+    BackHandler(enabled = exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
+        exploreViewModel.resetToRows()
+    }
+
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -125,25 +130,37 @@ fun ExploreScreen(
                         fontWeight = FontWeight.Bold,
                     )
                 },
-                actions = {
-                    IconButton(onClick = { showFilterBottomSheet = true }) {
-                        BadgedBox(
-                            badge = {
-                                if (isFilterActive) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.primary)
-                                }
-                            },
-                        ) {
+                navigationIcon = {
+                    if (exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
+                        IconButton(onClick = exploreViewModel::resetToRows) {
                             Icon(
-                                imageVector = BgmIcons.FilterList,
-                                contentDescription = "高级筛选",
-                                tint =
-                                    if (isFilterActive) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
+                                imageVector = BgmIcons.ArrowBack,
+                                contentDescription = "返回精选",
                             )
+                        }
+                    }
+                },
+                actions = {
+                    if (exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
+                        IconButton(onClick = { showFilterBottomSheet = true }) {
+                            BadgedBox(
+                                badge = {
+                                    if (isFilterActive) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.primary)
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.FilterList,
+                                    contentDescription = "高级筛选",
+                                    tint =
+                                        if (isFilterActive) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                )
+                            }
                         }
                     }
 
