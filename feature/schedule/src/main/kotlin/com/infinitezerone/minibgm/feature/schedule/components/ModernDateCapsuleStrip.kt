@@ -7,8 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,7 +55,7 @@ fun ModernDateCapsuleStrip(
     val density = LocalDensity.current
     var containerWidthPx by remember { mutableIntStateOf(0) }
 
-    val capsuleWidthDp = 56.dp
+    val capsuleWidthDp = 58.dp
     val spacingDp = 8.dp
     val horizontalPaddingDp = 14.dp
     val stridePx = with(density) { (capsuleWidthDp + spacingDp).toPx() }
@@ -129,54 +129,57 @@ fun DateCapsule(
     modifier: Modifier = Modifier,
 ) {
     val containerColor =
-        if (isSelected) {
-            MaterialTheme.colorScheme.primary
-        } else if (item.isToday) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+        when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            item.isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else -> MaterialTheme.colorScheme.surfaceContainerLow
         }
 
     val contentColor =
-        if (isSelected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else if (item.isToday) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurface
+        when {
+            isSelected -> MaterialTheme.colorScheme.onPrimary
+            item.isToday -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurface
         }
 
     val borderColor =
-        if (item.isToday && !isSelected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-        } else {
-            Color.Transparent
+        when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            item.isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+            else -> Color.Transparent
         }
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         color = containerColor,
         border = if (borderColor != Color.Transparent) BorderStroke(1.dp, borderColor) else null,
-        modifier = modifier.width(56.dp),
+        modifier = modifier.width(58.dp),
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+            modifier = Modifier.padding(vertical = 7.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
+            Text(
+                text = if (item.isToday) "今天" else item.weekdayLabel,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor,
+            )
+
+            Text(
+                text = item.dateLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.75f),
+            )
+
+            // 追番小指示器（居中沉底，不挤占文字中心轴）
+            Box(
+                modifier = Modifier.height(6.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = if (item.isToday) "今天" else item.weekdayLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
-                    color = contentColor,
-                )
                 if (watchingCount > 0) {
-                    Spacer(modifier = Modifier.width(2.dp))
                     Box(
                         modifier =
                             Modifier
@@ -186,12 +189,6 @@ fun DateCapsule(
                     )
                 }
             }
-
-            Text(
-                text = item.dateLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.75f),
-            )
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.schedule.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -37,9 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -147,8 +150,8 @@ fun TimelineSlotRow(
                 .fillMaxWidth()
                 .drawBehind {
                     // 左侧轨道轨线与节点绘制在 draw 阶段，消除 IntrinsicSize.Min 双重测量开销
-                    val trackCenterX = 48.dp.toPx()
-                    val dotCenterY = 11.dp.toPx()
+                    val trackCenterX = 50.dp.toPx()
+                    val dotCenterY = 12.dp.toPx()
 
                     // 垂直轨道连线（向下延伸一个插槽间距，与相邻行首绘的线段拼成连续轨道）
                     drawLine(
@@ -163,7 +166,7 @@ fun TimelineSlotRow(
                         AirStatus.AIRING -> {
                             drawCircle(
                                 color = StatusAiring.copy(alpha = 0.25f),
-                                radius = 6.5.dp.toPx(),
+                                radius = 7.dp.toPx(),
                                 center = Offset(trackCenterX, dotCenterY),
                             )
                             drawCircle(
@@ -175,7 +178,7 @@ fun TimelineSlotRow(
                         AirStatus.UPCOMING -> {
                             drawCircle(
                                 color = statusColor.copy(alpha = 0.2f),
-                                radius = 5.5.dp.toPx(),
+                                radius = 6.dp.toPx(),
                                 center = Offset(trackCenterX, dotCenterY),
                             )
                             drawCircle(
@@ -201,7 +204,7 @@ fun TimelineSlotRow(
             jstTime = jstTime,
             count = schedules.size,
             upcomingCountdown = upcomingCountdown,
-            modifier = Modifier.width(52.dp),
+            modifier = Modifier.width(56.dp),
         )
 
         Column(
@@ -253,7 +256,7 @@ fun TimelineTrackRail(
         ) {
             Text(
                 text = time,
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold),
                 color =
                     when (airStatus) {
                         AirStatus.AIRING -> StatusAiring
@@ -265,19 +268,22 @@ fun TimelineTrackRail(
             )
 
             if (airStatus != AirStatus.NORMAL) {
-                Text(
-                    text =
-                        when (airStatus) {
-                            AirStatus.AIRED -> "已播"
-                            AirStatus.AIRING -> "热播"
-                            AirStatus.UPCOMING -> upcomingCountdown ?: "待播"
-                            AirStatus.NORMAL -> ""
-                        },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.82f,
-                    fontWeight = FontWeight.Bold,
-                    color = statusColor,
-                )
+                val statusText =
+                    when (airStatus) {
+                        AirStatus.AIRED -> "已播"
+                        AirStatus.AIRING -> "热播"
+                        AirStatus.UPCOMING -> upcomingCountdown ?: "待播"
+                        AirStatus.NORMAL -> ""
+                    }
+                if (statusText.isNotBlank()) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor,
+                        maxLines = 1,
+                    )
+                }
             }
 
             if (count > 1) {
@@ -288,20 +294,18 @@ fun TimelineTrackRail(
                 ) {
                     Text(
                         text = "${count}部",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.75f,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
             }
 
             if (!jstTime.isNullOrBlank() && jstTime != time) {
                 Text(
-                    text = jstTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.7f,
+                    text = "JP $jstTime",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     maxLines = 1,
                     modifier = Modifier.padding(top = 1.dp),
@@ -359,13 +363,13 @@ fun ScheduleTimelineSingleCard(
             } else {
                 null
             },
-        modifier = modifier.fillMaxWidth().height(76.dp),
+        modifier = modifier.fillMaxWidth().height(86.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(8.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 9.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 1. 封面海报（内部 60dp 高，宽约 42dp）
+            // 1. 封面海报（内部 72dp 高，宽约 50dp）
             Box(
                 modifier =
                     Modifier
@@ -389,35 +393,79 @@ fun ScheduleTimelineSingleCard(
                     score = score,
                     modifier = Modifier.align(Alignment.BottomStart),
                     shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
-                    starSize = 8.dp,
-                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                    contentPadding = PaddingValues(horizontal = 3.dp, vertical = 1.5.dp),
+                    starSize = 9.dp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.5.dp),
                 )
             }
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // 2. 信息行：标题 + 集数徽章 / 在追标记 / 播放按钮
+            // 2. 信息列：标题 + 原名/副标 + 状态与快捷操作
             Column(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(
-                    text = displayName,
-                    style =
-                        MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 13.5.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = displayName,
+                            style =
+                                MaterialTheme.typography.titleSmall.copy(
+                                    fontSize = 14.sp,
+                                    lineHeight = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
 
-                Spacer(modifier = Modifier.height(5.dp))
+                        if (isWatching) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                modifier = Modifier.padding(start = 6.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.Bookmark,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(11.dp),
+                                    )
+                                    Text(
+                                        text = "在追",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
+                    }
 
+                    if (schedule.title.isNotBlank() && schedule.title != displayName) {
+                        Text(
+                            text = schedule.title,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
+                        )
+                    }
+                }
+
+                // 底行：集数徽章 + 首选播映平台 + 播放/找源按钮
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
@@ -434,7 +482,7 @@ fun ScheduleTimelineSingleCard(
                         ) {
                             Text(
                                 text = if (isFirstEp) "首播 · 第 1 话" else "第 ${schedule.nextEpisodeNumber} 话",
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp),
                                 fontWeight = FontWeight.ExtraBold,
                                 color =
                                     if (isFirstEp) {
@@ -447,23 +495,29 @@ fun ScheduleTimelineSingleCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    if (isWatching) {
-                        Icon(
-                            imageVector = BgmIcons.Bookmark,
-                            contentDescription = "已在追",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    val primarySite = schedule.siteLinks.firstOrNull()
+                    if (primarySite != null) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f),
+                            modifier = Modifier.padding(start = 6.dp),
+                        ) {
+                            Text(
+                                text = primarySite.displayName.ifBlank { primarySite.siteName },
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp),
+                            )
+                        }
                     }
 
-                    // 播放按钮：视觉 30dp，触控判定区 40dp
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // 播放按钮：视觉 28dp，触控判定区 38dp
                     Box(
                         modifier =
                             Modifier
-                                .size(40.dp)
+                                .size(38.dp)
                                 .clickable {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onShowSources(schedule)
@@ -473,7 +527,7 @@ fun ScheduleTimelineSingleCard(
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(30.dp),
+                            modifier = Modifier.size(28.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -506,7 +560,7 @@ fun ScheduleNowIndicator(
                 .height(22.dp)
                 .drawBehind {
                     // 左侧轨道延续：竖线贯穿 + 实心节点标记当前时刻
-                    val trackCenterX = 48.dp.toPx()
+                    val trackCenterX = 50.dp.toPx()
                     drawLine(
                         color = StatusAiring,
                         start = Offset(trackCenterX, 0f),
@@ -522,7 +576,7 @@ fun ScheduleNowIndicator(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(modifier = Modifier.width(52.dp))
+        Spacer(modifier = Modifier.width(56.dp))
 
         Box(
             modifier =
@@ -533,16 +587,28 @@ fun ScheduleNowIndicator(
         )
 
         Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = StatusAiring.copy(alpha = 0.9f),
+            shape = RoundedCornerShape(10.dp),
+            color = StatusAiring,
         ) {
-            Text(
-                text = "现在 $nowLabel",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(Color.White),
+                )
+                Text(
+                    text = "现在 $nowLabel",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
         }
     }
 }
@@ -559,7 +625,7 @@ fun ScheduleUntimedSection(
     var isExpanded by remember { mutableStateOf(true) }
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
@@ -600,10 +666,15 @@ fun ScheduleUntimedSection(
                         }
                     }
 
+                    val arrowRotation by animateFloatAsState(
+                        targetValue = if (isExpanded) 180f else 0f,
+                        label = "untimed_expand_arrow",
+                    )
                     Icon(
-                        imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                        imageVector = BgmIcons.KeyboardArrowDown,
                         contentDescription = if (isExpanded) "折叠" else "展开",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.graphicsLayer(rotationZ = arrowRotation),
                     )
                 }
             }
