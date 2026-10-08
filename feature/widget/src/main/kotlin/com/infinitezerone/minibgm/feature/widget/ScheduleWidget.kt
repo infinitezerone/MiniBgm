@@ -23,10 +23,10 @@ import coil3.SingletonImageLoader
 import coil3.asDrawable
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
-import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmDarkColors
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmLightColors
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import org.koin.core.context.GlobalContext
+import java.time.Instant
 import java.time.ZoneId
 
 /**
@@ -82,16 +83,34 @@ class ScheduleWidget : GlanceAppWidget() {
                         ?.firstOrNull() == true
                 val trackedSubjectIds =
                     if (isLoggedIn) {
-                        koin
-                            .getOrNull<CollectionRepository>()
-                            ?.getCollectionsByTypeStream(CollectionType.DOING)
-                            ?.firstOrNull()
-                            .orEmpty()
-                            .map { it.subjectId }
+                        val collectionRepo = koin.getOrNull<CollectionRepository>()
+                        val doing =
+                            collectionRepo
+                                ?.getCollectionsByTypeStream(CollectionType.DOING)
+                                ?.firstOrNull()
+                                .orEmpty()
+                        val wish =
+                            collectionRepo
+                                ?.getCollectionsByTypeStream(CollectionType.WISH)
+                                ?.firstOrNull()
+                                .orEmpty()
+                        (doing + wish).distinctBy { it.subjectId }.map { it.subjectId }
                     } else {
                         emptyList()
                     }
                 val scheduleRepo = koin?.getOrNull<ScheduleRepository>()
+                val settingsRepo = koin?.getOrNull<SettingsRepository>()
+                val allowAdult =
+                    settingsRepo
+                        ?.settings
+                        ?.firstOrNull()
+                        ?.showRestrictedContent == true
+
+                val nowEpochMillis = System.currentTimeMillis()
+                val todayCst = Instant.ofEpochMilli(nowEpochMillis).atZone(ZoneId.of("Asia/Shanghai")).toLocalDate()
+                val todayDateStr = todayCst.toString()
+                val todayWeekday = todayCst.dayOfWeek.value
+
                 val upcoming =
                     if (isLoggedIn && trackedSubjectIds.isNotEmpty()) {
                         scheduleRepo
@@ -103,19 +122,19 @@ class ScheduleWidget : GlanceAppWidget() {
                     } else {
                         emptyList()
                     }
-                // 公共日历仅作为未登录用户的获客面；登录用户绝不掺入陌生番剧
+                // 公共日历仅作为未登录用户的获客面；以 AniList 真实播出事件为真源，遵循家长控制过滤成人内容
                 val todaySchedules =
                     if (!isLoggedIn) {
                         scheduleRepo
-                            ?.getSchedulesByWeekday(
-                                TimeUtils.cstWeekdayOfEpoch(System.currentTimeMillis()),
-                            )?.firstOrNull()
-                            .orEmpty()
+                            ?.getSchedulesForDate(
+                                dateStr = todayDateStr,
+                                weekday = todayWeekday,
+                                allowAdult = allowAdult,
+                            ).orEmpty()
                     } else {
                         emptyList()
                     }
 
-                val nowEpochMillis = System.currentTimeMillis()
                 val zoneId = ZoneId.systemDefault()
 
                 val state =

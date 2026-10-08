@@ -39,6 +39,17 @@ class FakeScheduleRepository : ScheduleRepository {
 
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> = schedulesState.map { it[weekday].orEmpty() }
 
+    var schedulesForDateResult: List<AirSchedule>? = null
+
+    override suspend fun getSchedulesForDate(
+        dateStr: String,
+        weekday: Int,
+        allowAdult: Boolean,
+    ): List<AirSchedule> =
+        schedulesForDateResult ?: schedulesState.value[weekday].orEmpty().let { list ->
+            if (allowAdult) list else list.filterNot { it.isAdult }
+        }
+
     override fun getAllSchedulesStream(): Flow<List<AirSchedule>> = schedulesState.map { it.values.flatten() }
 
     override fun getAllAirEventsStream(): Flow<List<com.infinitezerone.minibgm.core.model.AirScheduleEvent>> = airEventsState

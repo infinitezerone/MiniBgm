@@ -2725,4 +2725,93 @@ class ScheduleRepositoryImplTest {
             assertNotNull(cached)
             assertTrue(cached.contains("冬季动画"))
         }
+
+    @Test
+    fun getSchedulesForDate_matchesAirEventsAndFiltersAdult() =
+        runTest {
+            val scheduleDao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 1L,
+                                title = "Today Anime",
+                                titleCn = "今日动画",
+                                coverUrl = "",
+                                ratingScore = 8.0,
+                                airDate = "2026-10-01",
+                                weekday = 4,
+                                timeCst = "20:00",
+                                timeJst = "21:00",
+                                sitesJson = "[]",
+                                broadcastRule = "",
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 2L,
+                                title = "Adult Anime",
+                                titleCn = "成人动画",
+                                coverUrl = "",
+                                ratingScore = 7.0,
+                                airDate = "2026-10-01",
+                                weekday = 4,
+                                timeCst = "21:00",
+                                timeJst = "22:00",
+                                sitesJson = "[]",
+                                broadcastRule = "adult=true",
+                            ),
+                            AirScheduleEntity(
+                                bgmId = 3L,
+                                title = "Other Day Anime",
+                                titleCn = "非今日动画",
+                                coverUrl = "",
+                                ratingScore = 7.5,
+                                airDate = "2026-07-01",
+                                weekday = 4,
+                                timeCst = "22:00",
+                                timeJst = "23:00",
+                                sitesJson = "[]",
+                                broadcastRule = "",
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao =
+                FakeAirEventDao().apply {
+                    insertAirEvents(
+                        listOf(
+                            AirEventEntity(
+                                subjectId = 1L,
+                                episode = 2,
+                                airAtUtc = "2026-10-08T12:00:00Z",
+                                kind = "scheduled",
+                                source = "anilist",
+                            ),
+                            AirEventEntity(
+                                subjectId = 2L,
+                                episode = 2,
+                                airAtUtc = "2026-10-08T13:00:00Z",
+                                kind = "scheduled",
+                                source = "anilist",
+                            ),
+                            AirEventEntity(
+                                subjectId = 3L,
+                                episode = 12,
+                                airAtUtc = "2026-09-30T14:00:00Z",
+                                kind = "actual",
+                                source = "anilist",
+                            ),
+                        ),
+                    )
+                }
+            val repo = createRepository(scheduleDao = scheduleDao, airEventDao = airEventDao)
+
+            val todaySchedules = repo.getSchedulesForDate(dateStr = "2026-10-08", weekday = 4, allowAdult = false)
+            assertEquals(1, todaySchedules.size)
+            assertEquals(1L, todaySchedules.first().bgmId)
+            assertEquals(2, todaySchedules.first().nextEpisodeNumber)
+
+            val allTodaySchedules = repo.getSchedulesForDate(dateStr = "2026-10-08", weekday = 4, allowAdult = true)
+            assertEquals(2, allTodaySchedules.size)
+            assertEquals(listOf(1L, 2L), allTodaySchedules.map { it.bgmId })
+        }
 }

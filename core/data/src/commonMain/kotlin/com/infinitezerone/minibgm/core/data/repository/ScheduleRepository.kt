@@ -47,6 +47,17 @@ interface ScheduleRepository {
     fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>>
 
     /**
+     * 查询指定自然日（CST 日期，如 "2026-10-08"）的放送条目列表：
+     * 以 AniList 验证播出事件为真源，结合 bangumi-data 元数据，遵循家长控制过滤成人内容。
+     * 排序规则与主 App 放送时刻表完全对齐。
+     */
+    suspend fun getSchedulesForDate(
+        dateStr: String,
+        weekday: Int,
+        allowAdult: Boolean = false,
+    ): List<AirSchedule>
+
+    /**
      * 全量排期流（单流监听，避免按天拆流导致的重复查询与高频重组）。
      * 全量刷新管线进行期间扣住中间态，仅在管线完成后以最新完整数据对外发流。
      */
@@ -188,6 +199,68 @@ internal class ScheduleRepositoryImpl(
                 .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
                 .map { it.toModel(json) }
         }
+
+    override suspend fun getSchedulesForDate(
+        dateStr: String,
+        weekday: Int,
+        allowAdult: Boolean,
+    ): List<AirSchedule> {
+        val rawSchedules = scheduleDao.getAllSchedulesList().map { it.toModel(json) }
+        val allSchedules = if (allowAdult) rawSchedules else rawSchedules.filter { !it.isAdult }
+        val schedulesByBgmId = allSchedules.associateBy { it.bgmId }
+
+        val storedEvents = airEventDao.getAllAirEvents()
+        val eventsOnThisDay =
+            storedEvents.filter {
+                TimeUtils.formatIsoToCstDate(it.airAtUtc) == dateStr
+            }
+        val subjectIdsWithEvents = storedEvents.map { it.subjectId }.toSet()
+
+        val list = mutableListOf<AirSchedule>()
+        val seenSubjectIdsOnThisDay = mutableSetOf<Long>()
+
+        eventsOnThisDay.groupBy { it.subjectId }.forEach { (subId, events) ->
+            val schedule = schedulesByBgmId[subId]
+            if (schedule != null) {
+                seenSubjectIdsOnThisDay.add(subId)
+                val distinctEvents = events.distinctBy { it.episode }.sortedBy { it.episode }
+                distinctEvents.forEach { event ->
+                    list.add(
+                        schedule.copy(
+                            weekday = weekday,
+                            nextEpisodeNumber = event.episode,
+                            nextEpisodeAtUtc = event.airAtUtc,
+                            timeCst = TimeUtils.formatToCstTime(event.airAtUtc).ifBlank { schedule.timeCst },
+                            timeJst = TimeUtils.formatToJstTime(event.airAtUtc).ifBlank { schedule.timeJst },
+                        ),
+                    )
+                }
+            }
+        }
+
+        allSchedules.forEach { schedule ->
+            if (schedule.bgmId in seenSubjectIdsOnThisDay) return@forEach
+            if (schedule.bgmId in subjectIdsWithEvents) return@forEach
+
+            if (schedule.nextEpisodeAtUtc.isNotBlank()) {
+                val scheduleDate = TimeUtils.formatIsoToCstDate(schedule.nextEpisodeAtUtc)
+                if (scheduleDate == dateStr) {
+                    list.add(schedule.copy(weekday = weekday))
+                }
+            } else if (schedule.weekday == weekday) {
+                list.add(schedule)
+            }
+        }
+
+        return list.sortedWith(
+            compareBy<AirSchedule> {
+                val time = it.timeCst.ifBlank { it.timeJst }
+                if (time.isNotBlank()) 0 else 1
+            }.thenBy {
+                it.timeCst.ifBlank { it.timeJst }
+            },
+        )
+    }
 
     override fun getAllAirEventsStream(): Flow<List<AirScheduleEvent>> =
         airEventDao.getAllAirEventsStream().map { list ->
