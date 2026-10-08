@@ -10,7 +10,6 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -28,7 +27,6 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.infinitezerone.minibgm.feature.widget.CheckInEpisodeCallback
 import com.infinitezerone.minibgm.feature.widget.R
-import com.infinitezerone.minibgm.feature.widget.RefreshScheduleWidgetCallback
 import com.infinitezerone.minibgm.feature.widget.ScheduleWidgetUiState
 
 /**
@@ -172,7 +170,6 @@ internal fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
         WidgetHeader(
             title = headerTitleOf(uiState),
             dateLine = dateLineOf(uiState),
-            onRefreshClick = actionRunCallback<RefreshScheduleWidgetCallback>(),
             onScheduleClick = openScheduleAction(),
         )
         Spacer(modifier = GlanceModifier.height(4.dp))
@@ -241,7 +238,6 @@ internal fun ExpandedWidgetContent(
         WidgetHeader(
             title = headerTitleOf(uiState),
             dateLine = dateLineOf(uiState),
-            onRefreshClick = actionRunCallback<RefreshScheduleWidgetCallback>(),
             onScheduleClick = openScheduleAction(),
         )
         Spacer(modifier = GlanceModifier.height(8.dp))

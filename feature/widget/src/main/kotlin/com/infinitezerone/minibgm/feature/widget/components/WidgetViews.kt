@@ -6,8 +6,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
-import androidx.glance.Image
-import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.Action
 import androidx.glance.action.clickable
@@ -23,7 +21,6 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -136,7 +133,6 @@ internal fun StatusBadge(item: ScheduleWidgetItemUiModel) {
 internal fun WidgetHeader(
     title: String,
     dateLine: String,
-    onRefreshClick: Action,
     onScheduleClick: Action,
 ) {
     val context = LocalContext.current
@@ -156,25 +152,11 @@ internal fun WidgetHeader(
             style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
         )
         Spacer(modifier = GlanceModifier.defaultWeight())
-        // 40dp 热区承载 16dp 图标：视觉不变，触控面积符合最低标准
-        Box(
-            modifier =
-                GlanceModifier
-                    .size(40.dp)
-                    .clickable(onRefreshClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                provider = ImageProvider(R.drawable.ic_widget_refresh),
-                contentDescription = context.getString(R.string.widget_cd_refresh),
-                modifier = GlanceModifier.size(16.dp),
-            )
-        }
         Box(
             modifier =
                 GlanceModifier
                     .clickable(onScheduleClick)
-                    .padding(horizontal = 4.dp, vertical = 12.dp),
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
         ) {
             Text(
                 text = context.getString(R.string.widget_open_schedule),
