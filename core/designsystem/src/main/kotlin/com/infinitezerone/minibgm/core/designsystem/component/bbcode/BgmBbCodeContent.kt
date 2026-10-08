@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
@@ -236,6 +237,7 @@ private fun BgmBbCodeImage(
     var isRevealed by rememberSaveable(image.url) { mutableStateOf(!image.isMasked) }
     var retryCount by remember(image.url) { mutableIntStateOf(0) }
     var isLoadFailed by remember(image.url, retryCount) { mutableStateOf(false) }
+    val logger = remember { bgmLogger("Bgm/BbCode") }
     val aspectRatio = image.aspectRatio
     val imageModifier =
         Modifier
@@ -351,7 +353,10 @@ private fun BgmBbCodeImage(
                         model = image.url,
                         contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
                         contentScale = ContentScale.Fit,
-                        onError = { isLoadFailed = true },
+                        onError = { state ->
+                            isLoadFailed = true
+                            logger.w { "BBCode image load failed for ${image.url}: ${state.result.throwable.message}" }
+                        },
                         onSuccess = { isLoadFailed = false },
                         modifier = imageModifier,
                     )

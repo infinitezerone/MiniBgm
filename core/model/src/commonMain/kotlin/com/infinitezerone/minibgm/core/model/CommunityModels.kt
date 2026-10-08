@@ -80,6 +80,7 @@ data class EpisodeComment(
     val user: CommentUser? = null,
     val reactions: List<CommentReaction> = emptyList(),
     val replies: List<EpisodeCommentReply> = emptyList(),
+    val floor: Int = 0,
 )
 
 /**

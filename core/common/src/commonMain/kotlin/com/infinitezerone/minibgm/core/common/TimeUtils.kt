@@ -153,6 +153,26 @@ object TimeUtils {
         }
     }
 
+    /**
+     * 将秒级时间戳格式化为相对时间描述（如 "刚刚"、"5分钟前"、"2小时前"、"昨天"、"3天前" 或 "yyyy-MM-dd"）。
+     * 时间戳非法或 <= 0 时返回空字符串。
+     */
+    fun formatRelativeTime(
+        epochSeconds: Long,
+        nowSeconds: Long = nowEpochMillis() / 1000,
+    ): String {
+        if (epochSeconds <= 0) return ""
+        val diff = nowSeconds - epochSeconds
+        return when {
+            diff < 60 -> "刚刚"
+            diff < 3600 -> "${(diff / 60).coerceAtLeast(1)}分钟前"
+            diff < 86400 -> "${diff / 3600}小时前"
+            diff < 86400 * 2 -> "昨天"
+            diff < 86400 * 7 -> "${diff / 86400}天前"
+            else -> formatEpochSecondsToDate(epochSeconds)
+        }
+    }
+
     fun currentCstYearMonth(): Pair<Int, Int> {
         val local = Clock.System.now().toLocalDateTime(timeZoneCst)
         return local.year to local.month.number

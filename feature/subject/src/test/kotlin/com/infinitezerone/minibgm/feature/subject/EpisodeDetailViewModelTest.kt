@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -143,6 +144,7 @@ class EpisodeDetailViewModelTest {
                         user = CommentUser(id = 1L, username = "test", nickname = "Tester", avatar = null),
                         content = "这集太精彩了！",
                         createdAt = 1700000000L,
+                        floor = 1,
                     ),
                 )
             val subjectRepository =
@@ -292,6 +294,37 @@ class EpisodeDetailViewModelTest {
             assertEquals(CommunityLikeTarget.EPISODE_COMMENT, call.first)
             assertEquals(2038019L, call.second)
             assertEquals(141, call.third)
+        }
+
+    @Test
+    fun toggleCommentReaction_byReactionValue_addsLike() =
+        runTest {
+            val communityRepository = FakeCommunityRepository().apply { setEpisodeComments(episodeId, listOf(sampleComment)) }
+            val subjectRepository =
+                FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val authRepository =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = loggedInUserId, username = "tester", nickname = "测试用户"),
+                )
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    authRepository = authRepository,
+                )
+            advanceUntilIdle()
+
+            viewModel.toggleCommentReaction(sampleComment, 140)
+            advanceUntilIdle()
+
+            val call = communityRepository.setLikeCalls.single()
+            assertEquals(CommunityLikeTarget.EPISODE_COMMENT, call.first)
+            assertEquals(2038019L, call.second)
+            assertEquals(140, call.third)
         }
 
     @Test
@@ -465,5 +498,75 @@ class EpisodeDetailViewModelTest {
             // 验证未发生全量分集和条目网络拉取
             assertEquals(0, subjectRepository.fetchEpisodesCallCount)
             assertEquals(0, subjectRepository.fetchSubjectDetailCallCount)
+        }
+
+    @Test
+    fun commentSortOrder_switchesBetweenHotFloorAndLatest() =
+        runTest {
+            val comment1 =
+                EpisodeComment(
+                    id = 1L,
+                    createdAt = 1000L,
+                    content = "最早发的，0表态",
+                    floor = 1,
+                    reactions = emptyList(),
+                )
+            val comment2 =
+                EpisodeComment(
+                    id = 2L,
+                    createdAt = 2000L,
+                    content = "中间发的，高赞表态",
+                    floor = 2,
+                    reactions =
+                        listOf(
+                            CommentReaction(
+                                value = 140,
+                                users = listOf(CommentReactionUser(id = 1L), CommentReactionUser(id = 2L)),
+                            ),
+                        ),
+                )
+            val comment3 =
+                EpisodeComment(
+                    id = 3L,
+                    createdAt = 3000L,
+                    content = "最新发的，1表态",
+                    floor = 3,
+                    reactions =
+                        listOf(
+                            CommentReaction(value = 0, users = listOf(CommentReactionUser(id = 3L))),
+                        ),
+                )
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    setEpisodeComments(episodeId, listOf(comment1, comment2, comment3))
+                }
+            val subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = subjectRepository,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                )
+            advanceUntilIdle()
+
+            // 1. 默认 HOT：comment2 (2票) -> comment3 (1票) -> comment1 (0票)
+            assertEquals(CommentSortOrder.HOT, viewModel.uiState.value.commentSortOrder)
+            val hotComments = viewModel.uiState.value.comments
+            assertEquals(listOf(2L, 3L, 1L), hotComments.map { it.id })
+            assertEquals(listOf(2, 3, 1), hotComments.map { it.floor })
+
+            // 2. 切换为 ASCENDING（正序）：comment1 (#1) -> comment2 (#2) -> comment3 (#3)
+            viewModel.setCommentSortOrder(CommentSortOrder.ASCENDING)
+            assertEquals(CommentSortOrder.ASCENDING, viewModel.uiState.value.commentSortOrder)
+            val ascComments = viewModel.uiState.value.comments
+            assertEquals(listOf(1L, 2L, 3L), ascComments.map { it.id })
+
+            // 3. 切换为 DESCENDING（倒序）：comment3 (#3) -> comment2 (#2) -> comment1 (#1)
+            viewModel.setCommentSortOrder(CommentSortOrder.DESCENDING)
+            assertEquals(CommentSortOrder.DESCENDING, viewModel.uiState.value.commentSortOrder)
+            val descComments = viewModel.uiState.value.comments
+            assertEquals(listOf(3L, 2L, 1L), descComments.map { it.id })
         }
 }

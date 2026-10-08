@@ -1,11 +1,12 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import android.content.ClipData
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,8 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -37,10 +39,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +66,7 @@ import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrderTabs
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import kotlinx.coroutines.launch
@@ -98,9 +104,20 @@ fun EpisodeDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val handleCopyComment: (String) -> Unit =
+        remember(clipboard, coroutineScope, snackbarHostState) {
+            { text ->
+                coroutineScope.launch {
+                    val clipEntry = ClipEntry(ClipData.newPlainText("comment", text))
+                    clipboard.setClipEntry(clipEntry)
+                    snackbarHostState.showSnackbar("已复制评论内容")
+                }
+            }
+        }
     // 吐槽表态结果与登录提示
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
@@ -178,6 +195,17 @@ fun EpisodeDetailScreen(
                 },
                 actions = {
                     if (episode != null) {
+                        if (onPlayClick != null) {
+                            IconButton(
+                                onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Play,
+                                    contentDescription = "播放本集",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
@@ -222,111 +250,196 @@ fun EpisodeDetailScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    // 1. 分集序号与标题 (中文名 & 原名)
+                    // 1. 分集精炼头部：话数徽标、连贯切集胶囊、标题与放送元信息
                     item(key = "episode_header") {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            // 顶栏：话数标签 + 分集属性 (左) 与 上/下一集切换器 (右)
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f, fill = false),
                                 ) {
-                                    Text(
-                                        text = episodeNumberText,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    )
-                                }
-
-                                if (episode != null && episode.type != 0) {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
                                     ) {
                                         Text(
-                                            text = group.label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                            text = episodeNumberText,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                         )
+                                    }
+
+                                    if (episode != null && episode.type != 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                        ) {
+                                            Text(
+                                                text = group.label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                            )
+                                        }
+                                    }
+
+                                    if (episode != null) {
+                                        val metaParts =
+                                            listOfNotNull(
+                                                episode.airdate.takeIf { it.isNotBlank() }?.let { "放送：$it" },
+                                                episode.duration.takeIf { it.isNotBlank() }?.let { "时长：$it" },
+                                            )
+                                        if (metaParts.isNotEmpty()) {
+                                            Text(
+                                                text = metaParts.joinToString(" · "),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 连贯切集胶囊：‹ 当前集/总集数 ›
+                                val allEps = uiState.allEpisodes
+                                if (allEps.size > 1) {
+                                    val currentIndex = allEps.indexOfFirst { it.id == episodeId }
+                                    if (currentIndex >= 0) {
+                                        val prevEp = if (currentIndex > 0) allEps.getOrNull(currentIndex - 1) else null
+                                        val nextEp = if (currentIndex < allEps.size - 1) allEps.getOrNull(currentIndex + 1) else null
+
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                            ) {
+                                                IconButton(
+                                                    onClick = { prevEp?.let { onEpisodeClick(it.id) } },
+                                                    enabled = prevEp != null,
+                                                    modifier = Modifier.size(28.dp),
+                                                ) {
+                                                    Icon(
+                                                        imageVector = BgmIcons.KeyboardArrowLeft,
+                                                        contentDescription = "上一集",
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "${currentIndex + 1}/${allEps.size}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                                IconButton(
+                                                    onClick = { nextEp?.let { onEpisodeClick(it.id) } },
+                                                    enabled = nextEp != null,
+                                                    modifier = Modifier.size(28.dp),
+                                                ) {
+                                                    Icon(
+                                                        imageVector = BgmIcons.KeyboardArrowRight,
+                                                        contentDescription = "下一集",
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
 
+                            // 主标题
                             Text(
                                 text = displayTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
 
+                            // 副标题（日文原名，不同于中文译名时展示）
                             if (episode != null && episode.name.isNotBlank() && episode.name != displayTitle) {
                                 Text(
                                     text = episode.name,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
                     }
 
-                    // 2. 放送时间与时长 Chip 标签
-                    if (episode != null && (episode.airdate.isNotBlank() || episode.duration.isNotBlank())) {
-                        item(key = "episode_meta") {
-                            FlowRow(
+                    // 2. 辅助工具胶囊条（播放源与看到本集；轻量不霸屏）
+                    if (episode != null && (!uiState.isWatched && episode.isMain && episode.episodeInt > 1 || onPlayClick != null)) {
+                        item(key = "episode_tools") {
+                            Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (episode.airdate.isNotBlank()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                Surface(
+                                    onClick = { showSourcesSheet = true },
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = BgmIcons.DateRange,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                            Text(
-                                                text = "放送：${episode.airdate}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = BgmIcons.CloudQueue,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = "播放源",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
                                 }
 
-                                if (episode.duration.isNotBlank()) {
+                                if (!uiState.isWatched && episode.isMain && episode.episodeInt > 1) {
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            viewModel.markWatchedUpTo(episode)
+                                        },
+                                        shape = CircleShape,
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                         ) {
                                             Icon(
-                                                imageVector = BgmIcons.Schedule,
+                                                imageVector = BgmIcons.FormatListNumbered,
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.primary,
                                             )
                                             Text(
-                                                text = "时长：${episode.duration}",
+                                                text = "看到此集 (1~${episode.episodeInt})",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.primary,
                                             )
                                         }
                                     }
@@ -335,136 +448,45 @@ fun EpisodeDetailScreen(
                         }
                     }
 
-                    // 3. 播放与打卡操作面板
-                    if (episode != null) {
-                        item(key = "episode_actions") {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    if (onPlayClick != null) {
-                                        Button(
-                                            onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            Icon(
-                                                imageVector = BgmIcons.Play,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(text = "播放本集")
-                                        }
-                                    }
-                                    FilledTonalButton(
-                                        onClick = { showSourcesSheet = true },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.CloudQueue,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(text = "播放源")
-                                    }
-                                }
-
-                                if (uiState.isWatched) {
-                                    FilledTonalButton(
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                            viewModel.toggleWatched(episode, false)
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(text = "已看过 · 点击取消打卡")
-                                    }
-                                } else {
-                                    val epNum = episode.episodeInt
-                                    if (epNum > 1) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Button(
-                                                onClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                    viewModel.toggleWatched(episode, true)
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                            ) {
-                                                Icon(
-                                                    imageVector = BgmIcons.CheckBorder,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(text = "标记此集")
-                                            }
-                                            FilledTonalButton(
-                                                onClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                    viewModel.markWatchedUpTo(episode)
-                                                },
-                                                modifier = Modifier.weight(1f),
-                                            ) {
-                                                Icon(
-                                                    imageVector = BgmIcons.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text(text = "看到本集")
-                                            }
-                                        }
-                                    } else {
-                                        Button(
-                                            onClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                                viewModel.toggleWatched(episode, true)
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Icon(
-                                                imageVector = BgmIcons.CheckBorder,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(text = "标记为看过 (打卡)")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // 4. 剧情梗概 (Full desc)                    if (episode != null && episode.desc.isNotBlank()) {
+                    // 3. 剧情梗概（轻量折叠卡片）
+                    if (episode != null && episode.desc.isNotBlank()) {
                         item(key = "episode_desc") {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = "剧情梗概",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    modifier = Modifier.fillMaxWidth(),
+                            var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { isDescExpanded = !isDescExpanded },
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = "剧情梗概",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                        Text(
+                                            text = if (isDescExpanded) "收起 ∧" else "展开 ∨",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                     Text(
                                         text = episode.desc.trim(),
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(14.dp),
+                                        maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
                                 }
                             }
@@ -507,6 +529,16 @@ fun EpisodeDetailScreen(
                                         )
                                     }
                                 }
+                            }
+
+                            if (uiState.comments.isNotEmpty()) {
+                                CommentSortOrderTabs(
+                                    currentOrder = uiState.commentSortOrder,
+                                    onOrderSelected = { order ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.setCommentSortOrder(order)
+                                    },
+                                )
                             }
                         }
                     }
@@ -601,16 +633,20 @@ fun EpisodeDetailScreen(
                             }
                         }
                     } else {
-                        items(
+                        itemsIndexed(
                             items = uiState.comments,
-                            key = { it.id },
-                            contentType = { "episode_comment" },
-                        ) { comment ->
+                            key = { _, it -> it.id },
+                            contentType = { _, _ -> "episode_comment" },
+                        ) { index, comment ->
                             EpisodeCommentItem(
                                 comment = comment,
+                                floorNumber = if (comment.floor > 0) comment.floor else (index + 1),
                                 onUrlClick = handleLinkClick,
+                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                                onCopyComment = handleCopyComment,
                                 currentUserId = uiState.currentUserId,
                                 onReactionClick = { reaction -> viewModel.toggleCommentReaction(comment, reaction) },
+                                onAddReaction = { reactionValue -> viewModel.toggleCommentReaction(comment, reactionValue) },
                             )
                         }
                     }

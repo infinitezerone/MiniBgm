@@ -20,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +53,7 @@ data class EpisodeDetailUiState(
     val collection: UserCollection? = null,
     val allEpisodes: List<Episode> = emptyList(),
     val comments: List<EpisodeComment> = emptyList(),
+    val commentSortOrder: CommentSortOrder = CommentSortOrder.HOT,
     val isCommentsLoading: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val error: String? = null,
@@ -123,9 +125,10 @@ private data class CommentsRefreshIntent(
     val shouldFetchSubject: Boolean,
 )
 
-/** 会话侧提示位（评论状态 + 登录提示 + 命令层错误位）的合流中间态 */
+/** 会话侧提示位（评论状态 + 排序模式 + 登录提示 + 命令层错误位）的合流中间态 */
 private data class SessionData(
     val comments: CommentsUi,
+    val sortOrder: CommentSortOrder,
     val showLoginPromptDialog: Boolean,
     val actionError: String?,
 )
@@ -177,6 +180,9 @@ class EpisodeDetailViewModel(
     /** 评论刷新会话与表态命令共用的落位容器（见 [CommentsUi]） */
     private val commentsUi = MutableStateFlow(CommentsUi())
 
+    /** 评论排序模式（默认热门优先） */
+    private val commentSortOrder = MutableStateFlow(CommentSortOrder.HOT)
+
     private val isLoggedIn =
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -215,8 +221,8 @@ class EpisodeDetailViewModel(
             ) { rules, playlists, failures ->
                 PlaybackData(playbackRules = rules, playlists = playlists, failedSourceReasons = failures)
             },
-            combine(commentsUi, loginPromptVisible, actionError) { comments, prompt, error ->
-                SessionData(comments = comments, showLoginPromptDialog = prompt, actionError = error)
+            combine(commentsUi, commentSortOrder, loginPromptVisible, actionError) { comments, sortOrder, prompt, error ->
+                SessionData(comments = comments, sortOrder = sortOrder, showLoginPromptDialog = prompt, actionError = error)
             },
         ) { episodeData, identity, playback, session ->
             EpisodeDetailUiState(
@@ -227,7 +233,8 @@ class EpisodeDetailViewModel(
                 isWatched = episodeData.isWatched,
                 collection = episodeData.collection,
                 allEpisodes = episodeData.allEpisodes,
-                comments = session.comments.comments,
+                comments = sortEpisodeComments(session.comments.comments, session.sortOrder),
+                commentSortOrder = session.sortOrder,
                 isCommentsLoading = session.comments.isCommentsLoading,
                 showLoginPromptDialog = session.showLoginPromptDialog,
                 error = session.actionError,
@@ -302,7 +309,10 @@ class EpisodeDetailViewModel(
                 when (commentsResult) {
                     is AppResult.Success ->
                         current.copy(
-                            comments = commentsResult.data,
+                            comments =
+                                commentsResult.data.mapIndexed { index, comment ->
+                                    if (comment.floor <= 0) comment.copy(floor = index + 1) else comment
+                                },
                             isCommentsLoading = false,
                             isRefreshing = false,
                             commentsError = null,
@@ -436,6 +446,17 @@ class EpisodeDetailViewModel(
     }
 
     /**
+     * 按表情值切换自己对某条吐槽的表态状态：若该表情已存在则切换，若不存在则新增表态。
+     */
+    fun toggleCommentReaction(
+        comment: EpisodeComment,
+        reactionValue: Int,
+    ) {
+        val existing = comment.reactions.firstOrNull { it.value == reactionValue }
+        toggleCommentReaction(comment, existing ?: CommentReaction(value = reactionValue))
+    }
+
+    /**
      * 切换自己对某条吐槽某条表情表态的状态：
      * 未登录提示登录；已在该类型表态过 → 取消；否则以该表情类型加入。
      *
@@ -491,4 +512,26 @@ class EpisodeDetailViewModel(
     fun dismissLoginPrompt() {
         loginPromptVisible.value = false
     }
+
+    /** 切换单集吐槽排序规则（热门 / 楼层 / 最新） */
+    fun setCommentSortOrder(order: CommentSortOrder) {
+        commentSortOrder.value = order
+    }
 }
+
+/** 单集吐槽排序算法 */
+private fun sortEpisodeComments(
+    comments: List<EpisodeComment>,
+    sortOrder: CommentSortOrder,
+): List<EpisodeComment> =
+    when (sortOrder) {
+        CommentSortOrder.HOT ->
+            comments.sortedWith(
+                compareByDescending<EpisodeComment> { it.reactions.sumOf { r -> r.count } }
+                    .thenBy { if (it.floor > 0) it.floor else Int.MAX_VALUE },
+            )
+        CommentSortOrder.ASCENDING ->
+            comments.sortedBy { if (it.floor > 0) it.floor else Int.MAX_VALUE }
+        CommentSortOrder.DESCENDING ->
+            comments.sortedByDescending { it.floor }
+    }

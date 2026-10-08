@@ -50,6 +50,16 @@ internal object AdaptiveDnsResolver {
      */
     private val resolvedCandidates = ConcurrentHashMap<String, List<String>>()
 
+    private val dynamicEchHosts = ConcurrentHashMap.newKeySet<String>()
+
+    /** 动态注册由探测器或 DoH 发现的 ECH 支持域名。 */
+    fun registerEchHost(host: String) {
+        val normalized = host.trim().lowercase()
+        if (normalized.isNotBlank()) {
+            dynamicEchHosts.add(normalized)
+        }
+    }
+
     /** 判断域名是否支持 ECH 握手。 */
     private fun isDomainOrSubdomain(
         host: String,
@@ -59,7 +69,9 @@ internal object AdaptiveDnsResolver {
     fun isEchEligible(host: String): Boolean =
         isDomainOrSubdomain(host, "bgm.tv") ||
             isDomainOrSubdomain(host, "bangumi.tv") ||
-            isDomainOrSubdomain(host, "chii.in")
+            isDomainOrSubdomain(host, "chii.in") ||
+            isDomainOrSubdomain(host, "sda1.dev") ||
+            dynamicEchHosts.any { isDomainOrSubdomain(host, it) }
 
     /** 判断域名是否由 Cloudflare 提供服务。这些 host 才会拿到候选地址列表。 */
     fun isCloudflareHosted(host: String): Boolean = isEchEligible(host) || isDomainOrSubdomain(host, "anilist.co")
@@ -223,5 +235,6 @@ internal object AdaptiveDnsResolver {
     fun resetForTest() {
         resolvedCandidates.clear()
         dnsCache.clear()
+        dynamicEchHosts.clear()
     }
 }

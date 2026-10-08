@@ -1,28 +1,33 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,9 +38,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -53,21 +60,15 @@ internal fun getTabLabel(
     subjectType: SubjectType,
 ): String =
     when (tab) {
+        SubjectDetailTab.OVERVIEW -> "概览"
         SubjectDetailTab.EPISODES ->
             when (subjectType) {
-                SubjectType.BOOK -> "卷册与章节"
-                SubjectType.MUSIC -> "曲目列表"
-                SubjectType.GAME -> "关卡与章节"
-                SubjectType.ANIME, SubjectType.REAL -> "章节打卡"
+                SubjectType.BOOK -> "卷册"
+                SubjectType.MUSIC -> "曲目"
+                SubjectType.GAME -> "章节"
+                SubjectType.ANIME, SubjectType.REAL -> "分集"
             }
-        SubjectDetailTab.DETAILS ->
-            when (subjectType) {
-                SubjectType.BOOK -> "原作与出版信息"
-                SubjectType.MUSIC -> "专辑制作与人员"
-                SubjectType.GAME -> "游戏资料与主创"
-                SubjectType.ANIME, SubjectType.REAL -> "资料与演职员"
-            }
-        SubjectDetailTab.COMMUNITY -> "社区吐槽"
+        SubjectDetailTab.COMMUNITY -> "讨论"
     }
 
 /**
@@ -143,7 +144,7 @@ internal fun SubjectDetailContent(
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
     val gridColumns = if (adaptiveInfo.isWide) 7 else 6
 
-    val tabHeaderIndex = if (uiState.error != null) 3 else 2
+    val tabHeaderIndex = if (uiState.error != null) 2 else 1
 
     val nextUpEpisode =
         remember(currentEpisodes, uiState.collection?.epStatus) {
@@ -200,6 +201,10 @@ internal fun SubjectDetailContent(
                 subject = displaySubject,
                 subjectType = subjectType,
                 sharedElementSource = source,
+                collection = uiState.collection,
+                totalEpisodes = totalEpisodes,
+                onOpenCollectionSheet = onOpenCollectionSheet,
+                onTagClick = onTagClick,
             )
         }
 
@@ -209,56 +214,95 @@ internal fun SubjectDetailContent(
             }
         } else if (fullSubject != null) {
             val subject = fullSubject
-            // 2. 我的追番/阅读/收听/游玩与进度条面板
-            item(key = "collection_progress_bar") {
-                SubjectPersonalProgressCard(
-                    collection = uiState.collection,
-                    totalEpisodes = totalEpisodes,
-                    subjectType = subjectType,
-                    onOpenSheet = onOpenCollectionSheet,
-                    onToggleWatching = onToggleWatching,
-                    onUpdateCollectionStatus = onUpdateCollectionStatus,
-                    onIncrementWatched = onIncrementWatched,
-                    onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
-                    nextEpSort = nextUpEpNumber,
-                )
-            }
 
-            // 3. 粘性二级分栏 Tab 栏
+            // 2. 粘性二级分栏 Tab 栏（对标 Bilibili/豆瓣 极简胶囊滑块规范）
             stickyHeader(key = "subject_tabs_bar") {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
                 ) {
-                    PrimaryTabRow(
+                    TabRow(
                         selectedTabIndex = selectedTab.ordinal,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        divider = {},
+                        indicator = { tabPositions ->
+                            if (selectedTab.ordinal < tabPositions.size) {
+                                val currentTabPosition = tabPositions[selectedTab.ordinal]
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .tabIndicatorOffset(currentTabPosition)
+                                            .fillMaxWidth(),
+                                    contentAlignment = Alignment.BottomCenter,
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .width(28.dp)
+                                                .height(3.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                    )
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         SubjectDetailTab.entries.forEach { tab ->
+                            val isSelected = selectedTab == tab
                             val tabLabel = getTabLabel(tab, subjectType)
+                            val badgeCount =
+                                when (tab) {
+                                    SubjectDetailTab.EPISODES -> currentEpisodes.size.takeIf { it > 0 }
+                                    SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
+                                    else -> null
+                                }
                             Tab(
-                                selected = selectedTab == tab,
+                                selected = isSelected,
                                 onClick = { onSelectTab(tab) },
                                 text = {
-                                    Text(
-                                        text =
-                                            when (tab) {
-                                                SubjectDetailTab.EPISODES ->
-                                                    if (currentEpisodes.isNotEmpty()) {
-                                                        "$tabLabel (${currentEpisodes.size})"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    ) {
+                                        Text(
+                                            text = tabLabel,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                            color =
+                                                if (isSelected) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                },
+                                        )
+                                        if (badgeCount != null) {
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color =
+                                                    if (isSelected) {
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                                     } else {
-                                                        tabLabel
-                                                    }
-                                                SubjectDetailTab.COMMUNITY ->
-                                                    if (uiState.subjectCommentTotal > 0) {
-                                                        "$tabLabel (${uiState.subjectCommentTotal})"
-                                                    } else {
-                                                        tabLabel
-                                                    }
-                                                else -> tabLabel
-                                            },
-                                        fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Medium,
-                                    )
+                                                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                                                    },
+                                            ) {
+                                                Text(
+                                                    text = if (badgeCount > 999) "999+" else badgeCount.toString(),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color =
+                                                        if (isSelected) {
+                                                            MaterialTheme.colorScheme.primary
+                                                        } else {
+                                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                        },
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                                )
+                                            }
+                                        }
+                                    }
                                 },
                             )
                         }
@@ -268,6 +312,93 @@ internal fun SubjectDetailContent(
 
             // 4. Tab 切换内容
             when (selectedTab) {
+                SubjectDetailTab.OVERVIEW -> {
+                    // 1. 横向轻量选集滑轨（若有分集）：紧凑直达点播、打卡与详情
+                    if (currentEpisodes.isNotEmpty()) {
+                        item(key = "overview_episodes_rail") {
+                            EpisodeQuickRail(
+                                episodes = currentEpisodes,
+                                watchedCount = uiState.collection?.epStatus ?: 0,
+                                onEpisodeClick = { episode ->
+                                    if (onEpisodeClickForQuickAction != null) {
+                                        onEpisodeClickForQuickAction(episode)
+                                    } else {
+                                        onSelectEpisodeForDetail(episode)
+                                    }
+                                },
+                                onViewAllClick = { onSelectTab(SubjectDetailTab.EPISODES) },
+                                hasProgress = uiState.collection != null,
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
+                        }
+                    }
+
+                    // 2. 角色与声优阵容（若有）
+                    if (uiState.characters.isNotEmpty()) {
+                        item(key = "characters_section") {
+                            CharactersSection(
+                                characters = uiState.characters,
+                                onCharacterClick = onCharacterClick,
+                                onActorClick = onPersonClick,
+                                onPreviewCharacter = onPreviewCharacter,
+                            )
+                        }
+                    }
+
+                    // 3. 评分分布与标签（1~10分柱状图、收藏人数、分类标签）
+                    item(key = "rating_distribution") {
+                        RatingDistributionCard(
+                            rating = subject.rating,
+                            collection = subject.collection,
+                            tags = subject.tags,
+                            onTagClick = onTagClick,
+                        )
+                    }
+
+                    // 4. 制作人员 / Staff（若有）
+                    if (uiState.persons.isNotEmpty()) {
+                        item(key = "staff_section") {
+                            StaffSection(
+                                persons = uiState.persons,
+                                onPersonClick = onPersonClick,
+                            )
+                        }
+                    }
+
+                    // 5. 关联作品与系列（若有）
+                    if (uiState.relations.isNotEmpty()) {
+                        item(key = "relations_section") {
+                            RelationsSection(
+                                relations = uiState.relations,
+                                onSubjectClick = onSubjectClick,
+                                currentSubjectId = displaySubject.id,
+                                currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
+                                currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
+                                currentSubjectScore = displaySubject.rating?.score ?: 0.0,
+                            )
+                        }
+                    }
+
+                    // 6. 首次加载占位
+                    if (uiState.isDetailsLoading &&
+                        uiState.relations.isEmpty() &&
+                        uiState.characters.isEmpty() &&
+                        uiState.persons.isEmpty()
+                    ) {
+                        item(key = "details_loading_indicator") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 SubjectDetailTab.EPISODES -> {
                     val watchedInGroup =
                         currentEpisodes.count {
@@ -310,6 +441,18 @@ internal fun SubjectDetailContent(
                                 groupedEpisodes = groupedEpisodes,
                                 selectedGroup = activeGroup,
                                 onGroupSelected = onSelectGroup,
+                            )
+                        }
+                    }
+
+                    // 高光吐槽直达卡片：置顶呈现续看/最新话吐槽入口与热烈讨论氛围
+                    val spotlightEpisode = nextUpEpisode ?: currentEpisodes.firstOrNull()
+                    if (spotlightEpisode != null) {
+                        item(key = "spotlight_episode_tucao") {
+                            SpotlightEpisodeTucaoCard(
+                                episode = spotlightEpisode,
+                                onClick = { onSelectEpisodeForDetail(spotlightEpisode) },
+                                modifier = Modifier.padding(bottom = 6.dp),
                             )
                         }
                     }
@@ -400,7 +543,13 @@ internal fun SubjectDetailContent(
                                     watchedCount = uiState.collection?.epStatus ?: 0,
                                     hasProgress = uiState.collection != null,
                                     onToggleWatched = onToggleEpisodeWatched,
-                                    onEpisodeClick = onEpisodeClickForQuickAction,
+                                    onEpisodeClick = { episode ->
+                                        if (onEpisodeClickForQuickAction != null) {
+                                            onEpisodeClickForQuickAction(episode)
+                                        } else {
+                                            onSelectEpisodeForDetail(episode)
+                                        }
+                                    },
                                     onEpisodeLongClick = { episode ->
                                         val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
                                         if (!isWatched && episode.type == 0) {
@@ -472,68 +621,6 @@ internal fun SubjectDetailContent(
                                     )
                                 }
                             }
-                        }
-                    }
-                }
-
-                SubjectDetailTab.DETAILS -> {
-                    item(key = "rating_distribution") {
-                        RatingDistributionCard(
-                            rating = subject.rating,
-                            collection = subject.collection,
-                            tags = subject.tags,
-                            onTagClick = onTagClick,
-                        )
-                    }
-
-                    if (uiState.isDetailsLoading &&
-                        uiState.relations.isEmpty() &&
-                        uiState.characters.isEmpty() &&
-                        uiState.persons.isEmpty()
-                    ) {
-                        item(key = "details_loading_indicator") {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                        }
-                    }
-
-                    if (uiState.relations.isNotEmpty()) {
-                        item(key = "relations_section") {
-                            RelationsSection(
-                                relations = uiState.relations,
-                                onSubjectClick = onSubjectClick,
-                                currentSubjectId = displaySubject.id,
-                                currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
-                                currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
-                                currentSubjectScore = displaySubject.rating?.score ?: 0.0,
-                            )
-                        }
-                    }
-
-                    if (uiState.characters.isNotEmpty()) {
-                        item(key = "characters_section") {
-                            CharactersSection(
-                                characters = uiState.characters,
-                                onCharacterClick = onCharacterClick,
-                                onActorClick = onPersonClick,
-                                onPreviewCharacter = onPreviewCharacter,
-                            )
-                        }
-                    }
-
-                    if (uiState.persons.isNotEmpty()) {
-                        item(key = "staff_section") {
-                            StaffSection(
-                                persons = uiState.persons,
-                                onPersonClick = onPersonClick,
-                            )
                         }
                     }
                 }

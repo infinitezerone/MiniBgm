@@ -80,9 +80,9 @@ sealed interface SubjectDetailUiEvent {
 enum class SubjectDetailTab(
     val label: String,
 ) {
-    EPISODES("章节打卡"),
-    DETAILS("资料与演职员"),
-    COMMUNITY("社区吐槽"),
+    OVERVIEW("概览"),
+    EPISODES("分集"),
+    COMMUNITY("讨论"),
 }
 
 /** 条目详情页 UI 状态 */
@@ -91,7 +91,7 @@ data class SubjectDetailUiState(
     val isRefreshing: Boolean = false,
     val isEpisodesLoading: Boolean = true,
     val isLoggedIn: Boolean = false,
-    val selectedTab: SubjectDetailTab = SubjectDetailTab.EPISODES,
+    val selectedTab: SubjectDetailTab = SubjectDetailTab.OVERVIEW,
     val isEpisodeGridView: Boolean = true,
     /** 分集排序方向：false = 最早在前，true = 最新在前 */
     val episodeSortDescending: Boolean = false,
@@ -456,8 +456,8 @@ class SubjectDetailViewModel(
     fun selectTab(tab: SubjectDetailTab) {
         _uiState.update { it.copy(selectedTab = tab) }
         when (tab) {
+            SubjectDetailTab.OVERVIEW -> loadDetailsTabIfNeeded()
             SubjectDetailTab.EPISODES -> Unit
-            SubjectDetailTab.DETAILS -> loadDetailsTabIfNeeded()
             SubjectDetailTab.COMMUNITY -> loadCommunityTabIfNeeded()
         }
     }

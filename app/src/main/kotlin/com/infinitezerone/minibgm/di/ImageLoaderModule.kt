@@ -9,10 +9,12 @@ import coil3.memory.MemoryCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.ImageResult
 import coil3.request.crossfade
+import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.core.common.isBgmDomain
 import com.infinitezerone.minibgm.core.common.toBgmCdnUrl
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.createPlatformHttpClientEngine
+import com.infinitezerone.minibgm.core.network.ech.EchCapabilityDetector
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.HttpClientEngineBase
@@ -29,16 +31,22 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.InternalAPI
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 /**
- * 图片专用双轨路由网络引擎：
- * 1. Bangumi 官方图床（lain.bgm.tv 等）：路由至 [primaryEngine]（原生 ECH 引擎），
+ * 图片专用智能双轨路由网络引擎：
+ * 1. Bangumi 官方图床（lain.bgm.tv 等）与 AniList：路由至 [primaryEngine]（原生 ECH 引擎），
  *    享受 Anycast 优选、ECH 加密 SNI 与 HTTP/2 多路复用，穿透网络干扰；
- * 2. 外部第三方图床（新浪、B站、Imgur 等）：路由至 [fallbackEngine]（平台通用 CIO 引擎），
- *    支持标准 HTTP/HTTPS，独立连接池，严格不占用 ECH 的 64 个并发槽位，消除对业务 API 的资源挤占。
+ * 2. 外部第三方图床：
+ *    - 经由 [EchCapabilityDetector]（支持 DoH Type 65 嗅探与种子白名单）动态检测是否支持 ECH；
+ *    - 若支持（如 Cloudflare 图床 p.sda1.dev 等），路由至 [primaryEngine] 并受 [thirdPartyEchSemaphore] 并发许可保护（最多 8 个槽位），
+ *      严格防止第三方图片挤占核心业务 API 的 64 个并发槽位，若 ECH 握手异常自动安全降级至 [fallbackEngine]；
+ *    - 若不支持（如 B站、新浪等传统直连图床），走 [fallbackEngine]（平台通用 CIO 引擎）独立连接池。
  */
 @OptIn(InternalAPI::class)
 private class ImageRoutingEngine(
@@ -50,19 +58,50 @@ private class ImageRoutingEngine(
     override val supportedCapabilities: Set<HttpClientEngineCapability<*>>
         get() = primaryEngine.supportedCapabilities.intersect(fallbackEngine.supportedCapabilities)
 
+    // 第三方图床 ECH 并发配额隔离（最多 8 个并发槽位，杜绝抢占核心业务 API）
+    private val thirdPartyEchSemaphore = Semaphore(permits = 8)
+
+    // DoH 嗅探专用轻量客户端（基于 fallbackEngine 建立，短超时）
+    private val dohProbeClient by lazy {
+        HttpClient(fallbackEngine) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 2_500
+                connectTimeoutMillis = 1_500
+                socketTimeoutMillis = 1_500
+            }
+        }
+    }
+
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
         val host = data.url.host
-        val targetEngine =
-            if (host.isBgmDomain || host.equals("anilist.co", ignoreCase = true) || host.endsWith(".anilist.co", ignoreCase = true)) {
-                primaryEngine
-            } else {
-                fallbackEngine
+        val isCoreHost =
+            host.isBgmDomain ||
+                host.equals("anilist.co", ignoreCase = true) ||
+                host.endsWith(".anilist.co", ignoreCase = true)
+
+        if (isCoreHost) {
+            return primaryEngine.execute(data)
+        }
+
+        val useEch = EchCapabilityDetector.isEchSupported(host, dohProbeClient)
+        return if (useEch) {
+            try {
+                thirdPartyEchSemaphore.withPermit {
+                    primaryEngine.execute(data)
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                fallbackEngine.execute(data)
             }
-        return targetEngine.execute(data)
+        } else {
+            fallbackEngine.execute(data)
+        }
     }
 
     override fun close() {
         super.close()
+        dohProbeClient.close()
         primaryEngine.close()
         fallbackEngine.close()
     }
@@ -108,6 +147,7 @@ val imageLoaderModule =
             BgmHttpClient
                 .createBaseClient(
                     engine = compositeEngine,
+                    enableLogging = BuildConfig.DEBUG,
                     userAgent = appUserAgent,
                     loggerTag = "Bgm/ImageHttp",
                 ) {
@@ -164,6 +204,10 @@ val imageLoaderModule =
                         .directory(context.cacheDir.resolve("image_cache"))
                         .maxSizeBytes(250L * 1024 * 1024)
                         .build()
+                }.apply {
+                    if (BuildConfig.DEBUG) {
+                        logger(coil3.util.DebugLogger())
+                    }
                 }.crossfade(true)
                 .build()
         }

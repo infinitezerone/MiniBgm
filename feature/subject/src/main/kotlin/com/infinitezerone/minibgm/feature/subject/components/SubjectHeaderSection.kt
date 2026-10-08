@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,13 +51,17 @@ import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import kotlin.math.roundToInt
 
-/** 条目头部卡片：立体圆角海报、完整译名与原名、年份季度徽章、评分与全站 Rank、可展开简介 */
+/** 条目头部卡片：立体圆角海报、完整译名与原名、年份季度徽章、评分与全站 Rank、主要制作团队、热门标签、轻量收藏条、可展开简介 */
 @Composable
 fun SubjectHeaderCard(
     subject: Subject,
     subjectType: SubjectType,
     modifier: Modifier = Modifier,
     sharedElementSource: String = "",
+    collection: UserCollection? = null,
+    totalEpisodes: Int = 0,
+    onOpenCollectionSheet: (() -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     var isSummaryExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -107,7 +112,7 @@ fun SubjectHeaderCard(
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = MaterialTheme.typography.bodySmall.fontSize * 0.9f,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -174,10 +179,10 @@ fun SubjectHeaderCard(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(top = 4.dp),
+                            modifier = Modifier.padding(top = 2.dp),
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = RatingGold.copy(alpha = 0.15f),
                             ) {
                                 Row(
@@ -228,6 +233,149 @@ fun SubjectHeaderCard(
                             }
                         }
                     }
+
+                    // 核心主创与制作团队（监督/原作/动画制作公司等）
+                    val staffHighlights = subject.keyStaff.take(2)
+                    if (staffHighlights.isNotEmpty()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                            modifier = Modifier.padding(top = 2.dp),
+                        ) {
+                            staffHighlights.forEach { (role, name) ->
+                                Text(
+                                    text = "$role: $name",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+
+                    // 核心分类标签（按热度排名前4）
+                    val topTags = subject.tags.filter { it.name.isNotBlank() }.take(4)
+                    if (topTags.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.padding(top = 2.dp),
+                        ) {
+                            topTags.forEach { tag ->
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
+                                    modifier = Modifier.clickable { onTagClick?.invoke(tag.name) },
+                                ) {
+                                    Text(
+                                        text = "#${tag.name}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 轻量收藏状态条（名片底部直接透出当前收藏进度，点击直达编辑抽屉）
+            if (onOpenCollectionSheet != null) {
+                Surface(
+                    onClick = onOpenCollectionSheet,
+                    shape = RoundedCornerShape(10.dp),
+                    color =
+                        if (collection != null) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+                        },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f, fill = false),
+                        ) {
+                            Icon(
+                                imageVector = if (collection != null) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                                contentDescription = null,
+                                tint =
+                                    if (collection !=
+                                        null
+                                    ) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                modifier = Modifier.size(16.dp),
+                            )
+                            val collectionType = collection?.let { CollectionType.fromValue(it.type) }
+                            val epText =
+                                if (collection != null) {
+                                    if (totalEpisodes >
+                                        0
+                                    ) {
+                                        " · ${collection.epStatus}/$totalEpisodes 话"
+                                    } else if (collection.epStatus >
+                                        0
+                                    ) {
+                                        " · ${collection.epStatus}话"
+                                    } else {
+                                        ""
+                                    }
+                                } else {
+                                    ""
+                                }
+                            val rateText = if (collection != null && collection.rate > 0) " · ★ ${collection.rate}分" else ""
+                            val statusLabel =
+                                if (collection !=
+                                    null
+                                ) {
+                                    "${collectionType?.label ?: "已收藏"}$epText$rateText"
+                                } else {
+                                    "标记收藏状态 (想看 / 在看 / 看过)"
+                                }
+                            Text(
+                                text = statusLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (collection != null) FontWeight.Bold else FontWeight.Medium,
+                                color =
+                                    if (collection !=
+                                        null
+                                    ) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = if (collection != null) "编辑" else "添加",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Icon(
+                                imageVector = BgmIcons.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                 }
             }
 
@@ -264,6 +412,135 @@ fun SubjectHeaderCard(
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 屏幕底部悬浮收藏/追番状态栏：
+ * 贴合主流成熟 App（B站/流媒体/豆瓣）规范：轻量常驻底部，不破坏页面纵向浏览连续性，
+ * 1 步点击展开完整收藏设置（想看/在看/评分/短评）或快速播放续看。
+ */
+@Composable
+fun SubjectDetailFloatingBar(
+    collection: UserCollection?,
+    totalEpisodes: Int,
+    subjectType: SubjectType,
+    onOpenCollectionSheet: () -> Unit,
+    modifier: Modifier = Modifier,
+    nextEpSort: Float? = null,
+    onPlayNext: (() -> Unit)? = null,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            // 左侧：收藏状态胶囊
+            Surface(
+                onClick = onOpenCollectionSheet,
+                shape = RoundedCornerShape(16.dp),
+                color =
+                    if (collection != null) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = if (collection != null) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                        contentDescription = null,
+                        tint =
+                            if (collection != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.size(18.dp),
+                    )
+                    val collectionType = collection?.let { CollectionType.fromValue(it.type) }
+                    val label =
+                        if (collection != null) {
+                            val epText =
+                                if (totalEpisodes > 0) {
+                                    " · ${collection.epStatus}/$totalEpisodes${subjectType.unitName}"
+                                } else if (collection.epStatus > 0) {
+                                    " · ${collection.epStatus}${subjectType.unitName}"
+                                } else {
+                                    ""
+                                }
+                            val rateText = if (collection.rate > 0) " · ★${collection.rate}" else ""
+                            "${collectionType?.label ?: "已收藏"}$epText$rateText"
+                        } else {
+                            "加入追番 / 标记状态"
+                        }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color =
+                            if (collection != null) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Icon(
+                        imageVector = BgmIcons.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint =
+                            if (collection != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+
+            // 右侧：若有播放源，显示一键播放
+            if (onPlayNext != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = onPlayNext,
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.Play,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text =
+                            if (nextEpSort != null && nextEpSort > 0) {
+                                "续看 E${nextEpSort.toInt()}"
+                            } else {
+                                "播放"
+                            },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }

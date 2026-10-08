@@ -74,6 +74,38 @@ data class Subject(
                 .orEmpty()
 
     /**
+     * 关键主创与制作团队（infobox 首要制作人员，如动画制作、导演/监督、原作、作者、开发等）。
+     */
+    val keyStaff: List<Pair<String, String>>
+        get() {
+            val priorityKeys =
+                listOf(
+                    "动画制作",
+                    "制作",
+                    "导演",
+                    "监督",
+                    "原作",
+                    "作画",
+                    "作者",
+                    "出版社",
+                    "开发",
+                    "发行",
+                    "艺术家",
+                    "音乐",
+                )
+            val result = mutableListOf<Pair<String, String>>()
+            for (key in priorityKeys) {
+                val item = infobox.firstOrNull { it.key == key } ?: continue
+                val values = item.flatValues().filter { it.isNotBlank() }
+                if (values.isNotEmpty()) {
+                    result.add(key to values.joinToString(" / "))
+                }
+                if (result.size >= 4) break
+            }
+            return result
+        }
+
+    /**
      * 是否为片段型条目（MV / PV / CM / 短片等），而非有完整叙事、按集放送的正片。
      *
      * 一季的搜索结果里混着几十条音乐影像与宣传短片，会把真正的新番冲散，因此导视默认折叠它们。

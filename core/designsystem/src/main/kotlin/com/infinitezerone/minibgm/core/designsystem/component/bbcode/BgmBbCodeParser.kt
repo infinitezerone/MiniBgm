@@ -44,6 +44,17 @@ sealed interface BbCodeBlock {
 }
 
 /**
+ * 楼中楼子回复解析结果：
+ * 将传统论坛式的 "[quote][b]被回复者[/b] 说: 引用的长段文本[/quote]实际回复内容"
+ * 解构成符合现代主流移动端标准（B站、小红书、微博、贴吧）的 "被回复者" + "干净回复正文"，
+ * 彻底消除移动端多层级嵌套卡片与冗余引用文本。
+ */
+data class SubReplyParsed(
+    val replyToUser: String? = null,
+    val content: String,
+)
+
+/**
  * Bangumi 行内语法树节点
  */
 sealed interface BbInlineElement {
@@ -210,6 +221,59 @@ object BgmBbCodeParser {
             blocksCache[trimmed] = parsed
         }
         return parsed
+    }
+
+    private val MANUAL_REPLY_REGEX = Regex("""^回复\s*@?([^\s:：]+)\s*[:：]\s*([\s\S]+)$""")
+
+    /**
+     * 将楼中楼子回复原始文本解构为目标被回复人与干净正文，消除冗余引用框。
+     */
+    fun parseSubReply(rawText: String): SubReplyParsed {
+        val trimmed = rawText.trim()
+        if (trimmed.startsWith("[quote", ignoreCase = true)) {
+            val quote = findBalancedQuote(trimmed, 0)
+            if (quote != null) {
+                val (blockRange, contentRange) = quote
+                val afterQuote = trimmed.substring(blockRange.last + 1).trim()
+                val quoteInner = trimmed.substring(contentRange).trim()
+                val authorMatch = QUOTE_AUTHOR_REGEX.find(quoteInner)
+                val author =
+                    authorMatch
+                        ?.groupValues
+                        ?.get(1)
+                        ?.trim()
+                        ?.ifBlank { null }
+                if (afterQuote.isNotEmpty()) {
+                    return SubReplyParsed(
+                        replyToUser = author,
+                        content = afterQuote,
+                    )
+                } else {
+                    val innerContent = authorMatch?.groupValues?.get(2)?.trim() ?: quoteInner
+                    return SubReplyParsed(
+                        replyToUser = author,
+                        content = innerContent,
+                    )
+                }
+            }
+        }
+
+        val manualMatch = MANUAL_REPLY_REGEX.find(trimmed)
+        if (manualMatch != null) {
+            val author = manualMatch.groupValues[1].trim().removePrefix("@")
+            val content = manualMatch.groupValues[2].trim()
+            if (author.isNotEmpty() && content.isNotEmpty()) {
+                return SubReplyParsed(
+                    replyToUser = author,
+                    content = content,
+                )
+            }
+        }
+
+        return SubReplyParsed(
+            replyToUser = null,
+            content = trimmed,
+        )
     }
 
     private fun doParseBlocks(preprocessedText: String): List<BbCodeBlock> {

@@ -1,5 +1,11 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import android.content.ClipData
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,10 +21,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,10 +41,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,8 +60,10 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrderTabs
 import com.infinitezerone.minibgm.feature.subject.components.TopicMainPostCard
 import com.infinitezerone.minibgm.feature.subject.components.TopicReplyCard
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -74,7 +89,21 @@ fun TopicDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val listState = rememberLazyListState()
+
+    val handleCopyContent: (String) -> Unit =
+        remember(clipboard, coroutineScope, snackbarHostState) {
+            { text ->
+                coroutineScope.launch {
+                    val clipEntry = ClipEntry(ClipData.newPlainText("topic_content", text))
+                    clipboard.setClipEntry(clipEntry)
+                    snackbarHostState.showSnackbar("已复制内容")
+                }
+            }
+        }
 
     // 表态结果与登录提示
     ObserveAsEvents(viewModel.events) { event ->
@@ -85,6 +114,7 @@ fun TopicDetailScreen(
 
     val topic = uiState.topicDetail
     val displayTitle = topic?.title ?: initialTitle.ifBlank { "讨论详情" }
+    val opUserId = topic?.creator?.id
     val topicWebUrl =
         if (type == "group") {
             "$BGM_BASE_URL/group/topic/$topicId"
@@ -98,6 +128,10 @@ fun TopicDetailScreen(
             is BgmLink.Topic -> onTopicClick(link.topicId, "")
             else -> context.launchWebUrl(url)
         }
+    }
+
+    val showBackToTop by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 2 }
     }
 
     Scaffold(
@@ -132,6 +166,29 @@ fun TopicDetailScreen(
                         containerColor = MaterialTheme.colorScheme.surface,
                     ),
             )
+        },
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = showBackToTop,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+            ) {
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    },
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.KeyboardArrowUp,
+                        contentDescription = "回到顶部",
+                    )
+                }
+            }
         },
         bottomBar = {
             Surface(
@@ -203,8 +260,9 @@ fun TopicDetailScreen(
                     }
                 }
                 topic != null -> {
-                    val floorReplies = topic.floorReplies
+                    val sortedReplies = uiState.sortedFloorReplies
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -215,10 +273,15 @@ fun TopicDetailScreen(
                                 topic = topic,
                                 onSubjectClick = onSubjectClick,
                                 onUrlClick = handleLinkClick,
+                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                                onCopyContent = handleCopyContent,
+                                currentUserId = uiState.currentUserId,
+                                onReactionClick = { reaction -> viewModel.toggleMainPostReaction(reaction) },
+                                onAddReaction = { value -> viewModel.toggleMainPostReaction(value) },
                             )
                         }
 
-                        // 回复分割线与回复计数
+                        // 回复标题行：回复计数与排序分段器
                         item(key = "replies_header") {
                             Column(
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
@@ -227,26 +290,42 @@ fun TopicDetailScreen(
                                 HorizontalDivider(
                                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                                 )
-                                Text(
-                                    text = if (floorReplies.isNotEmpty()) "全部回复 (${floorReplies.size})" else "暂无回帖",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = if (topic.floorReplies.isNotEmpty()) "全部回复 (${topic.floorReplies.size})" else "暂无回帖",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    if (topic.floorReplies.isNotEmpty()) {
+                                        CommentSortOrderTabs(
+                                            currentOrder = uiState.sortOrder,
+                                            onOrderSelected = { order -> viewModel.setSortOrder(order) },
+                                        )
+                                    }
+                                }
                             }
                         }
 
                         // 2 楼及后续楼层回帖列表
-                        itemsIndexed(
-                            items = floorReplies,
-                            key = { _, reply -> reply.id },
-                        ) { index, reply ->
+                        items(
+                            items = sortedReplies,
+                            key = { (_, reply) -> reply.id },
+                        ) { (floorNumber, reply) ->
                             TopicReplyCard(
                                 reply = reply,
-                                floorNumber = index + 2,
+                                floorNumber = floorNumber,
                                 onUrlClick = handleLinkClick,
+                                isOp = opUserId != null && reply.creator?.id == opUserId,
+                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                                onCopyContent = handleCopyContent,
                                 currentUserId = uiState.currentUserId,
                                 onReactionClick = { reaction -> viewModel.toggleReaction(reply, reaction) },
+                                onAddReaction = { reactionValue -> viewModel.toggleReaction(reply, reactionValue) },
                             )
                         }
 

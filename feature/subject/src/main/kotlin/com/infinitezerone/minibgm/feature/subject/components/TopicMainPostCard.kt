@@ -1,11 +1,12 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,27 +24,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicParentSubject
 
 /**
- * 讨论帖主楼卡片（楼主原帖、关联番剧、主楼正文与表态）
+ * 讨论帖主楼卡片（楼主原帖、关联番剧、主楼正文与表情表态）
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TopicMainPostCard(
     topic: TopicDetail,
     onSubjectClick: (Long) -> Unit,
     onUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onUserClick: ((String) -> Unit)? = null,
+    onCopyContent: ((String) -> Unit)? = null,
+    currentUserId: Long? = null,
+    onReactionClick: ((CommentReaction) -> Unit)? = null,
+    onAddReaction: ((Int) -> Unit)? = null,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val username = topic.creator?.username
+    val avatarClickable = onUserClick != null && !username.isNullOrBlank()
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -79,7 +92,14 @@ fun TopicMainPostCard(
                         Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .then(
+                                if (avatarClickable) {
+                                    Modifier.clickable { onUserClick(username.orEmpty()) }
+                                } else {
+                                    Modifier
+                                },
+                            ),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -87,6 +107,12 @@ fun TopicMainPostCard(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier =
+                            if (avatarClickable) {
+                                Modifier.clickable { onUserClick(username.orEmpty()) }
+                            } else {
+                                Modifier
+                            },
                     )
                     if (topic.createdAt > 0) {
                         Text(
@@ -118,50 +144,40 @@ fun TopicMainPostCard(
                 )
             }
 
-            // 主楼正文（BBCode 原生渲染）
+            // 主楼正文（BBCode 原生渲染，支持长按复制）
             val mainContent = topic.mainPost?.content.orEmpty()
             if (mainContent.isNotBlank()) {
-                BgmBbCodeContent(
-                    content = mainContent,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    onUrlClick = onUrlClick,
-                )
-            }
-
-            // 主楼点赞反应（Reactions）
-            val reactions = topic.mainPost?.reactions.orEmpty()
-            if (reactions.isNotEmpty()) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (onCopyContent != null && mainContent.isNotBlank()) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onCopyContent(mainContent)
+                                    }
+                                },
+                            ),
                 ) {
-                    reactions.forEach { reaction ->
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Favorite,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(13.dp),
-                                )
-                                Text(
-                                    text = reaction.count.toString(),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
+                    BgmBbCodeContent(
+                        content = mainContent,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        onUrlClick = onUrlClick,
+                    )
                 }
             }
+
+            // 主楼点赞反应（Reactions）与快捷选择器
+            val reactions = topic.mainPost?.reactions.orEmpty()
+            CommentReactionsBar(
+                reactions = reactions,
+                currentUserId = currentUserId,
+                onReactionClick = { reaction -> onReactionClick?.invoke(reaction) },
+                onAddReaction = { value -> onAddReaction?.invoke(value) },
+            )
         }
     }
 }

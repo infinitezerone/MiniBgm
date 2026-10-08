@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.TopicReply
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -343,5 +344,84 @@ class TopicDetailViewModelTest {
             assertTrue(floor.reactions.isEmpty())
             val event = viewModel.events.first()
             assertTrue(event is TopicDetailUiEvent.ShowSnackbar && event.message == "网络异常")
+        }
+
+    @Test
+    fun setSortOrder_changesSortOrderAndSortsFloorRepliesCorrectly() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    val detail =
+                        sampleTopicDetail.copy(
+                            replies =
+                                sampleTopicDetail.replies +
+                                    TopicReply(
+                                        id = 1004L,
+                                        creatorId = 999L,
+                                        content = "3楼回帖",
+                                        reactions = listOf(CommentReaction(value = 1, users = listOf(CommentReactionUser(id = 1L)))),
+                                    ),
+                        )
+                    setTopicDetail(sampleTopicId, detail)
+                }
+            val viewModel = TopicDetailViewModel(sampleTopicId, "subject", communityRepository)
+            advanceUntilIdle()
+
+            // 默认正序
+            assertEquals(CommentSortOrder.ASCENDING, viewModel.uiState.value.sortOrder)
+            val ascFloors = viewModel.uiState.value.sortedFloorReplies
+            assertEquals(2, ascFloors.size)
+            assertEquals(2, ascFloors[0].first) // #2 楼
+            assertEquals(1002L, ascFloors[0].second.id)
+            assertEquals(3, ascFloors[1].first) // #3 楼
+            assertEquals(1004L, ascFloors[1].second.id)
+
+            // 切换倒序
+            viewModel.setSortOrder(CommentSortOrder.DESCENDING)
+            advanceUntilIdle()
+            assertEquals(CommentSortOrder.DESCENDING, viewModel.uiState.value.sortOrder)
+            val descFloors = viewModel.uiState.value.sortedFloorReplies
+            assertEquals(3, descFloors[0].first) // #3 楼先显示
+            assertEquals(1004L, descFloors[0].second.id)
+            assertEquals(2, descFloors[1].first) // #2 楼后显示
+            assertEquals(1002L, descFloors[1].second.id)
+
+            // 切换热门
+            viewModel.setSortOrder(CommentSortOrder.HOT)
+            advanceUntilIdle()
+            assertEquals(CommentSortOrder.HOT, viewModel.uiState.value.sortOrder)
+            val hotFloors = viewModel.uiState.value.sortedFloorReplies
+            assertEquals(3, hotFloors[0].first) // 3楼有 1 个表态排在前面
+            assertEquals(1004L, hotFloors[0].second.id)
+            assertEquals(2, hotFloors[1].first)
+            assertEquals(1002L, hotFloors[1].second.id)
+        }
+
+    @Test
+    fun toggleMainPostReaction_optimisticallyUpdatesMainPostReactions() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    setTopicDetail(sampleTopicId, sampleTopicDetail)
+                }
+            val viewModel = loggedInViewModel(communityRepository)
+            advanceUntilIdle()
+
+            viewModel.toggleMainPostReaction(44)
+            advanceUntilIdle()
+
+            val mainPost =
+                viewModel.uiState.value.topicDetail
+                    ?.mainPost
+            assertNotNull(mainPost)
+            assertEquals(1, mainPost?.reactions?.size)
+            assertEquals(44, mainPost?.reactions?.first()?.value)
+            assertTrue(
+                mainPost
+                    ?.reactions
+                    ?.first()
+                    ?.users
+                    ?.any { it.id == loggedInUserId } == true,
+            )
         }
 }

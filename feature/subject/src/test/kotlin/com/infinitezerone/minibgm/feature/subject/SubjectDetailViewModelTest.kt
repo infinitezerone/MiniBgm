@@ -1042,17 +1042,24 @@ class SubjectDetailViewModelTest {
                     communityRepository = FakeCommunityRepository(),
                 )
 
-            assertEquals(SubjectDetailTab.EPISODES, viewModel.uiState.value.selectedTab)
+            assertEquals(SubjectDetailTab.OVERVIEW, viewModel.uiState.value.selectedTab)
             assertTrue(
                 viewModel.uiState.value.characters
                     .isEmpty(),
             )
 
-            viewModel.selectTab(SubjectDetailTab.DETAILS)
-            assertEquals(SubjectDetailTab.DETAILS, viewModel.uiState.value.selectedTab)
+            viewModel.selectTab(SubjectDetailTab.EPISODES)
+            assertEquals(SubjectDetailTab.EPISODES, viewModel.uiState.value.selectedTab)
+
+            viewModel.selectTab(SubjectDetailTab.OVERVIEW)
+            assertEquals(SubjectDetailTab.OVERVIEW, viewModel.uiState.value.selectedTab)
+            testScheduler.advanceUntilIdle()
             assertEquals(sampleCharacterList, viewModel.uiState.value.characters)
             assertEquals(samplePersonList, viewModel.uiState.value.persons)
             assertEquals(sampleRelationList, viewModel.uiState.value.relations)
+
+            viewModel.selectTab(SubjectDetailTab.COMMUNITY)
+            assertEquals(SubjectDetailTab.COMMUNITY, viewModel.uiState.value.selectedTab)
         }
 
     @Test

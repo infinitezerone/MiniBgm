@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -136,6 +137,7 @@ object BgmIcons {
     val ArrowBack: ImageVector = Icons.AutoMirrored.Filled.ArrowBack
     val ArrowForward: ImageVector = Icons.AutoMirrored.Filled.ArrowForward
     val ArrowForwardIos: ImageVector = Icons.AutoMirrored.Filled.ArrowForwardIos
+    val KeyboardArrowLeft: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft
     val KeyboardArrowRight: ImageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight
     val KeyboardArrowDown: ImageVector = Icons.Filled.KeyboardArrowDown
     val KeyboardArrowUp: ImageVector = Icons.Filled.KeyboardArrowUp

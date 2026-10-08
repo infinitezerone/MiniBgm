@@ -481,4 +481,44 @@ class BgmBbCodeParserTest {
         val stickerInside = mask.elements[3] as BbInlineElement.Sticker
         assertEquals("bgm_38", stickerInside.stickerId)
     }
+
+    @Test
+    fun parseSubReply_extractsAuthorAndCleansQuote() {
+        val input = "[quote][b]蒅南[/b] 说: 更正一下，应该是PKM[/quote]lycoris应该都不是正常人类"
+        val parsed = BgmBbCodeParser.parseSubReply(input)
+        assertEquals("蒅南", parsed.replyToUser)
+        assertEquals("lycoris应该都不是正常人类", parsed.content)
+    }
+
+    @Test
+    fun parseSubReply_extractsAuthorFromQuoteWithoutBold() {
+        val input = "[quote]小明 说: 原话[/quote]回复"
+        val parsed = BgmBbCodeParser.parseSubReply(input)
+        assertEquals("小明", parsed.replyToUser)
+        assertEquals("回复", parsed.content)
+    }
+
+    @Test
+    fun parseSubReply_quoteOnlyWithoutTrailingText_usesQuoteContent() {
+        val input = "[quote][b]蒅南[/b] 说: 赞同[/quote]"
+        val parsed = BgmBbCodeParser.parseSubReply(input)
+        assertEquals("蒅南", parsed.replyToUser)
+        assertEquals("赞同", parsed.content)
+    }
+
+    @Test
+    fun parseSubReply_manualReplyPrefix() {
+        val input = "回复 @小明: 确实是这样的"
+        val parsed = BgmBbCodeParser.parseSubReply(input)
+        assertEquals("小明", parsed.replyToUser)
+        assertEquals("确实是这样的", parsed.content)
+    }
+
+    @Test
+    fun parseSubReply_regularContentWithoutQuote() {
+        val input = "这是一条普通的直接回复"
+        val parsed = BgmBbCodeParser.parseSubReply(input)
+        assertNull(parsed.replyToUser)
+        assertEquals("这是一条普通的直接回复", parsed.content)
+    }
 }

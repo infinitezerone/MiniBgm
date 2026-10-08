@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicReply
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -89,24 +90,58 @@ class TopicDetailViewModel(
                     }.onStart { emit(TopicLoad(isLoading = true, isRefreshing = isUserPull)) }
             }
 
+    private val sortOrder = MutableStateFlow(CommentSortOrder.ASCENDING)
+
     val uiState: StateFlow<TopicDetailUiState> =
         combine(
             loadState,
             loadedDetail,
             authRepository?.activeUserId ?: flowOf(null),
-        ) { load, detail, userId ->
+            sortOrder,
+        ) { load, detail, userId, order ->
             TopicDetailUiState(
                 isLoading = load.isLoading && detail == null,
                 isRefreshing = load.isRefreshing,
                 topicDetail = detail,
                 error = load.error,
                 currentUserId = userId,
+                sortOrder = order,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, TopicDetailUiState())
 
     /** 刷新讨论帖内容与回帖流 */
     fun refresh(isUserPullToRefresh: Boolean = false) {
         refreshIntent.tryEmit(isUserPullToRefresh)
+    }
+
+    /** 切换楼层回帖排序规则 */
+    fun setSortOrder(order: CommentSortOrder) {
+        sortOrder.value = order
+    }
+
+    /**
+     * 切换主楼（1 楼）表情表态
+     */
+    fun toggleMainPostReaction(reaction: CommentReaction) {
+        val mainPost = loadedDetail.value?.mainPost ?: return
+        toggleReaction(mainPost, reaction)
+    }
+
+    fun toggleMainPostReaction(reactionValue: Int) {
+        val mainPost = loadedDetail.value?.mainPost ?: return
+        toggleReaction(mainPost, reactionValue)
+    }
+
+    fun toggleReaction(
+        reply: TopicReply,
+        reactionValue: Int,
+    ) {
+        val existing = reply.reactions.find { it.value == reactionValue }
+        if (existing != null) {
+            toggleReaction(reply, existing)
+        } else {
+            toggleReaction(reply, CommentReaction(value = reactionValue, users = emptyList()))
+        }
     }
 
     /**

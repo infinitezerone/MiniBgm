@@ -986,3 +986,209 @@ fun buildEpisodesProgressLabel(
             ""
     }
 }
+
+/** 概览页横向分集快捷滑轨（符合 Bilibili / 豆瓣 选集标准）：一行紧凑方块，带全集跳转入口 */
+@Composable
+fun EpisodeQuickRail(
+    episodes: List<Episode>,
+    watchedCount: Int,
+    onEpisodeClick: (Episode) -> Unit,
+    onViewAllClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hasProgress: Boolean = true,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "分集选集",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "全部 ${episodes.size} 话 ›",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(onClick = onViewAllClick)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+        }
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 0.dp),
+        ) {
+            items(items = episodes.take(24), key = { it.id }) { episode ->
+                val isWatched = isEpisodeWatched(episode, watchedCount)
+                val isFuture = isEpisodeFutureAir(episode)
+                val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress)
+                val label =
+                    if (episode.isMain) {
+                        episode.formattedNumber
+                    } else {
+                        val prefix =
+                            when (episode.type) {
+                                1 -> "SP"
+                                2 -> "OP"
+                                3 -> "ED"
+                                else -> "E"
+                            }
+                        "$prefix${episode.sort.toInt()}"
+                    }
+
+                val cellShape = BgmShapes.small
+                val cellBorder =
+                    when {
+                        isNextToWatch -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                        isFuture -> BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        else -> null
+                    }
+                val cellBackground =
+                    when {
+                        isWatched -> MaterialTheme.colorScheme.primaryContainer
+                        isNextToWatch -> statusDoingContainerColor()
+                        isFuture -> MaterialTheme.colorScheme.surfaceContainerLowest
+                        else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                    }
+                val cellContentColor =
+                    when {
+                        isWatched -> MaterialTheme.colorScheme.onPrimaryContainer
+                        isNextToWatch -> onStatusDoingContainerColor()
+                        isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(46.dp)
+                            .clip(cellShape)
+                            .then(
+                                if (cellBorder != null) Modifier.border(cellBorder, cellShape) else Modifier,
+                            ).background(cellBackground)
+                            .clickable { onEpisodeClick(episode) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (isNextToWatch) FontWeight.ExtraBold else FontWeight.Bold,
+                            color = cellContentColor,
+                        )
+                        if (isWatched) {
+                            Icon(
+                                imageVector = BgmIcons.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(11.dp),
+                            )
+                        }
+                    }
+
+                    if (isNextToWatch) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(2.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Play,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(10.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 最新播出或续看分集的吐槽高光卡片（置顶于分集 Tab 顶部，1 步穿透进当周热烈讨论） */
+@Composable
+fun SpotlightEpisodeTucaoCard(
+    episode: Episode,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (episode.comment >= 30) {
+                                    WishOrange.copy(alpha = 0.15f)
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                },
+                            ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (episode.comment >= 30) BgmIcons.LocalFireDepartment else BgmIcons.ChatBubbleOutline,
+                        contentDescription = null,
+                        tint = if (episode.comment >= 30) WishOrange else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Column {
+                    val epLabel = if (episode.isMain) "第 ${episode.formattedNumber} 话" else episode.guideLabel
+                    Text(
+                        text = "本集讨论高光 · $epLabel",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = if (episode.comment > 0) "共 ${episode.comment} 条讨论 · 点击查看热评 ›" else "暂无吐槽 · 抢先占楼发表 ›",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Icon(
+                imageVector = BgmIcons.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
