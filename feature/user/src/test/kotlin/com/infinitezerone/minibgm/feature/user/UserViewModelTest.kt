@@ -251,22 +251,6 @@ class UserViewModelTest {
         }
 
     @Test
-    fun syncBangumiDataNow_triggersScheduleRepository() =
-        runTest {
-            val scheduleRepo = FakeScheduleRepository()
-            scheduleRepo.syncBangumiDataResult = AppResult.Success(Unit)
-            val (viewModel, _) = createViewModel(scheduleRepo = scheduleRepo)
-
-            var callbackSuccess = false
-            viewModel.syncBangumiDataNow { success ->
-                callbackSuccess = success
-            }
-
-            assertTrue(callbackSuccess)
-            assertEquals(1, scheduleRepo.syncBangumiDataCallCount)
-        }
-
-    @Test
     fun loggedInState_loadsCollectionCountsFromRepository() =
         runTest {
             val authRepo =

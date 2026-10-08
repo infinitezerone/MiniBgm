@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +23,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -59,8 +57,6 @@ internal fun SettingsSection(
     activeProfile: UserProfile?,
     savedAccountsCount: Int,
     syncInterval: SyncInterval,
-    lastSyncTimestamp: Long,
-    isSyncing: Boolean,
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     airingDailySummaryEnabled: Boolean = true,
@@ -78,7 +74,6 @@ internal fun SettingsSection(
     onOpenTimingBottomSheet: () -> Unit = {},
     onOpenSystemNotificationSettings: () -> Unit = {},
     onOpenSyncDialog: () -> Unit,
-    onSyncNow: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
     isClearingCache: Boolean = false,
@@ -100,13 +95,6 @@ internal fun SettingsSection(
     onCheckForUpdate: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val lastSyncText =
-        if (lastSyncTimestamp == 0L) {
-            "尚未同步"
-        } else {
-            "已是最新"
-        }
-
     // 版本号取自 PackageManager，与 BuildConfig 保持一致；预览环境下取不到则留空
     val context = LocalContext.current
     val clientVersion =
@@ -143,10 +131,7 @@ internal fun SettingsSection(
 
         SyncAndReminderSettingsCard(
             syncInterval = syncInterval,
-            lastSyncTimestamp = lastSyncTimestamp,
-            isSyncing = isSyncing,
             onOpenSyncDialog = onOpenSyncDialog,
-            onSyncNow = onSyncNow,
             onOpenPlaybackRules = onOpenPlaybackRules,
             airingReminderEnabled = airingReminderEnabled,
             onToggleAiringReminder = onToggleAiringReminder,
@@ -343,10 +328,7 @@ internal fun PreferenceSettingsCard(
 @Composable
 internal fun SyncAndReminderSettingsCard(
     syncInterval: SyncInterval,
-    lastSyncTimestamp: Long,
-    isSyncing: Boolean,
     onOpenSyncDialog: () -> Unit,
-    onSyncNow: () -> Unit,
     onOpenPlaybackRules: (() -> Unit)?,
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
@@ -364,13 +346,6 @@ internal fun SyncAndReminderSettingsCard(
     onOpenSystemNotificationSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val lastSyncText =
-        if (lastSyncTimestamp == 0L) {
-            "尚未同步"
-        } else {
-            "已是最新"
-        }
-
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -394,30 +369,6 @@ internal fun SyncAndReminderSettingsCard(
                 title = "播放源自动同步",
                 subtitle = "周期：${syncInterval.displayName}",
                 onClick = onOpenSyncDialog,
-            )
-
-            SettingsItemRow(
-                icon = BgmIcons.CloudQueue,
-                iconTint = MaterialTheme.colorScheme.secondary,
-                title = "检查最新放送源",
-                subtitle = "状态：$lastSyncText · bgm-data",
-                trailing = {
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        OutlinedButton(
-                            onClick = onSyncNow,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                            shape = RoundedCornerShape(8.dp),
-                        ) {
-                            Text("立即检查", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                },
-                onClick = if (!isSyncing) onSyncNow else null,
             )
 
             if (onOpenPlaybackRules != null) {
@@ -870,8 +821,6 @@ private fun SettingsSectionPreview() {
             activeProfile = null,
             savedAccountsCount = 1,
             syncInterval = SyncInterval.DAILY,
-            lastSyncTimestamp = 123456789L,
-            isSyncing = false,
             airingReminderEnabled = true,
             onToggleAiringReminder = {},
             airingReminderHour = 8,
@@ -879,7 +828,6 @@ private fun SettingsSectionPreview() {
             airingNotificationOffsetMinutes = -15,
             onOpenTimingBottomSheet = {},
             onOpenSyncDialog = {},
-            onSyncNow = {},
             onOpenWebUrl = {},
             onClearCache = {},
             onLogoutCurrentClick = {},

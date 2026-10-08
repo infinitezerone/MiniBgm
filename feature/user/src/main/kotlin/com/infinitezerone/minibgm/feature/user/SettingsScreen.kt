@@ -187,17 +187,6 @@ fun SettingsScreen(
         uiState = uiState,
         onBackClick = onBackClick,
         onSelectSyncInterval = viewModel::setSyncInterval,
-        onSyncNow = {
-            viewModel.syncBangumiDataNow { success ->
-                coroutineScope.launch {
-                    if (success) {
-                        snackbarHostState.showSnackbar("播放源已是最新状态")
-                    } else {
-                        snackbarHostState.showSnackbar("同步失败，请检查网络设置")
-                    }
-                }
-            }
-        },
         onToggleAiringReminder = toggleAiringReminder,
         airingDailySummaryEnabled = uiState.airingDailySummaryEnabled,
         onToggleAiringDailySummary = viewModel::setAiringDailySummaryEnabled,
@@ -433,7 +422,6 @@ fun SettingsScreenContent(
     uiState: UserUiState,
     onBackClick: () -> Unit,
     onSelectSyncInterval: (SyncInterval) -> Unit,
-    onSyncNow: () -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit,
     airingDailySummaryEnabled: Boolean = true,
     onToggleAiringDailySummary: (Boolean) -> Unit = {},
@@ -531,8 +519,6 @@ fun SettingsScreenContent(
             item(key = "settings_sync_reminder") {
                 SyncAndReminderSettingsCard(
                     syncInterval = uiState.syncInterval,
-                    lastSyncTimestamp = uiState.lastSyncTimestamp,
-                    isSyncing = uiState.isSyncing,
                     onOpenSyncDialog = {
                         coroutineScope.launch {
                             val selected =
@@ -549,7 +535,6 @@ fun SettingsScreenContent(
                             }
                         }
                     },
-                    onSyncNow = onSyncNow,
                     onOpenPlaybackRules = onPlaybackRulesClick,
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
@@ -692,7 +677,6 @@ private fun SettingsScreenPreview() {
                 ),
             onBackClick = {},
             onSelectSyncInterval = {},
-            onSyncNow = {},
             onToggleAiringReminder = {},
             airingReminderHour = 8,
             onSelectReminderHour = {},

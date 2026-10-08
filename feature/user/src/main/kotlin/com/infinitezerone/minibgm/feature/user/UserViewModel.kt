@@ -78,9 +78,8 @@ private data class SyncSlice(
     val airDelayOffsetMinutes: Int,
 )
 
-/** 本地 UI 域切片：手动同步、收藏统计、追番足迹与刷新标记 */
+/** 本地 UI 域切片：收藏统计、追番足迹与刷新标记 */
 private data class LocalSlice(
-    val manualSyncing: Boolean,
     val collectionCounts: Map<CollectionType, Int>,
     val isCountsLoading: Boolean,
     val isRefreshing: Boolean,
@@ -103,7 +102,6 @@ class UserViewModel(
     private val crashLogRepository: CrashLogRepository,
     private val updateRepository: UpdateRepository,
 ) : ViewModel() {
-    private val isManualSyncing = MutableStateFlow(false)
     private val isRefreshingFlow = MutableStateFlow(false)
     private val isCheckingUpdateFlow = MutableStateFlow(false)
 
@@ -185,14 +183,12 @@ class UserViewModel(
 
     private val localSlice: Flow<LocalSlice> =
         combine(
-            isManualSyncing,
             collectionCountsState,
             isRefreshingFlow,
             collectionRepository.observeTrackingFootprint(),
             isCheckingUpdateFlow,
-        ) { manualSyncing, countsState, isRefreshing, trackingFootprint, isCheckingUpdate ->
+        ) { countsState, isRefreshing, trackingFootprint, isCheckingUpdate ->
             LocalSlice(
-                manualSyncing,
                 countsState.collectionCounts,
                 countsState.isCountsLoading,
                 isRefreshing,
@@ -216,7 +212,7 @@ class UserViewModel(
                 isRefreshing = local.isRefreshing,
                 syncInterval = sync.settings.syncInterval,
                 lastSyncTimestamp = sync.settings.bangumiDataLastSyncTimestamp,
-                isSyncing = sync.workSyncing || local.manualSyncing,
+                isSyncing = sync.workSyncing,
                 collectionCounts = local.collectionCounts,
                 isCountsLoading = local.isCountsLoading,
                 trackingFootprint = local.trackingFootprint,
@@ -378,20 +374,6 @@ class UserViewModel(
         viewModelScope.launch {
             settingsRepository.setShowRestrictedContent(enabled)
             scheduleRepository.refreshAllSchedules(force = true)
-        }
-    }
-
-    fun syncBangumiDataNow(onComplete: (Boolean) -> Unit = {}) {
-        viewModelScope.launch {
-            isManualSyncing.value = true
-            var success = false
-            try {
-                val result = scheduleRepository.syncBangumiData()
-                success = result is AppResult.Success
-            } finally {
-                isManualSyncing.value = false
-                onComplete(success)
-            }
         }
     }
 
