@@ -118,6 +118,8 @@ internal fun SubjectDetailContent(
     onOpenSources: (() -> Unit)? = null,
     onOpenEpisodeSources: ((Episode) -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
+    onDecrementWatched: (() -> Unit)? = null,
+    onPromptLogin: (() -> Unit)? = null,
     onEpisodeClickForQuickAction: ((Episode) -> Unit)? = null,
     onRetryEpisodes: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -175,7 +177,7 @@ internal fun SubjectDetailContent(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (uiState.error != null) {
@@ -205,6 +207,23 @@ internal fun SubjectDetailContent(
                 totalEpisodes = totalEpisodes,
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onTagClick = onTagClick,
+            )
+        }
+
+        // 2. 个人追番与进度看板卡片
+        item(key = "collection_progress_card") {
+            SubjectCollectionCard(
+                collection = uiState.collection,
+                totalEpisodes = totalEpisodes,
+                subjectType = subjectType,
+                isLoggedIn = uiState.isLoggedIn,
+                nextEpSort = nextUpEpNumber,
+                onOpenCollectionSheet = onOpenCollectionSheet,
+                onUpdateCollectionStatus = onUpdateCollectionStatus ?: {},
+                onPlayNext = onPlayNextEpisode,
+                onIncrementWatched = onIncrementWatched,
+                onDecrementWatched = onDecrementWatched,
+                onPromptLogin = onPromptLogin,
             )
         }
 
@@ -333,7 +352,17 @@ internal fun SubjectDetailContent(
                         }
                     }
 
-                    // 2. 角色与声优阵容（若有）
+                    // 2. 评分分布与标签（1~10分柱状图、收藏人数、分类标签）
+                    item(key = "rating_distribution") {
+                        RatingDistributionCard(
+                            rating = subject.rating,
+                            collection = subject.collection,
+                            tags = subject.tags,
+                            onTagClick = onTagClick,
+                        )
+                    }
+
+                    // 3. 角色与声优阵容（若有）
                     if (uiState.characters.isNotEmpty()) {
                         item(key = "characters_section") {
                             CharactersSection(
@@ -343,16 +372,6 @@ internal fun SubjectDetailContent(
                                 onPreviewCharacter = onPreviewCharacter,
                             )
                         }
-                    }
-
-                    // 3. 评分分布与标签（1~10分柱状图、收藏人数、分类标签）
-                    item(key = "rating_distribution") {
-                        RatingDistributionCard(
-                            rating = subject.rating,
-                            collection = subject.collection,
-                            tags = subject.tags,
-                            onTagClick = onTagClick,
-                        )
                     }
 
                     // 4. 制作人员 / Staff（若有）

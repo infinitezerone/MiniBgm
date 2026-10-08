@@ -1261,9 +1261,6 @@ class SubjectDetailViewModelTest {
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepo.updateEpisodeCallCount)
             assertNull(viewModel.uiState.value.collection)
-            val event1 = viewModel.uiEvents.first()
-            assertTrue(event1 is SubjectDetailUiEvent.ShowMessage)
-            assertEquals("请先登录 Bangumi 账号", (event1 as SubjectDetailUiEvent.ShowMessage).message)
 
             viewModel.dismissLoginPrompt()
             assertFalse(viewModel.uiState.value.showLoginPromptDialog)
@@ -1273,17 +1270,11 @@ class SubjectDetailViewModelTest {
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
             assertEquals(0, collectionRepo.markEpisodesWatchedUpToCallCount)
             assertNull(viewModel.uiState.value.collection)
-            val event2 = viewModel.uiEvents.first()
-            assertTrue(event2 is SubjectDetailUiEvent.ShowMessage)
-            assertEquals("请先登录 Bangumi 账号", (event2 as SubjectDetailUiEvent.ShowMessage).message)
 
             viewModel.dismissLoginPrompt()
             viewModel.promptLogin()
             testScheduler.advanceUntilIdle()
             assertTrue(viewModel.uiState.value.showLoginPromptDialog)
-            val event3 = viewModel.uiEvents.first()
-            assertTrue(event3 is SubjectDetailUiEvent.ShowMessage)
-            assertEquals("请先登录 Bangumi 账号", (event3 as SubjectDetailUiEvent.ShowMessage).message)
         }
 
     @Test

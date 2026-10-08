@@ -1,28 +1,21 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,14 +35,11 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
-import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
-import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
-import kotlin.math.roundToInt
 
 /** 条目头部卡片：立体圆角海报、完整译名与原名、年份季度徽章、评分与全站 Rank、主要制作团队、热门标签、轻量收藏条、可展开简介 */
 @Composable
@@ -280,559 +270,79 @@ fun SubjectHeaderCard(
                 }
             }
 
-            // 轻量收藏状态条（名片底部直接透出当前收藏进度，点击直达编辑抽屉）
-            if (onOpenCollectionSheet != null) {
-                Surface(
-                    onClick = onOpenCollectionSheet,
-                    shape = RoundedCornerShape(10.dp),
-                    color =
-                        if (collection != null) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
-                        },
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.weight(1f, fill = false),
-                        ) {
-                            Icon(
-                                imageVector = if (collection != null) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                                contentDescription = null,
-                                tint =
-                                    if (collection !=
-                                        null
-                                    ) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                modifier = Modifier.size(16.dp),
-                            )
-                            val collectionType = collection?.let { CollectionType.fromValue(it.type) }
-                            val epText =
-                                if (collection != null) {
-                                    if (totalEpisodes >
-                                        0
-                                    ) {
-                                        " · ${collection.epStatus}/$totalEpisodes 话"
-                                    } else if (collection.epStatus >
-                                        0
-                                    ) {
-                                        " · ${collection.epStatus}话"
-                                    } else {
-                                        ""
-                                    }
-                                } else {
-                                    ""
-                                }
-                            val rateText = if (collection != null && collection.rate > 0) " · ★ ${collection.rate}分" else ""
-                            val statusLabel =
-                                if (collection !=
-                                    null
-                                ) {
-                                    "${collectionType?.label ?: "已收藏"}$epText$rateText"
-                                } else {
-                                    "标记收藏状态 (想看 / 在看 / 看过)"
-                                }
-                            Text(
-                                text = statusLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (collection != null) FontWeight.Bold else FontWeight.Medium,
-                                color =
-                                    if (collection !=
-                                        null
-                                    ) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = if (collection != null) "编辑" else "添加",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Icon(
-                                imageVector = BgmIcons.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (subject.summary.isNotBlank()) {
+            val trimmedSummary = remember(subject.summary) { subject.summary.trim() }
+            if (trimmedSummary.isNotBlank()) {
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = 10.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                 )
+
+                // 智能段落折叠：Bangumi 条目常以空行分隔首段中文简介与后续日文原文/设定
+                val summaryBlocks =
+                    remember(trimmedSummary) {
+                        trimmedSummary.split(Regex("(?:\r?\n){2,}")).map { it.trim() }.filter { it.isNotEmpty() }
+                    }
+                val hasMultiParagraphs = summaryBlocks.size > 1
+                val firstParagraph = summaryBlocks.firstOrNull().orEmpty()
+                val isSingleLongBlock =
+                    !hasMultiParagraphs &&
+                        (trimmedSummary.length > 120 || trimmedSummary.count { it == '\n' } >= 3)
+                val canExpand = hasMultiParagraphs || isSingleLongBlock
+
+                val displayText =
+                    when {
+                        !canExpand -> trimmedSummary
+                        isSummaryExpanded -> trimmedSummary
+                        hasMultiParagraphs -> firstParagraph
+                        else -> trimmedSummary
+                    }
+
+                val maxLines =
+                    if (isSummaryExpanded || !canExpand || hasMultiParagraphs) {
+                        Int.MAX_VALUE
+                    } else {
+                        4
+                    }
+
                 Text(
-                    text = subject.summary.trim(),
+                    text = displayText,
                     style = MaterialTheme.typography.bodyMedium,
-                    maxLines = if (isSummaryExpanded) Int.MAX_VALUE else 3,
+                    maxLines = maxLines,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.animateContentSize(),
                 )
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { isSummaryExpanded = !isSummaryExpanded }
-                            .padding(top = 6.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (isSummaryExpanded) "收起简介" else "展开完整简介",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Icon(
-                        imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
-    }
-}
 
-/**
- * 屏幕底部悬浮收藏/追番状态栏：
- * 贴合主流成熟 App（B站/流媒体/豆瓣）规范：轻量常驻底部，不破坏页面纵向浏览连续性，
- * 1 步点击展开完整收藏设置（想看/在看/评分/短评）或快速播放续看。
- */
-@Composable
-fun SubjectDetailFloatingBar(
-    collection: UserCollection?,
-    totalEpisodes: Int,
-    subjectType: SubjectType,
-    onOpenCollectionSheet: () -> Unit,
-    modifier: Modifier = Modifier,
-    nextEpSort: Float? = null,
-    onPlayNext: (() -> Unit)? = null,
-) {
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            // 左侧：收藏状态胶囊
-            Surface(
-                onClick = onOpenCollectionSheet,
-                shape = RoundedCornerShape(16.dp),
-                color =
-                    if (collection != null) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHighest
-                    },
-                modifier = Modifier.weight(1f, fill = false),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = if (collection != null) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                        contentDescription = null,
-                        tint =
-                            if (collection != null) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        modifier = Modifier.size(18.dp),
-                    )
-                    val collectionType = collection?.let { CollectionType.fromValue(it.type) }
-                    val label =
-                        if (collection != null) {
-                            val epText =
-                                if (totalEpisodes > 0) {
-                                    " · ${collection.epStatus}/$totalEpisodes${subjectType.unitName}"
-                                } else if (collection.epStatus > 0) {
-                                    " · ${collection.epStatus}${subjectType.unitName}"
-                                } else {
-                                    ""
-                                }
-                            val rateText = if (collection.rate > 0) " · ★${collection.rate}" else ""
-                            "${collectionType?.label ?: "已收藏"}$epText$rateText"
-                        } else {
-                            "加入追番 / 标记状态"
+                if (canExpand) {
+                    val expandLabel =
+                        when {
+                            isSummaryExpanded -> "收起简介"
+                            hasMultiParagraphs -> "展开完整简介及原文"
+                            else -> "展开完整简介"
                         }
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color =
-                            if (collection != null) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Icon(
-                        imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint =
-                            if (collection != null) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-
-            // 右侧：若有播放源，显示一键播放
-            if (onPlayNext != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                FilledTonalButton(
-                    onClick = onPlayNext,
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Play,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text =
-                            if (nextEpSort != null && nextEpSort > 0) {
-                                "续看 E${nextEpSort.toInt()}"
-                            } else {
-                                "播放"
-                            },
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 个人追番/阅读/收听/游玩状态与进度卡片（含 Stitch 外露 5 状态胶囊排，支持 1-tap 直达切换） */
-@Composable
-fun SubjectPersonalProgressCard(
-    collection: UserCollection?,
-    totalEpisodes: Int,
-    subjectType: SubjectType,
-    onOpenSheet: () -> Unit,
-    onToggleWatching: () -> Unit,
-    modifier: Modifier = Modifier,
-    onUpdateCollectionStatus: ((CollectionType) -> Unit)? = null,
-    onIncrementWatched: (() -> Unit)? = null,
-    onPlayNext: (() -> Unit)? = null,
-    nextEpSort: Float? = null,
-) {
-    val currentEp = collection?.epStatus ?: 0
-    val progress = if (totalEpisodes > 0) (currentEp.toFloat() / totalEpisodes).coerceIn(0f, 1f) else 0f
-    val currentType = collection?.let { CollectionType.fromValue(it.type) }
-
-    val statusTypes =
-        remember {
-            listOf(
-                CollectionType.WISH,
-                CollectionType.DOING,
-                CollectionType.COLLECT,
-                CollectionType.ON_HOLD,
-                CollectionType.DROPPED,
-            )
-        }
-
-    val cardTitle =
-        when (subjectType) {
-            SubjectType.BOOK -> "我的阅读与进度"
-            SubjectType.MUSIC -> "我的收听与进度"
-            SubjectType.GAME -> "我的游玩与评测"
-            SubjectType.ANIME, SubjectType.REAL -> "我的追番与进度"
-        }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            // 1. 顶部状态栏：图标、标题、评分星级、编辑管理按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Bookmark,
-                        contentDescription = null,
-                        tint = if (collection != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = if (collection != null) cardTitle else "标记收藏状态",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (collection != null && collection.rate > 0) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = RatingGold.copy(alpha = 0.15f),
-                        ) {
-                            Text(
-                                text = "★ ${collection.rate}分",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = RatingGold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                }
-
-                FilledTonalButton(
-                    onClick = onOpenSheet,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "编辑",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-
-            // 2. Stitch 外露 5 状态胶囊排：想看 / 在看 / 看过 / 搁置 / 抛弃
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                statusTypes.forEach { type ->
-                    val isSelected = currentType == type
-                    val verb = type.getVerb(subjectType)
-                    Surface(
-                        onClick = {
-                            if (isSelected) {
-                                onOpenSheet()
-                            } else {
-                                onUpdateCollectionStatus?.invoke(type) ?: onToggleWatching()
-                            }
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        color =
-                            if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                        modifier = Modifier.weight(1f).height(36.dp),
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { isSummaryExpanded = !isSummaryExpanded }
+                                .padding(top = 6.dp, bottom = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 2.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center,
-                            ) {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = BgmIcons.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                }
-                                Text(
-                                    text = verb,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3. 进度条与快捷打卡区
-            if (collection == null) {
-                Text(
-                    text = "点击上方状态一键加入收藏，实时同步排期与打卡进度",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            } else if (subjectType == SubjectType.GAME) {
-                val statusVerb = currentType?.getVerb(subjectType) ?: ""
-                Text(
-                    text = "游玩状态：$statusVerb",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            } else if (totalEpisodes > 0 || (subjectType == SubjectType.BOOK && collection.volStatus > 0)) {
-                val progressLabel =
-                    when (subjectType) {
-                        SubjectType.BOOK -> {
-                            val vol = collection.volStatus
-                            val ep = collection.epStatus
-                            if (vol > 0) "已读 $vol 卷 · $ep 话" else "已读 $ep / 全 $totalEpisodes 话"
-                        }
-                        SubjectType.MUSIC -> "已听 $currentEp / 全 $totalEpisodes 首"
-                        else -> "已看 $currentEp / 全 $totalEpisodes 话"
-                    }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = progressLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (totalEpisodes > 0) {
                         Text(
-                            text = "${(progress * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
+                            text = expandLabel,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
                         )
-                    }
-                }
-
-                if (totalEpisodes > 0) {
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    )
-                }
-            }
-
-            if (collection != null &&
-                onIncrementWatched != null &&
-                (totalEpisodes <= 0 || currentEp < totalEpisodes) &&
-                subjectType != SubjectType.GAME
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilledTonalButton(
-                        onClick = onIncrementWatched,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.weight(1f),
-                    ) {
                         Icon(
-                            imageVector = BgmIcons.Add,
+                            imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                             contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp),
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "+1 话",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    if (onPlayNext != null && nextEpSort != null) {
-                        FilledTonalButton(
-                            onClick = onPlayNext,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Play,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "续看第 ${nextEpSort.toEpisodeLabel()} 话",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
                     }
                 }
-            }
-
-            if (collection != null && collection.comment.isNotBlank()) {
-                Text(
-                    text = "「${collection.comment}」",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }

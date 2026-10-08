@@ -195,12 +195,9 @@ class SubjectDetailViewModel(
     private val _uiEvents = Channel<SubjectDetailUiEvent>(Channel.BUFFERED)
     val uiEvents: Flow<SubjectDetailUiEvent> = _uiEvents.receiveAsFlow()
 
-    /** 引导未登录用户登录 Bangumi 账号并提示 */
+    /** 引导未登录用户登录 Bangumi 账号并展示登录对话框 */
     fun promptLogin() {
         _uiState.update { it.copy(showLoginPromptDialog = true) }
-        viewModelScope.launch {
-            _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-        }
     }
 
     fun enableAiringReminder() {
@@ -510,10 +507,7 @@ class SubjectDetailViewModel(
     /** 控制收藏状态底栏显隐（未登录时拦截弹窗） */
     fun setCollectionSheetVisible(visible: Boolean) {
         if (visible && !isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
         _uiState.update { it.copy(showCollectionSheet = visible) }
@@ -669,10 +663,8 @@ class SubjectDetailViewModel(
         tags: List<String>? = null,
     ) {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showCollectionSheet = false, showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            _uiState.update { it.copy(showCollectionSheet = false) }
+            promptLogin()
             return
         }
 
@@ -726,10 +718,7 @@ class SubjectDetailViewModel(
     /** +1 话快捷打卡当前待看的下一集，并发送撤销事件 */
     fun incrementWatchedEpisode() {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
         val currentEp = _uiState.value.collection?.epStatus ?: 0
@@ -758,13 +747,43 @@ class SubjectDetailViewModel(
         }
     }
 
+    /** -1 话快捷回退当前已看的最后一集 */
+    fun decrementWatchedEpisode() {
+        if (!isLoggedIn.value) {
+            promptLogin()
+            return
+        }
+        val currentEp = _uiState.value.collection?.epStatus ?: 0
+        if (currentEp <= 0) return
+        val currentEpisode =
+            _uiState.value.episodes.firstOrNull {
+                it.isMain && it.episodeInt == currentEp
+            }
+        if (currentEpisode != null) {
+            toggleEpisodeWatched(
+                episodeId = currentEpisode.id,
+                isWatched = false,
+                epNumber = currentEp,
+                episodeType = 0,
+            )
+        } else {
+            val targetEp = currentEp - 1
+            markWatchedUpTo(
+                Episode(
+                    id = 0L,
+                    sort = targetEp.toFloat(),
+                    ep = targetEp.toFloat(),
+                    type = 0,
+                    name = "第 $targetEp 话",
+                ),
+            )
+        }
+    }
+
     /** 1-tap 快捷追番/移出在看（支持 0ms 本地即时乐观更新与失败回滚，未登录时拦截弹窗） */
     fun toggleWatching() {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
         val current = _uiState.value.collection
@@ -785,10 +804,7 @@ class SubjectDetailViewModel(
         episodeType: Int = 0,
     ) {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
 
@@ -873,10 +889,7 @@ class SubjectDetailViewModel(
      */
     fun markWatchedUpTo(targetEpisode: Episode) {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
         val targetEpNumber = targetEpisode.episodeInt
@@ -960,10 +973,7 @@ class SubjectDetailViewModel(
         undoneEpisodeIds: List<Long>,
     ) {
         if (!isLoggedIn.value) {
-            _uiState.update { it.copy(showLoginPromptDialog = true) }
-            viewModelScope.launch {
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("请先登录 Bangumi 账号"))
-            }
+            promptLogin()
             return
         }
         val currentCollection = _uiState.value.collection
