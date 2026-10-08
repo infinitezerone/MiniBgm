@@ -39,6 +39,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -234,15 +235,15 @@ internal fun SubjectDetailContent(
         } else if (fullSubject != null) {
             val subject = fullSubject
 
-            // 2. 粘性二级分栏 Tab 栏（对标 Bilibili/豆瓣 极简胶囊滑块规范）
-            stickyHeader(key = "subject_tabs_bar") {
+            // 2. 二级分栏 Tab 栏（跟随内容自然流滚动，不再生硬吸顶）
+            item(key = "subject_tabs_bar") {
                 Surface(
-                    color = MaterialTheme.colorScheme.surface,
+                    color = Color.Transparent,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
                 ) {
                     TabRow(
                         selectedTabIndex = selectedTab.ordinal,
-                        containerColor = MaterialTheme.colorScheme.surface,
+                        containerColor = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         divider = {},
                         indicator = { tabPositions ->
