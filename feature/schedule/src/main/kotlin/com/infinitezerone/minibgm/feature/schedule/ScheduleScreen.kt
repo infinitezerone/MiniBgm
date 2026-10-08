@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
@@ -78,6 +78,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -251,10 +252,24 @@ fun ScheduleScreen(
             val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
             val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
 
-            // 随列表滚动收起的筛选条：收起时内容向上平移并裁剪，视效为滑入日期条之下
-            val filterVisibleHeight = with(density) { (filterBarHeightPx - filterCollapseState.offset).coerceAtLeast(0f).toDp() }
+            // 随列表滚动收起的筛选条：高度与平移全部在 Layout/Draw 阶段读取，消除滚动过程中的重组开销
             Box(
-                modifier = Modifier.fillMaxWidth().height(filterVisibleHeight).clipToBounds(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .layout { measurable, constraints ->
+                            val visibleHeightPx = (filterBarHeightPx - filterCollapseState.offset).coerceAtLeast(0f).roundToInt()
+                            val placeable =
+                                measurable.measure(
+                                    constraints.copy(
+                                        minHeight = 0,
+                                        maxHeight = visibleHeightPx,
+                                    ),
+                                )
+                            layout(placeable.width, visibleHeightPx) {
+                                placeable.place(0, 0)
+                            }
+                        }.clipToBounds(),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 FilterAndMetaBar(
