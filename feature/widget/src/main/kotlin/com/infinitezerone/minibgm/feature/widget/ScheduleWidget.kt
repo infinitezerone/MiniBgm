@@ -140,13 +140,19 @@ class ScheduleWidget : GlanceAppWidget() {
             }
 
         provideContent {
-            GlanceTheme(colors = ColorProviders(MiniBgmLightColors, MiniBgmDarkColors)) {
+            val colors =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    GlanceTheme.colors
+                } else {
+                    ColorProviders(MiniBgmLightColors, MiniBgmDarkColors)
+                }
+            GlanceTheme(colors = colors) {
                 // 顶层统一承载系统小组件背景与动态大圆角（Android 12+）
                 Box(
                     modifier =
                         GlanceModifier
                             .fillMaxSize()
-                            .background(GlanceTheme.colors.background)
+                            .background(GlanceTheme.colors.widgetBackground)
                             .appWidgetBackground(),
                 ) {
                     WidgetRoot(uiState = uiState, heroCover = heroCover)

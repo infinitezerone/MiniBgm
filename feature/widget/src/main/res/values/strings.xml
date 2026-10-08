@@ -66,4 +66,8 @@
 
     <!-- 刷新反馈 -->
     <string name="widget_refresh_failed">刷新失败，请稍后重试</string>
+
+    <!-- 快捷打卡 -->
+    <string name="widget_check_in_success">已打卡第 %1$d 话</string>
+    <string name="widget_check_in_action">+1 打卡</string>
 </resources>

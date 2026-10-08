@@ -14,6 +14,7 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -24,6 +25,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import com.infinitezerone.minibgm.feature.widget.CheckInEpisodeCallback
 import com.infinitezerone.minibgm.feature.widget.R
 import com.infinitezerone.minibgm.feature.widget.RefreshScheduleWidgetCallback
 import com.infinitezerone.minibgm.feature.widget.ScheduleWidgetUiState
@@ -90,11 +93,33 @@ internal fun CompactWidgetContent(uiState: ScheduleWidgetUiState) {
         ) {
             StatusBadge(item = hero)
             Spacer(modifier = GlanceModifier.defaultWeight())
-            Text(
-                text = weekdayTextOf(uiState),
-                maxLines = 1,
-                style = textStyle(color = GlanceTheme.colors.outline, fontSize = 10.sp),
-            )
+            if (uiState.isLoggedIn && hero.isTracked && hero.isWatchable && hero.episode > 0) {
+                Box(
+                    modifier =
+                        GlanceModifier
+                            .clickable(CheckInEpisodeCallback.createAction(hero.subjectId, hero.episode))
+                            .background(GlanceTheme.colors.primaryContainer)
+                            .cornerRadius(6.dp)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "+1",
+                        style =
+                            TextStyle(
+                                color = GlanceTheme.colors.onPrimaryContainer,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                    )
+                }
+            } else {
+                Text(
+                    text = weekdayTextOf(uiState),
+                    maxLines = 1,
+                    style = textStyle(color = GlanceTheme.colors.outline, fontSize = 10.sp),
+                )
+            }
         }
 
         Spacer(modifier = GlanceModifier.height(6.dp))
@@ -159,6 +184,12 @@ internal fun MediumWidgetContent(uiState: ScheduleWidgetUiState) {
                 WidgetItemRow(
                     item = item,
                     onClick = openSubjectAction(item.subjectId),
+                    onCheckIn =
+                        if (uiState.isLoggedIn && item.isTracked && item.isWatchable && item.episode > 0) {
+                            CheckInEpisodeCallback.createAction(item.subjectId, item.episode)
+                        } else {
+                            null
+                        },
                     modifier = if (rows.size >= 3) GlanceModifier.defaultWeight() else GlanceModifier,
                 )
             }
@@ -246,6 +277,28 @@ internal fun ExpandedWidgetContent(
                         maxLines = 1,
                         style = textStyle(color = GlanceTheme.colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold),
                     )
+                    if (uiState.isLoggedIn && hero.isTracked && hero.isWatchable && hero.episode > 0) {
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        Box(
+                            modifier =
+                                GlanceModifier
+                                    .clickable(CheckInEpisodeCallback.createAction(hero.subjectId, hero.episode))
+                                    .background(GlanceTheme.colors.primaryContainer)
+                                    .cornerRadius(6.dp)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "+1",
+                                style =
+                                    TextStyle(
+                                        color = GlanceTheme.colors.onPrimaryContainer,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = GlanceModifier.height(4.dp))
@@ -295,6 +348,12 @@ internal fun ExpandedWidgetContent(
                         WidgetItemRow(
                             item = item,
                             onClick = openSubjectAction(item.subjectId),
+                            onCheckIn =
+                                if (uiState.isLoggedIn && item.isTracked && item.isWatchable && item.episode > 0) {
+                                    CheckInEpisodeCallback.createAction(item.subjectId, item.episode)
+                                } else {
+                                    null
+                                },
                             modifier = itemModifier,
                         )
                     }
@@ -312,6 +371,12 @@ internal fun ExpandedWidgetContent(
                         WidgetItemRow(
                             item = item,
                             onClick = openSubjectAction(item.subjectId),
+                            onCheckIn =
+                                if (uiState.isLoggedIn && item.isTracked && item.isWatchable && item.episode > 0) {
+                                    CheckInEpisodeCallback.createAction(item.subjectId, item.episode)
+                                } else {
+                                    null
+                                },
                             modifier = itemModifier,
                         )
                     }

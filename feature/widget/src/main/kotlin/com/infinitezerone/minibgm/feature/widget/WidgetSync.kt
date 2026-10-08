@@ -78,4 +78,18 @@ object WidgetSync {
             }
         }
     }
+
+    /** 请求系统向桌面固定添加「今日追番」小组件（API 26+） */
+    fun requestPinScheduleWidget(context: Context): Boolean {
+        val appWidgetManager = context.getSystemService(android.appwidget.AppWidgetManager::class.java) ?: return false
+        if (!appWidgetManager.isRequestPinAppWidgetSupported) return false
+        val provider = android.content.ComponentName(context, ScheduleWidgetReceiver::class.java)
+        return appWidgetManager.requestPinAppWidget(provider, null, null)
+    }
+
+    /** 检查当前系统是否支持一键向桌面固定小组件 */
+    fun isPinScheduleWidgetSupported(context: Context): Boolean {
+        val appWidgetManager = context.getSystemService(android.appwidget.AppWidgetManager::class.java) ?: return false
+        return appWidgetManager.isRequestPinAppWidgetSupported
+    }
 }

@@ -37,35 +37,65 @@ import com.infinitezerone.minibgm.feature.widget.ScheduleWidgetItemUiModel
 import com.infinitezerone.minibgm.feature.widget.ScheduleWidgetUiState
 import java.time.LocalDate
 
-/** 统一条目行：状态胶囊 + 番名 + 话数，4x2 与 4x4 共用 */
+/** 统一条目行：状态胶囊 + 番名 + 话数 + 可选 +1 快捷打卡，4x2 与 4x4 共用 */
 @Composable
 internal fun WidgetItemRow(
     item: ScheduleWidgetItemUiModel,
     onClick: Action,
     modifier: GlanceModifier = GlanceModifier,
+    onCheckIn: Action? = null,
 ) {
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .clickable(onClick)
                 .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatusBadge(item = item)
-        Spacer(modifier = GlanceModifier.width(6.dp))
-        Text(
-            text = item.title,
-            maxLines = 1,
-            style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-            modifier = GlanceModifier.defaultWeight(),
-        )
-        Spacer(modifier = GlanceModifier.width(4.dp))
-        Text(
-            text = episodeText(item),
-            maxLines = 1,
-            style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
-        )
+        Row(
+            modifier =
+                GlanceModifier
+                    .defaultWeight()
+                    .clickable(onClick),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            StatusBadge(item = item)
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Text(
+                text = item.title,
+                maxLines = 1,
+                style = textStyle(color = GlanceTheme.colors.onBackground, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                modifier = GlanceModifier.defaultWeight(),
+            )
+            Spacer(modifier = GlanceModifier.width(4.dp))
+            Text(
+                text = episodeText(item),
+                maxLines = 1,
+                style = textStyle(color = GlanceTheme.colors.outline, fontSize = 11.sp),
+            )
+        }
+        if (onCheckIn != null) {
+            Spacer(modifier = GlanceModifier.width(6.dp))
+            Box(
+                modifier =
+                    GlanceModifier
+                        .clickable(onCheckIn)
+                        .background(GlanceTheme.colors.primaryContainer)
+                        .cornerRadius(6.dp)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "+1",
+                    style =
+                        TextStyle(
+                            color = GlanceTheme.colors.onPrimaryContainer,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                )
+            }
+        }
     }
 }
 
