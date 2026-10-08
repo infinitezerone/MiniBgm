@@ -98,7 +98,6 @@ fun ScheduleScreen(
     val density = LocalDensity.current
     val filterBarHeight = 44.dp
     val filterBarHeightPx = with(density) { filterBarHeight.toPx() }
-    val filterCollapseState = remember { FilterBarCollapseState(filterBarHeightPx) }
     var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
     val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -133,6 +132,17 @@ fun ScheduleScreen(
 
     val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
 
+    val filterCollapseState =
+        remember(filterBarHeightPx) {
+            FilterBarCollapseState(
+                limitPx = filterBarHeightPx,
+                canScroll = {
+                    val state = pageListStates.getOrNull(pagerState.currentPage)
+                    state != null && (state.canScrollForward || state.canScrollBackward)
+                },
+            )
+        }
+
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     if (scrollToTop != null) {
         ObserveAsEvents(scrollToTop) {
@@ -150,10 +160,13 @@ fun ScheduleScreen(
         snackbarHostState.showSnackbar(message)
     }
 
-    // 滑动 Pager 时，双向同步选中的天索引
+    // 滑动 Pager 时，双向同步选中的天索引；切天时平滑复位展开筛选条
     LaunchedEffect(pagerState.currentPage) {
         if (uiState.selectedPageIndex != pagerState.currentPage) {
             viewModel.selectPage(pagerState.currentPage)
+        }
+        if (filterCollapseState.offset > 0f) {
+            filterCollapseState.animateTo(0f)
         }
     }
 
@@ -477,6 +490,7 @@ private fun DayScheduleList(
 /** 筛选条滚动收起控制器（enterAlways 模式）：上滑先收起再滚列表，下滑先展开（B站时间表模式），松手后吸附到两端 */
 private class FilterBarCollapseState(
     private val limitPx: Float,
+    private val canScroll: () -> Boolean,
 ) : NestedScrollConnection {
     var offset by mutableFloatStateOf(0f)
         private set
@@ -484,15 +498,21 @@ private class FilterBarCollapseState(
     override fun onPreScroll(
         available: Offset,
         source: NestedScrollSource,
-    ): Offset =
-        when {
-            // 手指上滑：先收起筛选条，剩余位移才交给列表
-            available.y < 0f -> {
+    ): Offset {
+        // 关键防冲突：仅响应用户真实触控输入，忽略系统边缘拉伸与弹性回弹（SideEffect），
+        // 避免列表触底时 Android 12+ Stretch Overscroll 回弹物理动画与顶部展开动画互相拉扯抽搐。
+        if (source != NestedScrollSource.UserInput) {
+            return Offset.Zero
+        }
+
+        return when {
+            // 手指上滑（列表内容上移）：仅当列表有足够内容可滚动时才收起筛选条
+            available.y < 0f && canScroll() -> {
                 val prev = offset
                 offset = (prev - available.y).coerceIn(0f, limitPx)
                 Offset(0f, prev - offset)
             }
-            // 手指下滑：先展开筛选条
+            // 手指下滑（列表内容下移）：先展开筛选条
             available.y > 0f && offset > 0f -> {
                 val prev = offset
                 offset = (prev - available.y).coerceIn(0f, limitPx)
@@ -500,16 +520,28 @@ private class FilterBarCollapseState(
             }
             else -> Offset.Zero
         }
+    }
 
     override suspend fun onPostFling(
         consumed: Velocity,
         available: Velocity,
     ): Velocity {
-        animateTo(if (offset > limitPx / 2f) limitPx else 0f)
+        // 仅在处于半收起/半展开的中间悬空态时，才执行两端吸附过渡；
+        // 若已完全展开 (0f) 或完全收起 (limitPx)，不触发任何动画，避免干扰列表本身的惯性滑动或触底回弹。
+        if (offset > 0f && offset < limitPx) {
+            val target =
+                when {
+                    available.y < -100f || consumed.y < -100f -> limitPx
+                    available.y > 100f || consumed.y > 100f -> 0f
+                    else -> if (offset > limitPx / 2f) limitPx else 0f
+                }
+            animateTo(target)
+        }
         return super.onPostFling(consumed, available)
     }
 
     suspend fun animateTo(target: Float) {
+        if (offset == target) return
         animate(
             initialValue = offset,
             targetValue = target,
