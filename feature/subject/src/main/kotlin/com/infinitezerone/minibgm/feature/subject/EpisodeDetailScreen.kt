@@ -2,7 +2,9 @@ package com.infinitezerone.minibgm.feature.subject
 
 import android.content.ClipData
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +50,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -578,7 +582,7 @@ fun EpisodeDetailScreen(
                             var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
 
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.88f),
                                 modifier =
                                     Modifier
@@ -587,25 +591,62 @@ fun EpisodeDetailScreen(
                             ) {
                                 Column(
                                     modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text(
-                                            text = "剧情梗概",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                        if (isLongDesc) {
-                                            Text(
-                                                text = if (isDescExpanded) "收起 ∧" else "展开 ∨",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .size(3.dp, 12.dp)
+                                                        .clip(RoundedCornerShape(1.5.dp))
+                                                        .background(MaterialTheme.colorScheme.primary),
                                             )
+                                            Text(
+                                                text = "剧情梗概",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                        if (isLongDesc) {
+                                            val arrowRotation by animateFloatAsState(
+                                                targetValue = if (isDescExpanded) 180f else 0f,
+                                                label = "desc_expand_arrow",
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                ) {
+                                                    Text(
+                                                        text = if (isDescExpanded) "收起" else "展开",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                    Icon(
+                                                        imageVector = BgmIcons.KeyboardArrowDown,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier =
+                                                            Modifier
+                                                                .size(14.dp)
+                                                                .graphicsLayer(rotationZ = arrowRotation),
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                     Text(

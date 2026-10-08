@@ -131,6 +131,11 @@ class BgmNavState(
                     removeAll { it is DetailChainRoute }
                     removeAll { it::class == key::class }
                 }
+                is EpisodeDetailRoute -> {
+                    // 同一作品内的分集切换属于横向平移浏览，替换当前栈内同作品的分集，
+                    // 避免连续切集在返回栈中无限堆叠，使返回时只需按一次即可干脆利落直达条目页
+                    removeAll { it is EpisodeDetailRoute && it.subjectId == route.subjectId }
+                }
                 // 钻取链层级：关联条目、分集讨论、标签专题、帖子详情允许逐层压栈（single-top 去重相同 key）
                 is DetailChainRoute -> remove(key)
                 // 顶层 Tab 根永远是子栈首元素，不允许作为子页入栈（走 navigateTo 的顶层分支）

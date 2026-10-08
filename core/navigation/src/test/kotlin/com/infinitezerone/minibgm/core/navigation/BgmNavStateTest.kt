@@ -81,6 +81,23 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToDifferentEpisodeOfSameSubject_replacesExistingEpisodeInsteadOfStacking() {
+        val state = newState()
+        state.navigateTo(SubjectDetailRoute(1L))
+        state.navigateTo(EpisodeDetailRoute(episodeId = 101L, subjectId = 1L))
+        state.navigateTo(EpisodeDetailRoute(episodeId = 102L, subjectId = 1L))
+
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, SubjectDetailRoute(1L), EpisodeDetailRoute(episodeId = 102L, subjectId = 1L)),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+
+        assertEquals(SubjectDetailRoute(1L), state.currentKey)
+    }
+
+    @Test
     fun navigateToSearchRoute_clearsExistingDetail() {
         val state = newState()
         state.navigateTo(SubjectDetailRoute(1L))
