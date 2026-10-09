@@ -73,6 +73,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
@@ -135,13 +137,15 @@ fun PlayerScreen(
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
     var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
+    var isTrackSheetOpen by remember { mutableStateOf(false) }
+    var tracksSnapshot by remember { mutableStateOf(PlayerTracksSnapshot()) }
     var isScreenLocked by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubProgress by remember { mutableFloatStateOf(0f) }
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
 
-    // 视频真实宽高比：监听播放器尺寸事件，限制在 Android PiP 合法比例 (1/2.39 ~ 2.39)
+    // 视频真实宽高比：监听播放器尺寸与音视频轨道事件
     var videoAspectRatio by remember { mutableStateOf<Rational?>(null) }
     DisposableEffect(player) {
         val listener =
@@ -154,6 +158,14 @@ fun PlayerScreen(
                         }
                     }
                 }
+
+                override fun onTracksChanged(tracks: Tracks) {
+                    tracksSnapshot = extractPlayerTracksSnapshot(player)
+                }
+
+                override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
+                    tracksSnapshot = extractPlayerTracksSnapshot(player)
+                }
             }
         val initialSize = player.videoSize
         if (initialSize.width > 0 && initialSize.height > 0) {
@@ -163,6 +175,7 @@ fun PlayerScreen(
             }
         }
         player.addListener(listener)
+        tracksSnapshot = extractPlayerTracksSnapshot(player)
         onDispose { player.removeListener(listener) }
     }
 
@@ -219,6 +232,7 @@ fun PlayerScreen(
     fun toggleFullscreen(landscape: Boolean) {
         if (!landscape) {
             isEpisodeDrawerOpen = false
+            isTrackSheetOpen = false
         }
         isLandscape = landscape
         val act = activity ?: return
@@ -400,7 +414,9 @@ fun PlayerScreen(
     }
 
     BackHandler {
-        if (isEpisodeDrawerOpen) {
+        if (isTrackSheetOpen) {
+            isTrackSheetOpen = false
+        } else if (isEpisodeDrawerOpen) {
             isEpisodeDrawerOpen = false
         } else if (isLandscape) {
             toggleFullscreen(false)
@@ -557,6 +573,9 @@ fun PlayerScreen(
                     },
                     onRequestOpenSources = onRequestOpenSources,
                     showPipButton = uiState.pipEnabled,
+                    hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
+                    isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
+                    onOpenTrackSelection = { isTrackSheetOpen = true },
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -622,6 +641,17 @@ fun PlayerScreen(
                         onClose = { isEpisodeDrawerOpen = false },
                     )
                 }
+
+                // 全屏内右侧音轨与字幕选择抽屉
+                PlayerTrackSelectionLandscapeDrawer(
+                    isOpen = isTrackSheetOpen,
+                    tracksSnapshot = tracksSnapshot,
+                    onSelectSubtitle = { selectSubtitleTrack(player, it) },
+                    onDisableSubtitles = { disableSubtitles(player) },
+                    onAutoSubtitles = { autoSelectSubtitles(player) },
+                    onSelectAudio = { selectAudioTrack(player, it) },
+                    onClose = { isTrackSheetOpen = false },
+                )
             }
         } else {
             // 竖屏常规态：顶部 16:9 播放窗口 + 播放源切换 + 底部选集网格
@@ -702,6 +732,9 @@ fun PlayerScreen(
                         onToggleLock = {},
                         onRequestOpenSources = onRequestOpenSources,
                         showPipButton = uiState.pipEnabled,
+                        hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
+                        isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
+                        onOpenTrackSelection = { isTrackSheetOpen = true },
                         modifier =
                             Modifier
                                 .fillMaxSize()
@@ -794,6 +827,17 @@ fun PlayerScreen(
                 }
             }
         }
+
+        PlayerTrackSelectionSheet(
+            isOpen = isTrackSheetOpen && !isLandscape,
+            isLandscape = false,
+            tracksSnapshot = tracksSnapshot,
+            onSelectSubtitle = { selectSubtitleTrack(player, it) },
+            onDisableSubtitles = { disableSubtitles(player) },
+            onAutoSubtitles = { autoSelectSubtitles(player) },
+            onSelectAudio = { selectAudioTrack(player, it) },
+            onDismiss = { isTrackSheetOpen = false },
+        )
     }
 }
 
@@ -847,6 +891,9 @@ private fun PlayerVideoStage(
     onToggleLock: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
     showPipButton: Boolean = true,
+    hasSelectableTracks: Boolean = false,
+    isSubtitlesActive: Boolean = false,
+    onOpenTrackSelection: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -964,6 +1011,9 @@ private fun PlayerVideoStage(
                 showEpisodeQueue = showEpisodeQueue,
                 onOpenEpisodeQueue = onOpenEpisodeQueue,
                 showPipButton = showPipButton,
+                hasSelectableTracks = hasSelectableTracks,
+                isSubtitlesActive = isSubtitlesActive,
+                onOpenTrackSelection = onOpenTrackSelection,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
                 onSingleTap = onSingleTap,

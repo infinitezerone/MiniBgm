@@ -96,6 +96,9 @@ internal fun PlayerControlsOverlay(
     showEpisodeQueue: Boolean,
     onOpenEpisodeQueue: () -> Unit,
     showPipButton: Boolean = true,
+    hasSelectableTracks: Boolean = false,
+    isSubtitlesActive: Boolean = false,
+    onOpenTrackSelection: () -> Unit = {},
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
@@ -423,6 +426,21 @@ internal fun PlayerControlsOverlay(
                             imageVector = BgmIcons.List,
                             contentDescription = stringResource(R.string.feature_subject_player_episodes),
                             tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+
+                if (hasSelectableTracks) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onOpenTrackSelection,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Subtitles,
+                            contentDescription = stringResource(R.string.feature_subject_player_tracks_btn),
+                            tint = if (isSubtitlesActive) MaterialTheme.colorScheme.primary else Color.White,
                             modifier = Modifier.size(20.dp),
                         )
                     }

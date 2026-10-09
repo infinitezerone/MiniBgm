@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.filled.VolumeMute
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Book
@@ -89,6 +90,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -240,6 +242,8 @@ object BgmIcons {
     val PictureInPicture: ImageVector = Icons.Filled.PictureInPictureAlt
     val VolumeUp: ImageVector = Icons.AutoMirrored.Filled.VolumeUp
     val VolumeMute: ImageVector = Icons.AutoMirrored.Filled.VolumeMute
+    val Subtitles: ImageVector = Icons.Filled.Subtitles
+    val Audiotrack: ImageVector = Icons.Filled.Audiotrack
 
     // ---- 7. 社区与交流 ----
     val ChatBubble: ImageVector = Icons.Filled.ChatBubble

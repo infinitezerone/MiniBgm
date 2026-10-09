@@ -294,4 +294,14 @@
     <string name="feature_subject_player_err_invalid_url">播放地址已失效或返回错误</string>
     <string name="feature_subject_player_err_unsupported_format">视频流格式无法解析</string>
     <string name="feature_subject_player_err_unknown">播放出现未知异常</string>
+
+    <!-- 轨道与字幕选择 -->
+    <string name="feature_subject_player_tracks_title">音轨与字幕</string>
+    <string name="feature_subject_player_tracks_btn">音轨/字幕</string>
+    <string name="feature_subject_player_subtitles_group">软字幕</string>
+    <string name="feature_subject_player_audio_group">音频轨道</string>
+    <string name="feature_subject_player_subtitles_off">关闭字幕</string>
+    <string name="feature_subject_player_subtitles_auto">自动匹配</string>
+    <string name="feature_subject_player_track_default">默认</string>
+    <string name="feature_subject_player_track_unnamed">未命名轨道</string>
 </resources>

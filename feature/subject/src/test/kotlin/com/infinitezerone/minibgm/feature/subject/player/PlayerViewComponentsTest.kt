@@ -81,4 +81,75 @@ class PlayerViewComponentsTest {
         // 10% of 90min is 9min = 540s
         assertEquals(540_000L, calculateSeekDeltaMs(1000f, width, totalMs))
     }
+
+    @Test
+    fun resolveLanguageName_mapsCommonCodes() {
+        assertEquals("中文 (简体)", resolveLanguageName("zh-CN"))
+        assertEquals("中文 (简体)", resolveLanguageName("zh-Hans"))
+        assertEquals("中文 (简体)", resolveLanguageName("chi"))
+        assertEquals("中文 (繁体)", resolveLanguageName("zh-Hant"))
+        assertEquals("中文 (繁体)", resolveLanguageName("cht"))
+        assertEquals("日语", resolveLanguageName("ja"))
+        assertEquals("日语", resolveLanguageName("jpn"))
+        assertEquals("英语", resolveLanguageName("en"))
+        assertEquals("韩语", resolveLanguageName("ko"))
+        assertEquals(null, resolveLanguageName(null))
+        assertEquals(null, resolveLanguageName(""))
+        assertEquals(null, resolveLanguageName("und"))
+    }
+
+    @Test
+    fun formatTrackDisplayName_formatsSubtitlesAndAudio() {
+        assertEquals(
+            "中文 (简体) (简日双语) [默认]",
+            formatTrackDisplayDetails(
+                label = "简日双语",
+                language = "zh-CN",
+                channelCount = 0,
+                selectionFlags = androidx.media3.common.C.SELECTION_FLAG_DEFAULT,
+                trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+                index = 0,
+                defaultLabel = "字幕",
+            ),
+        )
+
+        assertEquals(
+            "日语 · 双声道",
+            formatTrackDisplayDetails(
+                label = null,
+                language = "ja",
+                channelCount = 2,
+                selectionFlags = 0,
+                trackType = androidx.media3.common.C.TRACK_TYPE_AUDIO,
+                index = 0,
+                defaultLabel = "音轨",
+            ),
+        )
+
+        assertEquals(
+            "日语原声 · 5.1 环绕声",
+            formatTrackDisplayDetails(
+                label = "日语原声",
+                language = null,
+                channelCount = 6,
+                selectionFlags = 0,
+                trackType = androidx.media3.common.C.TRACK_TYPE_AUDIO,
+                index = 0,
+                defaultLabel = "音轨",
+            ),
+        )
+
+        assertEquals(
+            "字幕 #1",
+            formatTrackDisplayDetails(
+                label = null,
+                language = null,
+                channelCount = 0,
+                selectionFlags = 0,
+                trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+                index = 0,
+                defaultLabel = "字幕",
+            ),
+        )
+    }
 }
