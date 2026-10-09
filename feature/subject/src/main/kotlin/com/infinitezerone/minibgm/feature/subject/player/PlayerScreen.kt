@@ -575,6 +575,7 @@ fun PlayerScreen(
                     showPipButton = uiState.pipEnabled,
                     hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
                     isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
+                    currentQualityLabel = if (tracksSnapshot.qualityTracks.size > 1) tracksSnapshot.currentQualityDisplayLabel else null,
                     onOpenTrackSelection = { isTrackSheetOpen = true },
                     modifier =
                         Modifier
@@ -646,6 +647,8 @@ fun PlayerScreen(
                 PlayerTrackSelectionLandscapeDrawer(
                     isOpen = isTrackSheetOpen,
                     tracksSnapshot = tracksSnapshot,
+                    onSelectQuality = { selectVideoQuality(player, it) },
+                    onAutoQuality = { selectAutoVideoQuality(player) },
                     onSelectSubtitle = { selectSubtitleTrack(player, it) },
                     onDisableSubtitles = { disableSubtitles(player) },
                     onAutoSubtitles = { autoSelectSubtitles(player) },
@@ -734,6 +737,14 @@ fun PlayerScreen(
                         showPipButton = uiState.pipEnabled,
                         hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
                         isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
+                        currentQualityLabel =
+                            if (tracksSnapshot.qualityTracks.size >
+                                1
+                            ) {
+                                tracksSnapshot.currentQualityDisplayLabel
+                            } else {
+                                null
+                            },
                         onOpenTrackSelection = { isTrackSheetOpen = true },
                         modifier =
                             Modifier
@@ -832,6 +843,8 @@ fun PlayerScreen(
             isOpen = isTrackSheetOpen && !isLandscape,
             isLandscape = false,
             tracksSnapshot = tracksSnapshot,
+            onSelectQuality = { selectVideoQuality(player, it) },
+            onAutoQuality = { selectAutoVideoQuality(player) },
             onSelectSubtitle = { selectSubtitleTrack(player, it) },
             onDisableSubtitles = { disableSubtitles(player) },
             onAutoSubtitles = { autoSelectSubtitles(player) },
@@ -893,6 +906,7 @@ private fun PlayerVideoStage(
     showPipButton: Boolean = true,
     hasSelectableTracks: Boolean = false,
     isSubtitlesActive: Boolean = false,
+    currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -1013,6 +1027,7 @@ private fun PlayerVideoStage(
                 showPipButton = showPipButton,
                 hasSelectableTracks = hasSelectableTracks,
                 isSubtitlesActive = isSubtitlesActive,
+                currentQualityLabel = currentQualityLabel,
                 onOpenTrackSelection = onOpenTrackSelection,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,

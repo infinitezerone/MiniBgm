@@ -295,9 +295,12 @@
     <string name="feature_subject_player_err_unsupported_format">视频流格式无法解析</string>
     <string name="feature_subject_player_err_unknown">播放出现未知异常</string>
 
-    <!-- 轨道与字幕选择 -->
-    <string name="feature_subject_player_tracks_title">音轨与字幕</string>
-    <string name="feature_subject_player_tracks_btn">音轨/字幕</string>
+    <!-- 轨道、画质与字幕选择 -->
+    <string name="feature_subject_player_tracks_title">画质、音轨与字幕</string>
+    <string name="feature_subject_player_tracks_btn">音画/字幕</string>
+    <string name="feature_subject_player_quality_group">画面清晰度</string>
+    <string name="feature_subject_player_quality_auto">自动 (自适应)</string>
+    <string name="feature_subject_player_quality_auto_current">当前自适应：%1$s</string>
     <string name="feature_subject_player_subtitles_group">软字幕</string>
     <string name="feature_subject_player_audio_group">音频轨道</string>
     <string name="feature_subject_player_subtitles_off">关闭字幕</string>

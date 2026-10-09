@@ -98,6 +98,7 @@ internal fun PlayerControlsOverlay(
     showPipButton: Boolean = true,
     hasSelectableTracks: Boolean = false,
     isSubtitlesActive: Boolean = false,
+    currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
@@ -414,6 +415,23 @@ internal fun PlayerControlsOverlay(
                         color = Color.White.copy(alpha = 0.9f),
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                     )
+                }
+
+                if (currentQualityLabel != null) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.14f),
+                        modifier = Modifier.clickable(onClick = onOpenTrackSelection),
+                    ) {
+                        Text(
+                            text = currentQualityLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        )
+                    }
                 }
 
                 if (showEpisodeQueue) {

@@ -152,4 +152,25 @@ class PlayerViewComponentsTest {
             ),
         )
     }
+
+    @Test
+    fun formatQualityLabel_resolvesStandardResolutions() {
+        assertEquals("4K", formatQualityLabel(3840, 2160))
+        assertEquals("2K", formatQualityLabel(2560, 1440))
+        assertEquals("1080P", formatQualityLabel(1920, 1080))
+        assertEquals("720P", formatQualityLabel(1280, 720))
+        assertEquals("480P", formatQualityLabel(854, 480))
+        assertEquals("360P", formatQualityLabel(640, 360))
+        assertEquals("240P", formatQualityLabel(320, 240))
+        assertEquals("未知画质", formatQualityLabel(-1, -1))
+    }
+
+    @Test
+    fun formatQualityDetail_formatsResolutionAndBitrate() {
+        assertEquals("1920×1080 · 3.5 Mbps", formatQualityDetail(1920, 1080, 3_500_000))
+        assertEquals("1280×720 · 800 kbps", formatQualityDetail(1280, 720, 800_000))
+        assertEquals("1920×1080", formatQualityDetail(1920, 1080, -1))
+        assertEquals("3.5 Mbps", formatQualityDetail(-1, -1, 3_500_000))
+        assertEquals(null, formatQualityDetail(-1, -1, -1))
+    }
 }
