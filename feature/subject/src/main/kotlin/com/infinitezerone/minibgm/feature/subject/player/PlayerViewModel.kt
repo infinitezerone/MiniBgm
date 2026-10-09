@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositor
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
@@ -107,6 +108,7 @@ data class PlayerUiState(
     val subjectCoverUrl: String = "",
     val subjectScore: Double = 0.0,
     val subjectDate: String = "",
+    val subjectSummary: String = "",
     val subjectCollectionType: Int? = null,
     val currentEpisodeDesc: String = "",
     val currentEpisodeAirdate: String = "",
@@ -592,6 +594,7 @@ class PlayerViewModel(
                     subjectCoverUrl = snapshot.subject?.images?.large ?: snapshot.subject?.images?.common ?: next.subjectCoverUrl,
                     subjectScore = snapshot.subject?.rating?.score ?: next.subjectScore,
                     subjectDate = snapshot.subject?.date?.ifBlank { snapshot.subject.airDate } ?: next.subjectDate,
+                    subjectSummary = snapshot.subject?.summary ?: next.subjectSummary,
                     subjectCollectionType = snapshot.collection?.type ?: next.subjectCollectionType,
                 )
             // 源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
@@ -841,6 +844,44 @@ class PlayerViewModel(
                     _events.send(
                         PlayerUiEvent.ShowSnackbar(
                             if (targetWatched) "已标记为看过（第 $epNumber 话）" else "已撤回看过标记（第 $epNumber 话）",
+                        ),
+                    )
+                }.onError { _, message ->
+                    _events.send(PlayerUiEvent.ShowSnackbar(message))
+                }
+        }
+    }
+
+    /**
+     * 快捷切换当前条目的追番状态（B站风格追番按钮）：
+     * 未追番 -> 在看（DOING）；已在看 -> 撤回/想看或提示已在看。
+     */
+    fun toggleFollowSubject() {
+        if (!isLoggedIn.value) {
+            viewModelScope.launch {
+                _events.send(PlayerUiEvent.ShowSnackbar("请先登录 Bangumi"))
+            }
+            return
+        }
+        val currentType = _uiState.value.subjectCollectionType
+        val targetType =
+            if (currentType == CollectionType.DOING.value) {
+                CollectionType.WISH
+            } else {
+                CollectionType.DOING
+            }
+        viewModelScope.launch {
+            val result =
+                collectionRepository.updateCollectionStatus(
+                    subjectId = _uiState.value.subjectId,
+                    type = targetType,
+                )
+            result
+                .onSuccess {
+                    _uiState.update { it.copy(subjectCollectionType = targetType.value) }
+                    _events.send(
+                        PlayerUiEvent.ShowSnackbar(
+                            if (targetType == CollectionType.DOING) "已加入追番（在看）" else "已更新追番状态",
                         ),
                     )
                 }.onError { _, message ->

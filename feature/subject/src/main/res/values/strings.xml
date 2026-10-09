@@ -315,4 +315,17 @@
     <string name="feature_subject_player_subtitles_auto">自动匹配</string>
     <string name="feature_subject_player_track_default">默认</string>
     <string name="feature_subject_player_track_unnamed">未命名轨道</string>
+
+    <!-- B站风格播放页 Tab 与追番 -->
+    <string name="feature_subject_player_tab_intro">简介</string>
+    <string name="feature_subject_player_tab_discussion">讨论</string>
+    <string name="feature_subject_player_follow_anime">+ 追番</string>
+    <string name="feature_subject_player_followed_anime">已追番</string>
+    <string name="feature_subject_player_watching_anime">在看</string>
+    <string name="feature_subject_player_watched_anime">看过</string>
+    <string name="feature_subject_player_source_label">源</string>
+    <string name="feature_subject_player_discussion_banner_title">第 %1$s 话 · 讨论吐槽区</string>
+    <string name="feature_subject_player_discussion_banner_desc">共 %1$d 条吐槽，点击参与讨论与观点交流 ›</string>
+    <string name="feature_subject_player_discussion_empty_desc">本集暂无吐槽，快来抢先占楼发表你的看法 ›</string>
+    <string name="feature_subject_player_discussion_open_detail">进入完整讨论区</string>
 </resources>
