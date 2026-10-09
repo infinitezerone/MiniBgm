@@ -12,15 +12,15 @@ class TopLevelDestinationTest {
         assertEquals(3, destinations.size)
 
         val schedule = TopLevelDestination.SCHEDULE
-        assertEquals("放送", schedule.labelText)
+        assertEquals(R.string.core_navigation_tab_schedule, schedule.labelRes)
         assertEquals(ScheduleRoute, schedule.route)
 
         val explore = TopLevelDestination.EXPLORE
-        assertEquals("探索", explore.labelText)
+        assertEquals(R.string.core_navigation_tab_explore, explore.labelRes)
         assertEquals(ExploreRoute, explore.route)
 
         val user = TopLevelDestination.USER
-        assertEquals("我的", user.labelText)
+        assertEquals(R.string.core_navigation_tab_user, user.labelRes)
         assertEquals(UserRoute, user.route)
     }
 

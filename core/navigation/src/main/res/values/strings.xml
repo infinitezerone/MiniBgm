@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 底部导航顶层 Tab -->
+    <string name="core_navigation_tab_schedule">放送</string>
+    <string name="core_navigation_tab_explore">探索</string>
+    <string name="core_navigation_tab_user">我的</string>
+</resources>

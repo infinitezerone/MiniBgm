@@ -7,6 +7,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.core.navigation"
+    resourcePrefix = "core_navigation_"
 }
 
 dependencies {

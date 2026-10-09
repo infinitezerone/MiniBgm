@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.navigation
 
+import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -10,25 +11,25 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 enum class TopLevelDestination(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
-    val labelText: String,
+    @StringRes val labelRes: Int,
     val route: NavKey,
 ) {
     SCHEDULE(
         selectedIcon = BgmIcons.Calendar,
         unselectedIcon = BgmIcons.CalendarBorder,
-        labelText = "放送",
+        labelRes = R.string.core_navigation_tab_schedule,
         route = ScheduleRoute,
     ),
     EXPLORE(
         selectedIcon = BgmIcons.Explore,
         unselectedIcon = BgmIcons.ExploreBorder,
-        labelText = "探索",
+        labelRes = R.string.core_navigation_tab_explore,
         route = ExploreRoute,
     ),
     USER(
         selectedIcon = BgmIcons.User,
         unselectedIcon = BgmIcons.UserBorder,
-        labelText = "我的",
+        labelRes = R.string.core_navigation_tab_user,
         route = UserRoute,
     ),
 }
