@@ -34,14 +34,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,7 +60,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -762,52 +758,11 @@ fun PlayerScreen(
                 }
 
                 // B站风格：播放器正下方紧跟「简介」与「讨论」双 Tab
-                PrimaryTabRow(
+                BiliPlayerTabRow(
                     selectedTabIndex = currentTab,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                ) {
-                    Tab(
-                        selected = currentTab == 0,
-                        onClick = { currentTab = 0 },
-                        text = {
-                            Text(
-                                text = stringResource(R.string.feature_subject_player_tab_intro),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Medium,
-                                color =
-                                    if (currentTab ==
-                                        0
-                                    ) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                            )
-                        },
-                    )
-                    Tab(
-                        selected = currentTab == 1,
-                        onClick = { currentTab = 1 },
-                        text = {
-                            val commentCount = uiState.currentEpisodeCommentCount
-                            val countLabel = if (commentCount > 0) " ($commentCount)" else ""
-                            Text(
-                                text = stringResource(R.string.feature_subject_player_tab_discussion) + countLabel,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Medium,
-                                color =
-                                    if (currentTab ==
-                                        1
-                                    ) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                            )
-                        },
-                    )
-                }
+                    discussionCount = uiState.currentEpisodeCommentCount,
+                    onTabSelected = { currentTab = it },
+                )
 
                 // 下半部：Tab 页面内容
                 if (currentTab == 0) {

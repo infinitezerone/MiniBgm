@@ -328,4 +328,6 @@
     <string name="feature_subject_player_discussion_banner_desc">共 %1$d 条吐槽，点击参与讨论与观点交流 ›</string>
     <string name="feature_subject_player_discussion_empty_desc">本集暂无吐槽，快来抢先占楼发表你的看法 ›</string>
     <string name="feature_subject_player_discussion_open_detail">进入完整讨论区</string>
+    <string name="feature_subject_player_expand_all">全部剧集</string>
+    <string name="feature_subject_player_collapse">收起</string>
 </resources>

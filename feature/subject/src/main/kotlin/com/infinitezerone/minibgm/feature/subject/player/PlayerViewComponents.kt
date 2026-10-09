@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +27,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,14 +48,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
+import com.infinitezerone.minibgm.core.designsystem.component.formatScore
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
@@ -909,7 +917,10 @@ internal fun PlayerEmptyView(
 private const val BILI_EPISODE_CHUNK_SIZE = 30
 
 /**
- * B站风格番剧头部：左侧大字标题、评分、年份、简介折叠；右侧突出追番药丸按钮。
+ * 番剧头部：大字标题 + 纯文字元信息行 + 折叠简介，右侧挂统一形态的追番药丸。
+ *
+ * 刻意不用带底色的评分徽章与三种混用的 M3 Button：追番三态只换填充色与文案，
+ * 形态恒定；评分走「图标 + 数字」的纯文字排布，避免在扁平内容区里叠出第二层容器感。
  */
 @Composable
 internal fun BiliPlayerSubjectHeader(
@@ -923,150 +934,75 @@ internal fun BiliPlayerSubjectHeader(
     modifier: Modifier = Modifier,
 ) {
     var isSummaryExpanded by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
+            Text(
+                text = subjectName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier =
                     Modifier
                         .weight(1f)
+                        .clip(RoundedCornerShape(4.dp))
                         .clickable(onClick = onSubjectClick),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = subjectName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.feature_subject_player_view_subject_detail),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            BiliFollowPill(
+                collectionType = collectionType,
+                onClick = onToggleFollow,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (score > 0.0) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (score > 0.0) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Star,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(11.dp),
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = String.format(Locale.US, "%.1f", score),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        }
-                    }
-                    if (airDate.isNotBlank()) {
-                        Text(
-                            text = airDate.take(4) + "年",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (collectionType != null) {
-                        val statusLabel = CollectionType.fromValue(collectionType).label
-                        Text(
-                            text = "· $statusLabel",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // B站经典高亮追番药丸按钮
-            val isFollowing = collectionType == CollectionType.DOING.value
-            val isWatched = collectionType == CollectionType.COLLECT.value
-            if (isFollowing) {
-                FilledTonalButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleFollow()
-                    },
-                    shape = CircleShape,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                    modifier = Modifier.height(34.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Icon(
-                        imageVector = BgmIcons.Check,
+                        imageVector = BgmIcons.Star,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp),
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = stringResource(R.string.feature_subject_player_followed_anime),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            } else if (isWatched) {
-                OutlinedButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleFollow()
-                    },
-                    shape = CircleShape,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                    modifier = Modifier.height(34.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_watched_anime),
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            } else {
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleFollow()
-                    },
-                    shape = CircleShape,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                    modifier = Modifier.height(34.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_follow_anime),
+                        text = score.formatScore(),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
+            }
+            if (airDate.isNotBlank()) {
+                Text(
+                    text = airDate.take(4) + "年",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (collectionType != null) {
+                Text(
+                    text = CollectionType.fromValue(collectionType).label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 
-        // 折叠简介
         if (summary.isNotBlank()) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier =
                     Modifier
@@ -1096,7 +1032,10 @@ internal fun BiliPlayerSubjectHeader(
 }
 
 /**
- * 当前分集状态条：标题、首播时间、打卡胶囊、吐槽入口
+ * 当前分集信息行：左侧分集标题与首播日期，右侧吐槽与打卡两枚轻量胶囊。
+ *
+ * 刻意不再用 Surface 包一层底色卡片——浅色主题下 surfaceContainerLow 是纯白，
+ * 铺在灰底内容区上会形成一块边界模糊的"白板"，比不包更脏。
  */
 @Composable
 internal fun BiliCurrentEpisodeInfoBar(
@@ -1111,97 +1050,65 @@ internal fun BiliCurrentEpisodeInfoBar(
 ) {
     val haptic = LocalHapticFeedback.current
 
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    Row(
         modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = epLabel + if (episodeName.isNotBlank()) " · $episodeName" else "",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (airdate.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_airdate, airdate),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // 吐槽入口
-            FilledTonalButton(
-                onClick = onCommentClick,
-                shape = RoundedCornerShape(16.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                modifier = Modifier.height(30.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.ChatBubbleOutline,
-                    contentDescription = null,
-                    modifier = Modifier.size(13.dp),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (commentCount > 0) "$commentCount" else stringResource(R.string.feature_subject_player_episode_comments),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            // 打卡按钮
-            FilterChip(
-                selected = isWatched,
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onToggleWatched()
-                },
-                shape = RoundedCornerShape(16.dp),
-                label = {
-                    Text(
-                        text =
-                            if (isWatched) {
-                                stringResource(R.string.feature_subject_player_watched)
-                            } else {
-                                stringResource(R.string.feature_subject_player_mark_as_watched)
-                            },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (isWatched) FontWeight.Bold else FontWeight.Normal,
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = BgmIcons.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(13.dp),
-                    )
-                },
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = epLabel + if (episodeName.isNotBlank()) " · $episodeName" else "",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+            if (airdate.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.feature_subject_player_airdate, airdate),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        BiliTogglePill(
+            label =
+                if (commentCount > 0) {
+                    commentCount.toString()
+                } else {
+                    stringResource(R.string.feature_subject_player_episode_comments)
+                },
+            selected = false,
+            onClick = onCommentClick,
+            leadingIcon = BgmIcons.ChatBubbleOutline,
+        )
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        BiliTogglePill(
+            label =
+                if (isWatched) {
+                    stringResource(R.string.feature_subject_player_watched)
+                } else {
+                    stringResource(R.string.feature_subject_player_mark_as_watched)
+                },
+            selected = isWatched,
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggleWatched()
+            },
+            leadingIcon = BgmIcons.Check,
+        )
     }
 }
 
 /**
- * 紧凑轻量的播放源横向选择条
+ * 播放源横向选择条：源名做成轻量胶囊；打不开的源降透明度并在右侧挂一个告警图标，
+ * 把"这条源不可用"从原来挤在胶囊内的小字改成不撑高胶囊的角标。
  */
 @Composable
 internal fun BiliPlayerSourceBar(
@@ -1223,36 +1130,35 @@ internal fun BiliPlayerSourceBar(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         LazyRow(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             itemsIndexed(sources) { index, source ->
                 val isSelected = index == selectedIndex
                 val failureCount = sourceFailureCounts[source.id] ?: 0
-                val isFailing = failureCount > 0
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onSelectSource(index) },
-                    modifier = if (isFailing && !isSelected) Modifier.alpha(0.65f) else Modifier,
-                    shape = RoundedCornerShape(8.dp),
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = source.nameRes?.let { stringResource(it) } ?: source.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            )
-                            SourceFailureHint(failureCount)
-                        }
-                    },
-                    colors =
-                        FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
-                )
+                val isFailing = failureCount > 0 && !isSelected
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BiliTogglePill(
+                        label = source.nameRes?.let { stringResource(it) } ?: source.name,
+                        selected = isSelected,
+                        onClick = { onSelectSource(index) },
+                        modifier = if (isFailing) Modifier.alpha(0.5f) else Modifier,
+                    )
+                    if (isFailing) {
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(
+                            imageVector = BgmIcons.Warning,
+                            contentDescription =
+                                stringResource(R.string.feature_subject_player_failures_count, failureCount),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
+                }
             }
         }
 
@@ -1275,7 +1181,10 @@ internal fun BiliPlayerSourceBar(
 }
 
 /**
- * B站风格选集区域：横向滑动单集条（LazyRow），支持右上角切换网格平铺
+ * 选集区：横向滑动单集条，右上角可切换为整季网格。
+ *
+ * 标题行的"自动连播"收敛成切换胶囊（选中才显勾），"展开/收起"改成主色纯文字 + 箭头，
+ * 不再用 M3 Switch 撑高整行，也修掉了原先硬编码在组件里的展开文案。
  */
 @Composable
 internal fun BiliEpisodesSection(
@@ -1327,32 +1236,41 @@ internal fun BiliEpisodesSection(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            BiliTogglePill(
+                label = stringResource(R.string.feature_subject_player_auto_play_next),
+                selected = autoNextEnabled,
+                onClick = onToggleAutoNext,
+                leadingIcon = if (autoNextEnabled) BgmIcons.Check else null,
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
             Row(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { isExpandedGrid = !isExpandedGrid }
+                        .padding(horizontal = 2.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = onToggleAutoNext),
             ) {
                 Text(
-                    text = stringResource(R.string.feature_subject_player_auto_play_next),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Switch(
-                    checked = autoNextEnabled,
-                    onCheckedChange = { onToggleAutoNext() },
-                )
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            TextButton(
-                onClick = { isExpandedGrid = !isExpandedGrid },
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    text = if (isExpandedGrid) "收起" else "全部 >",
+                    text =
+                        stringResource(
+                            if (isExpandedGrid) {
+                                R.string.feature_subject_player_collapse
+                            } else {
+                                R.string.feature_subject_player_expand_all
+                            },
+                        ),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = if (isExpandedGrid) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }
@@ -1407,14 +1325,13 @@ internal fun BiliEpisodesSection(
                     }
                 LazyRow(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     itemsIndexed(paginationLabels) { index, chunkLabel ->
-                        val isSelected = index == selectedChunkIndex
-                        FilterChip(
-                            selected = isSelected,
+                        BiliTogglePill(
+                            label = chunkLabel,
+                            selected = index == selectedChunkIndex,
                             onClick = { selectedChunkIndex = index },
-                            label = { Text(chunkLabel, style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                 }
@@ -1442,7 +1359,10 @@ internal fun BiliEpisodesSection(
 }
 
 /**
- * B站横向单集滑动卡片
+ * 横向滑动的单集格子：当前播放 = 主色实心，其余 = 中性底色。
+ *
+ * 状态改由填充色与右下角标表达，不再往 46dp 高的格子里塞第二行"播放中"小字
+ * （两行字会把序号挤得偏上、一行里对不齐）；播放中与已看状态通过语义描述保留给读屏。
  */
 @Composable
 internal fun BiliEpisodeRowCard(
@@ -1462,56 +1382,61 @@ internal fun BiliEpisodeRowCard(
             "SP${episode.sort.toInt()}"
         }
 
+    val stateLabel =
+        when {
+            isSelected -> stringResource(R.string.feature_subject_player_playing)
+            episode.isWatched -> stringResource(R.string.feature_subject_player_watched)
+            else -> null
+        }
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
         color =
             if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             },
         contentColor =
             if (isSelected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+                MaterialTheme.colorScheme.onPrimary
             } else {
                 MaterialTheme.colorScheme.onSurface
             },
-        modifier = modifier.width(72.dp).height(50.dp),
+        modifier =
+            modifier
+                .width(64.dp)
+                .height(46.dp)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = if (stateLabel != null) "$sortLabel, $stateLabel" else sortLabel
+                },
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(2.dp),
-            ) {
-                Text(
-                    text = sortLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    maxLines = 1,
-                )
-                if (isSelected) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_playing),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
+            Text(
+                text = sortLabel,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+            )
             if (episode.isWatched) {
                 Box(
                     modifier =
                         Modifier
                             .align(Alignment.BottomEnd)
                             .padding(4.dp)
-                            .size(6.dp)
+                            .size(5.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .background(
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            ),
                 )
             }
         }
@@ -1519,7 +1444,10 @@ internal fun BiliEpisodeRowCard(
 }
 
 /**
- * 讨论/吐槽 Tab 页面组件
+ * 讨论/吐槽 Tab：分集信息、进入完整讨论区、剧情简介三段扁平排布。
+ *
+ * 去掉原先两层 surfaceContainerLow 卡片容器——浅色主题下 surfaceContainerLow 就是纯白，
+ * 与灰底背景只差一个色阶，卡片边界靠"猜"；改用分隔线切段，层级更清楚也更轻。
  */
 @Composable
 internal fun BiliEpisodeDiscussionTab(
@@ -1531,97 +1459,299 @@ internal fun BiliEpisodeDiscussionTab(
     onGoToDiscussion: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-            ) {
-                val sortLabel = episodeSort.toEpisodeLabel()
+        Column {
+            Text(
+                text =
+                    stringResource(
+                        R.string.feature_subject_player_discussion_banner_title,
+                        episodeSort.toEpisodeLabel(),
+                    ),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (episodeName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.feature_subject_player_discussion_banner_title, sortLabel),
-                    style = MaterialTheme.typography.titleMedium,
+                    text = episodeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text =
+                    if (commentCount > 0) {
+                        stringResource(R.string.feature_subject_player_discussion_banner_desc, commentCount)
+                    } else {
+                        stringResource(R.string.feature_subject_player_discussion_empty_desc)
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Surface(
+            onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onGoToDiscussion()
+            },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().height(44.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = BgmIcons.ChatBubbleOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.feature_subject_player_discussion_open_detail),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+
+        if (desc.isNotBlank()) {
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            Column {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_episode_desc_title),
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (episodeName.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                if (airdate.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = episodeName,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = stringResource(R.string.feature_subject_player_airdate, airdate),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text =
-                        if (commentCount > 0) {
-                            stringResource(R.string.feature_subject_player_discussion_banner_desc, commentCount)
-                        } else {
-                            stringResource(R.string.feature_subject_player_discussion_empty_desc)
-                        },
-                    style = MaterialTheme.typography.bodySmall,
+                    text = desc.trim(),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
-                    onClick = onGoToDiscussion,
-                    shape = CircleShape,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.ChatBubbleOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_discussion_open_detail),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
             }
+        }
+    }
+}
+
+/**
+ * 播放页下半部统一使用的轻量胶囊。
+ *
+ * 刻意不用 M3 的 FilterChip——FilterChip 带 1dp 描边、容器色与较大内边距，竖屏列表里
+ * 连排会显得"厚"；这里只用填充色区分选中态，形态恒定，尺寸由调用方给定。
+ */
+@Composable
+private fun BiliPill(
+    label: String,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+    height: Dp = 28.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelSmall,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp),
+) {
+    Row(
+        modifier =
+            modifier
+                .height(height)
+                .clip(CircleShape)
+                .background(containerColor)
+                .clickable(onClick = onClick)
+                .padding(contentPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(13.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = textStyle,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+            maxLines = 1,
+        )
+    }
+}
+
+/** 可切换的小标签：选中 = 主色实心，未选 = 中性容器色。 */
+@Composable
+private fun BiliTogglePill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
+) {
+    BiliPill(
+        label = label,
+        containerColor =
+            if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+        contentColor =
+            if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        onClick = onClick,
+        modifier = modifier,
+        leadingIcon = leadingIcon,
+    )
+}
+
+/** 追番药丸：三态只换填充色与文案，按钮形态始终一致。 */
+@Composable
+private fun BiliFollowPill(
+    collectionType: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    val isFollowing = collectionType == CollectionType.DOING.value
+    val isWatched = collectionType == CollectionType.COLLECT.value
+    val isTracked = isFollowing || isWatched
+
+    BiliPill(
+        label =
+            when {
+                isFollowing -> stringResource(R.string.feature_subject_player_followed_anime)
+                isWatched -> stringResource(R.string.feature_subject_player_watched_anime)
+                else -> stringResource(R.string.feature_subject_player_follow_anime)
+            },
+        containerColor =
+            if (isTracked) {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
+        contentColor =
+            if (isTracked) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onPrimary
+            },
+        leadingIcon = if (isTracked) BgmIcons.Check else null,
+        onClick = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
+        modifier = modifier,
+        height = 32.dp,
+        textStyle = MaterialTheme.typography.labelMedium,
+        contentPadding = PaddingValues(horizontal = 14.dp),
+    )
+}
+
+/**
+ * 播放页双 Tab 行：纯文字 + 主色短下划线。
+ *
+ * 替代 M3 的 PrimaryTabRow——后者自带容器底色与占满宽度的指示条，
+ * 会在播放器正下方切出一条突兀的白色横带。
+ */
+@Composable
+internal fun BiliPlayerTabRow(
+    selectedTabIndex: Int,
+    discussionCount: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(46.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            BiliTabItem(
+                label = stringResource(R.string.feature_subject_player_tab_intro),
+                selected = selectedTabIndex == 0,
+                onClick = { onTabSelected(0) },
+            )
+            BiliTabItem(
+                label =
+                    stringResource(R.string.feature_subject_player_tab_discussion) +
+                        if (discussionCount > 0) " $discussionCount" else "",
+                selected = selectedTabIndex == 1,
+                onClick = { onTabSelected(1) },
+            )
+        }
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
+@Composable
+private fun BiliTabItem(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val tint =
+        if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
         }
 
-        if (desc.isNotBlank()) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_episode_desc_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (airdate.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.feature_subject_player_airdate, airdate),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = desc.trim(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
+    Box(
+        modifier =
+            Modifier
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(4.dp))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 2.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = tint,
+        )
+        Box(
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(18.dp)
+                    .height(2.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) tint else Color.Transparent),
+        )
     }
 }
