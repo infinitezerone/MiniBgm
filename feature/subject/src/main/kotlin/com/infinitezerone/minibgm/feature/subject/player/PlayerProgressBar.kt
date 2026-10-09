@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -58,6 +62,11 @@ internal fun PlayerProgressBar(
         label = "glowAlpha",
     )
 
+    val currentOnScrubStart by rememberUpdatedState(onScrubStart)
+    val currentOnScrubbing by rememberUpdatedState(onScrubbing)
+    val currentOnScrubEnd by rememberUpdatedState(onScrubEnd)
+    var lastFraction by remember { mutableFloatStateOf(0f) }
+
     Canvas(
         modifier =
             modifier
@@ -67,11 +76,12 @@ internal fun PlayerProgressBar(
                     detectTapGestures(
                         onPress = { offset ->
                             val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            onScrubStart()
-                            onScrubbing(fraction)
+                            lastFraction = fraction
+                            currentOnScrubStart()
+                            currentOnScrubbing(fraction)
                             val released = tryAwaitRelease()
                             if (released) {
-                                onScrubEnd(fraction)
+                                currentOnScrubEnd(fraction)
                             }
                         },
                     )
@@ -79,19 +89,21 @@ internal fun PlayerProgressBar(
                     detectDragGestures(
                         onDragStart = { offset ->
                             val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            onScrubStart()
-                            onScrubbing(fraction)
+                            lastFraction = fraction
+                            currentOnScrubStart()
+                            currentOnScrubbing(fraction)
                         },
                         onDrag = { change, _ ->
                             change.consume()
                             val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                            onScrubbing(fraction)
+                            lastFraction = fraction
+                            currentOnScrubbing(fraction)
                         },
                         onDragEnd = {
-                            onScrubEnd(progress)
+                            currentOnScrubEnd(lastFraction)
                         },
                         onDragCancel = {
-                            onScrubEnd(progress)
+                            currentOnScrubEnd(lastFraction)
                         },
                     )
                 },
