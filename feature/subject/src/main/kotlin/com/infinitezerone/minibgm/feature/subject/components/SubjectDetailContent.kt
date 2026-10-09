@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
@@ -150,7 +151,7 @@ internal fun SubjectDetailContent(
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
     val gridColumns = if (adaptiveInfo.isWide) 7 else 5
 
-    val tabHeaderIndex = if (uiState.error != null) 2 else 1
+    val tabHeaderIndex = if (uiState.error != null) 3 else 2
 
     val nextUpEpisode =
         remember(currentEpisodes, uiState.collection?.epStatus) {
@@ -189,7 +190,7 @@ internal fun SubjectDetailContent(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (uiState.error != null) {
@@ -197,7 +198,7 @@ internal fun SubjectDetailContent(
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.feature_subject_sync_hint, uiState.error.orEmpty()),
@@ -219,6 +220,7 @@ internal fun SubjectDetailContent(
                 totalEpisodes = totalEpisodes,
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onTagClick = onTagClick,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
 
@@ -236,104 +238,110 @@ internal fun SubjectDetailContent(
                 onIncrementWatched = onIncrementWatched,
                 onDecrementWatched = onDecrementWatched,
                 onPromptLogin = onPromptLogin,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
 
         if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
             item(key = "detail_loading_skeleton") {
-                SubjectDetailBodySkeleton()
+                SubjectDetailBodySkeleton(modifier = Modifier.padding(horizontal = 16.dp))
             }
         } else if (fullSubject != null) {
             val subject = fullSubject
 
-            // 2. 二级分栏 Tab 栏（跟随内容自然流滚动，不再生硬吸顶）
-            item(key = "subject_tabs_bar") {
+            // 2. 二级分栏 Tab 栏（通栏精致吸顶，带表面底色遮蔽与层次分割线）
+            stickyHeader(key = "subject_tabs_bar") {
                 Surface(
-                    color = Color.Transparent,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    PrimaryTabRow(
-                        selectedTabIndex = selectedTab.ordinal,
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        divider = {},
-                        indicator = {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .tabIndicatorOffset(selectedTab.ordinal)
-                                        .fillMaxWidth(),
-                                contentAlignment = Alignment.BottomCenter,
-                            ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        PrimaryTabRow(
+                            selectedTabIndex = selectedTab.ordinal,
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            divider = {},
+                            indicator = {
                                 Box(
                                     modifier =
                                         Modifier
-                                            .width(28.dp)
-                                            .height(3.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primary),
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        SubjectDetailTab.entries.forEach { tab ->
-                            val isSelected = selectedTab == tab
-                            val tabLabel = getTabLabel(tab, subjectType)
-                            val badgeCount =
-                                when (tab) {
-                                    SubjectDetailTab.EPISODES -> currentEpisodes.size.takeIf { it > 0 }
-                                    SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
-                                    else -> null
+                                            .tabIndicatorOffset(selectedTab.ordinal)
+                                            .fillMaxWidth(),
+                                    contentAlignment = Alignment.BottomCenter,
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .width(28.dp)
+                                                .height(3.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                    )
                                 }
-                            Tab(
-                                selected = isSelected,
-                                onClick = { onSelectTab(tab) },
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                    ) {
-                                        Text(
-                                            text = tabLabel,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                            color =
-                                                if (isSelected) {
-                                                    MaterialTheme.colorScheme.primary
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                                },
-                                        )
-                                        if (badgeCount != null) {
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        ) {
+                            SubjectDetailTab.entries.forEach { tab ->
+                                val isSelected = selectedTab == tab
+                                val tabLabel = getTabLabel(tab, subjectType)
+                                val badgeCount =
+                                    when (tab) {
+                                        SubjectDetailTab.EPISODES -> currentEpisodes.size.takeIf { it > 0 }
+                                        SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
+                                        else -> null
+                                    }
+                                Tab(
+                                    selected = isSelected,
+                                    onClick = { onSelectTab(tab) },
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                        ) {
+                                            Text(
+                                                text = tabLabel,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                                 color =
                                                     if (isSelected) {
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                        MaterialTheme.colorScheme.primary
                                                     } else {
-                                                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
+                                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                                     },
-                                            ) {
-                                                Text(
-                                                    text = if (badgeCount > 999) "999+" else badgeCount.toString(),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            )
+                                            if (badgeCount != null) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
                                                     color =
                                                         if (isSelected) {
-                                                            MaterialTheme.colorScheme.primary
+                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                                         } else {
-                                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
                                                         },
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                                )
+                                                ) {
+                                                    Text(
+                                                        text = if (badgeCount > 999) "999+" else badgeCount.toString(),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        color =
+                                                            if (isSelected) {
+                                                                MaterialTheme.colorScheme.primary
+                                                            } else {
+                                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                                            },
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                                    )
+                                                }
                                             }
                                         }
-                                    }
-                                },
-                            )
+                                    },
+                                )
+                            }
                         }
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                        )
                     }
                 }
             }
@@ -356,7 +364,7 @@ internal fun SubjectDetailContent(
                                 },
                                 onViewAllClick = { onSelectTab(SubjectDetailTab.EPISODES) },
                                 hasProgress = uiState.collection != null,
-                                modifier = Modifier.padding(vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             )
                         }
                     }
@@ -368,6 +376,7 @@ internal fun SubjectDetailContent(
                             collection = subject.collection,
                             tags = subject.tags,
                             onTagClick = onTagClick,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
 
@@ -379,6 +388,7 @@ internal fun SubjectDetailContent(
                                 onCharacterClick = onCharacterClick,
                                 onActorClick = onPersonClick,
                                 onPreviewCharacter = onPreviewCharacter,
+                                modifier = Modifier.padding(horizontal = 16.dp),
                             )
                         }
                     }
@@ -389,6 +399,7 @@ internal fun SubjectDetailContent(
                             StaffSection(
                                 persons = uiState.persons,
                                 onPersonClick = onPersonClick,
+                                modifier = Modifier.padding(horizontal = 16.dp),
                             )
                         }
                     }
@@ -403,6 +414,7 @@ internal fun SubjectDetailContent(
                                 currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
                                 currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
                                 currentSubjectScore = displaySubject.rating?.score ?: 0.0,
+                                modifier = Modifier.padding(horizontal = 16.dp),
                             )
                         }
                     }
@@ -415,7 +427,7 @@ internal fun SubjectDetailContent(
                     ) {
                         item(key = "details_loading_indicator") {
                             Box(
-                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 CircularProgressIndicator(
@@ -459,6 +471,7 @@ internal fun SubjectDetailContent(
                             onOpenSources = onOpenSources,
                             group = activeGroup,
                             hasMoreEpisodes = hasMoreEpisodes,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
 
@@ -469,6 +482,7 @@ internal fun SubjectDetailContent(
                                 groupedEpisodes = groupedEpisodes,
                                 selectedGroup = activeGroup,
                                 onGroupSelected = onSelectGroup,
+                                modifier = Modifier.padding(horizontal = 16.dp),
                             )
                         }
                     }
@@ -477,9 +491,9 @@ internal fun SubjectDetailContent(
                         (uiState.isEpisodesLoading || uiState.isLoading) && currentEpisodes.isEmpty() -> {
                             item(key = "episodes_skeleton") {
                                 if (isGridView) {
-                                    EpisodeGridSkeleton(columns = gridColumns)
+                                    EpisodeGridSkeleton(columns = gridColumns, modifier = Modifier.padding(horizontal = 16.dp))
                                 } else {
-                                    EpisodeListSkeleton()
+                                    EpisodeListSkeleton(modifier = Modifier.padding(horizontal = 16.dp))
                                 }
                             }
                         }
@@ -492,7 +506,7 @@ internal fun SubjectDetailContent(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 16.dp),
+                                            .padding(horizontal = 16.dp, vertical = 16.dp),
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(20.dp),
@@ -540,7 +554,7 @@ internal fun SubjectDetailContent(
                                     modifier =
                                         Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 32.dp),
+                                            .padding(horizontal = 16.dp, vertical = 32.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
@@ -575,6 +589,7 @@ internal fun SubjectDetailContent(
                                         }
                                     },
                                     columns = gridColumns,
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                 )
                             }
                         }
@@ -616,6 +631,7 @@ internal fun SubjectDetailContent(
                                             onSelectEpisodeForDetail(episode)
                                         }
                                     },
+                                    modifier = Modifier.padding(horizontal = 16.dp),
                                 )
                             }
                         }
@@ -624,7 +640,7 @@ internal fun SubjectDetailContent(
                     if (hasMoreEpisodes) {
                         item(key = "episodes_load_more") {
                             Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (isLoadingMoreEpisodes) {
@@ -654,6 +670,7 @@ internal fun SubjectDetailContent(
                             onTopicClick = onTopicClick,
                             onCopyComment = onCopyComment,
                             isLoading = uiState.isCommunityLoading,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 }
