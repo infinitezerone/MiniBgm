@@ -130,7 +130,7 @@ fun CommentReactionChip(
             if (stickerUrl != null && !isLoadError) {
                 AsyncImage(
                     model = stickerUrl,
-                    contentDescription = "表态表情",
+                    contentDescription = stringResource(R.string.feature_subject_reaction_sticker_cd),
                     modifier = Modifier.size(16.dp),
                     contentScale = ContentScale.Fit,
                     onError = { isLoadError = true },

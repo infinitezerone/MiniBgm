@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,15 +30,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
-import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectComment
@@ -57,6 +59,7 @@ fun SubjectCommunitySection(
     topics: List<SubjectTopic>,
     onUrlClick: (String) -> Unit = {},
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
+    onCopyComment: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
 ) {
@@ -137,6 +140,7 @@ fun SubjectCommunitySection(
                             SubjectCommentItem(
                                 comment = comment,
                                 onUrlClick = onUrlClick,
+                                onCopyComment = onCopyComment,
                             )
                             if (index < displayComments.lastIndex) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -340,8 +344,11 @@ private fun MaterialTheme.labelMediumSmallOrFallback() = typography.labelSmall
 fun SubjectCommentItem(
     comment: SubjectComment,
     onUrlClick: (String) -> Unit = {},
+    onCopyComment: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -403,12 +410,28 @@ fun SubjectCommentItem(
         }
 
         if (comment.comment.isNotBlank()) {
-            BgmBbCodeContent(
-                content = comment.comment,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                onUrlClick = onUrlClick,
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                if (onCopyComment != null) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onCopyComment(comment.comment)
+                                }
+                            },
+                        ),
+            ) {
+                ExpandableCommentContent(
+                    content = comment.comment,
+                    onUrlClick = onUrlClick,
+                    collapsedMaxLines = 5,
+                    key = comment.user?.username ?: comment.updatedAt,
+                )
+            }
         }
     }
 }

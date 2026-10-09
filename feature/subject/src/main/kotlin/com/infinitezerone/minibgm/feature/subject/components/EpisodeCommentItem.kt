@@ -73,18 +73,7 @@ fun EpisodeCommentItem(
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            if (onCopyComment != null && comment.content.isNotBlank()) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onCopyComment(comment.content)
-                            }
-                        },
-                    ),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top,
         ) {
@@ -141,13 +130,29 @@ fun EpisodeCommentItem(
                     }
                 }
 
-                // 评论正文
-                ExpandableCommentContent(
-                    content = comment.content,
-                    onUrlClick = onUrlClick,
-                    collapsedMaxLines = 5,
-                    key = comment.id,
-                )
+                // 评论正文（支持长按复制与行级展开）
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (onCopyComment != null && comment.content.isNotBlank()) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onCopyComment(comment.content)
+                                    }
+                                },
+                            ),
+                ) {
+                    ExpandableCommentContent(
+                        content = comment.content,
+                        onUrlClick = onUrlClick,
+                        collapsedMaxLines = 5,
+                        key = comment.id,
+                    )
+                }
 
                 // 楼中楼回复容器
                 if (comment.replies.isNotEmpty()) {

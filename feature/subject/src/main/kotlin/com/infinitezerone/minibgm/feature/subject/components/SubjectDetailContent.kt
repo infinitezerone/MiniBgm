@@ -116,6 +116,7 @@ internal fun SubjectDetailContent(
     onLoadMoreComments: () -> Unit,
     isTransitionStabilizing: Boolean,
     onBatchMarkEpisode: (Episode) -> Unit,
+    onCopyComment: ((String) -> Unit)? = null,
     onPlayEpisode: ((Episode) -> Unit)? = null,
     onPlayNextEpisode: (() -> Unit)? = null,
     onOpenSources: (() -> Unit)? = null,
@@ -651,6 +652,7 @@ internal fun SubjectDetailContent(
                             topics = uiState.subjectTopics,
                             onUrlClick = onLinkClick,
                             onTopicClick = onTopicClick,
+                            onCopyComment = onCopyComment,
                             isLoading = uiState.isCommunityLoading,
                         )
                     }

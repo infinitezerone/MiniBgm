@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import android.content.ClipData
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -40,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -139,6 +142,19 @@ fun SubjectDetailScreen(
     var selectedEpisodeForQuickAction by remember { mutableStateOf<Episode?>(null) }
     var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
     var showAiringReminderPrompt by remember { mutableStateOf(false) }
+
+    val clipboard = LocalClipboard.current
+    val copiedContentText = stringResource(R.string.feature_subject_ep_copied_content)
+    val handleCopyComment: (String) -> Unit =
+        remember(clipboard, coroutineScope, snackbarHostState, copiedContentText) {
+            { text ->
+                coroutineScope.launch {
+                    val clipEntry = ClipEntry(ClipData.newPlainText("comment", text))
+                    clipboard.setClipEntry(clipEntry)
+                    snackbarHostState.showSnackbar(copiedContentText)
+                }
+            }
+        }
 
     val defaultTitle = stringResource(R.string.feature_subject_title)
     val epFormat = stringResource(R.string.feature_subject_check_in_ep_format)
@@ -598,6 +614,7 @@ fun SubjectDetailScreen(
                                     onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                     isTransitionStabilizing = isTransitionStabilizing,
                                     onBatchMarkEpisode = handleBatchMark,
+                                    onCopyComment = handleCopyComment,
                                     onPlayEpisode =
                                         if (onPlayClick != null) {
                                             { episode -> onPlayClick(viewModel.buildPlayerRoute(episode)) }

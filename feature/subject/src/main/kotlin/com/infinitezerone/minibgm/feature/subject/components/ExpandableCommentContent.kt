@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,7 +24,7 @@ import com.infinitezerone.minibgm.feature.subject.R
 /**
  * 可折叠评论/回帖正文组件：
  * 基于 Compose 原生 [maxLines] 与 [onTextLayout]（hasVisualOverflow）实现行级折叠。
- * 折叠状态下点击正文任意区域或文字链接均可展开，使用 [key] 保证列表滑动复用状态不混淆。
+ * 展开/收起统一收敛至底部明确按钮，避免拦截正文内的超链接与黑幕刮刮乐，使用 [key] 保证列表滑动复用状态不混淆。
  */
 @Composable
 internal fun ExpandableCommentContent(
@@ -39,13 +41,7 @@ internal fun ExpandableCommentContent(
         modifier =
             modifier
                 .fillMaxWidth()
-                .then(
-                    if (!isExpanded && canExpand) {
-                        Modifier.clickable { isExpanded = true }
-                    } else {
-                        Modifier
-                    },
-                ).animateContentSize(),
+                .animateContentSize(),
     ) {
         BgmBbCodeContent(
             content = content,
@@ -74,7 +70,9 @@ internal fun ExpandableCommentContent(
                 modifier =
                     Modifier
                         .padding(top = 4.dp)
-                        .clickable { isExpanded = !isExpanded },
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { isExpanded = !isExpanded }
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
             )
         }
     }

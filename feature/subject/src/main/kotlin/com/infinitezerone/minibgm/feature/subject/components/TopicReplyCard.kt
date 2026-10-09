@@ -157,6 +157,7 @@ fun TopicReplyCard(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
                             .combinedClickable(
                                 onClick = {},
                                 onLongClick = {

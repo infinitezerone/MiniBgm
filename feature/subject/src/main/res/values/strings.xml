@@ -223,6 +223,7 @@
     <string name="feature_subject_comment_expand_full">展开全文</string>
     <string name="feature_subject_reaction_add">添加表态</string>
     <string name="feature_subject_reaction_cd">表态</string>
+    <string name="feature_subject_reaction_sticker_cd">表态表情</string>
 
     <!-- 10. 帖子讨论 -->
     <string name="feature_subject_topic_copied">已复制内容</string>
