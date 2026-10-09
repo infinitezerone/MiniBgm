@@ -1,7 +1,9 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -10,6 +12,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,6 +64,7 @@ class PlayerViewModelTest {
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
         failureStore: PlaybackFailureStore? = null,
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
+        communityRepository: FakeCommunityRepository? = null,
     ): PlayerViewModel =
         PlayerViewModel(
             route = route,
@@ -68,6 +72,7 @@ class PlayerViewModelTest {
             authRepository = authRepository,
             settingsRepository = settingsRepository,
             failureStore = failureStore,
+            communityRepository = communityRepository,
         )
 
     @Test
@@ -1067,5 +1072,51 @@ class PlayerViewModelTest {
 
             assertFalse(vm.uiState.value.isWatched)
             assertEquals(0, collectionRepo.updateEpisodeCallCount)
+        }
+
+    @Test
+    fun loadComments_success_populatesCommentsInUiState() =
+        runTest {
+            val communityRepo = FakeCommunityRepository()
+            communityRepo.getEpisodeCommentsResult =
+                AppResult.Success(
+                    listOf(
+                        EpisodeComment(id = 101L, content = "第一条吐槽"),
+                        EpisodeComment(id = 102L, content = "第二条吐槽"),
+                    ),
+                )
+
+            val vm = viewModel(communityRepository = communityRepo)
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals(2, state.comments.size)
+            assertEquals("第一条吐槽", state.comments[0].content)
+            assertEquals(1, state.comments[0].floor)
+            assertEquals("第二条吐槽", state.comments[1].content)
+            assertEquals(2, state.comments[1].floor)
+            assertEquals(2, state.currentEpisodeCommentCount)
+            assertFalse(state.isCommentsLoading)
+        }
+
+    @Test
+    fun selectEpisode_resetsAndReloadsCommentsForNewEpisode() =
+        runTest {
+            val communityRepo = FakeCommunityRepository()
+            communityRepo.getEpisodeCommentsResult =
+                AppResult.Success(
+                    listOf(EpisodeComment(id = 201L, content = "新分集吐槽")),
+                )
+
+            val vm = viewModel(communityRepository = communityRepo)
+            advanceUntilIdle()
+
+            vm.selectEpisode(PlayerEpisodeItem(id = 3003L, sort = 2f, name = "第2话"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals(3003L, state.episodeId)
+            assertEquals(1, state.comments.size)
+            assertEquals("新分集吐槽", state.comments.single().content)
         }
 }

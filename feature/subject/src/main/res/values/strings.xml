@@ -286,6 +286,7 @@
     <string name="feature_subject_player_view_mode_grid">网格</string>
     <string name="feature_subject_player_view_mode_list">列表</string>
     <string name="feature_subject_player_episode_desc_title">剧情简介</string>
+    <string name="feature_subject_player_subject_summary_title">剧集简介</string>
     <string name="feature_subject_player_airdate">首播于 %1$s</string>
     <string name="feature_subject_player_view_subject_detail">条目详情</string>
     <string name="feature_subject_player_failures_count">%1$d 次打不开</string>
@@ -330,4 +331,5 @@
     <string name="feature_subject_player_discussion_open_detail">进入完整讨论区</string>
     <string name="feature_subject_player_expand_all">全部剧集</string>
     <string name="feature_subject_player_collapse">收起</string>
+    <string name="feature_subject_player_retry_comments">重新加载吐槽</string>
 </resources>

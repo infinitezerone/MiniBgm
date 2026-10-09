@@ -3,12 +3,14 @@ package com.infinitezerone.minibgm.feature.subject.player
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
@@ -16,6 +18,7 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -113,6 +116,9 @@ data class PlayerUiState(
     val currentEpisodeDesc: String = "",
     val currentEpisodeAirdate: String = "",
     val currentEpisodeCommentCount: Int = 0,
+    val comments: List<EpisodeComment> = emptyList(),
+    val isCommentsLoading: Boolean = false,
+    val commentsError: String? = null,
     val requestHeaders: Map<String, String> = emptyMap(),
     val isWatched: Boolean = false,
     val autoMarked: Boolean = false,
@@ -260,6 +266,7 @@ class PlayerViewModel(
     private val subjectRepository: SubjectRepository? = null,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
+    private val communityRepository: CommunityRepository? = null,
 ) : ViewModel() {
     /** 播放队列：调用方给了分集队列就用之，否则退化为单集播放（兼容空直链占位启动） */
     private val queue: List<PlayerQueueEntry> =
@@ -371,6 +378,7 @@ class PlayerViewModel(
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var resolveJob: Job? = null
+    private var commentsJob: Job? = null
 
     /** 条目流：仅在有 subjectId 且注入了条目仓库时订阅 */
     private val subjectFlow: Flow<Subject?> =
@@ -477,6 +485,10 @@ class PlayerViewModel(
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
                 }
             }
+        }
+
+        if (route.episodeId > 0) {
+            loadComments()
         }
     }
 
@@ -588,6 +600,7 @@ class PlayerViewModel(
             next =
                 next.copy(
                     isWatched = currentWatched,
+                    episodeId = if (next.episodeId <= 0L && currentEp != null && currentEp.id > 0L) currentEp.id else next.episodeId,
                     currentEpisodeDesc = currentEp?.desc ?: next.currentEpisodeDesc,
                     currentEpisodeAirdate = currentEp?.airdate ?: next.currentEpisodeAirdate,
                     currentEpisodeCommentCount = currentEp?.commentCount ?: next.currentEpisodeCommentCount,
@@ -611,6 +624,9 @@ class PlayerViewModel(
                 next = next.copy(resumePositionMs = snapshot.positions[next.streamUrl] ?: 0L)
             }
             next
+        }
+        if (_uiState.value.episodeId > 0L && _uiState.value.comments.isEmpty() && !_uiState.value.isCommentsLoading) {
+            loadComments()
         }
         return sourcesChanged
     }
@@ -730,10 +746,13 @@ class PlayerViewModel(
                 currentEpisodeDesc = currentEp?.desc ?: "",
                 currentEpisodeAirdate = currentEp?.airdate ?: "",
                 currentEpisodeCommentCount = currentEp?.commentCount ?: 0,
+                comments = emptyList(),
+                commentsError = null,
                 autoMarked = false,
                 resumePositionMs = session.positionsMap[entry.streamUrl] ?: 0L,
             )
         }
+        loadComments(force = true)
     }
 
     /** 切换播放源 */
@@ -797,6 +816,8 @@ class PlayerViewModel(
                 currentEpisodeDesc = currentEp?.desc ?: episode.desc,
                 currentEpisodeAirdate = currentEp?.airdate ?: episode.airdate,
                 currentEpisodeCommentCount = currentEp?.commentCount ?: episode.commentCount,
+                comments = emptyList(),
+                commentsError = null,
                 autoMarked = false,
                 // 非直链源保留当前画面（不清空），等嗅探完成再替换，避免换集瞬间黑屏；
                 // 直链源精确取队列中的对应集，未命中就如实报缺，绝不串到别的集
@@ -816,6 +837,7 @@ class PlayerViewModel(
             )
         }
         resolveCurrentEpisodeStream()
+        loadComments(force = true)
     }
 
     /**
@@ -850,6 +872,48 @@ class PlayerViewModel(
                     _events.send(PlayerUiEvent.ShowSnackbar(message))
                 }
         }
+    }
+
+    /**
+     * 异步拉取当前分集的吐槽短评列表。
+     */
+    fun loadComments(force: Boolean = false) {
+        val epId = _uiState.value.episodeId
+        if (epId <= 0L || communityRepository == null) return
+        // 已在飞行中的请求不再重复发起：切集时 selectEpisode 已经 force 拉过一轮，
+        // 屏上的 LaunchedEffect 会再触发一次，没有这条保护就会把刚发出的请求取消重来。
+        if (!force && (commentsJob?.isActive == true || _uiState.value.comments.isNotEmpty())) return
+
+        commentsJob?.cancel()
+        commentsJob =
+            viewModelScope.launch {
+                _uiState.update { it.copy(isCommentsLoading = true, commentsError = null) }
+                when (val result = communityRepository.getEpisodeComments(epId)) {
+                    is AppResult.Success -> {
+                        val parsedComments =
+                            result.data.mapIndexed { index, comment ->
+                                if (comment.floor <= 0) comment.copy(floor = index + 1) else comment
+                            }
+                        _uiState.update { current ->
+                            current.copy(
+                                comments = parsedComments,
+                                currentEpisodeCommentCount = parsedComments.size,
+                                isCommentsLoading = false,
+                                commentsError = null,
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        _uiState.update { current ->
+                            current.copy(
+                                isCommentsLoading = false,
+                                commentsError = if (current.comments.isEmpty()) result.message else null,
+                            )
+                        }
+                    }
+                    is AppResult.Loading -> Unit
+                }
+            }
     }
 
     /**

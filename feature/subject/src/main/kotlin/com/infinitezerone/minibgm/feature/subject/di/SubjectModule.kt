@@ -58,6 +58,7 @@ val subjectModule =
                 subjectRepository = get(),
                 playbackResolverRepository = get(),
                 playbackSourceVerifier = getOrNull(),
+                communityRepository = getOrNull(),
             )
         }
     }

@@ -24,22 +24,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +70,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -82,7 +92,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -758,16 +770,55 @@ fun PlayerScreen(
                     )
                 }
 
-                // B站风格：播放器正下方紧跟「简介」与「讨论」双 Tab
+                // 常驻区：剧名标题栏 + 选集。这两样不随 Tab 切换消失——
+                // 「在看什么 / 要不要追番」与「切到第几集」都是随时要动的东西；
+                // 分集信息条与播放源属于本集静态信息，下沉到「简介」Tab 里。
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    BiliSubjectTitleBar(
+                        subjectName = uiState.subjectName.ifBlank { route.subjectName },
+                        score = uiState.subjectScore,
+                        airDate = uiState.subjectDate,
+                        collectionType = uiState.subjectCollectionType,
+                        onSubjectClick = {
+                            if (uiState.subjectId > 0 && onSubjectClick != null) {
+                                onSubjectClick(uiState.subjectId)
+                            }
+                        },
+                        onToggleFollow = viewModel::toggleFollowSubject,
+                    )
+
+                    if (uiState.episodes.isNotEmpty()) {
+                        BiliEpisodesSection(
+                            episodes = uiState.episodes,
+                            selectedEpisodeSort = uiState.episodeSort,
+                            selectedEpisodeId = uiState.episodeId,
+                            autoNextEnabled = uiState.autoNextEnabled,
+                            onToggleAutoNext = viewModel::toggleAutoNext,
+                            onSelectEpisode = viewModel::selectEpisode,
+                        )
+                    }
+                }
+
+                // B站风格：双 Tab（简介 / 讨论）
                 BiliPlayerTabRow(
                     selectedTabIndex = currentTab,
                     discussionCount = uiState.currentEpisodeCommentCount,
                     onTabSelected = { currentTab = it },
                 )
 
-                // 下半部：两个 Tab 共用同一个 LazyColumn。
-                // 留白、首尾间距、滚动行为因此只有一份定义，左右边界天然对齐；
-                // 原先讨论 Tab 是包在 weight(1f) 里的普通 Column，长剧情简介会被直接裁掉。
+                // 切换到讨论 Tab 时若尚未拉取评论，自动触发加载
+                LaunchedEffect(currentTab, uiState.episodeId) {
+                    if (currentTab == 1 && uiState.episodeId > 0L) {
+                        viewModel.loadComments()
+                    }
+                }
+
                 val tabListState = rememberLazyListState()
                 LaunchedEffect(currentTab) { tabListState.scrollToItem(0) }
 
@@ -782,24 +833,7 @@ fun PlayerScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     if (currentTab == 0) {
-                        // 1. 番剧头部信息区：标题、评分、年份、可折叠简介、右侧醒目追番按钮
-                        item {
-                            BiliPlayerSubjectHeader(
-                                subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                                score = uiState.subjectScore,
-                                airDate = uiState.subjectDate,
-                                summary = uiState.subjectSummary,
-                                collectionType = uiState.subjectCollectionType,
-                                onSubjectClick = {
-                                    if (uiState.subjectId > 0 && onSubjectClick != null) {
-                                        onSubjectClick(uiState.subjectId)
-                                    }
-                                },
-                                onToggleFollow = viewModel::toggleFollowSubject,
-                            )
-                        }
-
-                        // 2. 当前分集快捷信息与打卡条
+                        // 1. 当前分集信息与打卡（自常驻区下沉：属于本集静态信息）
                         item {
                             BiliCurrentEpisodeInfoBar(
                                 epLabel = epLabel,
@@ -812,7 +846,7 @@ fun PlayerScreen(
                             )
                         }
 
-                        // 3. 紧凑的播放源切换行
+                        // 2. 播放源切换（自常驻区下沉：低频操作，不必占常驻高度）
                         if (uiState.sources.isNotEmpty()) {
                             item {
                                 BiliPlayerSourceBar(
@@ -826,32 +860,131 @@ fun PlayerScreen(
                             }
                         }
 
-                        // 4. 选集模块：横向滑动单集条（LazyRow，B站经典），右上角全部展开网格
-                        item {
-                            BiliEpisodesSection(
-                                episodes = uiState.episodes,
-                                selectedEpisodeSort = uiState.episodeSort,
-                                selectedEpisodeId = uiState.episodeId,
-                                autoNextEnabled = uiState.autoNextEnabled,
-                                onToggleAutoNext = viewModel::toggleAutoNext,
-                                onSelectEpisode = viewModel::selectEpisode,
-                            )
+                        // 3. 本集剧情看点（若有）
+                        if (uiState.currentEpisodeDesc.isNotBlank()) {
+                            item {
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.feature_subject_player_episode_desc_title),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = uiState.currentEpisodeDesc.trim(),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+
+                        // 4. 剧集简介（可折叠两行）
+                        if (uiState.subjectSummary.isNotBlank()) {
+                            item {
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.feature_subject_player_subject_summary_title),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    BiliSubjectSummaryBlock(summary = uiState.subjectSummary)
+                                }
+                            }
                         }
                     } else {
-                        // 讨论/吐槽 Tab
-                        item {
-                            BiliEpisodeDiscussionTab(
-                                episodeSort = uiState.episodeSort,
-                                episodeName = uiState.episodeName,
-                                commentCount = uiState.currentEpisodeCommentCount,
-                                desc = uiState.currentEpisodeDesc,
-                                airdate = uiState.currentEpisodeAirdate,
-                                onGoToDiscussion = {
-                                    if (uiState.episodeId > 0 && onEpisodeDetailClick != null) {
-                                        onEpisodeDetailClick(uiState.subjectId, uiState.episodeId)
+                        // 讨论/吐槽 Tab：直接渲染真实分集短评列表
+                        when {
+                            uiState.isCommentsLoading && uiState.comments.isEmpty() -> {
+                                item {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(32.dp),
+                                            strokeWidth = 2.5.dp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
                                     }
-                                },
-                            )
+                                }
+                            }
+
+                            uiState.commentsError != null && uiState.comments.isEmpty() -> {
+                                item {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    ) {
+                                        Text(
+                                            text =
+                                                uiState.commentsError ?: stringResource(
+                                                    R.string.feature_subject_ep_comments_load_failed,
+                                                ),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                        OutlinedButton(onClick = { viewModel.loadComments(force = true) }) {
+                                            Text(stringResource(R.string.feature_subject_player_retry_comments))
+                                        }
+                                    }
+                                }
+                            }
+
+                            uiState.comments.isEmpty() -> {
+                                item {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.feature_subject_ep_comments_empty),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                itemsIndexed(uiState.comments, key = { _, c -> c.id }) { index, comment ->
+                                    EpisodeCommentItem(
+                                        comment = comment,
+                                        floorNumber = comment.floor.takeIf { it > 0 } ?: (index + 1),
+                                        onUrlClick = { url -> context.launchWebUrl(url) },
+                                        onUserClick = null,
+                                        currentUserId = null,
+                                    )
+                                    if (index < uiState.comments.lastIndex) {
+                                        HorizontalDivider(
+                                            thickness = 0.5.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.padding(vertical = 6.dp),
+                                        )
+                                    }
+                                }
+
+                                if (onEpisodeDetailClick != null && uiState.episodeId > 0) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            TextButton(onClick = { onEpisodeDetailClick(uiState.subjectId, uiState.episodeId) }) {
+                                                Text(
+                                                    text = stringResource(R.string.feature_subject_player_discussion_open_detail),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
