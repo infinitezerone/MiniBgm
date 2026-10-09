@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user.components
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -57,6 +58,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -68,28 +70,30 @@ import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.user.R
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 快捷预设定义
  */
 private data class TimingPreset(
-    val label: String,
+    @StringRes val labelRes: Int,
     val offsetMinutes: Int,
 )
 
 private val TIMING_PRESETS =
     listOf(
-        TimingPreset("提前 30 分钟", -30),
-        TimingPreset("提前 15 分钟", -15),
-        TimingPreset("提前 5 分钟", -5),
-        TimingPreset("准点", 0),
-        TimingPreset("延后 15 分钟", 15),
-        TimingPreset("延后 30 分钟", 30),
-        TimingPreset("延后 1 小时", 60),
+        TimingPreset(R.string.feature_user_timing_preset_advance_30, -30),
+        TimingPreset(R.string.feature_user_timing_preset_advance_15, -15),
+        TimingPreset(R.string.feature_user_timing_preset_advance_5, -5),
+        TimingPreset(R.string.feature_user_timing_preset_on_time, 0),
+        TimingPreset(R.string.feature_user_timing_preset_delay_15, 15),
+        TimingPreset(R.string.feature_user_timing_preset_delay_30, 30),
+        TimingPreset(R.string.feature_user_timing_preset_delay_60, 60),
     )
 
 /**
@@ -135,13 +139,13 @@ fun AiringTimingBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "开播提醒时间",
+                        text = stringResource(R.string.feature_user_timing_sheet_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "新集播出时的通知时间",
+                        text = stringResource(R.string.feature_user_timing_sheet_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -182,7 +186,7 @@ fun AiringTimingBottomSheet(
                         onClick = { selectedOffset = preset.offsetMinutes },
                         label = {
                             Text(
-                                text = preset.label,
+                                text = stringResource(preset.labelRes),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             )
@@ -224,13 +228,13 @@ fun AiringTimingBottomSheet(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Remove,
-                        contentDescription = "减少 1 分钟",
+                        contentDescription = stringResource(R.string.feature_user_timing_cd_minus),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
 
                 Text(
-                    text = "1 分钟微调",
+                    text = stringResource(R.string.feature_user_timing_fine_tune),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -245,7 +249,7 @@ fun AiringTimingBottomSheet(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Add,
-                        contentDescription = "增加 1 分钟",
+                        contentDescription = stringResource(R.string.feature_user_timing_cd_plus),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -264,7 +268,7 @@ fun AiringTimingBottomSheet(
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Text(
-                    text = "确认应用",
+                    text = stringResource(R.string.feature_user_timing_confirm),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -297,9 +301,9 @@ private fun TimingHeroCard(
 ) {
     val titleText =
         when {
-            offsetMinutes < 0 -> "提前 ${-offsetMinutes} 分钟"
-            offsetMinutes == 0 -> "准点开播"
-            else -> "延后 $offsetMinutes 分钟"
+            offsetMinutes < 0 -> stringResource(R.string.feature_user_timing_advance_minutes, -offsetMinutes)
+            offsetMinutes == 0 -> stringResource(R.string.feature_user_timing_on_time)
+            else -> stringResource(R.string.feature_user_timing_delay_minutes, offsetMinutes)
         }
 
     val examplePushTime =
@@ -314,9 +318,10 @@ private fun TimingHeroCard(
 
     val subtitleText =
         when {
-            offsetMinutes == 0 -> "新集开播时立即推送"
-            offsetMinutes == 15 -> "若 23:00 开播，将于 $examplePushTime 推送（适配国内平台）"
-            else -> "若 23:00 开播，将于 $examplePushTime 推送"
+            offsetMinutes == 0 -> stringResource(R.string.feature_user_timing_hero_immediate)
+            offsetMinutes == 15 ->
+                stringResource(R.string.feature_user_timing_hero_example_delay15, examplePushTime)
+            else -> stringResource(R.string.feature_user_timing_hero_example, examplePushTime)
         }
 
     Card(
@@ -362,7 +367,7 @@ private fun TimingHeroCard(
             IconButton(onClick = onEditClick) {
                 Icon(
                     imageVector = BgmIcons.Edit,
-                    contentDescription = "手动输入精确分钟",
+                    contentDescription = stringResource(R.string.feature_user_timing_cd_manual_input),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )
@@ -578,11 +583,11 @@ private fun DirectNumberInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("自定义时间") },
+        title = { Text(stringResource(R.string.feature_user_timing_custom_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "设置提前或延后的分钟数：",
+                    text = stringResource(R.string.feature_user_timing_custom_prompt),
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
@@ -593,13 +598,13 @@ private fun DirectNumberInputDialog(
                     FilterChip(
                         selected = isEarly,
                         onClick = { isEarly = true },
-                        label = { Text("提前") },
+                        label = { Text(stringResource(R.string.feature_user_timing_direction_advance)) },
                         modifier = Modifier.weight(1f),
                     )
                     FilterChip(
                         selected = !isEarly,
                         onClick = { isEarly = false },
-                        label = { Text("延后") },
+                        label = { Text(stringResource(R.string.feature_user_timing_direction_delay)) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -611,7 +616,7 @@ private fun DirectNumberInputDialog(
                             inputString = str
                         }
                     },
-                    label = { Text("分钟数") },
+                    label = { Text(stringResource(R.string.feature_user_timing_minutes_label)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
@@ -631,12 +636,12 @@ private fun DirectNumberInputDialog(
                     onConfirm(finalOffset)
                 },
             ) {
-                Text("确定")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_confirm))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )

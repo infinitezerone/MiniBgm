@@ -1,5 +1,8 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -8,12 +11,12 @@ import com.infinitezerone.minibgm.core.model.UserCollection
  * 收藏条目的连载与囤番筛选维度（全部、连载中、已完结、囤番中）
  */
 enum class CollectionAirFilter(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    ALL("全部"),
-    AIRING("连载中"),
-    FINISHED("已完结"),
-    BINGE("囤番中"),
+    ALL(R.string.feature_user_common_all),
+    AIRING(R.string.feature_user_air_filter_airing),
+    FINISHED(R.string.feature_user_air_filter_finished),
+    BINGE(R.string.feature_user_air_filter_binge),
 }
 
 /**
@@ -52,18 +55,23 @@ fun UserCollection.currentAiredEpisode(): Int {
 /**
  * 获取展示在条目卡片上的状态徽章文案
  */
+@Composable
 fun UserCollection.airStatusBadge(isBinge: Boolean): String {
     val total = subject?.totalEpisodes?.takeIf { it > 0 } ?: subject?.eps?.takeIf { it > 0 } ?: 0
     if (isFinished()) {
-        return if (total > 0) "已完结 · 全 $total 话" else "已完结"
+        return if (total > 0) {
+            stringResource(R.string.feature_user_air_badge_finished_total, total)
+        } else {
+            stringResource(R.string.feature_user_air_filter_finished)
+        }
     }
-    if (isBinge) return "囤番中"
+    if (isBinge) return stringResource(R.string.feature_user_air_filter_binge)
     val aired = currentAiredEpisode()
     return if (total > 0 && aired > 0) {
-        "连载至 $aired/$total 话"
+        stringResource(R.string.feature_user_air_badge_airing_total, aired, total)
     } else if (aired > 0) {
-        "连载至第 $aired 话"
+        stringResource(R.string.feature_user_air_badge_airing_ep, aired)
     } else {
-        "连载中"
+        stringResource(R.string.feature_user_air_filter_airing)
     }
 }

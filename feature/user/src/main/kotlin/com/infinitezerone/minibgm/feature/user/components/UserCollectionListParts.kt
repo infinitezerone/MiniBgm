@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,8 +55,10 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
 import com.infinitezerone.minibgm.feature.user.CollectionAirFilter
 import com.infinitezerone.minibgm.feature.user.CollectionSubjectFilter
+import com.infinitezerone.minibgm.feature.user.R
 import com.infinitezerone.minibgm.feature.user.airStatusBadge
 import com.infinitezerone.minibgm.feature.user.isFinished
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 收藏五状态的展示顺序：主动在追的排前面，归档态（搁置 / 抛弃）收尾。
@@ -181,7 +184,7 @@ internal fun SubjectFilterRow(
                     },
             ) {
                 Text(
-                    text = filter.label,
+                    text = stringResource(filter.labelRes),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     color =
@@ -228,7 +231,7 @@ internal fun AirFilterRow(
                     },
             ) {
                 Text(
-                    text = filter.label,
+                    text = stringResource(filter.labelRes),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     color =
@@ -259,7 +262,8 @@ internal fun UserCollectionCard(
 ) {
     val haptic = LocalHapticFeedback.current
     val subject = collection.subject
-    val title = subject?.displayName ?: "条目 #${collection.subjectId}"
+    val title =
+        subject?.displayName ?: stringResource(R.string.feature_user_subject_fallback_title, collection.subjectId)
     val coverUrl = subject?.images?.bestImage.orEmpty()
     val eps = subject?.eps ?: 0
     val totalEps = subject?.totalEpisodes?.takeIf { it > 0 } ?: eps
@@ -374,7 +378,7 @@ internal fun UserCollectionCard(
                                 modifier = Modifier.size(14.dp),
                             )
                             Text(
-                                text = "${collection.rate} 分",
+                                text = stringResource(R.string.feature_user_rate_score, collection.rate),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -410,11 +414,11 @@ internal fun UserCollectionCard(
                 ) {
                     val progressText =
                         if (totalEps > 0) {
-                            "$epStatus / $totalEps 话"
+                            stringResource(R.string.feature_user_progress_ep_total, epStatus, totalEps)
                         } else if (epStatus > 0) {
-                            "已看 $epStatus 话"
+                            stringResource(R.string.feature_user_progress_watched, epStatus)
                         } else {
-                            "尚未开始"
+                            stringResource(R.string.feature_user_progress_not_started)
                         }
                     Text(
                         text = progressText,
@@ -437,7 +441,12 @@ internal fun UserCollectionCard(
                             ) {
                                 Icon(
                                     imageVector = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
-                                    contentDescription = if (isBinge) "取消囤番" else "加入囤番",
+                                    contentDescription =
+                                        if (isBinge) {
+                                            stringResource(R.string.feature_user_binge_cd_remove)
+                                        } else {
+                                            stringResource(R.string.feature_user_binge_cd_add)
+                                        },
                                     tint =
                                         if (isBinge) {
                                             MaterialTheme.colorScheme.tertiary
@@ -465,12 +474,12 @@ internal fun UserCollectionCard(
                                 ) {
                                     Icon(
                                         imageVector = BgmIcons.Tv,
-                                        contentDescription = "播放源",
+                                        contentDescription = stringResource(R.string.feature_user_source_label),
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(14.dp),
                                     )
                                     Text(
-                                        text = "播放源",
+                                        text = stringResource(R.string.feature_user_source_label),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -493,7 +502,7 @@ internal fun UserCollectionCard(
                                 } else {
                                     Icon(
                                         imageVector = BgmIcons.PlusOne,
-                                        contentDescription = "+1 话",
+                                        contentDescription = stringResource(R.string.feature_user_progress_cd_plus_one),
                                         modifier = Modifier.size(16.dp),
                                     )
                                 }
@@ -620,7 +629,7 @@ private fun CollectionSkeletonCard(
 /** 空态：内联列表区块，不占满全屏 */
 @Composable
 internal fun EmptyCollectionsView(
-    message: String = "暂无该分类收藏",
+    message: String = stringResource(R.string.feature_user_empty_category),
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -633,7 +642,7 @@ internal fun EmptyCollectionsView(
         icon = BgmIcons.SearchOff,
         iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
         iconSize = 56.dp,
-        actionLabel = "刷新",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_refresh),
         onAction = onRefresh,
     )
 }
@@ -651,12 +660,12 @@ internal fun ErrorCollectionsView(
             modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp, vertical = 56.dp),
-        title = "加载收藏失败",
+        title = stringResource(R.string.feature_user_collections_load_failed),
         icon = BgmIcons.ErrorOutline,
         iconTint = MaterialTheme.colorScheme.error,
         iconSize = 56.dp,
         titleColor = MaterialTheme.colorScheme.error,
-        actionLabel = "重试",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_retry),
         onAction = onRetry,
     )
 }
@@ -685,7 +694,7 @@ internal fun CollectionListFooter(
 
         !hasMore && loadedCount >= 50 ->
             Text(
-                text = "— 已加载全部收藏 —",
+                text = stringResource(R.string.feature_user_collections_all_loaded),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center,
@@ -697,12 +706,13 @@ internal fun CollectionListFooter(
     }
 }
 
+@Composable
 internal fun getSubjectTypeName(type: Int): String =
     when (type) {
-        1 -> "书籍"
-        2 -> "动画"
-        3 -> "音乐"
-        4 -> "游戏"
-        6 -> "三次元"
-        else -> "条目"
+        1 -> stringResource(R.string.feature_user_subject_type_book)
+        2 -> stringResource(R.string.feature_user_subject_type_anime)
+        3 -> stringResource(R.string.feature_user_subject_type_music)
+        4 -> stringResource(R.string.feature_user_subject_type_game)
+        6 -> stringResource(R.string.feature_user_subject_type_real)
+        else -> stringResource(R.string.feature_user_subject_type_other)
     }

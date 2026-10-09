@@ -35,10 +35,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.user.R
 import kotlinx.coroutines.launch
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** Bangumi 官方访问令牌生成页（next.bgm.tv 子域，属 bgm 系域名，可走应用内浏览）。 */
 private const val ACCESS_TOKEN_PAGE_URL = "https://next.bgm.tv/demo/access-token"
@@ -98,7 +101,7 @@ internal fun UnauthenticatedLandingView(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = BgmIcons.User,
-                            contentDescription = "未登录",
+                            contentDescription = stringResource(R.string.feature_user_login_cd_unauthenticated),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(44.dp),
                         )
@@ -106,7 +109,7 @@ internal fun UnauthenticatedLandingView(
                 }
 
                 Text(
-                    text = "登录 Bangumi 账号",
+                    text = stringResource(R.string.feature_user_login_landing_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -130,7 +133,7 @@ internal fun UnauthenticatedLandingView(
                         )
                     } else {
                         Text(
-                            text = "登录",
+                            text = stringResource(R.string.feature_user_action_login),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -143,7 +146,7 @@ internal fun UnauthenticatedLandingView(
                     enabled = !isAuthenticating,
                 ) {
                     Text(
-                        text = "使用访问令牌登录",
+                        text = stringResource(R.string.feature_user_token_login_title),
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -163,6 +166,8 @@ private fun PersonalAccessTokenDialog(
     var isLoading by rememberSaveable { mutableStateOf(false) }
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
+    val emptyTokenError = stringResource(R.string.feature_user_token_empty_error)
+    val loginFailedError = stringResource(R.string.feature_user_token_login_failed)
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -176,7 +181,7 @@ private fun PersonalAccessTokenDialog(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
-                Text(text = "使用访问令牌登录")
+                Text(text = stringResource(R.string.feature_user_token_login_title))
             }
         },
         text = {
@@ -185,7 +190,7 @@ private fun PersonalAccessTokenDialog(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "在 Bangumi 官网生成访问令牌后粘贴到下方即可登录，令牌长期有效。",
+                    text = stringResource(R.string.feature_user_token_login_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -202,11 +207,11 @@ private fun PersonalAccessTokenDialog(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("打开令牌页面")
+                    Text(stringResource(R.string.feature_user_token_open_page))
                 }
 
                 Text(
-                    text = "1. 打开令牌页面并生成令牌（需已登录 Bangumi）\n2. 复制生成的令牌，粘贴到下方",
+                    text = stringResource(R.string.feature_user_token_steps),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -217,8 +222,8 @@ private fun PersonalAccessTokenDialog(
                         tokenText = it
                         errorMessage = null
                     },
-                    label = { Text("访问令牌") },
-                    placeholder = { Text("粘贴访问令牌") },
+                    label = { Text(stringResource(R.string.feature_user_token_label)) },
+                    placeholder = { Text(stringResource(R.string.feature_user_token_placeholder)) },
                     singleLine = true,
                     enabled = !isLoading,
                     isError = errorMessage != null,
@@ -253,7 +258,7 @@ private fun PersonalAccessTokenDialog(
                         ) {
                             Icon(
                                 imageVector = BgmIcons.ContentPaste,
-                                contentDescription = "粘贴",
+                                contentDescription = stringResource(R.string.feature_user_action_paste),
                             )
                         }
                     },
@@ -266,7 +271,7 @@ private fun PersonalAccessTokenDialog(
                 onClick = {
                     val token = tokenText.trim()
                     if (token.isBlank()) {
-                        errorMessage = "请先粘贴访问令牌"
+                        errorMessage = emptyTokenError
                         return@Button
                     }
                     isLoading = true
@@ -276,7 +281,7 @@ private fun PersonalAccessTokenDialog(
                         if (success) {
                             onDismiss()
                         } else {
-                            errorMessage = error ?: "登录失败，请确认令牌是否有效"
+                            errorMessage = error ?: loginFailedError
                         }
                     }
                 },
@@ -289,7 +294,7 @@ private fun PersonalAccessTokenDialog(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Text("登录")
+                    Text(stringResource(R.string.feature_user_action_login))
                 }
             }
         },
@@ -298,7 +303,7 @@ private fun PersonalAccessTokenDialog(
                 onClick = onDismiss,
                 enabled = !isLoading,
             ) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )

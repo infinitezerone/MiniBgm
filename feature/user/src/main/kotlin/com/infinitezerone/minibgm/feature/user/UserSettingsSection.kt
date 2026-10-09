@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -190,7 +191,7 @@ internal fun AppearanceSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "外观显示",
+                text = stringResource(R.string.feature_user_section_appearance),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -217,8 +218,8 @@ internal fun AppearanceSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.Palette,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "动态取色 (Material You)",
-                subtitle = "跟随系统壁纸配色生成主题",
+                title = stringResource(R.string.feature_user_settings_dynamic_color_title),
+                subtitle = stringResource(R.string.feature_user_settings_dynamic_color_desc),
                 onClick = { onToggleDynamicColor(!dynamicColor) },
                 trailing = {
                     Switch(
@@ -231,8 +232,8 @@ internal fun AppearanceSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.DarkMode,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "AMOLED 纯黑模式",
-                subtitle = "深色模式下使用纯黑表面，更省电更沉浸",
+                title = stringResource(R.string.feature_user_settings_amoled_title),
+                subtitle = stringResource(R.string.feature_user_settings_amoled_desc),
                 onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
                 trailing = {
                     Switch(
@@ -261,7 +262,7 @@ internal fun PlaybackSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "播放设置",
+                text = stringResource(R.string.feature_user_section_playback),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -271,8 +272,8 @@ internal fun PlaybackSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.PictureInPicture,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "自动画中画",
-                subtitle = "播放视频切回桌面或切换应用时自动开启小窗",
+                title = stringResource(R.string.feature_user_settings_pip_title),
+                subtitle = stringResource(R.string.feature_user_settings_pip_desc),
                 onClick = { onTogglePipEnabled(!pipEnabled) },
                 trailing = {
                     Switch(
@@ -301,7 +302,7 @@ internal fun PreferenceSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "受限内容",
+                text = stringResource(R.string.feature_user_section_restricted),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -311,7 +312,7 @@ internal fun PreferenceSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.VisibilityOff,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "显示受限条目内容",
+                title = stringResource(R.string.feature_user_settings_restricted_content_title),
                 subtitle = "",
                 onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
                 trailing = {
@@ -356,7 +357,7 @@ internal fun SyncAndReminderSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "数据同步与提醒",
+                text = stringResource(R.string.feature_user_section_sync_reminder),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -366,8 +367,8 @@ internal fun SyncAndReminderSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.Sync,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "播放源自动同步",
-                subtitle = "周期：${syncInterval.displayName}",
+                title = stringResource(R.string.feature_user_settings_auto_sync_title),
+                subtitle = stringResource(R.string.feature_user_settings_sync_period, syncInterval.displayName),
                 onClick = onOpenSyncDialog,
             )
 
@@ -375,8 +376,8 @@ internal fun SyncAndReminderSettingsCard(
                 SettingsItemRow(
                     icon = BgmIcons.PlayCircle,
                     iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = "播放源管理",
-                    subtitle = "导入自备片单、维护第三方解析规则",
+                    title = stringResource(R.string.feature_user_title_playback_rules),
+                    subtitle = stringResource(R.string.feature_user_settings_playback_manage_desc),
                     onClick = onOpenPlaybackRules,
                 )
             }
@@ -389,14 +390,14 @@ internal fun SyncAndReminderSettingsCard(
             val isReminderActive = airingReminderEnabled && hasNotificationPermission
             val reminderSubtitle =
                 if (!hasNotificationPermission) {
-                    "系统通知未开启，点击开启权限与每日推送"
+                    stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
                 } else {
-                    "支持每日汇总清单与单集开播即时通知"
+                    stringResource(R.string.feature_user_settings_reminder_active_subtitle)
                 }
             SettingsItemRow(
                 icon = BgmIcons.NotificationsActive,
                 iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                title = "追番更新提醒",
+                title = stringResource(R.string.feature_user_settings_airing_reminder_title),
                 subtitle = reminderSubtitle,
                 onClick = {
                     onToggleAiringReminder(!isReminderActive)
@@ -424,8 +425,16 @@ internal fun SyncAndReminderSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.Schedule,
                         iconTint = MaterialTheme.colorScheme.secondary,
-                        title = "每日更新汇总",
-                        subtitle = if (airingDailySummaryEnabled) "每天 %02d:00 推送今日更新".format(airingReminderHour) else "已关闭",
+                        title = stringResource(R.string.feature_user_settings_daily_summary_title),
+                        subtitle =
+                            if (airingDailySummaryEnabled) {
+                                stringResource(
+                                    R.string.feature_user_settings_daily_summary_subtitle,
+                                    "%02d:00".format(airingReminderHour),
+                                )
+                            } else {
+                                stringResource(R.string.feature_user_common_off)
+                            },
                         onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
                         trailing = {
                             Switch(
@@ -443,17 +452,31 @@ internal fun SyncAndReminderSettingsCard(
                     // 2. 新集开播提醒
                     val timingSubtitle =
                         when {
-                            airingNotificationOffsetMinutes < 0 -> "提前 ${-airingNotificationOffsetMinutes} 分钟"
-                            airingNotificationOffsetMinutes == 0 -> "准点开播"
-                            airingNotificationOffsetMinutes == 15 -> "延后 15 分钟（适配国内平台）"
-                            else -> "延后 $airingNotificationOffsetMinutes 分钟"
+                            airingNotificationOffsetMinutes < 0 ->
+                                stringResource(
+                                    R.string.feature_user_timing_advance_minutes,
+                                    -airingNotificationOffsetMinutes,
+                                )
+                            airingNotificationOffsetMinutes == 0 -> stringResource(R.string.feature_user_timing_on_time)
+                            airingNotificationOffsetMinutes == 15 ->
+                                stringResource(R.string.feature_user_timing_delay_15_platform)
+                            else ->
+                                stringResource(
+                                    R.string.feature_user_timing_delay_minutes,
+                                    airingNotificationOffsetMinutes,
+                                )
                         }
 
                     SettingsItemRow(
                         icon = BgmIcons.PlayCircle,
                         iconTint = MaterialTheme.colorScheme.tertiary,
-                        title = "新集开播提醒",
-                        subtitle = if (airingPreAirEnabled) "每集播出时单独通知" else "已关闭",
+                        title = stringResource(R.string.feature_user_settings_pre_air_title),
+                        subtitle =
+                            if (airingPreAirEnabled) {
+                                stringResource(R.string.feature_user_settings_pre_air_desc)
+                            } else {
+                                stringResource(R.string.feature_user_common_off)
+                            },
                         onClick = null,
                         trailing = {
                             Switch(
@@ -467,7 +490,7 @@ internal fun SyncAndReminderSettingsCard(
                         SettingsItemRow(
                             icon = BgmIcons.Schedule,
                             iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
-                            title = "提醒时间",
+                            title = stringResource(R.string.feature_user_settings_reminder_time_title),
                             subtitle = timingSubtitle,
                             onClick = onOpenTimingBottomSheet,
                         )
@@ -482,8 +505,13 @@ internal fun SyncAndReminderSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.Inventory,
                         iconTint = MaterialTheme.colorScheme.tertiary,
-                        title = "囤番完结提醒",
-                        subtitle = if (airingBingeFinaleEnabled) "标记为囤番的条目在全剧完结时提醒开追" else "已关闭（囤番条目完全静默）",
+                        title = stringResource(R.string.feature_user_settings_binge_finale_title),
+                        subtitle =
+                            if (airingBingeFinaleEnabled) {
+                                stringResource(R.string.feature_user_settings_binge_finale_desc)
+                            } else {
+                                stringResource(R.string.feature_user_settings_binge_finale_off)
+                            },
                         onClick = null,
                         trailing = {
                             Switch(
@@ -502,8 +530,8 @@ internal fun SyncAndReminderSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.OpenInNew,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "系统通知管理",
-                        subtitle = "前往系统设置调整静音、振动与悬浮横幅权限",
+                        title = stringResource(R.string.feature_user_settings_system_notification_title),
+                        subtitle = stringResource(R.string.feature_user_settings_system_notification_desc),
                         onClick = onOpenSystemNotificationSettings,
                     )
                 }
@@ -531,7 +559,7 @@ internal fun AiAndStorageSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "智能服务与存储",
+                text = stringResource(R.string.feature_user_section_ai_storage),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -557,7 +585,7 @@ internal fun AiAndStorageSettingsCard(
                 SettingsItemRow(
                     icon = BgmIcons.Assistant,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    title = "AI 追番助手配置",
+                    title = stringResource(R.string.feature_user_settings_ai_config_title),
                     subtitle = "$providerDisplay · $modelDisplay",
                     onClick = onOpenAiSettingsDialog,
                 )
@@ -571,8 +599,13 @@ internal fun AiAndStorageSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.CleaningServices,
                 iconTint = MaterialTheme.colorScheme.secondary,
-                title = "清理本地缓存",
-                subtitle = if (isClearingCache) "正在清理…" else "清理离线网络图片缓存",
+                title = stringResource(R.string.feature_user_settings_clear_cache_title),
+                subtitle =
+                    if (isClearingCache) {
+                        stringResource(R.string.feature_user_settings_clearing)
+                    } else {
+                        stringResource(R.string.feature_user_settings_clear_cache_desc)
+                    },
                 onClick = if (isClearingCache) null else onClearCache,
             )
 
@@ -584,8 +617,8 @@ internal fun AiAndStorageSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.BugReport,
                 iconTint = MaterialTheme.colorScheme.tertiary,
-                title = "崩溃日志",
-                subtitle = "崩溃时自动记录堆栈，可导出给开发者",
+                title = stringResource(R.string.feature_user_crash_log_title),
+                subtitle = stringResource(R.string.feature_user_settings_crash_log_desc),
                 onClick = onOpenCrashLog,
             )
         }
@@ -622,7 +655,7 @@ internal fun AboutAndSupportSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = "关于与支持",
+                text = stringResource(R.string.feature_user_section_about),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -632,12 +665,12 @@ internal fun AboutAndSupportSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.BookmarkBorder,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "MiniBgm 客户端",
-                subtitle = "v$clientVersion · MIT 开源协议",
+                title = stringResource(R.string.feature_user_settings_client_title),
+                subtitle = stringResource(R.string.feature_user_settings_client_subtitle, clientVersion),
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.OpenInNew,
-                        contentDescription = "打开开源主页",
+                        contentDescription = stringResource(R.string.feature_user_settings_cd_open_github),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -653,8 +686,13 @@ internal fun AboutAndSupportSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.SystemUpdate,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "检查新版本",
-                subtitle = if (isCheckingUpdate) "正在检查更新…" else "当前版本 v$clientVersion",
+                title = stringResource(R.string.feature_user_settings_check_update_title),
+                subtitle =
+                    if (isCheckingUpdate) {
+                        stringResource(R.string.feature_user_settings_checking_update)
+                    } else {
+                        stringResource(R.string.feature_user_settings_current_version, clientVersion)
+                    },
                 trailing = {
                     if (isCheckingUpdate) {
                         CircularProgressIndicator(
@@ -664,7 +702,7 @@ internal fun AboutAndSupportSettingsCard(
                     } else {
                         Icon(
                             imageVector = BgmIcons.KeyboardArrowRight,
-                            contentDescription = "检查新版本",
+                            contentDescription = stringResource(R.string.feature_user_settings_check_update_title),
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -681,12 +719,12 @@ internal fun AboutAndSupportSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.Language,
                 iconTint = MaterialTheme.colorScheme.secondary,
-                title = "访问 Bangumi 官网",
-                subtitle = "bgm.tv · ACG 动漫数据库与社区",
+                title = stringResource(R.string.feature_user_settings_bgm_site_title),
+                subtitle = stringResource(R.string.feature_user_settings_bgm_site_desc),
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.OpenInNew,
-                        contentDescription = "打开网页",
+                        contentDescription = stringResource(R.string.feature_user_settings_cd_open_web),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -702,12 +740,12 @@ internal fun AboutAndSupportSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.Info,
                 iconTint = MaterialTheme.colorScheme.tertiary,
-                title = "Bangumi 维基协作指南",
-                subtitle = "条目收录规范与编辑守则",
+                title = stringResource(R.string.feature_user_settings_wiki_title),
+                subtitle = stringResource(R.string.feature_user_settings_wiki_desc),
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.OpenInNew,
-                        contentDescription = "打开网页",
+                        contentDescription = stringResource(R.string.feature_user_settings_cd_open_web),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -725,8 +763,8 @@ internal fun AboutAndSupportSettingsCard(
                 SettingsItemRow(
                     icon = BgmIcons.Logout,
                     iconTint = MaterialTheme.colorScheme.error,
-                    title = "退出当前账号",
-                    subtitle = "注销当前登录 (@$usernameText)，保留其他已存账号",
+                    title = stringResource(R.string.feature_user_logout_current_title),
+                    subtitle = stringResource(R.string.feature_user_settings_logout_subtitle, usernameText),
                     onClick = onLogoutCurrentClick,
                 )
 
@@ -739,8 +777,8 @@ internal fun AboutAndSupportSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.Delete,
                         iconTint = MaterialTheme.colorScheme.error,
-                        title = "退出所有已存账号",
-                        subtitle = "清除本机全部登录账号与本地缓存",
+                        title = stringResource(R.string.feature_user_settings_logout_all_title),
+                        subtitle = stringResource(R.string.feature_user_settings_logout_all_desc),
                         onClick = onLogoutAllClick,
                     )
                 }

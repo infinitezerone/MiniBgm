@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import com.infinitezerone.minibgm.core.designsystem.ambient.ambientGlow
 import com.infinitezerone.minibgm.core.designsystem.ambient.rememberAmbientDominantColorState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.feature.user.R
 
 /**
  * 个人页第一层：沉浸式身份头部。
@@ -60,6 +62,20 @@ internal fun UserProfileHero(
     val uid = profile?.id ?: 0L
     val ambientGlowState = rememberAmbientDominantColorState()
 
+    // 入站年份文案：优先「N 年加入 · 已 M 年」，不足一年则退化为「N 年加入」
+    val registeredYear = profile?.registeredYear
+    val registeredYearText =
+        if (registeredYear != null) {
+            val years = TimeUtils.currentCstYearMonth().first - registeredYear
+            if (years >= 1) {
+                stringResource(R.string.feature_user_profile_joined_years, registeredYear, years)
+            } else {
+                stringResource(R.string.feature_user_profile_joined_year, registeredYear)
+            }
+        } else {
+            null
+        }
+
     // 身份元信息合并为一行：@用户名 · UID · 入站年份。任一片段缺失即自动省略，不用占位符顶格。
     val metaText =
         buildString {
@@ -69,10 +85,9 @@ internal fun UserProfileHero(
                 if (isNotEmpty()) append(" · ")
                 append("UID $uid")
             }
-            profile?.registeredYear?.let { year ->
+            registeredYearText?.let { text ->
                 if (isNotEmpty()) append(" · ")
-                val years = TimeUtils.currentCstYearMonth().first - year
-                append(if (years >= 1) "$year 年加入 · 已 $years 年" else "$year 年加入")
+                append(text)
             }
         }
 
@@ -98,7 +113,7 @@ internal fun UserProfileHero(
                 if (avatarUrl.isNotBlank()) {
                     AsyncImage(
                         model = avatarUrl,
-                        contentDescription = "用户头像",
+                        contentDescription = stringResource(R.string.feature_user_profile_cd_avatar),
                         contentScale = ContentScale.Crop,
                         onSuccess = ambientGlowState::onImageSuccess,
                         onError = { ambientGlowState.onImageError() },
@@ -121,7 +136,10 @@ internal fun UserProfileHero(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = profile?.displayName?.ifBlank { "Bangumi 用户" } ?: "Bangumi 用户",
+                        text =
+                            profile?.displayName?.ifBlank {
+                                stringResource(R.string.feature_user_profile_default_name)
+                            } ?: stringResource(R.string.feature_user_profile_default_name),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
@@ -198,7 +216,7 @@ private fun AdminMark(modifier: Modifier = Modifier) {
             )
             Spacer(modifier = Modifier.width(3.dp))
             Text(
-                text = "管理员",
+                text = stringResource(R.string.feature_user_profile_admin_badge),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
@@ -226,7 +244,7 @@ private fun AccountSwitchChip(
             modifier = Modifier.padding(start = 9.dp, end = 5.dp, top = 3.dp, bottom = 3.dp),
         ) {
             Text(
-                text = "$count 个账号",
+                text = stringResource(R.string.feature_user_profile_accounts_count, count),
                 style = MaterialTheme.typography.labelSmall,
             )
             Icon(
@@ -263,7 +281,7 @@ internal fun TrackingStatsBand(
     ) {
         TrackingStatCell(
             value = footprint?.episodesWatched?.toString() ?: STAT_PLACEHOLDER,
-            label = "在看集数",
+            label = stringResource(R.string.feature_user_stats_watching),
             modifier = Modifier.weight(1f),
         )
         Box(
@@ -275,7 +293,7 @@ internal fun TrackingStatsBand(
         )
         TrackingStatCell(
             value = footprint?.monthActiveCount?.toString() ?: STAT_PLACEHOLDER,
-            label = "本月打卡",
+            label = stringResource(R.string.feature_user_stats_month_checkin),
             modifier = Modifier.weight(1f),
         )
     }

@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +37,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.feature.user.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 internal const val MAX_IMPORT_BYTES = 4 * 1024 * 1024
 
@@ -101,13 +104,13 @@ internal fun PlaylistEmptyCard(
                     modifier = Modifier.size(22.dp),
                 )
                 Text(
-                    text = "还没有自备片单",
+                    text = stringResource(R.string.feature_user_playlist_empty_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
             Text(
-                text = "自备片单是你自己提供的 JSON 文件：为每个条目声明分集地址（DIRECT 直链在应用内播放，PAGE 页面链接外部打开），可附带 Referer 等请求头。",
+                text = stringResource(R.string.feature_user_playlist_empty_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -119,10 +122,10 @@ internal fun PlaylistEmptyCard(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("选择 JSON 文件")
+                    Text(stringResource(R.string.feature_user_playlist_pick_file))
                 }
                 TextButton(onClick = onPasteJson) {
-                    Text("粘贴 JSON 导入")
+                    Text(stringResource(R.string.feature_user_playlist_paste_import))
                 }
             }
         }
@@ -168,9 +171,18 @@ internal fun PlaylistCard(
                     Text(
                         text =
                             if (playlist.bgmSubjectId > 0L) {
-                                "绑定条目 ${playlist.bgmSubjectId} · 直链 $directCount / 页面 $pageCount"
+                                stringResource(
+                                    R.string.feature_user_playlist_bound_subtitle,
+                                    playlist.bgmSubjectId,
+                                    directCount,
+                                    pageCount,
+                                )
                             } else {
-                                "未绑定条目（不会出现在分集入口）· 直链 $directCount / 页面 $pageCount"
+                                stringResource(
+                                    R.string.feature_user_playlist_unbound_subtitle,
+                                    directCount,
+                                    pageCount,
+                                )
                             },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -184,7 +196,7 @@ internal fun PlaylistCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.feature_user_action_delete), color = MaterialTheme.colorScheme.error)
                 }
             }
 
@@ -233,13 +245,23 @@ internal fun PlaylistTemplateCard(modifier: Modifier = Modifier) {
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = "片单 JSON 格式（schemaVersion ${PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION}）",
+                    text =
+                        stringResource(
+                            R.string.feature_user_playlist_template_title,
+                            PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION,
+                        ),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "收起示例" else "查看示例")
+                    Text(
+                        if (expanded) {
+                            stringResource(R.string.feature_user_playlist_template_collapse)
+                        } else {
+                            stringResource(R.string.feature_user_playlist_template_expand)
+                        },
+                    )
                 }
             }
             if (expanded) {
@@ -257,11 +279,12 @@ internal fun PlaylistTemplateCard(modifier: Modifier = Modifier) {
                 )
                 Text(
                     text =
-                        "上限：" +
-                            "${PlaybackPlaylistSchema.MAX_PLAYLISTS} 份片单、" +
-                            "每份 ${PlaybackPlaylistSchema.MAX_ENTRIES_PER_PLAYLIST} 条、" +
-                            "每条 ${PlaybackPlaylistSchema.MAX_HEADERS_PER_ENTRY} 个请求头；" +
-                            "同 id 的片单会被新导入的覆盖。",
+                        stringResource(
+                            R.string.feature_user_playlist_limit_desc,
+                            PlaybackPlaylistSchema.MAX_PLAYLISTS,
+                            PlaybackPlaylistSchema.MAX_ENTRIES_PER_PLAYLIST,
+                            PlaybackPlaylistSchema.MAX_HEADERS_PER_ENTRY,
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -282,11 +305,15 @@ internal fun PlaylistImportDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("粘贴片单 JSON") },
+        title = { Text(stringResource(R.string.feature_user_playlist_paste_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "顶层需为 schemaVersion ${PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION} 的片单文档；校验通过的片单会合并进现有列表（同 id 覆盖）。",
+                    text =
+                        stringResource(
+                            R.string.feature_user_playlist_paste_desc,
+                            PlaybackPlaylistSchema.CURRENT_SCHEMA_VERSION,
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -311,12 +338,12 @@ internal fun PlaylistImportDialog(
                 onClick = { onConfirm(jsonText) },
                 enabled = jsonText.isNotBlank(),
             ) {
-                Text("导入")
+                Text(stringResource(R.string.feature_user_action_import))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.model.InAppWebSession
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -42,11 +43,14 @@ internal fun InAppWebScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    val defaultPageTitle = stringResource(R.string.feature_user_web_default_title)
+    val linkCopiedMessage = stringResource(R.string.feature_user_web_link_copied)
+
     var session by remember { mutableStateOf<InAppWebSession?>(null) }
     var isStarting by remember { mutableStateOf(true) }
     var isPageLoading by remember { mutableStateOf(true) }
     var progress by remember { mutableIntStateOf(0) }
-    var pageTitle by remember { mutableStateOf(title.ifBlank { "Bangumi 网页" }) }
+    var pageTitle by remember { mutableStateOf(title.ifBlank { defaultPageTitle }) }
     var currentUrl by remember { mutableStateOf(url) }
     var canGoBack by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -75,7 +79,7 @@ internal fun InAppWebScreen(
         scope.launch {
             val clipEntry = ClipEntry(ClipData.newPlainText("url", target))
             clipboard.setClipEntry(clipEntry)
-            snackbarHostState.showSnackbar("链接已复制")
+            snackbarHostState.showSnackbar(linkCopiedMessage)
         }
     }
 
@@ -149,7 +153,7 @@ internal fun InAppWebScreen(
                     )
                 } else if (!isStarting) {
                     InAppWebUnavailable(
-                        reason = "该页面无法在应用内打开",
+                        reason = stringResource(R.string.feature_user_web_unavailable),
                         onOpenInBrowser = ::openInBrowser,
                         onClose = onBack,
                     )
@@ -157,7 +161,7 @@ internal fun InAppWebScreen(
 
                 InAppWebLoadingPlaceholder(
                     visible = isStarting || isPageLoading,
-                    title = "正在载入…",
+                    title = stringResource(R.string.feature_user_web_loading),
                 )
             }
         }

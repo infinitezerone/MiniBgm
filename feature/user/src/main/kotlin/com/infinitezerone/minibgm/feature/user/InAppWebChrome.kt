@@ -36,12 +36,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 把 WebView 当前的内部地址转回上游公开地址。
@@ -139,7 +141,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.ArrowBack,
-                                    contentDescription = "返回上一页",
+                                    contentDescription = stringResource(R.string.feature_user_web_cd_back_prev),
                                 )
                             }
                         } else {
@@ -149,7 +151,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Close,
-                                    contentDescription = "关闭",
+                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                                 )
                             }
                         }
@@ -162,7 +164,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Close,
-                                    contentDescription = "关闭",
+                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                                 )
                             }
                         }
@@ -173,7 +175,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Refresh,
-                                    contentDescription = "重新加载",
+                                    contentDescription = stringResource(R.string.feature_user_web_cd_reload),
                                 )
                             }
                         }
@@ -184,7 +186,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.ContentCopy,
-                                    contentDescription = "复制链接",
+                                    contentDescription = stringResource(R.string.feature_user_web_cd_copy_link),
                                 )
                             }
                         }
@@ -195,7 +197,7 @@ internal fun InAppWebScaffold(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.OpenInNew,
-                                    contentDescription = "用系统浏览器打开",
+                                    contentDescription = stringResource(R.string.feature_user_web_open_in_system_browser),
                                 )
                             }
                         }
@@ -267,7 +269,7 @@ internal fun InAppWebScaffold(
 @Composable
 internal fun InAppWebLoadingPlaceholder(
     visible: Boolean,
-    title: String = "正在载入…",
+    title: String = stringResource(R.string.feature_user_web_loading),
     subtitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -377,12 +379,12 @@ internal fun InAppWebUnavailable(
         Spacer(modifier = Modifier.height(16.dp))
         if (onOpenInBrowser != null) {
             Button(onClick = onOpenInBrowser) {
-                Text("用系统浏览器打开")
+                Text(stringResource(R.string.feature_user_web_open_in_system_browser))
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
         TextButton(onClick = onClose) {
-            Text("返回")
+            Text(stringResource(DesignSystemR.string.core_designsystem_action_back))
         }
     }
 }

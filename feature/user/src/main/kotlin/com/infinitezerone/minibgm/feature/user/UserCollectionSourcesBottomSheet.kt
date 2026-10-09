@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 个人中心追番条目播放与选源快捷面板：
@@ -63,7 +65,8 @@ internal fun UserCollectionSourcesBottomSheet(
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val subject = collection.subject
-    val displayName = subject?.displayName ?: "条目 #${collection.subjectId}"
+    val displayName =
+        subject?.displayName ?: stringResource(R.string.feature_user_subject_fallback_title, collection.subjectId)
     val coverUrl = subject?.images?.bestImage.orEmpty()
     val eps = subject?.eps ?: 0
     val totalEps = subject?.totalEpisodes?.takeIf { it > 0 } ?: eps
@@ -73,7 +76,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
     val searchKeyword =
         if (nextEp > 1 || (totalEps > 0 && nextEp <= totalEps)) {
-            "$displayName 第 $nextEp 话"
+            stringResource(R.string.feature_user_source_search_name_ep, displayName, nextEp)
         } else {
             displayName
         }
@@ -132,11 +135,18 @@ internal fun UserCollectionSourcesBottomSheet(
                     Text(
                         text =
                             when {
-                                isFinished && totalEps > 0 && epStatus >= totalEps -> "已完结 · 全 $totalEps 话全看毕"
-                                isFinished && totalEps > 0 -> "已完结 · 补番至第 $nextEp 话（全 $totalEps 话）"
-                                totalEps > 0 && nextEp <= totalEps -> "续看第 $nextEp 话（全 $totalEps 话）"
-                                epStatus > 0 -> "续看第 $nextEp 话"
-                                else -> "开始观看第 1 话"
+                                isFinished && totalEps > 0 && epStatus >= totalEps ->
+                                    stringResource(R.string.feature_user_source_badge_all_watched, totalEps)
+                                isFinished && totalEps > 0 ->
+                                    stringResource(
+                                        R.string.feature_user_source_badge_finished_to_ep,
+                                        nextEp,
+                                        totalEps,
+                                    )
+                                totalEps > 0 && nextEp <= totalEps ->
+                                    stringResource(R.string.feature_user_source_badge_resume_total, nextEp, totalEps)
+                                epStatus > 0 -> stringResource(R.string.feature_user_source_badge_resume, nextEp)
+                                else -> stringResource(R.string.feature_user_source_badge_start)
                             },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
@@ -153,7 +163,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Close,
-                        contentDescription = "关闭",
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -174,7 +184,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "快速跳转与搜索",
+                    text = stringResource(R.string.feature_user_source_quick_jump),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -183,7 +193,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 // 选项 1：哔哩哔哩搜索
                 UserSourceOptionCard(
-                    title = "哔哩哔哩搜索",
+                    title = stringResource(R.string.feature_user_source_bilibili_search),
                     iconVector = BgmIcons.Tv,
                     onClick = {
                         coroutineScope.hideThenDismiss(sheetState) {
@@ -198,7 +208,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 // 选项 2：蜜柑计划
                 UserSourceOptionCard(
-                    title = "蜜柑计划",
+                    title = stringResource(R.string.feature_user_source_mikan),
                     iconVector = BgmIcons.Download,
                     onClick = {
                         coroutineScope.hideThenDismiss(sheetState) {
@@ -212,7 +222,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 if (onToggleBinge != null && (collection.subjectType == 2 || collection.subjectType == 6) && !isFinished) {
                     Text(
-                        text = "追番偏好",
+                        text = stringResource(R.string.feature_user_source_preference),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -220,7 +230,12 @@ internal fun UserCollectionSourcesBottomSheet(
                     )
 
                     UserSourceOptionCard(
-                        title = if (isBinge) "已设为囤番（完结提醒）" else "设为囤番待看",
+                        title =
+                            if (isBinge) {
+                                stringResource(R.string.feature_user_source_binge_on)
+                            } else {
+                                stringResource(R.string.feature_user_source_binge_off)
+                            },
                         iconVector = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
                         trailing = {
                             Switch(
@@ -235,7 +250,7 @@ internal fun UserCollectionSourcesBottomSheet(
                 }
 
                 Text(
-                    text = "条目详情",
+                    text = stringResource(R.string.feature_user_source_subject_detail),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -244,7 +259,7 @@ internal fun UserCollectionSourcesBottomSheet(
 
                 // 选项 3：前往条目详情
                 UserSourceOptionCard(
-                    title = "进入条目详情",
+                    title = stringResource(R.string.feature_user_source_enter_detail),
                     iconVector = BgmIcons.Info,
                     onClick = {
                         coroutineScope.hideThenDismiss(sheetState) {

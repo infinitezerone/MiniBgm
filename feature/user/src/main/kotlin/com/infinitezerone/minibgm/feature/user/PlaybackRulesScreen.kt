@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
@@ -63,6 +64,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 播放源管理界面：
@@ -99,15 +101,25 @@ fun PlaybackRulesScreen(
                         runCatching {
                             context.contentResolver.openInputStream(uri)?.use { stream ->
                                 val bytes = stream.readNBytes(MAX_IMPORT_BYTES + 1)
-                                require(bytes.size <= MAX_IMPORT_BYTES) { "文件过大（上限 ${MAX_IMPORT_BYTES / 1024 / 1024} MB）" }
+                                require(bytes.size <= MAX_IMPORT_BYTES) {
+                                    context.getString(
+                                        R.string.feature_user_playlist_file_too_large,
+                                        MAX_IMPORT_BYTES / 1024 / 1024,
+                                    )
+                                }
                                 bytes.decodeToString()
-                            } ?: error("无法读取所选文件")
+                            } ?: error(context.getString(R.string.feature_user_playlist_file_unreadable))
                         }
                     }
                 outcome
                     .onSuccess { text -> viewModel.importPlaylistsFromJson(text) }
                     .onFailure { error ->
-                        snackbarHostState.showSnackbar("片单读取失败：${error.message ?: "未知错误"}")
+                        snackbarHostState.showSnackbar(
+                            context.getString(
+                                R.string.feature_user_playlist_read_failed,
+                                error.message ?: context.getString(R.string.feature_user_common_unknown_error),
+                            ),
+                        )
                     }
             }
         }
@@ -126,12 +138,12 @@ fun PlaybackRulesScreen(
     Scaffold(
         topBar = {
             BgmTopAppBar(
-                title = { Text(text = "播放源管理") },
+                title = { Text(text = stringResource(R.string.feature_user_title_playback_rules)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         )
                     }
                 },
@@ -139,20 +151,20 @@ fun PlaybackRulesScreen(
                     IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
                         Icon(
                             imageVector = BgmIcons.Assistant,
-                            contentDescription = "让 AI 助手找源",
+                            contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
                     IconButton(onClick = { isImportingPlaylistJson = true }) {
                         Icon(
                             imageVector = BgmIcons.ContentPaste,
-                            contentDescription = "粘贴片单 JSON",
+                            contentDescription = stringResource(R.string.feature_user_playlist_paste_title),
                         )
                     }
                     IconButton(onClick = { playlistPicker.launch(PLAYLIST_MIME_TYPES) }) {
                         Icon(
                             imageVector = BgmIcons.Upload,
-                            contentDescription = "从文件导入片单",
+                            contentDescription = stringResource(R.string.feature_user_playlist_cd_import_file),
                         )
                     }
                 },
@@ -183,8 +195,8 @@ fun PlaybackRulesScreen(
             ) {
                 item(key = "playlist_header") {
                     SectionHeader(
-                        title = "自备片单",
-                        supporting = "导入 JSON 片源后，分集播放向导会直接给出对应地址",
+                        title = stringResource(R.string.feature_user_playlist_section_title),
+                        supporting = stringResource(R.string.feature_user_playlist_section_desc),
                         trailing = {
                             if (uiState.playlists.isNotEmpty()) {
                                 TextButton(
@@ -193,9 +205,12 @@ fun PlaybackRulesScreen(
                                             val confirmed =
                                                 overlayHostState.await(
                                                     ConfirmDialogAction(
-                                                        title = "清空全部片单",
-                                                        message = "将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。",
-                                                        confirmText = "清空",
+                                                        title = context.getString(R.string.feature_user_playlist_clear_all_title),
+                                                        message =
+                                                            context.getString(
+                                                                R.string.feature_user_playlist_clear_all_message,
+                                                            ),
+                                                        confirmText = context.getString(R.string.feature_user_action_clear),
                                                         isDestructive = true,
                                                     ),
                                                 )
@@ -205,7 +220,7 @@ fun PlaybackRulesScreen(
                                         }
                                     },
                                 ) {
-                                    Text("清空", color = MaterialTheme.colorScheme.error)
+                                    Text(stringResource(R.string.feature_user_action_clear), color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         },
@@ -228,9 +243,14 @@ fun PlaybackRulesScreen(
                                     val confirmed =
                                         overlayHostState.await(
                                             ConfirmDialogAction(
-                                                title = "确认删除片单",
-                                                message = "确定要删除片单「${playlist.name}」及其 ${playlist.entries.size} 条分集吗？",
-                                                confirmText = "删除",
+                                                title = context.getString(R.string.feature_user_playlist_delete_title),
+                                                message =
+                                                    context.getString(
+                                                        R.string.feature_user_playlist_delete_message,
+                                                        playlist.name,
+                                                        playlist.entries.size,
+                                                    ),
+                                                confirmText = context.getString(R.string.feature_user_action_delete),
                                                 isDestructive = true,
                                             ),
                                         )
@@ -249,8 +269,8 @@ fun PlaybackRulesScreen(
 
                 item(key = "positions_header") {
                     SectionHeader(
-                        title = "续播记录",
-                        supporting = "内置播放器自动记录各播放地址的观看位置，用于下次断点续播",
+                        title = stringResource(R.string.feature_user_positions_section_title),
+                        supporting = stringResource(R.string.feature_user_positions_section_desc),
                         trailing = {
                             if (uiState.playbackPositions.isNotEmpty()) {
                                 TextButton(
@@ -259,9 +279,12 @@ fun PlaybackRulesScreen(
                                             val confirmed =
                                                 overlayHostState.await(
                                                     ConfirmDialogAction(
-                                                        title = "清空全部续播记录",
-                                                        message = "将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。",
-                                                        confirmText = "清空",
+                                                        title = context.getString(R.string.feature_user_positions_clear_all_title),
+                                                        message =
+                                                            context.getString(
+                                                                R.string.feature_user_positions_clear_all_message,
+                                                            ),
+                                                        confirmText = context.getString(R.string.feature_user_action_clear),
                                                         isDestructive = true,
                                                     ),
                                                 )
@@ -271,7 +294,7 @@ fun PlaybackRulesScreen(
                                         }
                                     },
                                 ) {
-                                    Text("清空", color = MaterialTheme.colorScheme.error)
+                                    Text(stringResource(R.string.feature_user_action_clear), color = MaterialTheme.colorScheme.error)
                                 }
                             }
                         },
@@ -281,7 +304,7 @@ fun PlaybackRulesScreen(
                 if (uiState.playbackPositions.isEmpty()) {
                     item(key = "positions_empty") {
                         Text(
-                            text = "暂无续播记录。播放器会在你观看时自动记录进度（保留最近 50 条）。",
+                            text = stringResource(R.string.feature_user_positions_empty),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 4.dp),
@@ -308,34 +331,40 @@ fun PlaybackRulesScreen(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                         )
                         SectionHeader(
-                            title = "解析规则（高级）",
+                            title = stringResource(R.string.feature_user_rules_section_title),
                             supporting =
                                 if (showAdvancedRules) {
-                                    "按占位符模板拼出解析地址，适合自定义第三方源"
+                                    stringResource(R.string.feature_user_rules_section_desc_expanded)
                                 } else {
-                                    "已配置 ${uiState.rules.size} 条规则"
+                                    stringResource(R.string.feature_user_rules_section_desc_count, uiState.rules.size)
                                 },
                             trailing = {
                                 // 尾部只留展开/收起：操作按钮放下面的独立行，
                                 // 全塞进尾部会把标题列挤成竖排单字
                                 TextButton(onClick = { showAdvancedRules = !showAdvancedRules }) {
-                                    Text(if (showAdvancedRules) "收起" else "展开")
+                                    Text(
+                                        if (showAdvancedRules) {
+                                            stringResource(R.string.feature_user_action_collapse)
+                                        } else {
+                                            stringResource(R.string.feature_user_action_expand)
+                                        },
+                                    )
                                 }
                             },
                         )
                         if (showAdvancedRules) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 TextButton(onClick = { viewModel.openSubscriptionImport() }) {
-                                    Text("订阅")
+                                    Text(stringResource(R.string.feature_user_action_subscribe))
                                 }
                                 TextButton(onClick = { viewModel.openSiteProbe() }) {
-                                    Text("探测")
+                                    Text(stringResource(R.string.feature_user_probe_action))
                                 }
                                 TextButton(onClick = { isImportingRuleJson = true }) {
-                                    Text("导入")
+                                    Text(stringResource(R.string.feature_user_action_import))
                                 }
                                 TextButton(onClick = { isAddingRule = true }) {
-                                    Text("添加")
+                                    Text(stringResource(R.string.feature_user_action_add))
                                 }
                             }
                         }
@@ -355,7 +384,7 @@ fun PlaybackRulesScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "暂无自定义播放规则，可点击「添加」或「导入」配置。",
+                                    text = stringResource(R.string.feature_user_rules_empty),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(14.dp),
@@ -374,9 +403,13 @@ fun PlaybackRulesScreen(
                                     val confirmed =
                                         overlayHostState.await(
                                             ConfirmDialogAction(
-                                                title = "确认删除规则",
-                                                message = "确定要删除播放规则「${rule.name}」吗？",
-                                                confirmText = "删除",
+                                                title = context.getString(R.string.feature_user_rules_delete_title),
+                                                message =
+                                                    context.getString(
+                                                        R.string.feature_user_rules_delete_message,
+                                                        rule.name,
+                                                    ),
+                                                confirmText = context.getString(R.string.feature_user_action_delete),
                                                 isDestructive = true,
                                             ),
                                         )

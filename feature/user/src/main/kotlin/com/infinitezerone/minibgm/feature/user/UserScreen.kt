@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
@@ -66,6 +67,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 个人页四层结构（对齐主流社区 App 个人页与仓库内 `SubjectDetailScreen` 的既有范式）：
@@ -86,6 +88,7 @@ fun UserScreen(
     val collectionsState by collectionsViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // 分区默认落在「在看」，进页面即可见内容，无需用户先手动切一次 Tab
     LaunchedEffect(collectionsViewModel) {
@@ -98,8 +101,8 @@ fun UserScreen(
             is UserCollectionsEvent.ProgressIncremented -> {
                 val result =
                     snackbarHostState.showSnackbar(
-                        message = "已打卡至第 " + event.newEp + " 话",
-                        actionLabel = "撤销",
+                        message = context.getString(R.string.feature_user_progress_toast_marked, event.newEp),
+                        actionLabel = context.getString(R.string.feature_user_action_undo),
                         duration = SnackbarDuration.Short,
                     )
                 if (result == SnackbarResult.ActionPerformed) {
@@ -126,10 +129,14 @@ fun UserScreen(
                 coroutineScope.launch {
                     if (success) {
                         snackbarHostState.showSnackbar(
-                            if (uiState.isLoggedIn) "个人中心已刷新" else "已刷新（登录后可同步个人数据）",
+                            if (uiState.isLoggedIn) {
+                                context.getString(R.string.feature_user_refresh_success)
+                            } else {
+                                context.getString(R.string.feature_user_refresh_success_anonymous)
+                            },
                         )
                     } else {
-                        snackbarHostState.showSnackbar("刷新失败，请检查网络")
+                        snackbarHostState.showSnackbar(context.getString(R.string.feature_user_refresh_failed))
                     }
                 }
             }
@@ -223,7 +230,7 @@ fun UserScreenContent(
         topBar = {
             BgmTopAppBar(
                 title = {
-                    Text(text = "个人中心")
+                    Text(text = stringResource(R.string.feature_user_title_home))
                 },
                 actions = {
                     if (uiState.isLoggedIn) {
@@ -238,13 +245,13 @@ fun UserScreenContent(
                                 ) {
                                     Icon(
                                         imageVector = BgmIcons.ManageAccounts,
-                                        contentDescription = "账号管理",
+                                        contentDescription = stringResource(R.string.feature_user_account_management),
                                     )
                                 }
                             } else {
                                 Icon(
                                     imageVector = BgmIcons.ManageAccounts,
-                                    contentDescription = "账号管理",
+                                    contentDescription = stringResource(R.string.feature_user_account_management),
                                 )
                             }
                         }
@@ -253,7 +260,7 @@ fun UserScreenContent(
                     IconButton(onClick = onSettingsClick) {
                         Icon(
                             imageVector = BgmIcons.SettingsBorder,
-                            contentDescription = "设置",
+                            contentDescription = stringResource(R.string.feature_user_title_settings),
                         )
                     }
                 },
@@ -388,9 +395,14 @@ fun UserScreenContent(
                     val confirmed =
                         overlayHostState.await(
                             ConfirmDialogAction(
-                                title = "退出账号",
-                                message = "退出「${profile.displayName}」(@${profile.username})？退出后需重新登录。",
-                                confirmText = "退出该账号",
+                                title = context.getString(R.string.feature_user_logout_current_title),
+                                message =
+                                    context.getString(
+                                        R.string.feature_user_logout_confirm_named,
+                                        profile.displayName,
+                                        profile.username,
+                                    ),
+                                confirmText = context.getString(R.string.feature_user_logout_account_action),
                                 isDestructive = true,
                             ),
                         )
@@ -408,9 +420,13 @@ fun UserScreenContent(
                     val confirmed =
                         overlayHostState.await(
                             ConfirmDialogAction(
-                                title = "退出所有账号",
-                                message = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
-                                confirmText = "退出所有账号",
+                                title = context.getString(R.string.feature_user_logout_all_title),
+                                message =
+                                    context.getString(
+                                        R.string.feature_user_logout_all_confirm,
+                                        uiState.savedAccounts.size,
+                                    ),
+                                confirmText = context.getString(R.string.feature_user_logout_all_title),
                                 isDestructive = true,
                             ),
                         )
@@ -454,9 +470,9 @@ fun UserScreenContent(
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
-                                        title = "未安装 $appName 客户端",
-                                        message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
-                                        confirmText = "浏览器打开",
+                                        title = context.getString(R.string.feature_user_app_not_installed_title, appName),
+                                        message = context.getString(R.string.feature_user_app_not_installed_message, appName),
+                                        confirmText = context.getString(DesignSystemR.string.core_designsystem_action_open_browser),
                                     ),
                                 )
                             if (confirmed) {
@@ -520,9 +536,12 @@ private fun LazyListScope.collectionSection(
             item(key = "collection_empty") {
                 val emptyMsg =
                     if (rawCollections.isNotEmpty() && state.selectedAirFilter != CollectionAirFilter.ALL) {
-                        "暂无符合「${state.selectedAirFilter.label}」条件的条目"
+                        stringResource(
+                            R.string.feature_user_empty_filtered,
+                            stringResource(state.selectedAirFilter.labelRes),
+                        )
                     } else {
-                        "暂无该分类收藏"
+                        stringResource(R.string.feature_user_empty_category)
                     }
                 EmptyCollectionsView(message = emptyMsg, onRefresh = onRefresh)
             }

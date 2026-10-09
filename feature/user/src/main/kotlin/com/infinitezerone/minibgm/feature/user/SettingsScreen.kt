@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import com.infinitezerone.minibgm.feature.user.components.AiSettingsDialog
 import com.infinitezerone.minibgm.feature.user.components.AiringTimingBottomSheet
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 全局设置二级页面（自「个人中心」右上角 ⚙️ 齿轮进入）：
@@ -125,8 +127,8 @@ fun SettingsScreen(
                 coroutineScope.launch {
                     val result =
                         snackbarHostState.showSnackbar(
-                            message = "已开启追番开播提醒（如需横幅/振动可在系统设置中开启）",
-                            actionLabel = "去设置",
+                            message = context.getString(R.string.feature_user_reminder_enabled_toast),
+                            actionLabel = context.getString(R.string.feature_user_action_go_settings),
                             duration = SnackbarDuration.Short,
                         )
                     if (result == SnackbarResult.ActionPerformed) {
@@ -140,7 +142,7 @@ fun SettingsScreen(
             } else {
                 viewModel.setAiringReminderEnabled(false)
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("未授予通知权限，无法接收提醒")
+                    snackbarHostState.showSnackbar(context.getString(R.string.feature_user_notification_denied_toast))
                 }
             }
         }
@@ -150,10 +152,10 @@ fun SettingsScreen(
             val confirmed =
                 overlayHostState.await(
                     ConfirmDialogAction(
-                        title = "需要系统通知权限",
-                        message = "您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。",
-                        confirmText = "前往设置",
-                        dismissText = "取消",
+                        title = context.getString(R.string.feature_user_notification_rationale_title),
+                        message = context.getString(R.string.feature_user_notification_rationale_message),
+                        confirmText = context.getString(R.string.feature_user_action_go_system_settings),
+                        dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
                     ),
                 )
             if (confirmed) {
@@ -225,7 +227,11 @@ fun SettingsScreen(
                     val result = runCatching { onClearCache() }
                     isClearingCache = false
                     snackbarHostState.showSnackbar(
-                        if (result.isSuccess) "已清理图片缓存" else "清理失败，请重试",
+                        if (result.isSuccess) {
+                            context.getString(R.string.feature_user_cache_cleared_toast)
+                        } else {
+                            context.getString(R.string.feature_user_cache_clear_failed_toast)
+                        },
                     )
                 }
             }
@@ -235,7 +241,7 @@ fun SettingsScreen(
             coroutineScope.launch {
                 val log = viewModel.loadLatestCrashLog()
                 if (log == null) {
-                    snackbarHostState.showSnackbar("暂无崩溃记录")
+                    snackbarHostState.showSnackbar(context.getString(R.string.feature_user_crash_none_toast))
                 } else {
                     crashLogText = log.content
                     showCrashLogDialog = true
@@ -254,22 +260,30 @@ fun SettingsScreen(
                         if (info.hasUpdate) {
                             val message =
                                 buildString {
-                                    append("最新版本：${info.latestVersion}")
+                                    append(context.getString(R.string.feature_user_update_latest_version, info.latestVersion))
                                     if (info.publishedAt.isNotBlank()) {
-                                        append(" (${info.publishedAt.take(10)})")
+                                        append(" ")
+                                        append(
+                                            context.getString(
+                                                R.string.feature_user_update_published_at,
+                                                info.publishedAt.take(10),
+                                            ),
+                                        )
                                     }
                                     if (info.releaseNotes.isNotBlank()) {
-                                        append("\n\n更新日志：\n")
+                                        append("\n\n")
+                                        append(context.getString(R.string.feature_user_update_release_notes_header))
+                                        append("\n")
                                         append(info.releaseNotes.trim())
                                     }
                                 }
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
-                                        title = "发现新版本 ${info.latestVersion}",
+                                        title = context.getString(R.string.feature_user_update_found_title, info.latestVersion),
                                         message = message,
-                                        confirmText = "前往发布页",
-                                        dismissText = "暂不更新",
+                                        confirmText = context.getString(R.string.feature_user_action_go_release),
+                                        dismissText = context.getString(R.string.feature_user_action_update_later),
                                         isPrimary = true,
                                         icon = BgmIcons.OpenInNew,
                                     ),
@@ -284,14 +298,14 @@ fun SettingsScreen(
                             }
                         } else {
                             snackbarHostState.showSnackbar(
-                                message = "当前已是最新版本 (v$clientVersion)",
+                                message = context.getString(R.string.feature_user_update_up_to_date_toast, clientVersion),
                                 duration = SnackbarDuration.Short,
                             )
                         }
                     }
                     is AppResult.Error -> {
                         snackbarHostState.showSnackbar(
-                            message = "检查更新失败: ${result.message}",
+                            message = context.getString(R.string.feature_user_update_failed_toast, result.message),
                             duration = SnackbarDuration.Short,
                         )
                     }
@@ -315,7 +329,7 @@ fun SettingsScreen(
                 coroutineScope.launch {
                     viewModel.clearCrashLogs()
                     showCrashLogDialog = false
-                    snackbarHostState.showSnackbar("崩溃日志已清空")
+                    snackbarHostState.showSnackbar(context.getString(R.string.feature_user_crash_cleared_toast))
                 }
             },
             onDismiss = { showCrashLogDialog = false },
@@ -345,7 +359,7 @@ private fun CrashLogDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "崩溃日志",
+                text = stringResource(R.string.feature_user_crash_log_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -353,7 +367,7 @@ private fun CrashLogDialog(
         text = {
             Column {
                 Text(
-                    text = "贴进 Issue 或发给开发者，配合 release 页的 mapping 才能还原出崩溃位置。",
+                    text = stringResource(R.string.feature_user_crash_log_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -386,16 +400,16 @@ private fun CrashLogDialog(
                     onDismiss()
                 },
             ) {
-                Text("复制")
+                Text(stringResource(R.string.feature_user_action_copy))
             }
         },
         dismissButton = {
             Row {
                 TextButton(onClick = { shareCrashLog(context, content) }) {
-                    Text("分享")
+                    Text(stringResource(R.string.feature_user_action_share))
                 }
                 TextButton(onClick = onClear) {
-                    Text("清空")
+                    Text(stringResource(R.string.feature_user_action_clear))
                 }
             }
         },
@@ -410,10 +424,12 @@ private fun shareCrashLog(
     val intent =
         Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "MiniBgm 崩溃报告")
+            putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.feature_user_crash_report_subject))
             putExtra(Intent.EXTRA_TEXT, content)
         }
-    context.startActivity(Intent.createChooser(intent, "导出崩溃日志"))
+    context.startActivity(
+        Intent.createChooser(intent, context.getString(R.string.feature_user_crash_export_title)),
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -459,6 +475,7 @@ fun SettingsScreenContent(
     enableAiConfig: Boolean = true,
     overlayHostState: OverlayHostState = rememberOverlayHostState(),
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var showTimingBottomSheet by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
@@ -466,12 +483,12 @@ fun SettingsScreenContent(
     Scaffold(
         topBar = {
             BgmTopAppBar(
-                title = { Text(text = "设置") },
+                title = { Text(text = stringResource(R.string.feature_user_title_settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         )
                     }
                 },
@@ -524,7 +541,7 @@ fun SettingsScreenContent(
                             val selected =
                                 overlayHostState.await(
                                     SingleChoiceDialogAction(
-                                        title = "播放源自动同步频率",
+                                        title = context.getString(R.string.feature_user_sync_interval_title),
                                         options = SyncInterval.entries,
                                         selectedOption = uiState.syncInterval,
                                         optionLabel = { it.displayName },
@@ -547,7 +564,7 @@ fun SettingsScreenContent(
                             val selected =
                                 overlayHostState.await(
                                     SingleChoiceDialogAction(
-                                        title = "每日提醒时刻",
+                                        title = context.getString(R.string.feature_user_reminder_hour_title),
                                         options = listOf(7, 8, 12, 18, 21),
                                         selectedOption = airingReminderHour,
                                         optionLabel = { "%02d:00".format(it) },
@@ -595,17 +612,21 @@ fun SettingsScreenContent(
                         val currentProfile = uiState.activeProfile
                         val message =
                             if (currentProfile != null) {
-                                "退出「${currentProfile.displayName}」(@${currentProfile.username})？退出后需重新登录。"
+                                context.getString(
+                                    R.string.feature_user_logout_confirm_named,
+                                    currentProfile.displayName,
+                                    currentProfile.username,
+                                )
                             } else {
-                                "退出当前账号？退出后需重新登录。"
+                                context.getString(R.string.feature_user_logout_current_confirm)
                             }
                         coroutineScope.launch {
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
-                                        title = "退出当前账号",
+                                        title = context.getString(R.string.feature_user_logout_current_title),
                                         message = message,
-                                        confirmText = "退出登录",
+                                        confirmText = context.getString(R.string.feature_user_logout_action),
                                         isDestructive = true,
                                         icon = BgmIcons.Logout,
                                     ),
@@ -620,9 +641,13 @@ fun SettingsScreenContent(
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
-                                        title = "退出所有账号",
-                                        message = "退出设备上保存的全部 ${uiState.savedAccounts.size} 个账号？退出后需重新登录。",
-                                        confirmText = "退出全部",
+                                        title = context.getString(R.string.feature_user_logout_all_title),
+                                        message =
+                                            context.getString(
+                                                R.string.feature_user_logout_all_confirm,
+                                                uiState.savedAccounts.size,
+                                            ),
+                                        confirmText = context.getString(R.string.feature_user_logout_all_action),
                                         isDestructive = true,
                                         icon = BgmIcons.Delete,
                                     ),

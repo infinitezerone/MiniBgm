@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.model.InAppWebSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -39,11 +40,13 @@ internal fun InAppLoginScreen(
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val defaultPageTitle = stringResource(R.string.feature_user_login_title)
+    val loginFailedMessage = stringResource(R.string.feature_user_login_failed)
     var session by remember { mutableStateOf<InAppWebSession?>(null) }
     var isStarting by remember { mutableStateOf(true) }
     var isPageLoading by remember { mutableStateOf(true) }
     var progress by remember { mutableIntStateOf(0) }
-    var pageTitle by remember { mutableStateOf("登录 Bangumi") }
+    var pageTitle by remember { mutableStateOf(defaultPageTitle) }
     var isExchanging by remember { mutableStateOf(false) }
     var isSucceeded by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -140,7 +143,7 @@ internal fun InAppLoginScreen(
                                         isSucceeded = true
                                     } else {
                                         scope.launch {
-                                            snackbarHostState.showSnackbar(error ?: "登录失败，请重试")
+                                            snackbarHostState.showSnackbar(error ?: loginFailedMessage)
                                         }
                                     }
                                 }
@@ -152,7 +155,7 @@ internal fun InAppLoginScreen(
                     )
                 } else if (!isStarting) {
                     InAppWebUnavailable(
-                        reason = "当前网络环境无法在应用内完成登录",
+                        reason = stringResource(R.string.feature_user_login_unavailable),
                         onOpenInBrowser = ::openInBrowser,
                         onClose = onBack,
                     )
@@ -160,14 +163,14 @@ internal fun InAppLoginScreen(
 
                 InAppWebLoadingPlaceholder(
                     visible = (isStarting || isPageLoading) && !isExchanging && !isSucceeded,
-                    title = "正在加载…",
+                    title = stringResource(R.string.feature_user_login_loading),
                 )
 
                 if (isExchanging) {
-                    InAppWebBusyOverlay(text = "正在登录…")
+                    InAppWebBusyOverlay(text = stringResource(R.string.feature_user_login_signing_in))
                 }
                 if (isSucceeded) {
-                    InAppWebBusyOverlay(text = "登录成功", showSpinner = false)
+                    InAppWebBusyOverlay(text = stringResource(R.string.feature_user_login_success), showSpinner = false)
                 }
             }
         }

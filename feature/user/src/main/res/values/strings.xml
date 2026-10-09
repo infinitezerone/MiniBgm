@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 1. 页面标题与通用操作 -->
+    <string name="feature_user_title_home">个人中心</string>
+    <string name="feature_user_title_settings">设置</string>
+    <string name="feature_user_title_playback_rules">播放源管理</string>
+    <string name="feature_user_action_undo">撤销</string>
+    <string name="feature_user_action_clear">清空</string>
+    <string name="feature_user_action_copy">复制</string>
+    <string name="feature_user_action_share">分享</string>
+    <string name="feature_user_action_paste">粘贴</string>
+    <string name="feature_user_action_edit">编辑</string>
+    <string name="feature_user_action_delete">删除</string>
+    <string name="feature_user_action_add">添加</string>
+    <string name="feature_user_action_import">导入</string>
+    <string name="feature_user_action_subscribe">订阅</string>
+    <string name="feature_user_action_collapse">收起</string>
+    <string name="feature_user_action_expand">展开</string>
+    <string name="feature_user_action_login">登录</string>
+    <string name="feature_user_action_go_settings">去设置</string>
+    <string name="feature_user_action_go_system_settings">前往设置</string>
+    <string name="feature_user_action_go_release">前往发布页</string>
+    <string name="feature_user_action_update_later">暂不更新</string>
+    <string name="feature_user_common_off">已关闭</string>
+    <string name="feature_user_common_all">全部</string>
+    <string name="feature_user_common_unknown_error">未知错误</string>
+
+    <!-- 2. 收藏筛选与连载状态徽章 -->
+    <string name="feature_user_air_filter_airing">连载中</string>
+    <string name="feature_user_air_filter_finished">已完结</string>
+    <string name="feature_user_air_filter_binge">囤番中</string>
+    <string name="feature_user_air_badge_finished_total">已完结 · 全 %1$d 话</string>
+    <string name="feature_user_air_badge_airing_total">连载至 %1$d/%2$d 话</string>
+    <string name="feature_user_air_badge_airing_ep">连载至第 %1$d 话</string>
+
+    <!-- 3. 个人中心主页 -->
+    <string name="feature_user_account_management">账号管理</string>
+    <string name="feature_user_refresh_success">个人中心已刷新</string>
+    <string name="feature_user_refresh_success_anonymous">已刷新（登录后可同步个人数据）</string>
+    <string name="feature_user_refresh_failed">刷新失败，请检查网络</string>
+    <string name="feature_user_progress_toast_marked">已打卡至第 %1$d 话</string>
+    <string name="feature_user_logout_confirm_named">退出「%1$s」(@%2$s)？退出后需重新登录。</string>
+    <string name="feature_user_logout_account_action">退出该账号</string>
+    <string name="feature_user_logout_all_title">退出所有账号</string>
+    <string name="feature_user_logout_all_confirm">退出设备上保存的全部 %1$d 个账号？退出后需重新登录。</string>
+    <string name="feature_user_logout_all_action">退出全部</string>
+    <string name="feature_user_app_not_installed_title">未安装 %1$s 客户端</string>
+    <string name="feature_user_app_not_installed_message">未检测到 %1$s 客户端，是否在应用内使用浏览器打开该播放源？</string>
+    <string name="feature_user_empty_filtered">暂无符合「%1$s」条件的条目</string>
+    <string name="feature_user_empty_category">暂无该分类收藏</string>
+    <string name="feature_user_collections_load_failed">加载收藏失败</string>
+    <string name="feature_user_collections_all_loaded">— 已加载全部收藏 —</string>
+    <string name="feature_user_subject_fallback_title">条目 #%1$d</string>
+
+    <!-- 4. 账号与登录 -->
+    <string name="feature_user_login_landing_title">登录 Bangumi 账号</string>
+    <string name="feature_user_login_cd_unauthenticated">未登录</string>
+    <string name="feature_user_token_login_title">使用访问令牌登录</string>
+    <string name="feature_user_token_login_desc">在 Bangumi 官网生成访问令牌后粘贴到下方即可登录，令牌长期有效。</string>
+    <string name="feature_user_token_open_page">打开令牌页面</string>
+    <string name="feature_user_token_steps">1. 打开令牌页面并生成令牌（需已登录 Bangumi）\n2. 复制生成的令牌，粘贴到下方</string>
+    <string name="feature_user_token_label">访问令牌</string>
+    <string name="feature_user_token_placeholder">粘贴访问令牌</string>
+    <string name="feature_user_token_empty_error">请先粘贴访问令牌</string>
+    <string name="feature_user_token_login_failed">登录失败，请确认令牌是否有效</string>
+    <string name="feature_user_account_sheet_subtitle">已保存 %1$d 个登录账号，支持一键无缝切换</string>
+    <string name="feature_user_account_add">添加其他 Bangumi 账号</string>
+    <string name="feature_user_account_active_badge">当前活跃</string>
+    <string name="feature_user_account_cd_active">当前活跃账号</string>
+
+    <!-- 5. 设置页：外观与播放 -->
+    <string name="feature_user_section_appearance">外观显示</string>
+    <string name="feature_user_settings_dynamic_color_title">动态取色 (Material You)</string>
+    <string name="feature_user_settings_dynamic_color_desc">跟随系统壁纸配色生成主题</string>
+    <string name="feature_user_settings_amoled_title">AMOLED 纯黑模式</string>
+    <string name="feature_user_settings_amoled_desc">深色模式下使用纯黑表面，更省电更沉浸</string>
+    <string name="feature_user_section_playback">播放设置</string>
+    <string name="feature_user_settings_pip_title">自动画中画</string>
+    <string name="feature_user_settings_pip_desc">播放视频切回桌面或切换应用时自动开启小窗</string>
+    <string name="feature_user_section_restricted">受限内容</string>
+    <string name="feature_user_settings_restricted_content_title">显示受限条目内容</string>
+
+    <!-- 6. 设置页：同步与提醒 -->
+    <string name="feature_user_section_sync_reminder">数据同步与提醒</string>
+    <string name="feature_user_settings_auto_sync_title">播放源自动同步</string>
+    <string name="feature_user_settings_sync_period">周期：%1$s</string>
+    <string name="feature_user_settings_playback_manage_desc">导入自备片单、维护第三方解析规则</string>
+    <string name="feature_user_settings_reminder_perm_subtitle">系统通知未开启，点击开启权限与每日推送</string>
+    <string name="feature_user_settings_reminder_active_subtitle">支持每日汇总清单与单集开播即时通知</string>
+    <string name="feature_user_settings_airing_reminder_title">追番更新提醒</string>
+    <string name="feature_user_settings_daily_summary_title">每日更新汇总</string>
+    <string name="feature_user_settings_daily_summary_subtitle">每天 %1$s 推送今日更新</string>
+    <string name="feature_user_settings_pre_air_title">新集开播提醒</string>
+    <string name="feature_user_settings_pre_air_desc">每集播出时单独通知</string>
+    <string name="feature_user_settings_reminder_time_title">提醒时间</string>
+    <string name="feature_user_settings_binge_finale_title">囤番完结提醒</string>
+    <string name="feature_user_settings_binge_finale_desc">标记为囤番的条目在全剧完结时提醒开追</string>
+    <string name="feature_user_settings_binge_finale_off">已关闭（囤番条目完全静默）</string>
+    <string name="feature_user_settings_system_notification_title">系统通知管理</string>
+    <string name="feature_user_settings_system_notification_desc">前往系统设置调整静音、振动与悬浮横幅权限</string>
+    <string name="feature_user_notification_rationale_title">需要系统通知权限</string>
+    <string name="feature_user_notification_rationale_message">您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。</string>
+    <string name="feature_user_reminder_enabled_toast">已开启追番开播提醒（如需横幅/振动可在系统设置中开启）</string>
+    <string name="feature_user_notification_denied_toast">未授予通知权限，无法接收提醒</string>
+    <string name="feature_user_sync_interval_title">播放源自动同步频率</string>
+    <string name="feature_user_reminder_hour_title">每日提醒时刻</string>
+
+    <!-- 7. 设置页：智能服务与关于 -->
+    <string name="feature_user_section_ai_storage">智能服务与存储</string>
+    <string name="feature_user_settings_ai_config_title">AI 追番助手配置</string>
+    <string name="feature_user_settings_clear_cache_title">清理本地缓存</string>
+    <string name="feature_user_settings_clearing">正在清理…</string>
+    <string name="feature_user_settings_clear_cache_desc">清理离线网络图片缓存</string>
+    <string name="feature_user_settings_crash_log_desc">崩溃时自动记录堆栈，可导出给开发者</string>
+    <string name="feature_user_cache_cleared_toast">已清理图片缓存</string>
+    <string name="feature_user_cache_clear_failed_toast">清理失败，请重试</string>
+    <string name="feature_user_crash_none_toast">暂无崩溃记录</string>
+    <string name="feature_user_crash_cleared_toast">崩溃日志已清空</string>
+    <string name="feature_user_crash_log_title">崩溃日志</string>
+    <string name="feature_user_crash_log_desc">贴进 Issue 或发给开发者，配合 release 页的 mapping 才能还原出崩溃位置。</string>
+    <string name="feature_user_crash_report_subject">MiniBgm 崩溃报告</string>
+    <string name="feature_user_crash_export_title">导出崩溃日志</string>
+    <string name="feature_user_section_about">关于与支持</string>
+    <string name="feature_user_settings_client_title">MiniBgm 客户端</string>
+    <string name="feature_user_settings_client_subtitle">v%1$s · MIT 开源协议</string>
+    <string name="feature_user_settings_cd_open_github">打开开源主页</string>
+    <string name="feature_user_settings_check_update_title">检查新版本</string>
+    <string name="feature_user_settings_checking_update">正在检查更新…</string>
+    <string name="feature_user_settings_current_version">当前版本 v%1$s</string>
+    <string name="feature_user_settings_bgm_site_title">访问 Bangumi 官网</string>
+    <string name="feature_user_settings_bgm_site_desc">bgm.tv · ACG 动漫数据库与社区</string>
+    <string name="feature_user_settings_cd_open_web">打开网页</string>
+    <string name="feature_user_settings_wiki_title">Bangumi 维基协作指南</string>
+    <string name="feature_user_settings_wiki_desc">条目收录规范与编辑守则</string>
+    <string name="feature_user_settings_logout_subtitle">注销当前登录 (@%1$s)，保留其他已存账号</string>
+    <string name="feature_user_settings_logout_all_title">退出所有已存账号</string>
+    <string name="feature_user_settings_logout_all_desc">清除本机全部登录账号与本地缓存</string>
+    <string name="feature_user_logout_current_title">退出当前账号</string>
+    <string name="feature_user_logout_current_confirm">退出当前账号？退出后需重新登录。</string>
+    <string name="feature_user_logout_action">退出登录</string>
+    <string name="feature_user_update_latest_version">最新版本：%1$s</string>
+    <string name="feature_user_update_published_at">(%1$s)</string>
+    <string name="feature_user_update_release_notes_header">更新日志：</string>
+    <string name="feature_user_update_found_title">发现新版本 %1$s</string>
+    <string name="feature_user_update_up_to_date_toast">当前已是最新版本 (v%1$s)</string>
+    <string name="feature_user_update_failed_toast">检查更新失败: %1$s</string>
+
+    <!-- 8. 播放源管理页 -->
+    <string name="feature_user_cd_ai_source_search">让 AI 助手找源</string>
+    <string name="feature_user_playlist_cd_import_file">从文件导入片单</string>
+    <string name="feature_user_playlist_file_too_large">文件过大（上限 %1$d MB）</string>
+    <string name="feature_user_playlist_file_unreadable">无法读取所选文件</string>
+    <string name="feature_user_playlist_read_failed">片单读取失败：%1$s</string>
+    <string name="feature_user_playlist_section_title">自备片单</string>
+    <string name="feature_user_playlist_section_desc">导入 JSON 片源后，分集播放向导会直接给出对应地址</string>
+    <string name="feature_user_playlist_clear_all_title">清空全部片单</string>
+    <string name="feature_user_playlist_clear_all_message">将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。</string>
+    <string name="feature_user_playlist_delete_title">确认删除片单</string>
+    <string name="feature_user_playlist_delete_message">确定要删除片单「%1$s」及其 %2$d 条分集吗？</string>
+    <string name="feature_user_positions_section_title">续播记录</string>
+    <string name="feature_user_positions_section_desc">内置播放器自动记录各播放地址的观看位置，用于下次断点续播</string>
+    <string name="feature_user_positions_clear_all_title">清空全部续播记录</string>
+    <string name="feature_user_positions_clear_all_message">将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。</string>
+    <string name="feature_user_positions_empty">暂无续播记录。播放器会在你观看时自动记录进度（保留最近 50 条）。</string>
+    <string name="feature_user_rules_section_title">解析规则（高级）</string>
+    <string name="feature_user_rules_section_desc_expanded">按占位符模板拼出解析地址，适合自定义第三方源</string>
+    <string name="feature_user_rules_section_desc_count">已配置 %1$d 条规则</string>
+    <string name="feature_user_rules_empty">暂无自定义播放规则，可点击「添加」或「导入」配置。</string>
+    <string name="feature_user_rules_delete_title">确认删除规则</string>
+    <string name="feature_user_rules_delete_message">确定要删除播放规则「%1$s」吗？</string>
+
+    <!-- 9. 播放规则对话框 -->
+    <string name="feature_user_rule_vars_title">支持的占位符变量</string>
+    <string name="feature_user_rule_vars_desc">{title}: 番剧名称\n{ep}: 分集编号（如 1, 2）\n{subjectId}: 条目 ID\n{episodeId}: 分集 ID</string>
+    <string name="feature_user_rule_kind_source_prefix">接口·%1$s</string>
+    <string name="feature_user_rule_kind_page">页面</string>
+    <string name="feature_user_rule_edit_title">编辑播放规则</string>
+    <string name="feature_user_rule_add_title">添加播放规则</string>
+    <string name="feature_user_rule_name_label">规则名称</string>
+    <string name="feature_user_rule_name_placeholder">例如：我的采集源</string>
+    <string name="feature_user_rule_url_label">URL 模板</string>
+    <string name="feature_user_rule_kind_source">取源接口</string>
+    <string name="feature_user_rule_kind_page_title">跳转页面</string>
+    <string name="feature_user_rule_parser_label">解析器</string>
+    <string name="feature_user_rule_headers_label">请求头（可选，每行 Key: Value）</string>
+    <string name="feature_user_rule_desc_label">备注说明（可选）</string>
+    <string name="feature_user_rule_import_title">导入规则 (JSON)</string>
+    <string name="feature_user_rule_import_desc">粘贴单条或数组格式的规则 JSON 配置：</string>
+    <string name="feature_user_probe_title">探测站点</string>
+    <string name="feature_user_probe_desc">填入站点域名，会试它是否符合标准采集接口（/api.php/provide/vod/）。</string>
+    <string name="feature_user_probe_probing">正在探测…</string>
+    <string name="feature_user_probe_recognized">✓ 识别为 MacCMS 采集接口</string>
+    <string name="feature_user_probe_result_desc">接口当前返回 %1$d 条内容，规则将以「取源接口」形态添加</string>
+    <string name="feature_user_probe_add_action">添加规则</string>
+    <string name="feature_user_probe_action">探测</string>
+    <string name="feature_user_subscription_title">订阅导入</string>
+    <string name="feature_user_subscription_desc">填入 TVBox / MiniBgm 订阅地址，检测通过后按报告勾选要导入的来源。</string>
+    <string name="feature_user_subscription_checking">正在检测…</string>
+    <string name="feature_user_subscription_report">✓ 检测通过：有效连通 %1$d/%2$d，平均延迟 %3$dms</string>
+    <string name="feature_user_subscription_import_selected">导入所选（%1$d）</string>
+    <string name="feature_user_subscription_check_action">检测</string>
+    <string name="feature_user_subscription_alive">✓ 连通</string>
+    <string name="feature_user_subscription_dead">✗ 未连通</string>
+    <string name="feature_user_position_seen">看到 %1$s</string>
+    <string name="feature_user_position_cd_clear">清除该续播记录</string>
+    <string name="feature_user_parser_auto">自动</string>
+    <string name="feature_user_parser_pipeline">流水线</string>
+
+    <!-- 10. 片单组件 -->
+    <string name="feature_user_playlist_empty_title">还没有自备片单</string>
+    <string name="feature_user_playlist_empty_desc">自备片单是你自己提供的 JSON 文件：为每个条目声明分集地址（DIRECT 直链在应用内播放，PAGE 页面链接外部打开），可附带 Referer 等请求头。</string>
+    <string name="feature_user_playlist_pick_file">选择 JSON 文件</string>
+    <string name="feature_user_playlist_paste_import">粘贴 JSON 导入</string>
+    <string name="feature_user_playlist_bound_subtitle">绑定条目 %1$d · 直链 %2$d / 页面 %3$d</string>
+    <string name="feature_user_playlist_unbound_subtitle">未绑定条目（不会出现在分集入口）· 直链 %1$d / 页面 %2$d</string>
+    <string name="feature_user_playlist_template_title">片单 JSON 格式（schemaVersion %1$d）</string>
+    <string name="feature_user_playlist_template_collapse">收起示例</string>
+    <string name="feature_user_playlist_template_expand">查看示例</string>
+    <string name="feature_user_playlist_limit_desc">上限：%1$d 份片单、每份 %2$d 条、每条 %3$d 个请求头；同 id 的片单会被新导入的覆盖。</string>
+    <string name="feature_user_playlist_paste_title">粘贴片单 JSON</string>
+    <string name="feature_user_playlist_paste_desc">顶层需为 schemaVersion %1$d 的片单文档；校验通过的片单会合并进现有列表（同 id 覆盖）。</string>
+
+    <!-- 11. 开播提醒时间 -->
+    <string name="feature_user_timing_sheet_title">开播提醒时间</string>
+    <string name="feature_user_timing_sheet_subtitle">新集播出时的通知时间</string>
+    <string name="feature_user_timing_preset_advance_30">提前 30 分钟</string>
+    <string name="feature_user_timing_preset_advance_15">提前 15 分钟</string>
+    <string name="feature_user_timing_preset_advance_5">提前 5 分钟</string>
+    <string name="feature_user_timing_preset_on_time">准点</string>
+    <string name="feature_user_timing_preset_delay_15">延后 15 分钟</string>
+    <string name="feature_user_timing_preset_delay_30">延后 30 分钟</string>
+    <string name="feature_user_timing_preset_delay_60">延后 1 小时</string>
+    <string name="feature_user_timing_advance_minutes">提前 %1$d 分钟</string>
+    <string name="feature_user_timing_on_time">准点开播</string>
+    <string name="feature_user_timing_delay_minutes">延后 %1$d 分钟</string>
+    <string name="feature_user_timing_delay_15_platform">延后 15 分钟（适配国内平台）</string>
+    <string name="feature_user_timing_fine_tune">1 分钟微调</string>
+    <string name="feature_user_timing_cd_minus">减少 1 分钟</string>
+    <string name="feature_user_timing_cd_plus">增加 1 分钟</string>
+    <string name="feature_user_timing_confirm">确认应用</string>
+    <string name="feature_user_timing_cd_manual_input">手动输入精确分钟</string>
+    <string name="feature_user_timing_hero_immediate">新集开播时立即推送</string>
+    <string name="feature_user_timing_hero_example_delay15">若 23:00 开播，将于 %1$s 推送（适配国内平台）</string>
+    <string name="feature_user_timing_hero_example">若 23:00 开播，将于 %1$s 推送</string>
+    <string name="feature_user_timing_custom_title">自定义时间</string>
+    <string name="feature_user_timing_custom_prompt">设置提前或延后的分钟数：</string>
+    <string name="feature_user_timing_direction_advance">提前</string>
+    <string name="feature_user_timing_direction_delay">延后</string>
+    <string name="feature_user_timing_minutes_label">分钟数</string>
+
+    <!-- 12. AI 服务配置 -->
+    <string name="feature_user_ai_dialog_title">AI 服务配置</string>
+    <string name="feature_user_ai_provider_label">服务提供商</string>
+    <string name="feature_user_ai_endpoint_label">Base URL / 端点</string>
+    <string name="feature_user_ai_apikey_label">API Key / 访问密钥</string>
+    <string name="feature_user_ai_apikey_placeholder_ollama">Ollama 本地可留空</string>
+    <string name="feature_user_ai_apikey_placeholder">输入 API Key</string>
+    <string name="feature_user_ai_apikey_required">使用云端服务商需配置 API Key</string>
+    <string name="feature_user_ai_apikey_hide">隐藏 API Key</string>
+    <string name="feature_user_ai_apikey_show">显示 API Key</string>
+    <string name="feature_user_ai_model_label">Model Name / 模型名称</string>
+
+    <!-- 13. 收藏卡片与列表 -->
+    <string name="feature_user_rate_score">%1$d 分</string>
+    <string name="feature_user_progress_ep_total">%1$d / %2$d 话</string>
+    <string name="feature_user_progress_watched">已看 %1$d 话</string>
+    <string name="feature_user_progress_not_started">尚未开始</string>
+    <string name="feature_user_binge_cd_add">加入囤番</string>
+    <string name="feature_user_binge_cd_remove">取消囤番</string>
+    <string name="feature_user_source_label">播放源</string>
+    <string name="feature_user_progress_cd_plus_one">+1 话</string>
+    <string name="feature_user_subject_type_book">书籍</string>
+    <string name="feature_user_subject_type_anime">动画</string>
+    <string name="feature_user_subject_type_music">音乐</string>
+    <string name="feature_user_subject_type_game">游戏</string>
+    <string name="feature_user_subject_type_real">三次元</string>
+    <string name="feature_user_subject_type_other">条目</string>
+
+    <!-- 14. 个人资料与统计 -->
+    <string name="feature_user_profile_joined_years">%1$d 年加入 · 已 %2$d 年</string>
+    <string name="feature_user_profile_joined_year">%1$d 年加入</string>
+    <string name="feature_user_profile_cd_avatar">用户头像</string>
+    <string name="feature_user_profile_default_name">Bangumi 用户</string>
+    <string name="feature_user_profile_admin_badge">管理员</string>
+    <string name="feature_user_profile_accounts_count">%1$d 个账号</string>
+    <string name="feature_user_stats_watching">在看集数</string>
+    <string name="feature_user_stats_month_checkin">本月打卡</string>
+
+    <!-- 15. 收藏详情快捷面板 -->
+    <string name="feature_user_source_search_name_ep">%1$s 第 %2$d 话</string>
+    <string name="feature_user_source_quick_jump">快速跳转与搜索</string>
+    <string name="feature_user_source_bilibili_search">哔哩哔哩搜索</string>
+    <string name="feature_user_source_mikan">蜜柑计划</string>
+    <string name="feature_user_source_preference">追番偏好</string>
+    <string name="feature_user_source_binge_on">已设为囤番（完结提醒）</string>
+    <string name="feature_user_source_binge_off">设为囤番待看</string>
+    <string name="feature_user_source_subject_detail">条目详情</string>
+    <string name="feature_user_source_enter_detail">进入条目详情</string>
+    <string name="feature_user_source_badge_all_watched">已完结 · 全 %1$d 话全看毕</string>
+    <string name="feature_user_source_badge_finished_to_ep">已完结 · 补番至第 %1$d 话（全 %2$d 话）</string>
+    <string name="feature_user_source_badge_resume_total">续看第 %1$d 话（全 %2$d 话）</string>
+    <string name="feature_user_source_badge_resume">续看第 %1$d 话</string>
+    <string name="feature_user_source_badge_start">开始观看第 1 话</string>
+
+    <!-- 16. 内置网页与登录接管页 -->
+    <string name="feature_user_web_default_title">Bangumi 网页</string>
+    <string name="feature_user_web_link_copied">链接已复制</string>
+    <string name="feature_user_web_unavailable">该页面无法在应用内打开</string>
+    <string name="feature_user_web_loading">正在载入…</string>
+    <string name="feature_user_web_cd_back_prev">返回上一页</string>
+    <string name="feature_user_web_cd_reload">重新加载</string>
+    <string name="feature_user_web_cd_copy_link">复制链接</string>
+    <string name="feature_user_web_open_in_system_browser">用系统浏览器打开</string>
+    <string name="feature_user_login_title">登录 Bangumi</string>
+    <string name="feature_user_login_loading">正在加载…</string>
+    <string name="feature_user_login_signing_in">正在登录…</string>
+    <string name="feature_user_login_success">登录成功</string>
+    <string name="feature_user_login_failed">登录失败，请重试</string>
+    <string name="feature_user_login_unavailable">当前网络环境无法在应用内完成登录</string>
+</resources>

@@ -26,11 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.feature.user.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 private const val DEFAULT_OLLAMA_ENDPOINT = "http://10.0.2.2:11434"
 private const val DEFAULT_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -100,7 +103,7 @@ internal fun AiSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("AI 服务配置", style = MaterialTheme.typography.titleMedium) },
+        title = { Text(stringResource(R.string.feature_user_ai_dialog_title), style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(
                 modifier =
@@ -109,7 +112,7 @@ internal fun AiSettingsDialog(
                         .verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = "服务提供商",
+                    text = stringResource(R.string.feature_user_ai_provider_label),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -143,7 +146,7 @@ internal fun AiSettingsDialog(
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = { endpoint = it },
-                    label = { Text("Base URL / 端点") },
+                    label = { Text(stringResource(R.string.feature_user_ai_endpoint_label)) },
                     placeholder = {
                         Text(
                             when (selectedProvider) {
@@ -162,13 +165,22 @@ internal fun AiSettingsDialog(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
-                    label = { Text("API Key / 访问密钥") },
+                    label = { Text(stringResource(R.string.feature_user_ai_apikey_label)) },
                     placeholder = {
-                        Text(if (selectedProvider == AiConfig.PROVIDER_OLLAMA) "Ollama 本地可留空" else "输入 API Key")
+                        Text(
+                            if (selectedProvider == AiConfig.PROVIDER_OLLAMA) {
+                                stringResource(R.string.feature_user_ai_apikey_placeholder_ollama)
+                            } else {
+                                stringResource(R.string.feature_user_ai_apikey_placeholder)
+                            },
+                        )
                     },
                     supportingText = {
                         if (selectedProvider != AiConfig.PROVIDER_OLLAMA && apiKey.isBlank()) {
-                            Text("使用云端服务商需配置 API Key", color = MaterialTheme.colorScheme.error)
+                            Text(
+                                stringResource(R.string.feature_user_ai_apikey_required),
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
                     },
                     singleLine = true,
@@ -177,7 +189,12 @@ internal fun AiSettingsDialog(
                         IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
                             Icon(
                                 imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
-                                contentDescription = if (isApiKeyVisible) "隐藏 API Key" else "显示 API Key",
+                                contentDescription =
+                                    if (isApiKeyVisible) {
+                                        stringResource(R.string.feature_user_ai_apikey_hide)
+                                    } else {
+                                        stringResource(R.string.feature_user_ai_apikey_show)
+                                    },
                             )
                         }
                     },
@@ -189,7 +206,7 @@ internal fun AiSettingsDialog(
                 OutlinedTextField(
                     value = model,
                     onValueChange = { model = it },
-                    label = { Text("Model Name / 模型名称") },
+                    label = { Text(stringResource(R.string.feature_user_ai_model_label)) },
                     placeholder = {
                         Text(
                             when (selectedProvider) {
@@ -230,12 +247,12 @@ internal fun AiSettingsDialog(
                     onDismiss()
                 },
             ) {
-                Text("保存")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )

@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomShee
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.feature.user.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,13 +71,13 @@ internal fun AccountManagementBottomSheet(
                     .padding(bottom = 32.dp),
         ) {
             Text(
-                text = "账号管理",
+                text = stringResource(R.string.feature_user_account_management),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "已保存 ${accounts.size} 个登录账号，支持一键无缝切换",
+                text = stringResource(R.string.feature_user_account_sheet_subtitle, accounts.size),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -112,7 +114,7 @@ internal fun AccountManagementBottomSheet(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "添加其他 Bangumi 账号")
+                Text(text = stringResource(R.string.feature_user_account_add))
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -132,7 +134,7 @@ internal fun AccountManagementBottomSheet(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "退出所有账号")
+                Text(text = stringResource(R.string.feature_user_logout_all_title))
             }
         }
     }
@@ -209,7 +211,7 @@ private fun AccountItemRow(
                             color = MaterialTheme.colorScheme.primary,
                         ) {
                             Text(
-                                text = "当前活跃",
+                                text = stringResource(R.string.feature_user_account_active_badge),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -227,7 +229,7 @@ private fun AccountItemRow(
             if (isActive) {
                 Icon(
                     imageVector = BgmIcons.CheckCircle,
-                    contentDescription = "当前活跃账号",
+                    contentDescription = stringResource(R.string.feature_user_account_cd_active),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp),
                 )
@@ -235,7 +237,7 @@ private fun AccountItemRow(
                 IconButton(onClick = onLogoutClick) {
                     Icon(
                         imageVector = BgmIcons.Delete,
-                        contentDescription = "退出该账号",
+                        contentDescription = stringResource(R.string.feature_user_logout_account_action),
                         tint = MaterialTheme.colorScheme.error,
                     )
                 }

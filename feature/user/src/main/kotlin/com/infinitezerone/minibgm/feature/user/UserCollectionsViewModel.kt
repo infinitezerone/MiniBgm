@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,13 +38,13 @@ import kotlinx.coroutines.launch
  */
 enum class CollectionSubjectFilter(
     val typeId: Int,
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    ALL(0, "全部"),
-    ANIME(2, "动画"),
-    BOOK(1, "书籍"),
-    GAME(4, "游戏"),
-    MUSIC(3, "音乐"),
+    ALL(0, R.string.feature_user_common_all),
+    ANIME(2, R.string.feature_user_subject_type_anime),
+    BOOK(1, R.string.feature_user_subject_type_book),
+    GAME(4, R.string.feature_user_subject_type_game),
+    MUSIC(3, R.string.feature_user_subject_type_music),
 }
 
 /** 用户收藏列表 UI 状态 */

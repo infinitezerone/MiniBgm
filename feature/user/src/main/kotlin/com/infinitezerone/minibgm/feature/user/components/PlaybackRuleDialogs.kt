@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,8 +41,10 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.feature.user.R
 import com.infinitezerone.minibgm.feature.user.SiteProbeUiState
 import com.infinitezerone.minibgm.feature.user.SubscriptionImportUiState
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 变量支持提示卡片
@@ -66,14 +69,14 @@ internal fun RuleVariablesHintCard() {
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "支持的占位符变量",
+                    text = stringResource(R.string.feature_user_rule_vars_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "{title}: 番剧名称\n{ep}: 分集编号（如 1, 2）\n{subjectId}: 条目 ID\n{episodeId}: 分集 ID",
+                    text = stringResource(R.string.feature_user_rule_vars_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -128,7 +131,12 @@ internal fun PlaybackRuleCard(
                                 },
                         ) {
                             Text(
-                                text = if (rule.kind == PlaybackRuleKind.SOURCE) "接口·" + parserTypeLabel(rule.parserType) else "页面",
+                                text =
+                                    if (rule.kind == PlaybackRuleKind.SOURCE) {
+                                        stringResource(R.string.feature_user_rule_kind_source_prefix, parserTypeLabel(rule.parserType))
+                                    } else {
+                                        stringResource(R.string.feature_user_rule_kind_page)
+                                    },
                                 style = MaterialTheme.typography.labelSmall,
                                 color =
                                     if (rule.kind == PlaybackRuleKind.SOURCE) {
@@ -179,7 +187,7 @@ internal fun PlaybackRuleCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("编辑")
+                    Text(stringResource(R.string.feature_user_action_edit))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(onClick = onDelete) {
@@ -190,7 +198,7 @@ internal fun PlaybackRuleCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.feature_user_action_delete), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -232,14 +240,22 @@ internal fun RuleEditDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEditing) "编辑播放规则" else "添加播放规则") },
+        title = {
+            Text(
+                if (isEditing) {
+                    stringResource(R.string.feature_user_rule_edit_title)
+                } else {
+                    stringResource(R.string.feature_user_rule_add_title)
+                },
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("规则名称") },
-                    placeholder = { Text("例如：我的采集源") },
+                    label = { Text(stringResource(R.string.feature_user_rule_name_label)) },
+                    placeholder = { Text(stringResource(R.string.feature_user_rule_name_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -247,7 +263,7 @@ internal fun RuleEditDialog(
                 OutlinedTextField(
                     value = urlTemplate,
                     onValueChange = { urlTemplate = it },
-                    label = { Text("URL 模板") },
+                    label = { Text(stringResource(R.string.feature_user_rule_url_label)) },
                     placeholder = { Text("https://example.com/search?q={title}") },
                     minLines = 2,
                     maxLines = 4,
@@ -279,7 +295,12 @@ internal fun RuleEditDialog(
                             onClick = { kind = option },
                             label = {
                                 Text(
-                                    text = if (option == PlaybackRuleKind.SOURCE) "取源接口" else "跳转页面",
+                                    text =
+                                        if (option == PlaybackRuleKind.SOURCE) {
+                                            stringResource(R.string.feature_user_rule_kind_source)
+                                        } else {
+                                            stringResource(R.string.feature_user_rule_kind_page_title)
+                                        },
                                     style = MaterialTheme.typography.labelMedium,
                                 )
                             },
@@ -292,7 +313,7 @@ internal fun RuleEditDialog(
                     // 所以这里让人显式选，而不是一律 AUTO（「探测」入口不走这条，它永落 MACCMS）。
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "解析器",
+                            text = stringResource(R.string.feature_user_rule_parser_label),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -318,7 +339,7 @@ internal fun RuleEditDialog(
                     OutlinedTextField(
                         value = headersText,
                         onValueChange = { headersText = it },
-                        label = { Text("请求头（可选，每行 Key: Value）") },
+                        label = { Text(stringResource(R.string.feature_user_rule_headers_label)) },
                         placeholder = { Text("Referer: https://example.com/") },
                         minLines = 2,
                         maxLines = 4,
@@ -329,7 +350,7 @@ internal fun RuleEditDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("备注说明（可选）") },
+                    label = { Text(stringResource(R.string.feature_user_rule_desc_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -340,12 +361,12 @@ internal fun RuleEditDialog(
                 onClick = { onConfirm(name, urlTemplate, description, kind, parserType, headersText) },
                 enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
             ) {
-                Text("保存")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )
@@ -363,11 +384,11 @@ internal fun RuleImportDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("导入规则 (JSON)") },
+        title = { Text(stringResource(R.string.feature_user_rule_import_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "粘贴单条或数组格式的规则 JSON 配置：",
+                    text = stringResource(R.string.feature_user_rule_import_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -391,12 +412,12 @@ internal fun RuleImportDialog(
                 onClick = { onConfirm(jsonText) },
                 enabled = jsonText.isNotBlank(),
             ) {
-                Text("导入")
+                Text(stringResource(R.string.feature_user_action_import))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )
@@ -415,11 +436,11 @@ internal fun SiteProbeDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("探测站点") },
+        title = { Text(stringResource(R.string.feature_user_probe_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "填入站点域名，会试它是否符合标准采集接口（/api.php/provide/vod/）。",
+                    text = stringResource(R.string.feature_user_probe_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -441,7 +462,7 @@ internal fun SiteProbeDialog(
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("正在探测…", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.feature_user_probe_probing), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -456,12 +477,12 @@ internal fun SiteProbeDialog(
                             modifier = Modifier.padding(12.dp),
                         ) {
                             Text(
-                                text = "✓ 识别为 MacCMS 采集接口",
+                                text = stringResource(R.string.feature_user_probe_recognized),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                             Text(
-                                text = "接口当前返回 ${result.sampleCount} 条内容，规则将以「取源接口」形态添加",
+                                text = stringResource(R.string.feature_user_probe_result_desc, result.sampleCount),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
@@ -486,20 +507,20 @@ internal fun SiteProbeDialog(
         confirmButton = {
             if (state.result != null) {
                 Button(onClick = onConfirm) {
-                    Text("添加规则")
+                    Text(stringResource(R.string.feature_user_probe_add_action))
                 }
             } else {
                 Button(
                     onClick = onProbe,
                     enabled = !state.isProbing && state.input.isNotBlank(),
                 ) {
-                    Text("探测")
+                    Text(stringResource(R.string.feature_user_probe_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )
@@ -520,14 +541,14 @@ internal fun SubscriptionImportDialog(
     val report = state.report
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("订阅导入") },
+        title = { Text(stringResource(R.string.feature_user_subscription_title)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             ) {
                 Text(
-                    text = "填入 TVBox / MiniBgm 订阅地址，检测通过后按报告勾选要导入的来源。",
+                    text = stringResource(R.string.feature_user_subscription_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -549,7 +570,7 @@ internal fun SubscriptionImportDialog(
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("正在检测…", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.feature_user_subscription_checking), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -564,7 +585,13 @@ internal fun SubscriptionImportDialog(
                             modifier = Modifier.padding(12.dp),
                         ) {
                             Text(
-                                text = "✓ 检测通过：有效连通 ${result.aliveRules}/${result.totalRules}，平均延迟 ${result.averageLatencyMs}ms",
+                                text =
+                                    stringResource(
+                                        R.string.feature_user_subscription_report,
+                                        result.aliveRules,
+                                        result.totalRules,
+                                        result.averageLatencyMs,
+                                    ),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
@@ -597,20 +624,20 @@ internal fun SubscriptionImportDialog(
                     onClick = onConfirm,
                     enabled = state.selected.isNotEmpty(),
                 ) {
-                    Text("导入所选（${state.selected.size}）")
+                    Text(stringResource(R.string.feature_user_subscription_import_selected, state.selected.size))
                 }
             } else {
                 Button(
                     onClick = onValidate,
                     enabled = !state.isValidating && state.input.isNotBlank(),
                 ) {
-                    Text("检测")
+                    Text(stringResource(R.string.feature_user_subscription_check_action))
                 }
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
             }
         },
     )
@@ -634,6 +661,10 @@ internal fun SubscriptionSourceRow(
             checked = isSelected,
             onCheckedChange = { onToggle() },
         )
+        val aliveLabel =
+            stringResource(
+                if (isAlive) R.string.feature_user_subscription_alive else R.string.feature_user_subscription_dead,
+            )
         Column(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.weight(1f),
@@ -648,7 +679,7 @@ internal fun SubscriptionSourceRow(
             Text(
                 text =
                     buildString {
-                        append(if (isAlive) "✓ 连通" else "✗ 未连通")
+                        append(aliveLabel)
                         if (latencyMs > 0L) append(" · ${latencyMs}ms")
                     },
                 style = MaterialTheme.typography.bodySmall,
@@ -692,14 +723,14 @@ internal fun PlaybackPositionRow(
                 )
             }
             Text(
-                text = "看到 " + formatPlaybackPosition(positionMs),
+                text = stringResource(R.string.feature_user_position_seen, formatPlaybackPosition(positionMs)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             IconButton(onClick = onClear) {
                 Icon(
                     imageVector = BgmIcons.CloseBorder,
-                    contentDescription = "清除该续播记录",
+                    contentDescription = stringResource(R.string.feature_user_position_cd_clear),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -708,12 +739,13 @@ internal fun PlaybackPositionRow(
 }
 
 /** 解析器选项的短标签：四个 chip 要排在一行，长名字排不下 */
+@Composable
 internal fun parserTypeLabel(type: RuleParserType): String =
     when (type) {
-        RuleParserType.AUTO -> "自动"
+        RuleParserType.AUTO -> stringResource(R.string.feature_user_parser_auto)
         RuleParserType.MACCMS -> "MacCMS"
         RuleParserType.STREMIO -> "Stremio"
-        RuleParserType.PIPELINE -> "流水线"
+        RuleParserType.PIPELINE -> stringResource(R.string.feature_user_parser_pipeline)
     }
 
 internal fun hostLabelOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
