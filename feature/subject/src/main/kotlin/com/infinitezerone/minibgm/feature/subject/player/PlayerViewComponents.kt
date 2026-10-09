@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -509,9 +510,12 @@ internal fun PlayerSourceSelector(
         ) {
             itemsIndexed(sources) { index, source ->
                 val isSelected = index == selectedIndex
+                val failureCount = sourceFailureCounts[source.id] ?: 0
+                val isFailing = failureCount > 0
                 FilterChip(
                     selected = isSelected,
                     onClick = { onSelectSource(index) },
+                    modifier = if (isFailing && !isSelected) Modifier.alpha(0.65f) else Modifier,
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(

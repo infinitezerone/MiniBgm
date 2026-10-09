@@ -26,6 +26,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class EpisodeStreamResolver(
     private val resolver: PlaybackResolverRepository,
+    private val verifier: PlaybackSourceVerifier? = null,
 ) {
     /** 一次探测的结果：[sources] 为命中候选时该规则的全部返回（可能含整季，调用方自行过滤） */
     data class ProbeOutcome(
@@ -84,15 +85,24 @@ class EpisodeStreamResolver(
                             title = queryTitle,
                         )
                     }
-                if (candidates.any { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }) {
-                    return@withTimeoutOrNull ProbeOutcome(
-                        rule = rule,
-                        sources = candidates,
-                        matchedTitle = queryTitle,
-                        attempted = attempted,
-                        attemptTotal = queryTitles.size,
-                        timedOut = false,
-                    )
+                val directCandidates = candidates.filter { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }
+                if (directCandidates.isNotEmpty()) {
+                    val playableCandidate =
+                        if (verifier != null) {
+                            directCandidates.firstOrNull { verifier.verify(it) !is StreamVerification.NotPlayable }
+                        } else {
+                            directCandidates.first()
+                        }
+                    if (playableCandidate != null) {
+                        return@withTimeoutOrNull ProbeOutcome(
+                            rule = rule,
+                            sources = listOf(playableCandidate) + candidates.filter { it != playableCandidate },
+                            matchedTitle = queryTitle,
+                            attempted = attempted,
+                            attemptTotal = queryTitles.size,
+                            timedOut = false,
+                        )
+                    }
                 }
             }
             ProbeOutcome(

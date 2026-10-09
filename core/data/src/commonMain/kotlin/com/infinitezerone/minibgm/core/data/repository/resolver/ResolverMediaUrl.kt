@@ -12,7 +12,7 @@ private const val MAX_CANDIDATES_PER_PAGE = 12
 internal const val MAX_MANIFEST_ENTRIES = 50
 
 private val MEDIA_URL_REGEX =
-    Regex("""https?://[^"'()\s<>]+?\.(?:m3u8|mp4|mkv|flv|webm|ts)(?:\?[^"'()\s<>]*)?""", RegexOption.IGNORE_CASE)
+    Regex("""https?://[^"'()\s<>]+?\.(?:m3u8|mp4|mkv|flv|webm|ts|mpd)(?:\?[^"'()\s<>]*)?""", RegexOption.IGNORE_CASE)
 
 private val MEDIA_TAG_REGEX =
     Regex("""<(?:source|video)\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
@@ -32,7 +32,7 @@ private fun isInvalidMediaHost(url: String): Boolean {
     return INVALID_MEDIA_HOSTS.any { host.endsWith(it) }
 }
 
-internal val URL_FILE_EXTENSION = Regex("""\.(m3u8|mp4|mkv|flv|webm|ts)$""", RegexOption.IGNORE_CASE)
+internal val URL_FILE_EXTENSION = Regex("""\.(m3u8|mp4|mkv|flv|webm|ts|mpd)$""", RegexOption.IGNORE_CASE)
 internal val URL_NUMBER_TOKEN = Regex("""\d+(?:\.\d+)?""")
 internal val URL_YEAR_TOKEN = Regex("""^(?:19|20)\d{2}$""")
 internal val NOISE_NUMBERS = setOf("1080", "720", "480", "360", "240", "2160", "1440", "4320", "60")

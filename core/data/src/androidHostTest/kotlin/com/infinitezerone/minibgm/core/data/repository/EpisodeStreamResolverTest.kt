@@ -188,4 +188,97 @@ class EpisodeStreamResolverTest {
             assertNull(outcome)
             assertTrue(progress.isNotEmpty())
         }
+
+    @Test
+    fun probeRule_withVerifier_skipsNotPlayableCandidateAndContinuesToPlayableCandidate() =
+        runTest {
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        if (title == "死链候选") {
+                            listOf(direct("https://cdn.example.tv/dead.m3u8"))
+                        } else if (title == "活链候选") {
+                            listOf(direct("https://cdn.example.tv/alive.m3u8"))
+                        } else {
+                            emptyList()
+                        }
+                }
+
+            val fakeVerifier =
+                object : PlaybackSourceVerifier {
+                    override suspend fun verify(source: PlayableSource): StreamVerification =
+                        if (source.url.contains("dead")) {
+                            StreamVerification.NotPlayable("404 Not Found")
+                        } else {
+                            StreamVerification.Playable
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub, fakeVerifier).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("死链候选", "活链候选"),
+                    epSort = 0f,
+                    subjectId = 1001L,
+                )
+
+            assertNotNull(outcome)
+            assertEquals("活链候选", outcome.matchedTitle)
+            assertEquals(2, outcome.attempted)
+            assertEquals("https://cdn.example.tv/alive.m3u8", outcome.directSource?.url)
+        }
+
+    @Test
+    fun probeRule_withVerifier_reportsExhaustedWhenAllDirectCandidatesAreNotPlayable() =
+        runTest {
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = listOf(direct("https://cdn.example.tv/bad.m3u8"))
+                }
+
+            val deadVerifier =
+                object : PlaybackSourceVerifier {
+                    override suspend fun verify(source: PlayableSource): StreamVerification =
+                        StreamVerification.NotPlayable("403 Forbidden")
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub, deadVerifier).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("片名1", "片名2"),
+                    epSort = 0f,
+                    subjectId = 1001L,
+                )
+
+            assertNotNull(outcome)
+            assertTrue(outcome.sources.isEmpty())
+            assertEquals(2, outcome.attempted)
+            assertNull(outcome.directSource)
+        }
 }

@@ -612,6 +612,64 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun selectNextSource_skipsFailingSourceAndPicksHealthyOne() =
+        runTest {
+            val failureStore = PlaybackFailureStore()
+            failureStore.markFailed(url = "https://b/bad.m3u8", reason = "HTTP 404", sourceId = "r2")
+
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
+                    PlaybackSourceRule(id = "r2", name = "R2", urlTemplate = "https://b/?t={title}", isEnabled = true),
+                    PlaybackSourceRule(id = "r3", name = "R3", urlTemplate = "https://c/?t={title}", isEnabled = true),
+                ),
+            )
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    failureStore = failureStore,
+                )
+            advanceUntilIdle()
+            assertEquals(0, vm.uiState.value.selectedSourceIndex)
+
+            // 下一切源应跳过有连续失败的 r2，优先挑选健康源 r3 (index 2)
+            vm.selectNextSource()
+            assertEquals(2, vm.uiState.value.selectedSourceIndex)
+        }
+
+    @Test
+    fun initialSource_skipsRememberedSourceIfItHasFailuresAndPicksHealthyOne() =
+        runTest {
+            val failureStore = PlaybackFailureStore()
+            failureStore.markFailed(url = "https://a/bad.m3u8", reason = "HTTP 404", sourceId = "r1")
+
+            val settings = FakeSettingsRepository()
+            settings.importPlaybackRules(
+                listOf(
+                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
+                    PlaybackSourceRule(id = "r2", name = "R2", urlTemplate = "https://b/?t={title}", isEnabled = true),
+                ),
+            )
+            settings.setLastPlaybackSourceId("r1")
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    failureStore = failureStore,
+                )
+            advanceUntilIdle()
+
+            // r1 虽然被记忆，但已有失败记录；应优先选中第一个健康源 r2 (index 1)
+            assertEquals("记忆源连续失败时应退回第一个健康源", 1, vm.uiState.value.selectedSourceIndex)
+        }
+
+    @Test
     fun onPlaybackReady_recordsLastWorkingSource() =
         runTest {
             val settings = FakeSettingsRepository()

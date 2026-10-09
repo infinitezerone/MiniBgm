@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.Episode
@@ -256,6 +257,7 @@ class PlayerViewModel(
     private val failureStore: PlaybackFailureStore? = null,
     private val subjectRepository: SubjectRepository? = null,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
+    private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
 ) : ViewModel() {
     /** 播放队列：调用方给了分集队列就用之，否则退化为单集播放（兼容空直链占位启动） */
     private val queue: List<PlayerQueueEntry> =
@@ -273,7 +275,10 @@ class PlayerViewModel(
         }
 
     /** 与 AI 找源共用的「规则 × 标题候选 → 直链」编排；未注入解析仓库时为 null */
-    private val episodeStreamResolver = playbackResolverRepository?.let(::EpisodeStreamResolver)
+    private val episodeStreamResolver =
+        playbackResolverRepository?.let { resolver ->
+            EpisodeStreamResolver(resolver = resolver, verifier = playbackSourceVerifier)
+        }
 
     /** 媒体会话命令层状态（8 个裸字段的收敛容器，见 [PlaybackSession]） */
     private val session = PlaybackSession(startIndex = route.startIndex.coerceIn(queue.indices))
@@ -513,7 +518,15 @@ class PlayerViewModel(
                         preferredSourceId.isNotBlank() &&
                         next.sources.isEmpty()
                     ) {
-                        newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
+                        val memoryIsHealthy = (snapshot.failureCounts[preferredSourceId] ?: 0) == 0
+                        if (memoryIsHealthy) {
+                            newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
+                        } else {
+                            newSources.indexOfFirst { (snapshot.failureCounts[it.id] ?: 0) == 0 }.takeIf { it >= 0 }
+                                ?: newSources.indexOfFirst { it.id == preferredSourceId }.takeIf { it >= 0 }
+                        }
+                    } else if (route.initialRuleId.isBlank() && next.sources.isEmpty()) {
+                        newSources.indexOfFirst { (snapshot.failureCounts[it.id] ?: 0) == 0 }.takeIf { it >= 0 }
                     } else {
                         null
                     }
@@ -729,12 +742,18 @@ class PlayerViewModel(
         resolveCurrentEpisodeStream()
     }
 
-    /** 切到下一个播放源（环绕）；解析失败时的"换一个源试试"动作 */
+    /** 切到下一个播放源（优先选择健康源）；解析失败时的"换一个源试试"动作 */
     fun selectNextSource() {
         val state = _uiState.value
         val total = state.sources.size
         if (total <= 1) return
-        selectSource((state.selectedSourceIndex + 1) % total)
+        val nextIndices = (1 until total).map { (state.selectedSourceIndex + it) % total }
+        val healthyNext =
+            nextIndices.firstOrNull { index ->
+                val sourceId = state.sources[index].id
+                (state.sourceFailureCounts[sourceId] ?: 0) == 0
+            }
+        selectSource(healthyNext ?: ((state.selectedSourceIndex + 1) % total))
     }
 
     /** 选中具体分集并播放 */
