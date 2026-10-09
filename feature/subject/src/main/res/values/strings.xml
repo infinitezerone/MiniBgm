@@ -256,6 +256,8 @@
     <string name="feature_subject_player_stretch">拉伸</string>
     <string name="feature_subject_player_unlock_screen">解锁屏幕</string>
     <string name="feature_subject_player_lock_screen">锁定屏幕</string>
+    <string name="feature_subject_player_screen_locked">屏幕已锁定，点击任意处唤出解锁键</string>
+    <string name="feature_subject_player_screen_unlocked">屏幕已解锁</string>
     <string name="feature_subject_player_pip">画中画</string>
     <string name="feature_subject_player_rewind_10s">快退 10 秒</string>
     <string name="feature_subject_player_pause">暂停</string>

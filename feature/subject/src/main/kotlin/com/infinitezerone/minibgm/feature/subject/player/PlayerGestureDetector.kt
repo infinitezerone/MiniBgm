@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -39,11 +40,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
 import androidx.compose.ui.node.DelegatingNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,34 @@ import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+/**
+ * 双击侧边（左退右进）
+ */
+internal enum class DoubleTapSide {
+    LEFT,
+    RIGHT,
+}
+
+/**
+ * 进度拖拽自适应计算算法：
+ * 针对短视频、普通 24 分钟番剧、长电影设定更跟手的滑屏距离跨度。
+ */
+internal fun calculateSeekDeltaMs(
+    dragDeltaX: Float,
+    width: Float,
+    totalDurationMs: Long,
+): Long {
+    if (width <= 0f || totalDurationMs <= 0L) return 0L
+    val fraction = dragDeltaX / width
+    val maxSpanMs =
+        when {
+            totalDurationMs <= 5 * 60 * 1000L -> 60 * 1000L
+            totalDurationMs <= 30 * 60 * 1000L -> 180 * 1000L
+            else -> (totalDurationMs * 0.10f).toLong().coerceIn(300 * 1000L, 900 * 1000L)
+        }
+    return (fraction * maxSpanMs).toLong()
+}
 
 /**
  * 手势 HUD 类型
@@ -99,6 +130,8 @@ internal fun Modifier.playerGestures(
     onHudStateChange: (GestureHudState) -> Unit,
     onTriggerHudDismiss: () -> Unit,
     isLocked: Boolean = false,
+    onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    onHaptic: (HapticFeedbackType) -> Unit = {},
 ): Modifier =
     this then
         PlayerGesturesElement(
@@ -115,6 +148,8 @@ internal fun Modifier.playerGestures(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
+            onDoubleTapRipple = onDoubleTapRipple,
+            onHaptic = onHaptic,
         )
 
 private data class PlayerGesturesElement(
@@ -131,6 +166,8 @@ private data class PlayerGesturesElement(
     val onHudStateChange: (GestureHudState) -> Unit,
     val onTriggerHudDismiss: () -> Unit,
     val isLocked: Boolean = false,
+    val onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    val onHaptic: (HapticFeedbackType) -> Unit = {},
 ) : ModifierNodeElement<PlayerGesturesNode>() {
     override fun create(): PlayerGesturesNode =
         PlayerGesturesNode(
@@ -147,6 +184,8 @@ private data class PlayerGesturesElement(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
+            onDoubleTapRipple = onDoubleTapRipple,
+            onHaptic = onHaptic,
         )
 
     override fun update(node: PlayerGesturesNode) {
@@ -164,6 +203,8 @@ private data class PlayerGesturesElement(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
+            onDoubleTapRipple = onDoubleTapRipple,
+            onHaptic = onHaptic,
         )
     }
 
@@ -190,6 +231,8 @@ private class PlayerGesturesNode(
     var onHudStateChange: (GestureHudState) -> Unit,
     var onTriggerHudDismiss: () -> Unit,
     var isLocked: Boolean = false,
+    var onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    var onHaptic: (HapticFeedbackType) -> Unit = {},
 ) : DelegatingNode() {
     private var isFastForwarding = false
     private var dragMode = DragMode.NONE
@@ -213,6 +256,8 @@ private class PlayerGesturesNode(
         onHudStateChange: (GestureHudState) -> Unit,
         onTriggerHudDismiss: () -> Unit,
         isLocked: Boolean = false,
+        onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+        onHaptic: (HapticFeedbackType) -> Unit = {},
     ) {
         this.context = context
         this.isPlaying = isPlaying
@@ -227,6 +272,8 @@ private class PlayerGesturesNode(
         this.onHudStateChange = onHudStateChange
         this.onTriggerHudDismiss = onTriggerHudDismiss
         this.isLocked = isLocked
+        this.onDoubleTapRipple = onDoubleTapRipple
+        this.onHaptic = onHaptic
     }
 
     @Suppress("unused")
@@ -245,6 +292,8 @@ private class PlayerGesturesNode(
                             x < width * 0.35f -> {
                                 val target = (cur - 10000L).coerceAtLeast(0L)
                                 onDoubleTapSeek(target)
+                                onDoubleTapRipple(DoubleTapSide.LEFT)
+                                onHaptic(HapticFeedbackType.LongPress)
                                 onHudStateChange(GestureHudState.Seek(target, total, -10000L))
                                 onTriggerHudDismiss()
                             }
@@ -252,10 +301,13 @@ private class PlayerGesturesNode(
                                 val maxPos = if (total > 0L) total else Long.MAX_VALUE
                                 val target = (cur + 10000L).coerceAtMost(maxPos)
                                 onDoubleTapSeek(target)
+                                onDoubleTapRipple(DoubleTapSide.RIGHT)
+                                onHaptic(HapticFeedbackType.LongPress)
                                 onHudStateChange(GestureHudState.Seek(target, total, 10000L))
                                 onTriggerHudDismiss()
                             }
                             else -> {
+                                onHaptic(HapticFeedbackType.LongPress)
                                 onDoubleTapPlayPause()
                             }
                         }
@@ -263,6 +315,7 @@ private class PlayerGesturesNode(
                     onLongPress = {
                         if (!isLocked && isPlaying) {
                             isFastForwarding = true
+                            onHaptic(HapticFeedbackType.LongPress)
                             onFastForwardStart()
                             onHudStateChange(GestureHudState.FastForward(2.0f))
                         }
@@ -271,6 +324,7 @@ private class PlayerGesturesNode(
                         tryAwaitRelease()
                         if (isFastForwarding) {
                             isFastForwarding = false
+                            onHaptic(HapticFeedbackType.TextHandleMove)
                             onFastForwardEnd()
                             onHudStateChange(GestureHudState.Idle)
                         }
@@ -335,8 +389,7 @@ private class PlayerGesturesNode(
                         when (dragMode) {
                             DragMode.HORIZONTAL_SEEK -> {
                                 if (total > 0L) {
-                                    val deltaFraction = dragAccumulatedX / width
-                                    val deltaMs = (deltaFraction * 90000L).toLong()
+                                    val deltaMs = calculateSeekDeltaMs(dragAccumulatedX, width.toFloat(), total)
                                     seekTargetMs = (cur + deltaMs).coerceIn(0L, total)
                                     onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - cur))
                                 }
@@ -408,8 +461,11 @@ internal fun PlayerGestureDetector(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var hudState by remember { mutableStateOf<GestureHudState>(GestureHudState.Idle) }
     var hideHudTrigger by remember { mutableIntStateOf(0) }
+    var activeRipple by remember { mutableStateOf<DoubleTapSide?>(null) }
+    var rippleTrigger by remember { mutableIntStateOf(0) }
 
     // 手势结束后自动淡出 HUD
     LaunchedEffect(hideHudTrigger) {
@@ -418,6 +474,14 @@ internal fun PlayerGestureDetector(
             if (hudState !is GestureHudState.FastForward) {
                 hudState = GestureHudState.Idle
             }
+        }
+    }
+
+    // 双击半屏波纹 450ms 后自动淡出
+    LaunchedEffect(rippleTrigger) {
+        if (rippleTrigger > 0) {
+            delay(450)
+            activeRipple = null
         }
     }
 
@@ -439,9 +503,28 @@ internal fun PlayerGestureDetector(
                     onHudStateChange = { hudState = it },
                     onTriggerHudDismiss = { hideHudTrigger++ },
                     isLocked = isLocked,
+                    onDoubleTapRipple = { side ->
+                        activeRipple = side
+                        rippleTrigger++
+                    },
+                    onHaptic = { type ->
+                        haptic.performHapticFeedback(type)
+                    },
                 ),
     ) {
         content()
+
+        // 双击半屏弧形涟漪遮罩动画
+        AnimatedVisibility(
+            visible = activeRipple != null,
+            enter = fadeIn(tween(100)),
+            exit = fadeOut(tween(250)),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            activeRipple?.let { side ->
+                DoubleTapRippleOverlay(side = side)
+            }
+        }
 
         // 浮动 HUD 指示层（侧边竖向灵动微胶囊 + 顶部/中央提示）
         AnimatedVisibility(
@@ -623,6 +706,65 @@ private fun FastForwardChip(
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             )
+        }
+    }
+}
+
+/**
+ * 双击快进/快退半屏弧形涟漪遮罩
+ */
+@Composable
+private fun DoubleTapRippleOverlay(
+    side: DoubleTapSide,
+    modifier: Modifier = Modifier,
+) {
+    val isLeft = side == DoubleTapSide.LEFT
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = if (isLeft) Alignment.CenterStart else Alignment.CenterEnd,
+    ) {
+        Surface(
+            shape =
+                if (isLeft) {
+                    RoundedCornerShape(
+                        topEndPercent = 100,
+                        bottomEndPercent = 100,
+                        topStartPercent = 0,
+                        bottomStartPercent = 0,
+                    )
+                } else {
+                    RoundedCornerShape(
+                        topStartPercent = 100,
+                        bottomStartPercent = 100,
+                        topEndPercent = 0,
+                        bottomEndPercent = 0,
+                    )
+                },
+            color = Color.White.copy(alpha = 0.16f),
+            modifier =
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.35f),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(
+                    imageVector = if (isLeft) BgmIcons.FastRewind else BgmIcons.FastForward,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(36.dp),
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isLeft) "-10s" else "+10s",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
         }
     }
 }

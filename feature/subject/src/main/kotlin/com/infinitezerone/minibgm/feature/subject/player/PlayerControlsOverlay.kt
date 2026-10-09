@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -97,12 +99,18 @@ internal fun PlayerControlsOverlay(
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
+    onSingleTap: () -> Unit = {},
 ) {
     Box(
         modifier =
             modifier
                 .fillMaxSize()
-                .background(if (isLocked) Color.Transparent else Color.Black.copy(alpha = 0.32f)),
+                .background(if (isLocked) Color.Transparent else Color.Black.copy(alpha = 0.32f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onSingleTap,
+                ),
     ) {
         // 播放错误态：只保留返回 + 错误文案 + 动作，隐藏所有控制台
         // （进度条/播放键/比例/倍速/PiP/全屏），避免画面被多种控件挤成一团。

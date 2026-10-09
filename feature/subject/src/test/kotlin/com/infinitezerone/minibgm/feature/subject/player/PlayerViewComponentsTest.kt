@@ -46,4 +46,39 @@ class PlayerViewComponentsTest {
         assertEquals(61, chunks[2].first().sort.toInt())
         assertEquals(75, chunks[2].last().sort.toInt())
     }
+
+    @Test
+    fun calculateSeekDeltaMs_handlesInvalidInputs() {
+        assertEquals(0L, calculateSeekDeltaMs(100f, 0f, 24 * 60 * 1000L))
+        assertEquals(0L, calculateSeekDeltaMs(100f, 1000f, 0L))
+        assertEquals(0L, calculateSeekDeltaMs(100f, 1000f, -1000L))
+    }
+
+    @Test
+    fun calculateSeekDeltaMs_scalesForShortVideos() {
+        val totalMs = 3 * 60 * 1000L // 3 minutes
+        val width = 1000f
+        // Half screen forward: fraction = 0.5f, maxSpan = 60s -> 30s
+        assertEquals(30_000L, calculateSeekDeltaMs(500f, width, totalMs))
+        // Half screen backward: fraction = -0.5f -> -30s
+        assertEquals(-30_000L, calculateSeekDeltaMs(-500f, width, totalMs))
+    }
+
+    @Test
+    fun calculateSeekDeltaMs_scalesForStandardAnimeEpisodes() {
+        val totalMs = 24 * 60 * 1000L // 24 minutes standard anime
+        val width = 1000f
+        // Full screen drag: 180s (3 minutes)
+        assertEquals(180_000L, calculateSeekDeltaMs(1000f, width, totalMs))
+        // 10% screen drag: 18s
+        assertEquals(18_000L, calculateSeekDeltaMs(100f, width, totalMs))
+    }
+
+    @Test
+    fun calculateSeekDeltaMs_scalesForFeatureFilms() {
+        val totalMs = 90 * 60 * 1000L // 90 minutes movie
+        val width = 1000f
+        // 10% of 90min is 9min = 540s
+        assertEquals(540_000L, calculateSeekDeltaMs(1000f, width, totalMs))
+    }
 }

@@ -538,7 +538,23 @@ fun PlayerScreen(
                             }
                     },
                     onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
-                    onToggleLock = { isScreenLocked = !isScreenLocked },
+                    onToggleLock = {
+                        isScreenLocked = !isScreenLocked
+                        coroutineScope.launch {
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message =
+                                    context.getString(
+                                        if (isScreenLocked) {
+                                            R.string.feature_subject_player_screen_locked
+                                        } else {
+                                            R.string.feature_subject_player_screen_unlocked
+                                        },
+                                    ),
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    },
                     onRequestOpenSources = onRequestOpenSources,
                     showPipButton = uiState.pipEnabled,
                     modifier =
@@ -950,6 +966,7 @@ private fun PlayerVideoStage(
                 showPipButton = showPipButton,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
+                onSingleTap = onSingleTap,
             )
         }
     }
