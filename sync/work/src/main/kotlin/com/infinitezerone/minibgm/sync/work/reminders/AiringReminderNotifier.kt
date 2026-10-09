@@ -76,7 +76,7 @@ class AiringReminderNotifier(
             val isFinale = item.isFinale
             val contentTitle =
                 if (isFinale) {
-                    "🎬《${item.displayName}》全剧完结！"
+                    context.getString(R.string.airing_finale_title, item.displayName)
                 } else if (isAlreadyStarted) {
                     context.getString(R.string.airing_pre_air_title_started)
                 } else {
@@ -84,7 +84,7 @@ class AiringReminderNotifier(
                 }
             val itemText =
                 if (isFinale) {
-                    "第 ${item.episode} 话（最终话）现已播出，共 ${item.totalEpisodes} 话全部完结，可以一口气开刷啦！"
+                    context.getString(R.string.airing_finale_item, item.episode, item.totalEpisodes)
                 } else if (isAlreadyStarted) {
                     context.getString(R.string.airing_pre_air_item_started, item.displayName, item.episode)
                 } else {
