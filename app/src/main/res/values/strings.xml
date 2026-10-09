@@ -1,3 +1,27 @@
 <resources>
     <string name="app_name">小番盒</string>
+
+    <!-- 登录与授权反馈 -->
+    <string name="app_login_cancelled">已取消授权登录</string>
+    <string name="app_login_failed">授权失败：%1$s</string>
+    <string name="app_login_success">登录成功</string>
+
+    <!-- 离线提示 -->
+    <string name="app_offline_snackbar">网络连接已断开，正在浏览本地离线数据</string>
+    <string name="app_online_restored">网络已恢复连接</string>
+
+    <!-- 登录处理中对话框 -->
+    <string name="app_oauth_processing_title">正在完成登录...</string>
+    <string name="app_oauth_processing_subtitle">正在安全验证授权凭据并同步个人资料，请稍候</string>
+
+    <!-- 平板 / 折叠屏展开时的详情面板占位 -->
+    <string name="app_detail_placeholder_title_search">搜索并查看作品详情</string>
+    <string name="app_detail_placeholder_subtitle_search">在左侧输入关键词或轻点历史记录\n选择任意条目即可在此处即时展开海报与讨论</string>
+    <string name="app_detail_placeholder_title_default">选择作品查看详情</string>
+    <string name="app_detail_placeholder_subtitle_default">在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽</string>
+
+    <!-- 应用内网页与助手入口 -->
+    <string name="app_in_app_web_title_token">访问令牌</string>
+    <string name="app_subject_fallback_title">当前条目</string>
+    <string name="app_ai_search_prompt">帮我找《%1$s》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 %2$d）</string>
 </resources>

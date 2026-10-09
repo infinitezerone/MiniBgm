@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
@@ -36,6 +37,7 @@ fun BgmNavigationRail(
         Spacer(modifier = Modifier.weight(1f))
         TopLevelDestination.entries.forEach { destination ->
             val isSelected = destination.route == currentDestination
+            val label = stringResource(destination.labelRes)
             NavigationRailItem(
                 selected = isSelected,
                 onClick = {
@@ -45,12 +47,12 @@ fun BgmNavigationRail(
                 icon = {
                     Icon(
                         imageVector = if (isSelected) destination.selectedIcon else destination.unselectedIcon,
-                        contentDescription = destination.labelText,
+                        contentDescription = label,
                     )
                 },
                 label = {
                     Text(
-                        text = destination.labelText,
+                        text = label,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     )
                 },

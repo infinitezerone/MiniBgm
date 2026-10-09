@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
@@ -73,7 +74,7 @@ fun BgmApp(
             if (!isOnline) {
                 wasOffline = true
                 snackbarHostState.showSnackbar(
-                    message = "网络连接已断开，正在浏览本地离线数据",
+                    message = context.getString(R.string.app_offline_snackbar),
                     duration = SnackbarDuration.Indefinite,
                 )
             }
@@ -82,14 +83,14 @@ fun BgmApp(
             if (snackbarHostState.currentSnackbarData
                     ?.visuals
                     ?.message
-                    ?.contains("网络连接已断开") == true
+                    ?.contains(context.getString(R.string.app_offline_snackbar)) == true
             ) {
                 snackbarHostState.currentSnackbarData?.dismiss()
             }
             if (wasOffline) {
                 wasOffline = false
                 snackbarHostState.showSnackbar(
-                    message = "网络已恢复连接",
+                    message = context.getString(R.string.app_online_restored),
                     duration = SnackbarDuration.Short,
                 )
             }

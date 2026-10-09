@@ -15,11 +15,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.infinitezerone.minibgm.R
 
 /**
  * 网页端 OAuth 回调后的全应用级加载提示弹窗。
@@ -55,7 +57,7 @@ fun OAuthProcessingDialog(modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "正在完成登录...",
+                    text = stringResource(R.string.app_oauth_processing_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -64,7 +66,7 @@ fun OAuthProcessingDialog(modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "正在安全验证授权凭据并同步个人资料，请稍候",
+                    text = stringResource(R.string.app_oauth_processing_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

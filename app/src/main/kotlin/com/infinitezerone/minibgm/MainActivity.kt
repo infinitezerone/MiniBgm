@@ -117,7 +117,12 @@ class MainActivity : ComponentActivity() {
             val error = data.getQueryParameter("error")
             if (error != null) {
                 lifecycleScope.launch {
-                    val message = if (error == "access_denied") "已取消授权登录" else "授权失败：$error"
+                    val message =
+                        if (error == "access_denied") {
+                            getString(R.string.app_login_cancelled)
+                        } else {
+                            getString(R.string.app_login_failed, error)
+                        }
                     snackbarHostState.showSnackbar(message)
                 }
                 return
@@ -128,7 +133,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 authRepository
                     .completeLogin(code, state)
-                    .onSuccess { snackbarHostState.showSnackbar("登录成功") }
+                    .onSuccess { snackbarHostState.showSnackbar(getString(R.string.app_login_success)) }
                     .onError { _, message -> snackbarHostState.showSnackbar(message) }
             }
         }

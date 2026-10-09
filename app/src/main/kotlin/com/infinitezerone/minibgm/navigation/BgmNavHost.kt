@@ -10,10 +10,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import coil3.ImageLoader
 import com.infinitezerone.minibgm.BuildConfig
+import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
@@ -77,7 +79,7 @@ fun BgmNavHost(
     // Custom Tabs 用的是系统网络栈，用不了 ECH（强阻断网络下打不开）
     val openLogin: () -> Unit = { navState.navigateTo(InAppLoginRoute) }
     val openTokenPage: (String) -> Unit = { url ->
-        navState.navigateTo(InAppWebRoute(url = url, title = "访问令牌"))
+        navState.navigateTo(InAppWebRoute(url = url, title = context.getString(R.string.app_in_app_web_title_token)))
     }
     val openInAppWebInBrowser: (String) -> Unit = { url -> context.launchWebUrl(url) }
     val openLoginInBrowser: (String) -> Unit = { url -> context.launchWebUrl(url, isAuth = true) }
@@ -86,14 +88,14 @@ fun BgmNavHost(
         if (navState.currentKey is SearchRoute) {
             BgmDetailPlaceholder(
                 icon = BgmIcons.SearchBorder,
-                title = "搜索并查看作品详情",
-                subtitle = "在左侧输入关键词或轻点历史记录\n选择任意条目即可在此处即时展开海报与讨论",
+                title = stringResource(R.string.app_detail_placeholder_title_search),
+                subtitle = stringResource(R.string.app_detail_placeholder_subtitle_search),
             )
         } else {
             BgmDetailPlaceholder(
                 icon = BgmIcons.TvBorder,
-                title = "选择作品查看详情",
-                subtitle = "在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽",
+                title = stringResource(R.string.app_detail_placeholder_title_default),
+                subtitle = stringResource(R.string.app_detail_placeholder_subtitle_default),
             )
         }
     }
@@ -332,11 +334,11 @@ fun BgmNavHost(
                                 playerEntry(
                                     onBackClick = { navState.goBack() },
                                     onRequestOpenSources = { route ->
-                                        val title = route.subjectName.ifBlank { "当前条目" }
+                                        val title = route.subjectName.ifBlank { context.getString(R.string.app_subject_fallback_title) }
                                         navState.navigateTo(
                                             AssistantRoute(
                                                 prefillPrompt =
-                                                    "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${route.subjectId}）",
+                                                    context.getString(R.string.app_ai_search_prompt, title, route.subjectId),
                                             ),
                                         )
                                     },

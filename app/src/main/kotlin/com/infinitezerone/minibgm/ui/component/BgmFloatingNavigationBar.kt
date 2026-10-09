@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -154,6 +155,7 @@ private fun BgmFloatingNavItem(
                 ).defaultMinSize(minWidth = 64.dp)
                 .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
+        val label = stringResource(destination.labelRes)
         Box(contentAlignment = Alignment.Center) {
             // 指示器胶囊：绘制在图标层之下，选中时弹性展开、取消时收缩消失（M3 Expressive spring）
             val indicatorScale by animateFloatAsState(
@@ -199,7 +201,7 @@ private fun BgmFloatingNavItem(
             ) { selected ->
                 Icon(
                     imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
-                    contentDescription = destination.labelText,
+                    contentDescription = label,
                     tint = iconColor,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -207,7 +209,7 @@ private fun BgmFloatingNavItem(
         }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = destination.labelText,
+            text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = textColor,

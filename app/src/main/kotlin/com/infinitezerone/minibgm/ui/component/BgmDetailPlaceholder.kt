@@ -18,9 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /** 平板或折叠屏展开双联场景下，右侧详情面板尚未选择条目时的占位组件。 */
@@ -28,9 +30,11 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 fun BgmDetailPlaceholder(
     modifier: Modifier = Modifier,
     icon: ImageVector = BgmIcons.TvBorder,
-    title: String = "选择作品查看详情",
-    subtitle: String = "在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽",
+    title: String? = null,
+    subtitle: String? = null,
 ) {
+    val resolvedTitle = title ?: stringResource(R.string.app_detail_placeholder_title_default)
+    val resolvedSubtitle = subtitle ?: stringResource(R.string.app_detail_placeholder_subtitle_default)
     Box(
         contentAlignment = Alignment.Center,
         modifier =
@@ -62,7 +66,7 @@ fun BgmDetailPlaceholder(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = title,
+                text = resolvedTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -71,7 +75,7 @@ fun BgmDetailPlaceholder(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = subtitle,
+                text = resolvedSubtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
