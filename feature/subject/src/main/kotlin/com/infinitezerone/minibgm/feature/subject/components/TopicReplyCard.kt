@@ -181,13 +181,13 @@ fun TopicReplyCard(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = 2.dp)
+                                .padding(top = 4.dp)
                                 .background(
                                     color = MaterialTheme.colorScheme.surfaceContainer,
                                     shape = RoundedCornerShape(8.dp),
-                                ).padding(8.dp)
+                                ).padding(horizontal = 10.dp, vertical = 10.dp)
                                 .animateContentSize(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         val visibleReplies =
                             if (isRepliesExpanded || reply.replies.size <= 2) {
@@ -202,7 +202,7 @@ fun TopicReplyCard(
                             val parsedReply = remember(subReply.content) { BgmBbCodeParser.parseSubReply(subReply.content) }
                             Row(
                                 verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
@@ -215,7 +215,7 @@ fun TopicReplyCard(
                                                     onCopyContent(parsedReply.content)
                                                 }
                                             },
-                                        ),
+                                        ).padding(vertical = 1.dp),
                             ) {
                                 AsyncImage(
                                     model =
@@ -227,7 +227,7 @@ fun TopicReplyCard(
                                     contentScale = ContentScale.Crop,
                                     modifier =
                                         Modifier
-                                            .size(22.dp)
+                                            .size(24.dp)
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                             .then(
@@ -244,7 +244,7 @@ fun TopicReplyCard(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
                                         Text(
                                             text =
@@ -298,14 +298,16 @@ fun TopicReplyCard(
                             }
                         }
 
-                        // 小红书式平铺展开细线栏
+                        // 小红书式平铺展开细线栏（缩进 34dp 避让上方头像，避免误触）
                         if (reply.replies.size > 2) {
                             val remainingCount = reply.replies.size - 2
                             Row(
                                 modifier =
                                     Modifier
+                                        .padding(top = 4.dp, start = 34.dp)
+                                        .clip(RoundedCornerShape(4.dp))
                                         .clickable { isRepliesExpanded = !isRepliesExpanded }
-                                        .padding(top = 4.dp, bottom = 2.dp),
+                                        .padding(horizontal = 6.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -324,8 +326,8 @@ fun TopicReplyCard(
                                             stringResource(R.string.feature_subject_comment_expand_replies, remainingCount)
                                         },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
                                 Icon(
                                     imageVector =
@@ -335,8 +337,8 @@ fun TopicReplyCard(
                                             BgmIcons.KeyboardArrowDown
                                         },
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(13.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
                                 )
                             }
                         }

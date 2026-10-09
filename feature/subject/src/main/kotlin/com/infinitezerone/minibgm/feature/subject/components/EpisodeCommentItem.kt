@@ -155,13 +155,13 @@ fun EpisodeCommentItem(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(top = 2.dp)
+                                .padding(top = 4.dp)
                                 .background(
                                     color = MaterialTheme.colorScheme.surfaceContainer,
                                     shape = RoundedCornerShape(8.dp),
-                                ).padding(8.dp)
+                                ).padding(horizontal = 10.dp, vertical = 10.dp)
                                 .animateContentSize(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         val visibleReplies =
                             if (isRepliesExpanded || comment.replies.size <= 2) {
@@ -176,7 +176,7 @@ fun EpisodeCommentItem(
                             val parsedReply = remember(reply.content) { BgmBbCodeParser.parseSubReply(reply.content) }
                             Row(
                                 verticalAlignment = Alignment.Top,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
@@ -189,7 +189,7 @@ fun EpisodeCommentItem(
                                                     onCopyComment(parsedReply.content)
                                                 }
                                             },
-                                        ),
+                                        ).padding(vertical = 1.dp),
                             ) {
                                 AsyncImage(
                                     model =
@@ -201,7 +201,7 @@ fun EpisodeCommentItem(
                                     contentScale = ContentScale.Crop,
                                     modifier =
                                         Modifier
-                                            .size(22.dp)
+                                            .size(24.dp)
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                                             .then(
@@ -218,7 +218,7 @@ fun EpisodeCommentItem(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
                                         Text(
                                             text = reply.user?.displayName ?: stringResource(R.string.feature_subject_comment_action_reply),
@@ -270,13 +270,16 @@ fun EpisodeCommentItem(
                             }
                         }
 
+                        // 小红书式平铺展开细线栏（缩进 34dp 避让上方头像，避免误触）
                         if (comment.replies.size > 2) {
                             val remainingCount = comment.replies.size - 2
                             Row(
                                 modifier =
                                     Modifier
+                                        .padding(top = 4.dp, start = 34.dp)
+                                        .clip(RoundedCornerShape(4.dp))
                                         .clickable { isRepliesExpanded = !isRepliesExpanded }
-                                        .padding(top = 4.dp, bottom = 2.dp),
+                                        .padding(horizontal = 6.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -295,8 +298,8 @@ fun EpisodeCommentItem(
                                             stringResource(R.string.feature_subject_comment_expand_replies, remainingCount)
                                         },
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
                                 )
                                 Icon(
                                     imageVector =
@@ -306,8 +309,8 @@ fun EpisodeCommentItem(
                                             BgmIcons.KeyboardArrowDown
                                         },
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(13.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(14.dp),
                                 )
                             }
                         }
