@@ -134,7 +134,7 @@ fun SeasonalFilterOptionsBottomSheet(
             // 题材与标签管理入口：跳转既有标签抽屉（支持搜索与三态包含/排除）
             Surface(
                 onClick = onOpenTagManager,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier.fillMaxWidth(),
             ) {

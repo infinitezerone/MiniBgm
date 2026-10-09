@@ -51,7 +51,7 @@ fun ScheduleTimelineSkeleton(
                     Modifier
                         .fillMaxWidth()
                         .drawBehind {
-                            val trackCenterX = 45.dp.toPx()
+                            val trackCenterX = 50.dp.toPx()
                             val dotCenterY = 18.dp.toPx()
 
                             if (index < 5) {
@@ -72,17 +72,17 @@ fun ScheduleTimelineSkeleton(
             ) {
                 // 左侧时间占位
                 Column(
-                    modifier = Modifier.width(36.dp).padding(top = 10.dp),
+                    modifier = Modifier.width(44.dp).padding(top = 10.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
                     SkeletonBox(
-                        modifier = Modifier.width(32.dp).height(14.dp),
+                        modifier = Modifier.width(36.dp).height(14.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                 }
 
-                Spacer(modifier = Modifier.width(20.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 // 右侧卡片占位
                 Card(

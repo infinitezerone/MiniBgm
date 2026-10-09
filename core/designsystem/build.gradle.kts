@@ -6,6 +6,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.core.designsystem"
+    resourcePrefix = "core_designsystem_"
 }
 
 dependencies {

@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.subject.R
 
 /** 条目头部卡片：立体圆角海报、完整译名与原名、年份季度徽章、评分与全站 Rank、主要制作团队、热门标签、轻量收藏条、可展开简介 */
 @Composable
@@ -74,7 +76,7 @@ fun SubjectHeaderCard(
                 CoverImage(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = subject.displayName,
-                    cornerRadius = 10.dp,
+                    cornerRadius = 8.dp,
                     aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier =
                         Modifier
@@ -152,7 +154,12 @@ fun SubjectHeaderCard(
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             ) {
                                 Text(
-                                    text = "全${episodeCount}${subjectType.unitName}",
+                                    text =
+                                        stringResource(
+                                            R.string.feature_subject_total_episodes_format,
+                                            episodeCount,
+                                            subjectType.unitName,
+                                        ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -172,7 +179,7 @@ fun SubjectHeaderCard(
                             modifier = Modifier.padding(top = 2.dp),
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = RatingGold.copy(alpha = 0.15f),
                             ) {
                                 Row(
@@ -214,7 +221,7 @@ fun SubjectHeaderCard(
 
                             if (rating.total > 0) {
                                 Text(
-                                    text = "${rating.total}人",
+                                    text = stringResource(R.string.feature_subject_rating_votes_count, rating.total),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     maxLines = 1,
@@ -315,9 +322,9 @@ fun SubjectHeaderCard(
                 if (canExpand) {
                     val expandLabel =
                         when {
-                            isSummaryExpanded -> "收起简介"
-                            hasMultiParagraphs -> "展开完整简介及原文"
-                            else -> "展开完整简介"
+                            isSummaryExpanded -> stringResource(R.string.feature_subject_collapse_summary)
+                            hasMultiParagraphs -> stringResource(R.string.feature_subject_expand_summary_with_original)
+                            else -> stringResource(R.string.feature_subject_expand_summary)
                         }
                     Row(
                         modifier =

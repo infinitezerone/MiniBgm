@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,8 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.sortedBySitePriority
+import com.infinitezerone.minibgm.feature.schedule.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,7 +133,7 @@ fun ScheduleSourcesBottomSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "选择播放或跳转来源",
+                        text = stringResource(R.string.feature_schedule_source_sheet_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -145,7 +148,7 @@ fun ScheduleSourcesBottomSheet(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Close,
-                        contentDescription = "关闭",
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -167,7 +170,7 @@ fun ScheduleSourcesBottomSheet(
             ) {
                 if (onInternalPlayClick != null) {
                     Text(
-                        text = "应用内播放",
+                        text = stringResource(R.string.feature_schedule_source_internal_player_section),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -175,7 +178,7 @@ fun ScheduleSourcesBottomSheet(
                     )
 
                     ScheduleSourceCard(
-                        title = "用内置播放器播放",
+                        title = stringResource(R.string.feature_schedule_source_internal_player_title),
                         iconVector = BgmIcons.PlayCircle,
                         onClick = {
                             coroutineScope.hideThenDismiss(sheetState) {
@@ -188,7 +191,7 @@ fun ScheduleSourcesBottomSheet(
 
                 if (onAiSourceSearch != null) {
                     Text(
-                        text = "AI 找源",
+                        text = stringResource(R.string.feature_schedule_source_ai_section),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -196,7 +199,7 @@ fun ScheduleSourcesBottomSheet(
                     )
 
                     ScheduleSourceCard(
-                        title = "让 AI 助手找源",
+                        title = stringResource(R.string.feature_schedule_source_ai_title),
                         iconVector = BgmIcons.Assistant,
                         onClick = {
                             coroutineScope.hideThenDismiss(sheetState) {
@@ -208,7 +211,7 @@ fun ScheduleSourcesBottomSheet(
                 }
 
                 Text(
-                    text = "外部跳转",
+                    text = stringResource(R.string.feature_schedule_source_external_section),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -217,7 +220,7 @@ fun ScheduleSourcesBottomSheet(
 
                 // 源 1：哔哩哔哩 (Bilibili 搜索)
                 ScheduleSourceCard(
-                    title = "哔哩哔哩搜索",
+                    title = stringResource(R.string.feature_schedule_source_bilibili_title),
                     iconVector = BgmIcons.Tv,
                     onClick = {
                         coroutineScope.hideThenDismiss(sheetState) {
@@ -232,7 +235,7 @@ fun ScheduleSourcesBottomSheet(
 
                 // 源 2：蜜柑计划 (Mikan)
                 ScheduleSourceCard(
-                    title = "蜜柑计划",
+                    title = stringResource(R.string.feature_schedule_source_mikan_title),
                     iconVector = BgmIcons.Download,
                     onClick = {
                         coroutineScope.hideThenDismiss(sheetState) {
@@ -258,7 +261,7 @@ fun ScheduleSourcesBottomSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                text = "其他外部平台 (${otherLinks.size})",
+                                text = stringResource(R.string.feature_schedule_source_other_platforms, otherLinks.size),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -271,7 +274,12 @@ fun ScheduleSourcesBottomSheet(
                                     } else {
                                         BgmIcons.KeyboardArrowDown
                                     },
-                                contentDescription = if (isOtherExpanded) "收起" else "展开",
+                                contentDescription =
+                                    if (isOtherExpanded) {
+                                        stringResource(R.string.feature_schedule_cd_collapse)
+                                    } else {
+                                        stringResource(R.string.feature_schedule_cd_expand)
+                                    },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 modifier = Modifier.size(20.dp),
                             )
@@ -350,7 +358,7 @@ private fun ScheduleSourceCard(
 
             Icon(
                 imageVector = BgmIcons.OpenInNew,
-                contentDescription = "打开",
+                contentDescription = stringResource(R.string.feature_schedule_source_cd_open),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.size(18.dp),
             )

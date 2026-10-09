@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.schedule.R
 
 enum class AirStatus {
     NORMAL,
@@ -101,6 +103,7 @@ fun getAirStatus(
 }
 
 /** 「还有多久开播」倒计时文案（对标 AniList / LiveChart 的播出表），remaining <= 0 时返回 null */
+@Composable
 fun countdownLabel(
     slotMinutes: Int,
     nowMinutes: Int,
@@ -110,8 +113,13 @@ fun countdownLabel(
     val hour = remaining / 60
     val minute = remaining % 60
     return when {
-        hour >= 1 -> if (minute > 0) "${hour}时${minute}分后" else "${hour}时后"
-        else -> "${minute}分后"
+        hour >= 1 ->
+            if (minute > 0) {
+                stringResource(R.string.feature_schedule_countdown_hours_minutes, hour, minute)
+            } else {
+                stringResource(R.string.feature_schedule_countdown_hours, hour)
+            }
+        else -> stringResource(R.string.feature_schedule_countdown_minutes, minute)
     }
 }
 
@@ -267,9 +275,9 @@ fun TimelineTrackRail(
             if (airStatus != AirStatus.NORMAL) {
                 val statusText =
                     when (airStatus) {
-                        AirStatus.AIRED -> "已播"
-                        AirStatus.AIRING -> "热播"
-                        AirStatus.UPCOMING -> upcomingCountdown ?: "待播"
+                        AirStatus.AIRED -> stringResource(R.string.feature_schedule_status_aired)
+                        AirStatus.AIRING -> stringResource(R.string.feature_schedule_status_airing)
+                        AirStatus.UPCOMING -> upcomingCountdown ?: stringResource(R.string.feature_schedule_status_upcoming)
                         AirStatus.NORMAL -> ""
                     }
                 if (statusText.isNotBlank()) {
@@ -290,7 +298,7 @@ fun TimelineTrackRail(
                     modifier = Modifier.padding(top = 2.dp),
                 ) {
                     Text(
-                        text = "${count}部",
+                        text = stringResource(R.string.feature_schedule_anime_count, count),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -334,7 +342,7 @@ fun ScheduleTimelineSingleCard(
                 ),
             )
         },
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -430,7 +438,7 @@ fun ScheduleTimelineSingleCard(
                                         modifier = Modifier.size(11.dp),
                                     )
                                     Text(
-                                        text = "在追",
+                                        text = stringResource(R.string.feature_schedule_watching_badge),
                                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -467,8 +475,14 @@ fun ScheduleTimelineSingleCard(
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
                                 },
                         ) {
+                            val epText =
+                                if (isFirstEp) {
+                                    stringResource(R.string.feature_schedule_first_episode)
+                                } else {
+                                    stringResource(R.string.feature_schedule_episode_format, schedule.nextEpisodeNumber)
+                                }
                             Text(
-                                text = if (isFirstEp) "首播 · 第 1 话" else "第 ${schedule.nextEpisodeNumber} 话",
+                                text = epText,
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp),
                                 fontWeight = FontWeight.ExtraBold,
                                 color =
@@ -519,7 +533,7 @@ fun ScheduleTimelineSingleCard(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = BgmIcons.Play,
-                                    contentDescription = "播放",
+                                    contentDescription = stringResource(R.string.feature_schedule_cd_play),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     modifier = Modifier.size(15.dp),
                                 )
@@ -587,7 +601,7 @@ fun ScheduleNowIndicator(
         Spacer(modifier = Modifier.width(6.dp))
 
         Surface(
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(8.dp),
             color = StatusAiring,
         ) {
             Row(
@@ -603,7 +617,7 @@ fun ScheduleNowIndicator(
                             .background(Color.White),
                 )
                 Text(
-                    text = "现在 $nowLabel",
+                    text = stringResource(R.string.feature_schedule_now_indicator, nowLabel),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -625,7 +639,7 @@ fun ScheduleUntimedSection(
     var isExpanded by remember { mutableStateOf(true) }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
@@ -650,7 +664,7 @@ fun ScheduleUntimedSection(
                             modifier = Modifier.size(18.dp),
                         )
                         Text(
-                            text = "全天 / 网络独播待定",
+                            text = stringResource(R.string.feature_schedule_untimed_title),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                         )
@@ -659,7 +673,7 @@ fun ScheduleUntimedSection(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ) {
                             Text(
-                                text = "${schedules.size} 部",
+                                text = stringResource(R.string.feature_schedule_untimed_count, schedules.size),
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                             )
@@ -672,7 +686,12 @@ fun ScheduleUntimedSection(
                     )
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "折叠" else "展开",
+                        contentDescription =
+                            if (isExpanded) {
+                                stringResource(R.string.feature_schedule_cd_collapse)
+                            } else {
+                                stringResource(R.string.feature_schedule_cd_expand)
+                            },
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.graphicsLayer(rotationZ = arrowRotation),
                     )

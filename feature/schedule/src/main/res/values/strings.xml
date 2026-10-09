@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 顶部栏与导航 -->
+    <string name="feature_schedule_title">放送时刻表</string>
+    <string name="feature_schedule_cd_ai_assistant">AI 追番助手</string>
+    <string name="feature_schedule_cd_search">搜索条目</string>
+
+    <!-- 星期与日期导航 -->
+    <string name="feature_schedule_today">今天</string>
+    <string name="feature_schedule_weekday_mon">周一</string>
+    <string name="feature_schedule_weekday_tue">周二</string>
+    <string name="feature_schedule_weekday_wed">周三</string>
+    <string name="feature_schedule_weekday_thu">周四</string>
+    <string name="feature_schedule_weekday_fri">周五</string>
+    <string name="feature_schedule_weekday_sat">周六</string>
+    <string name="feature_schedule_weekday_sun">周日</string>
+
+    <!-- 筛选栏 -->
+    <string name="feature_schedule_filter_my_watchlist_not_logged_in">我的追番 (未登录)</string>
+    <string name="feature_schedule_filter_my_watchlist_count">我的追番 (%1$d)</string>
+    <string name="feature_schedule_filter_all_broadcast_count">全网开播 (%1$d)</string>
+
+    <!-- 时间线卡片与状态 -->
+    <string name="feature_schedule_status_aired">已播</string>
+    <string name="feature_schedule_status_airing">热播</string>
+    <string name="feature_schedule_status_upcoming">待播</string>
+    <string name="feature_schedule_countdown_hours_minutes">%1$d时%2$d分后</string>
+    <string name="feature_schedule_countdown_hours">%1$d时后</string>
+    <string name="feature_schedule_countdown_minutes">%1$d分后</string>
+    <string name="feature_schedule_anime_count">%1$d部</string>
+    <string name="feature_schedule_watching_badge">在追</string>
+    <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
+    <string name="feature_schedule_episode_format">第 %1$d 话</string>
+    <string name="feature_schedule_cd_play">播放</string>
+    <string name="feature_schedule_now_indicator">现在 %1$s</string>
+
+    <!-- 未定番剧区 -->
+    <string name="feature_schedule_untimed_title">全天 / 网络独播待定</string>
+    <string name="feature_schedule_untimed_count">%1$d 部</string>
+    <string name="feature_schedule_cd_collapse">折叠</string>
+    <string name="feature_schedule_cd_expand">展开</string>
+
+    <!-- 空状态与离线提示 -->
+    <string name="feature_schedule_empty_watchlist">今天没有你追的番更新哦，去【全网开播】看看新番吧</string>
+    <string name="feature_schedule_empty_day">本日暂无新番排播</string>
+    <string name="feature_schedule_btn_view_all_broadcast">查看全网开播</string>
+    <string name="feature_schedule_offline_cache_tip">离线缓存数据 · 下拉或点击重试</string>
+    <string name="feature_schedule_load_failed_title">放送表加载失败</string>
+    <string name="feature_schedule_error_network">网络连接异常</string>
+
+    <!-- 播放来源 BottomSheet -->
+    <string name="feature_schedule_source_sheet_subtitle">选择播放或跳转来源</string>
+    <string name="feature_schedule_source_internal_player_section">应用内播放</string>
+    <string name="feature_schedule_source_internal_player_title">用内置播放器播放</string>
+    <string name="feature_schedule_source_ai_section">AI 找源</string>
+    <string name="feature_schedule_source_ai_title">让 AI 助手找源</string>
+    <string name="feature_schedule_source_external_section">外部跳转</string>
+    <string name="feature_schedule_source_bilibili_title">哔哩哔哩搜索</string>
+    <string name="feature_schedule_source_mikan_title">蜜柑计划</string>
+    <string name="feature_schedule_source_other_platforms">其他外部平台 (%1$d)</string>
+    <string name="feature_schedule_source_cd_open">打开</string>
+    <string name="feature_schedule_app_not_installed_title">未安装 %1$s 客户端</string>
+    <string name="feature_schedule_app_not_installed_message">未检测到 %1$s 客户端，是否在应用内使用浏览器打开该播放源？</string>
+    <string name="feature_schedule_ai_search_prompt">帮我找《%1$s》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 %2$d）</string>
+    <string name="feature_schedule_login_prompt_desc">追番与打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。</string>
+</resources>

@@ -61,6 +61,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -80,6 +81,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -185,12 +187,14 @@ fun PlayerScreen(
     val isInPipMode = rememberIsInPipMode()
 
     val epLabel =
-        remember(uiState.episodeSort, uiState.episodeType) {
-            if (uiState.episodeType == 0) {
-                "第 ${uiState.episodeSort.toEpisodeLabel()} 话"
-            } else {
-                "${EpisodeGroup.fromType(uiState.episodeType).label} ${uiState.episodeSort.toInt()}"
-            }
+        if (uiState.episodeType == 0) {
+            stringResource(R.string.feature_subject_episode_format, uiState.episodeSort.toEpisodeLabel())
+        } else {
+            stringResource(
+                R.string.feature_subject_episode_custom_format,
+                EpisodeGroup.fromType(uiState.episodeType).label,
+                uiState.episodeSort.toInt(),
+            )
         }
 
     suspend fun resumeFromSavedPositionIfNeeded() {
@@ -203,8 +207,8 @@ fun PlayerScreen(
         controller.seekTo(resume)
         val result =
             snackbarHostState.showSnackbar(
-                message = "已恢复到上次位置 ${formatDuration(resume)}",
-                actionLabel = "从头看",
+                message = context.getString(R.string.feature_subject_player_resume_position, formatDuration(resume)),
+                actionLabel = context.getString(R.string.feature_subject_player_start_from_beginning),
                 duration = SnackbarDuration.Long,
             )
         if (result == SnackbarResult.ActionPerformed) {
@@ -482,7 +486,7 @@ fun PlayerScreen(
                     isResolvingSource = uiState.isResolvingSource,
                     resolveAttempt = uiState.resolveAttempt,
                     resolveAttemptTotal = uiState.resolveAttemptTotal,
-                    resolvingSourceName = uiState.currentSource?.name ?: "播放源",
+                    resolvingSourceName = uiState.currentSource?.name ?: stringResource(R.string.feature_subject_player_sources),
                     subjectName = uiState.subjectName.ifBlank { route.subjectName },
                     epLabel = epLabel,
                     episodeName = uiState.episodeName,
@@ -627,7 +631,7 @@ fun PlayerScreen(
                         isResolvingSource = uiState.isResolvingSource,
                         resolveAttempt = uiState.resolveAttempt,
                         resolveAttemptTotal = uiState.resolveAttemptTotal,
-                        resolvingSourceName = uiState.currentSource?.name ?: "播放源",
+                        resolvingSourceName = uiState.currentSource?.name ?: stringResource(R.string.feature_subject_player_sources),
                         subjectName = uiState.subjectName.ifBlank { route.subjectName },
                         epLabel = epLabel,
                         episodeName = uiState.episodeName,

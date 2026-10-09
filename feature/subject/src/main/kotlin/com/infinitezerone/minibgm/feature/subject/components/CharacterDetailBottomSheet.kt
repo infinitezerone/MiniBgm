@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RA
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
+import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 原生角色详情底栏：支持立绘、声优联动、属性生平与直接在端内跳转出演作品
@@ -94,8 +97,17 @@ fun CharacterDetailBottomSheet(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
+                    val roleName = character?.roleName
                     Text(
-                        text = if (!character?.roleName.isNullOrBlank()) "角色档案 · ${character.roleName}" else "角色档案",
+                        text =
+                            if (!roleName.isNullOrBlank()) {
+                                stringResource(
+                                    R.string.feature_subject_character_profile_with_role,
+                                    roleName,
+                                )
+                            } else {
+                                stringResource(R.string.feature_subject_character_profile)
+                            },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -109,7 +121,7 @@ fun CharacterDetailBottomSheet(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Close,
-                        contentDescription = "关闭",
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp),
                     )
@@ -176,7 +188,7 @@ fun CharacterDetailBottomSheet(
                         val collects = detail?.stat?.collects ?: 0
                         if (collects > 0) {
                             EntityInfoPill(
-                                text = "$collects 收藏",
+                                text = stringResource(R.string.feature_subject_character_collects_count, collects),
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
                                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                             )
@@ -227,7 +239,7 @@ fun CharacterDetailBottomSheet(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "CV 声优",
+                                text = stringResource(R.string.feature_subject_character_cv),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                                 fontWeight = FontWeight.Medium,
@@ -243,7 +255,7 @@ fun CharacterDetailBottomSheet(
                         }
                         Icon(
                             imageVector = BgmIcons.KeyboardArrowRight,
-                            contentDescription = "查看声优详情",
+                            contentDescription = stringResource(R.string.feature_subject_view_cv_detail),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
                             modifier = Modifier.size(18.dp),
                         )
@@ -267,7 +279,7 @@ fun CharacterDetailBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "角色简介",
+                            text = stringResource(R.string.feature_subject_character_intro),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -292,7 +304,14 @@ fun CharacterDetailBottomSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = if (isSummaryExpanded) "收起完整简介" else "展开完整简介",
+                                    text =
+                                        if (isSummaryExpanded) {
+                                            stringResource(
+                                                R.string.feature_subject_collapse_summary,
+                                            )
+                                        } else {
+                                            stringResource(R.string.feature_subject_expand_summary)
+                                        },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold,
@@ -345,7 +364,7 @@ fun CharacterDetailBottomSheet(
 
             // 5. 出演作品展示区（精选横滑 + 3列海报网格墙双模式）
             RelatedWorksSection(
-                title = "出演作品",
+                title = stringResource(R.string.feature_subject_character_starred_works),
                 works = relatedWorks,
                 onSubjectClick = onSubjectClick,
                 onDismiss = onDismiss,

@@ -24,10 +24,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,24 +52,26 @@ import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectType
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailTab
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 import kotlinx.coroutines.launch
 
+@Composable
 internal fun getTabLabel(
     tab: SubjectDetailTab,
     subjectType: SubjectType,
 ): String =
     when (tab) {
-        SubjectDetailTab.OVERVIEW -> "概览"
+        SubjectDetailTab.OVERVIEW -> stringResource(R.string.feature_subject_tab_overview)
         SubjectDetailTab.EPISODES ->
             when (subjectType) {
-                SubjectType.BOOK -> "卷册"
-                SubjectType.MUSIC -> "曲目"
-                SubjectType.GAME -> "章节"
-                SubjectType.ANIME, SubjectType.REAL -> "分集"
+                SubjectType.BOOK -> stringResource(R.string.feature_subject_tab_volumes)
+                SubjectType.MUSIC -> stringResource(R.string.feature_subject_tab_tracks)
+                SubjectType.GAME -> stringResource(R.string.feature_subject_tab_chapters)
+                SubjectType.ANIME, SubjectType.REAL -> stringResource(R.string.feature_subject_tab_episodes)
             }
-        SubjectDetailTab.COMMUNITY -> "讨论"
+        SubjectDetailTab.COMMUNITY -> stringResource(R.string.feature_subject_tab_community)
     }
 
 /**
@@ -157,6 +159,14 @@ internal fun SubjectDetailContent(
         }
     val nextUpEpNumber = nextUpEpisode?.episodeNumber
 
+    val mainNextUpEpNumber =
+        remember(groupedEpisodes, uiState.episodes, uiState.collection?.epStatus) {
+            (groupedEpisodes[EpisodeGroup.MAIN] ?: uiState.episodes.filter { it.isMain })
+                .firstOrNull {
+                    isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
+                }?.episodeNumber
+        }
+
     LaunchedEffect(selectedTab) {
         val lastTab = lastTabRef.value
         if (selectedTab != lastTab) {
@@ -189,7 +199,7 @@ internal fun SubjectDetailContent(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "同步提示：${uiState.error}",
+                        text = stringResource(R.string.feature_subject_sync_hint, uiState.error.orEmpty()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(12.dp),
@@ -218,7 +228,7 @@ internal fun SubjectDetailContent(
                 totalEpisodes = totalEpisodes,
                 subjectType = subjectType,
                 isLoggedIn = uiState.isLoggedIn,
-                nextEpSort = nextUpEpNumber,
+                nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onUpdateCollectionStatus = onUpdateCollectionStatus ?: {},
                 onPlayNext = onPlayNextEpisode,
@@ -241,30 +251,27 @@ internal fun SubjectDetailContent(
                     color = Color.Transparent,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
                 ) {
-                    TabRow(
+                    PrimaryTabRow(
                         selectedTabIndex = selectedTab.ordinal,
                         containerColor = Color.Transparent,
                         contentColor = MaterialTheme.colorScheme.onSurface,
                         divider = {},
-                        indicator = { tabPositions ->
-                            if (selectedTab.ordinal < tabPositions.size) {
-                                val currentTabPosition = tabPositions[selectedTab.ordinal]
+                        indicator = {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .tabIndicatorOffset(selectedTab.ordinal)
+                                        .fillMaxWidth(),
+                                contentAlignment = Alignment.BottomCenter,
+                            ) {
                                 Box(
                                     modifier =
                                         Modifier
-                                            .tabIndicatorOffset(currentTabPosition)
-                                            .fillMaxWidth(),
-                                    contentAlignment = Alignment.BottomCenter,
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .width(28.dp)
-                                                .height(3.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary),
-                                    )
-                                }
+                                            .width(28.dp)
+                                            .height(3.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
+                                )
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -299,7 +306,7 @@ internal fun SubjectDetailContent(
                                         )
                                         if (badgeCount != null) {
                                             Surface(
-                                                shape = RoundedCornerShape(10.dp),
+                                                shape = RoundedCornerShape(8.dp),
                                                 color =
                                                     if (isSelected) {
                                                         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -498,7 +505,7 @@ internal fun SubjectDetailContent(
                                             modifier = Modifier.size(36.dp),
                                         )
                                         Text(
-                                            text = "分集加载失败",
+                                            text = stringResource(R.string.feature_subject_episodes_load_failed),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
@@ -519,7 +526,7 @@ internal fun SubjectDetailContent(
                                                 modifier = Modifier.size(16.dp),
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text(text = "重新加载")
+                                            Text(text = stringResource(R.string.feature_subject_reload))
                                         }
                                     }
                                 }
@@ -536,7 +543,7 @@ internal fun SubjectDetailContent(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "暂无分集信息",
+                                        text = stringResource(R.string.feature_subject_episodes_empty),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -623,7 +630,7 @@ internal fun SubjectDetailContent(
                                     CircularProgressIndicator(modifier = Modifier.size(22.dp))
                                 } else {
                                     Text(
-                                        text = "上滑加载更多分集…",
+                                        text = stringResource(R.string.feature_subject_load_more_episodes),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )

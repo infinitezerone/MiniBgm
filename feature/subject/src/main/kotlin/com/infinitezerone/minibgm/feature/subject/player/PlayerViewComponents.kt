@@ -32,10 +32,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.subject.R
 import java.util.Locale
 
 /**
@@ -94,7 +96,7 @@ internal fun PlayerResolvingOverlay(
             sourceName = sourceName,
             attempt = attempt,
             attemptTotal = attemptTotal,
-            prefix = "正在切换播放源",
+            prefix = stringResource(R.string.feature_subject_player_switching_source),
         )
     }
 }
@@ -104,7 +106,7 @@ private fun ResolvingIndicator(
     sourceName: String,
     attempt: Int,
     attemptTotal: Int,
-    prefix: String = "正在从",
+    prefix: String = stringResource(R.string.feature_subject_player_sniffing_from_prefix),
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -116,13 +118,14 @@ private fun ResolvingIndicator(
             strokeWidth = 3.dp,
             modifier = Modifier.size(40.dp),
         )
+        val sniffing =
+            if (attemptTotal > 0) {
+                stringResource(R.string.feature_subject_player_sniffing_stream_with_attempt, attempt, attemptTotal)
+            } else {
+                stringResource(R.string.feature_subject_player_sniffing_stream)
+            }
         Text(
-            text =
-                if (attemptTotal > 0) {
-                    "$prefix【$sourceName】嗅探视频直链...（第 $attempt/$attemptTotal 次尝试）"
-                } else {
-                    "$prefix【$sourceName】嗅探视频直链..."
-                },
+            text = "$prefix【$sourceName】$sniffing",
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White,
         )
@@ -170,7 +173,7 @@ internal fun PlayerHeaderInfo(
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                 ) {
                     Text(
-                        text = "已看",
+                        text = stringResource(R.string.feature_subject_player_watched),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -189,7 +192,7 @@ internal fun SourceFailureHint(failureCount: Int) {
     if (failureCount <= 0) return
     Spacer(modifier = Modifier.width(6.dp))
     Text(
-        text = "$failureCount 次打不开",
+        text = stringResource(R.string.feature_subject_player_failures_count, failureCount),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.error,
     )
@@ -216,7 +219,7 @@ internal fun PlayerSourceSelector(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "播放源",
+                text = stringResource(R.string.feature_subject_player_sources),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -236,7 +239,7 @@ internal fun PlayerSourceSelector(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "播放源管理",
+                        text = stringResource(R.string.feature_subject_player_manage_sources),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -255,7 +258,7 @@ internal fun PlayerSourceSelector(
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = source.name,
+                                text = source.nameRes?.let { stringResource(it) } ?: source.name,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             )
                             SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
@@ -299,7 +302,7 @@ internal fun EpisodeSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "选集",
+                text = stringResource(R.string.feature_subject_player_episodes),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -307,7 +310,7 @@ internal fun EpisodeSectionHeader(
             if (episodeCount > 0) {
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "共 $episodeCount 话",
+                    text = stringResource(R.string.feature_subject_player_total_episodes_count, episodeCount),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -318,7 +321,7 @@ internal fun EpisodeSectionHeader(
                 modifier = Modifier.clickable(onClick = onToggleAutoNext),
             ) {
                 Text(
-                    text = "自动连播",
+                    text = stringResource(R.string.feature_subject_player_auto_play_next),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -416,7 +419,7 @@ internal fun EpisodeGridCard(
                 )
                 if (isSelected) {
                     Text(
-                        text = "播放中",
+                        text = stringResource(R.string.feature_subject_player_playing),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
@@ -457,7 +460,12 @@ internal fun PlayerEmptyView(
                 modifier = Modifier.size(64.dp),
             )
             Text(
-                text = if (errorMessage != null) "播放源解析未完成" else "暂无在线可播直链",
+                text =
+                    if (errorMessage != null) {
+                        stringResource(R.string.feature_subject_player_unresolved_stream)
+                    } else {
+                        stringResource(R.string.feature_subject_player_no_online_stream)
+                    },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
@@ -467,7 +475,7 @@ internal fun PlayerEmptyView(
                     if (errorMessage != null) {
                         errorMessage
                     } else {
-                        "$subjectName · $epLabel\n该分集尚未匹配到应用内直链，可通过下方播放源切换其他来源，或在播放源管理中配置"
+                        stringResource(R.string.feature_subject_player_no_stream_hint, subjectName, epLabel)
                     },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.7f),
@@ -476,20 +484,20 @@ internal fun PlayerEmptyView(
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onBackClick) {
-                    Text("返回", color = Color.White)
+                    Text(stringResource(R.string.feature_subject_cd_back), color = Color.White)
                 }
                 if (errorMessage != null) {
                     Button(onClick = onRetry) {
-                        Text("重试嗅探")
+                        Text(stringResource(R.string.feature_subject_player_retry_sniff))
                     }
                     if (onNextSource != null) {
                         OutlinedButton(onClick = onNextSource) {
-                            Text("换下一个源", color = Color.White)
+                            Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                         }
                     }
                 } else if (onRequestOpenSources != null) {
                     Button(onClick = onRequestOpenSources) {
-                        Text("AI 找源")
+                        Text(stringResource(R.string.feature_subject_source_ai_search))
                     }
                 }
             }

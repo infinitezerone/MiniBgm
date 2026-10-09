@@ -32,11 +32,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 全屏内选集抽屉：分集分段列表 + 播放源切换 + 自动连播开关。
@@ -94,13 +96,13 @@ internal fun PlayerEpisodeQueueDrawer(
             ) {
                 val totalCount = if (episodes.isNotEmpty()) episodes.size else queue.size
                 Text(
-                    text = "选集 · $totalCount 话",
+                    text = stringResource(R.string.feature_subject_player_episodes_with_count, totalCount),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "自动连播",
+                    text = stringResource(R.string.feature_subject_player_auto_play_next),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -110,7 +112,7 @@ internal fun PlayerEpisodeQueueDrawer(
                 IconButton(onClick = onClose) {
                     Icon(
                         imageVector = BgmIcons.Close,
-                        contentDescription = "关闭选集面板",
+                        contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -128,7 +130,7 @@ internal fun PlayerEpisodeQueueDrawer(
                             onClick = { onSelectSource(index) },
                             label = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(source.name)
+                                    Text(source.nameRes?.let { stringResource(it) } ?: source.name)
                                     SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
                                 }
                             },
@@ -252,7 +254,15 @@ internal fun PlayerEpisodeQueueDrawer(
                                     },
                             )
                             Text(
-                                text = entry.label.ifBlank { entry.episodeName.ifBlank { "第 ${index + 1} 条" } },
+                                text =
+                                    entry.label.ifBlank {
+                                        entry.episodeName.ifBlank {
+                                            stringResource(
+                                                R.string.feature_subject_player_item_index_format,
+                                                index + 1,
+                                            )
+                                        }
+                                    },
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color =

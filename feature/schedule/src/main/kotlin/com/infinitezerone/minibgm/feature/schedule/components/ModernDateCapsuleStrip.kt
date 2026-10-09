@@ -35,10 +35,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
+import com.infinitezerone.minibgm.feature.schedule.R
 import com.infinitezerone.minibgm.feature.schedule.WeekdayDateItem
 import kotlin.math.roundToInt
 
@@ -151,7 +153,7 @@ fun DateCapsule(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = containerColor,
         border = if (borderColor != Color.Transparent) BorderStroke(1.dp, borderColor) else null,
         modifier = modifier.width(58.dp),
@@ -161,8 +163,24 @@ fun DateCapsule(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            val weekdayText =
+                if (item.isToday) {
+                    stringResource(R.string.feature_schedule_today)
+                } else {
+                    when (item.weekday) {
+                        1 -> stringResource(R.string.feature_schedule_weekday_mon)
+                        2 -> stringResource(R.string.feature_schedule_weekday_tue)
+                        3 -> stringResource(R.string.feature_schedule_weekday_wed)
+                        4 -> stringResource(R.string.feature_schedule_weekday_thu)
+                        5 -> stringResource(R.string.feature_schedule_weekday_fri)
+                        6 -> stringResource(R.string.feature_schedule_weekday_sat)
+                        7 -> stringResource(R.string.feature_schedule_weekday_sun)
+                        else -> item.weekdayLabel
+                    }
+                }
+
             Text(
-                text = if (item.isToday) "今天" else item.weekdayLabel,
+                text = weekdayText,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
                 color = contentColor,
@@ -220,8 +238,14 @@ fun FilterAndMetaBar(
             },
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             label = {
+                val labelText =
+                    if (!isLoggedIn) {
+                        stringResource(R.string.feature_schedule_filter_my_watchlist_not_logged_in)
+                    } else {
+                        stringResource(R.string.feature_schedule_filter_my_watchlist_count, watchingCount)
+                    }
                 Text(
-                    text = if (!isLoggedIn) "我的追番 (未登录)" else "我的追番 ($watchingCount)",
+                    text = labelText,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
                 )
@@ -234,7 +258,7 @@ fun FilterAndMetaBar(
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
             label = {
                 Text(
-                    text = "全网开播 ($totalCount)",
+                    text = stringResource(R.string.feature_schedule_filter_all_broadcast_count, totalCount),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
                 )

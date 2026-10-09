@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -34,6 +35,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
+import com.infinitezerone.minibgm.feature.subject.R
 import kotlin.math.roundToInt
 
 private val STATUS_TYPES =
@@ -99,7 +102,7 @@ fun SubjectCollectionCard(
                         if (collection != null) {
                             CollectionType.fromValue(collection.type).getVerb(subjectType)
                         } else {
-                            "追番与进度"
+                            stringResource(R.string.feature_subject_collection_card_title)
                         }
                     Text(
                         text = statusText,
@@ -110,11 +113,11 @@ fun SubjectCollectionCard(
 
                     if (collection != null && collection.rate > 0) {
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(4.dp),
                             color = RatingGold.copy(alpha = 0.15f),
                         ) {
                             Text(
-                                text = "★ ${collection.rate}分",
+                                text = stringResource(R.string.feature_subject_rating_score_stars, collection.rate.toString()),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = RatingGold,
@@ -127,7 +130,7 @@ fun SubjectCollectionCard(
                 if (isLoggedIn) {
                     FilledTonalButton(
                         onClick = onOpenCollectionSheet,
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         modifier = Modifier.height(28.dp),
                     ) {
@@ -138,7 +141,14 @@ fun SubjectCollectionCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (collection != null) "评价与短评" else "添加收藏",
+                            text =
+                                if (collection !=
+                                    null
+                                ) {
+                                    stringResource(R.string.feature_subject_btn_edit_rating)
+                                } else {
+                                    stringResource(R.string.feature_subject_btn_add_collection)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -159,7 +169,7 @@ fun SubjectCollectionCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "登录 Bangumi 账号同步与管理追番进度",
+                            text = stringResource(R.string.feature_subject_login_to_sync),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -170,7 +180,7 @@ fun SubjectCollectionCard(
                             modifier = Modifier.height(30.dp),
                         ) {
                             Text(
-                                text = "登录",
+                                text = stringResource(R.string.feature_subject_action_login),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -252,11 +262,16 @@ fun SubjectCollectionCard(
                             }
                         val progressLabel =
                             if (totalEpisodes > 0) {
-                                "看到第 $currentEp / $totalEpisodes 话 ($progressPercent%)"
+                                stringResource(
+                                    R.string.feature_subject_progress_watched_with_total,
+                                    currentEp,
+                                    totalEpisodes,
+                                    progressPercent,
+                                )
                             } else if (currentEp > 0) {
-                                "看到第 $currentEp 话"
+                                stringResource(R.string.feature_subject_progress_watched_only, currentEp)
                             } else {
-                                "尚未开始观看"
+                                stringResource(R.string.feature_subject_progress_not_started)
                             }
 
                         Text(
@@ -269,13 +284,13 @@ fun SubjectCollectionCard(
                         if (onPlayNext != null) {
                             val playLabel =
                                 if (nextEpSort != null && nextEpSort > 0) {
-                                    "续看 E${nextEpSort.toInt()}"
+                                    stringResource(R.string.feature_subject_resume_watch, nextEpSort.toEpisodeLabel())
                                 } else {
-                                    "播放"
+                                    stringResource(R.string.feature_subject_cd_play)
                                 }
                             FilledTonalButton(
                                 onClick = onPlayNext,
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 modifier = Modifier.height(28.dp),
                             ) {
@@ -320,13 +335,13 @@ fun SubjectCollectionCard(
                                 FilledTonalButton(
                                     onClick = onDecrementWatched,
                                     enabled = currentEp > 0,
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                     modifier = Modifier.height(34.dp),
                                 ) {
                                     Icon(
                                         imageVector = BgmIcons.Remove,
-                                        contentDescription = "回退一集",
+                                        contentDescription = stringResource(R.string.feature_subject_step_back_one_ep),
                                         modifier = Modifier.size(14.dp),
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
@@ -342,21 +357,21 @@ fun SubjectCollectionCard(
                             Button(
                                 onClick = onIncrementWatched,
                                 enabled = canIncrement,
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                 modifier = Modifier.weight(1f).height(34.dp),
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.PlusOne,
-                                    contentDescription = "打卡下一集",
+                                    contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 val incrementText =
                                     if (canIncrement) {
-                                        "打卡第 ${currentEp + 1} 话"
+                                        stringResource(R.string.feature_subject_check_in_ep_format, currentEp + 1)
                                     } else {
-                                        "已看到最新话"
+                                        stringResource(R.string.feature_subject_reached_latest_ep)
                                     }
                                 Text(
                                     text = incrementText,

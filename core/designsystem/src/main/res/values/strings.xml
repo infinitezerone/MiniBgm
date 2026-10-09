@@ -1,0 +1,85 @@
+<resources>
+    <!-- 通用操作 (Common Actions) -->
+    <string name="core_designsystem_action_confirm">确定</string>
+    <string name="core_designsystem_action_cancel">取消</string>
+    <string name="core_designsystem_action_save">保存</string>
+    <string name="core_designsystem_action_retry">重试</string>
+    <string name="core_designsystem_action_close">关闭</string>
+    <string name="core_designsystem_action_back">返回</string>
+    <string name="core_designsystem_action_more">更多选项</string>
+    <string name="core_designsystem_action_refresh">刷新</string>
+    <string name="core_designsystem_action_open_browser">浏览器打开</string>
+
+    <!-- 通用状态 (Common Status & Feedback) -->
+    <string name="core_designsystem_status_loading">加载中…</string>
+    <string name="core_designsystem_status_empty">暂无数据</string>
+    <string name="core_designsystem_status_error">加载失败，点击重试</string>
+
+    <!-- 登录引导 (Login Prompt Dialog) -->
+    <string name="core_designsystem_login_prompt_title">请先登录 Bangumi 账号</string>
+    <string name="core_designsystem_action_login_now">立即登录</string>
+    <string name="core_designsystem_action_dismiss_later">稍后再说</string>
+
+    <!-- 追番权限提醒对话框 (Airing Reminder Permission Dialog) -->
+    <string name="core_designsystem_airing_perm_title">开启追番更新提醒？</string>
+    <string name="core_designsystem_airing_perm_msg_with_title">已将《%1$s》加入追番！开启通知权限后，MiniBgm 可以在该番剧每日开播和更新时提前提醒你，不错过每一话精彩。</string>
+    <string name="core_designsystem_airing_perm_msg_generic">已将番剧加入追番！开启通知权限后，MiniBgm 可以在番剧每日开播和更新时提前提醒你，不错过每一话精彩。</string>
+    <string name="core_designsystem_airing_perm_tip">提示：可在「我的 - 设置」中自定义每日提醒时刻与延迟时间。</string>
+    <string name="core_designsystem_action_enable_notification">开启通知</string>
+    <string name="core_designsystem_action_not_now">暂不开启</string>
+
+    <!-- 收藏状态底部面板 (Collection Status Bottom Sheet) -->
+    <string name="core_designsystem_collection_sheet_title">标记条目状态</string>
+    <string name="core_designsystem_collection_type_header">收藏类型</string>
+    <string name="core_designsystem_collection_progress_book">阅读进度</string>
+    <string name="core_designsystem_collection_progress_watch">收看进度</string>
+    <string name="core_designsystem_collection_action_all_watched">全看完了</string>
+    <string name="core_designsystem_collection_action_dec_ep">减一集</string>
+    <string name="core_designsystem_collection_action_inc_ep">加一集</string>
+    <string name="core_designsystem_collection_current_ep">第 %1$d 话</string>
+    <string name="core_designsystem_collection_total_ep">全 %1$d 话</string>
+    <string name="core_designsystem_collection_my_rating">我的评分</string>
+    <string name="core_designsystem_collection_unrated">未评分</string>
+    <string name="core_designsystem_collection_rating_format">%1$d 分 · %2$s</string>
+    <string name="core_designsystem_collection_star_cd">%1$d 分</string>
+    <string name="core_designsystem_collection_my_tags">我的标签</string>
+    <string name="core_designsystem_collection_tags_label">标签 (空格分隔)</string>
+    <string name="core_designsystem_collection_tags_placeholder">例如：热血 奇幻 MAPPA</string>
+    <string name="core_designsystem_collection_privacy_toggle">仅自己可见 (私密收藏)</string>
+    <string name="core_designsystem_collection_comment_label">简评 / 吐槽</string>
+    <string name="core_designsystem_collection_comment_placeholder">写下你的追番感想或评价...</string>
+
+    <!-- Bangumi 评分档位说明 (Score Labels) -->
+    <string name="core_designsystem_score_1">不忍直视</string>
+    <string name="core_designsystem_score_2">很差</string>
+    <string name="core_designsystem_score_3">差</string>
+    <string name="core_designsystem_score_4">较差</string>
+    <string name="core_designsystem_score_5">不过不失</string>
+    <string name="core_designsystem_score_6">还行</string>
+    <string name="core_designsystem_score_7">推荐</string>
+    <string name="core_designsystem_score_8">力荐</string>
+    <string name="core_designsystem_score_9">神作</string>
+    <string name="core_designsystem_score_10">极品</string>
+
+    <!-- 标签操作底部面板 (Tag Action Bottom Sheet) -->
+    <string name="core_designsystem_tag_unfilter_seasonal">取消在当季片单中的筛选</string>
+    <string name="core_designsystem_tag_filter_seasonal">在当季片单中以此标签筛选</string>
+    <string name="core_designsystem_tag_remove_favorite">从常用筛选标签中移除</string>
+    <string name="core_designsystem_tag_add_favorite">添加到我的常用筛选标签</string>
+    <string name="core_designsystem_tag_favorite_desc_active">已在您的常用标签列表中</string>
+    <string name="core_designsystem_tag_favorite_desc_inactive">添加后将在季度片单与淘番榜单常驻展示</string>
+    <string name="core_designsystem_tag_browse_all">浏览「%1$s」全站相关作品</string>
+
+    <!-- BBCode 富文本渲染 (BBCode Content) -->
+    <string name="core_designsystem_bbcode_quote_format">引用 @%1$s 说：</string>
+    <string name="core_designsystem_bbcode_image_load_failed">图片加载失败</string>
+    <string name="core_designsystem_bbcode_image_click_retry">点击重试</string>
+    <string name="core_designsystem_bbcode_open_browser">浏览器打开</string>
+    <string name="core_designsystem_bbcode_image_masked_cd">隐藏图片</string>
+    <string name="core_designsystem_bbcode_image_comment_cd">评论图片</string>
+    <string name="core_designsystem_bbcode_masked_title">隐藏内容</string>
+    <string name="core_designsystem_bbcode_masked_desc">发布者已将此图片隐藏</string>
+    <string name="core_designsystem_bbcode_action_show">显示</string>
+    <string name="core_designsystem_bbcode_action_hide">隐藏</string>
+    <string name="core_designsystem_bbcode_action_hide_cd">重新隐藏</string>
+</resources>

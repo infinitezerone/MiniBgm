@@ -305,7 +305,7 @@ internal fun UserCollectionCard(
                             key = BgmSharedElementKeys.subjectCover(collection.subjectId, "user"),
                             clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
                         ),
-                cornerRadius = 10.dp,
+                cornerRadius = 8.dp,
             )
 
             Spacer(modifier = Modifier.width(12.dp))

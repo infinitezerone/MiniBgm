@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -41,6 +42,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodePa
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicReply
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 讨论帖楼层回帖项（流式无边框排版，对齐主流现代移动端社区标准）：
@@ -115,7 +117,7 @@ fun TopicReplyCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = reply.creator?.displayName ?: "未知用户",
+                            text = reply.creator?.displayName ?: stringResource(R.string.feature_subject_comment_user_default),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -132,7 +134,7 @@ fun TopicReplyCard(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                             ) {
                                 Text(
-                                    text = "楼主",
+                                    text = stringResource(R.string.feature_subject_topic_original_poster),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -143,7 +145,7 @@ fun TopicReplyCard(
                     }
 
                     Text(
-                        text = "#$floorNumber 楼",
+                        text = stringResource(R.string.feature_subject_comment_floor_format, floorNumber),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         fontWeight = FontWeight.Medium,
@@ -204,7 +206,7 @@ fun TopicReplyCard(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .clip(RoundedCornerShape(4.dp))
                                         .combinedClickable(
                                             onClick = {},
                                             onLongClick = {
@@ -245,7 +247,9 @@ fun TopicReplyCard(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                     ) {
                                         Text(
-                                            text = subReply.creator?.displayName ?: "回复",
+                                            text =
+                                                subReply.creator?.displayName
+                                                    ?: stringResource(R.string.feature_subject_comment_action_reply),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
@@ -259,7 +263,7 @@ fun TopicReplyCard(
                                         val replyToUser = parsedReply.replyToUser
                                         if (!replyToUser.isNullOrBlank()) {
                                             Text(
-                                                text = "回复",
+                                                text = stringResource(R.string.feature_subject_comment_action_reply),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                                             )
@@ -315,9 +319,9 @@ fun TopicReplyCard(
                                 Text(
                                     text =
                                         if (isRepliesExpanded) {
-                                            "收起"
+                                            stringResource(R.string.feature_subject_collapse)
                                         } else {
-                                            "展开剩余 $remainingCount 条回复"
+                                            stringResource(R.string.feature_subject_comment_expand_replies, remainingCount)
                                         },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),

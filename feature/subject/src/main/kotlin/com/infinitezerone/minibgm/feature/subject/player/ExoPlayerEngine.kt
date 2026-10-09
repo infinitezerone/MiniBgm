@@ -11,6 +11,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.infinitezerone.minibgm.feature.subject.R
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -67,7 +68,7 @@ class ExoPlayerEngine(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                listener?.onError(classifyPlaybackError(error))
+                listener?.onError(classifyPlaybackError(context, error))
             }
         }
 
@@ -139,19 +140,22 @@ private fun Int.toEngineState(): EnginePlaybackState =
         else -> EnginePlaybackState.IDLE
     }
 
-internal fun classifyPlaybackError(error: PlaybackException): String =
+internal fun classifyPlaybackError(
+    context: Context,
+    error: PlaybackException,
+): String =
     when (error.errorCode) {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-        -> "网络连接超时，请检查网络"
+        -> context.getString(R.string.feature_subject_player_err_timeout)
 
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
         PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-        -> "播放地址已失效或返回错误"
+        -> context.getString(R.string.feature_subject_player_err_invalid_url)
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
-        -> "视频流格式无法解析"
+        -> context.getString(R.string.feature_subject_player_err_unsupported_format)
 
-        else -> error.localizedMessage ?: "播放出现未知异常"
+        else -> error.localizedMessage ?: context.getString(R.string.feature_subject_player_err_unknown)
     }

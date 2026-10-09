@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,12 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -48,10 +51,11 @@ import kotlinx.coroutines.flow.StateFlow
  */
 enum class PlayerResizeMode(
     val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    FIT("适应"),
-    ZOOM("裁剪"),
-    FILL("拉伸"),
+    FIT("适应", R.string.feature_subject_player_fit),
+    ZOOM("裁剪", R.string.feature_subject_player_crop),
+    FILL("拉伸", R.string.feature_subject_player_stretch),
 }
 
 /**
@@ -132,7 +136,12 @@ internal fun PlayerControlsOverlay(
                 ) {
                     Icon(
                         imageVector = if (isLocked) BgmIcons.Lock else BgmIcons.LockOpen,
-                        contentDescription = if (isLocked) "解锁屏幕" else "锁定屏幕",
+                        contentDescription =
+                            if (isLocked) {
+                                stringResource(R.string.feature_subject_player_unlock_screen)
+                            } else {
+                                stringResource(R.string.feature_subject_player_lock_screen)
+                            },
                         tint = if (isLocked) MaterialTheme.colorScheme.primary else Color.White,
                         modifier = Modifier.size(22.dp),
                     )
@@ -175,7 +184,7 @@ internal fun PlayerControlsOverlay(
             IconButton(onClick = onBackClick) {
                 Icon(
                     imageVector = BgmIcons.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = stringResource(R.string.feature_subject_cd_back),
                     tint = Color.White,
                 )
             }
@@ -206,7 +215,7 @@ internal fun PlayerControlsOverlay(
                 IconButton(onClick = onEnterPip) {
                     Icon(
                         imageVector = BgmIcons.PictureInPicture,
-                        contentDescription = "画中画",
+                        contentDescription = stringResource(R.string.feature_subject_player_pip),
                         tint = Color.White,
                     )
                 }
@@ -235,7 +244,7 @@ internal fun PlayerControlsOverlay(
                     ) {
                         Icon(
                             imageVector = BgmIcons.Replay10,
-                            contentDescription = "快退 10 秒",
+                            contentDescription = stringResource(R.string.feature_subject_player_rewind_10s),
                             tint = Color.White,
                             modifier = Modifier.size(28.dp),
                         )
@@ -258,7 +267,12 @@ internal fun PlayerControlsOverlay(
                                 }
                             Icon(
                                 imageVector = icon,
-                                contentDescription = if (isPlaying) "暂停" else "播放",
+                                contentDescription =
+                                    if (isPlaying) {
+                                        stringResource(R.string.feature_subject_player_pause)
+                                    } else {
+                                        stringResource(R.string.feature_subject_player_play)
+                                    },
                                 tint = Color.White,
                                 modifier = Modifier.size(34.dp),
                             )
@@ -271,7 +285,7 @@ internal fun PlayerControlsOverlay(
                     ) {
                         Icon(
                             imageVector = BgmIcons.Forward10,
-                            contentDescription = "快进 10 秒",
+                            contentDescription = stringResource(R.string.feature_subject_player_forward_10s),
                             tint = Color.White,
                             modifier = Modifier.size(28.dp),
                         )
@@ -335,7 +349,12 @@ internal fun PlayerControlsOverlay(
                 ) {
                     Icon(
                         imageVector = if (isPlaying) BgmIcons.Pause else BgmIcons.Play,
-                        contentDescription = if (isPlaying) "暂停" else "播放",
+                        contentDescription =
+                            if (isPlaying) {
+                                stringResource(R.string.feature_subject_player_pause)
+                            } else {
+                                stringResource(R.string.feature_subject_player_play)
+                            },
                         tint = Color.White,
                         modifier = Modifier.size(24.dp),
                     )
@@ -362,7 +381,7 @@ internal fun PlayerControlsOverlay(
                     modifier = Modifier.clickable(onClick = onCycleResizeMode),
                 ) {
                     Text(
-                        text = resizeMode.label,
+                        text = stringResource(resizeMode.labelRes),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.9f),
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
@@ -394,7 +413,7 @@ internal fun PlayerControlsOverlay(
                     ) {
                         Icon(
                             imageVector = BgmIcons.List,
-                            contentDescription = "选集",
+                            contentDescription = stringResource(R.string.feature_subject_player_episodes),
                             tint = Color.White,
                             modifier = Modifier.size(20.dp),
                         )
@@ -414,7 +433,12 @@ internal fun PlayerControlsOverlay(
                             } else {
                                 BgmIcons.Fullscreen
                             },
-                        contentDescription = if (isLandscape) "退出全屏" else "全屏播放",
+                        contentDescription =
+                            if (isLandscape) {
+                                stringResource(R.string.feature_subject_player_exit_fullscreen)
+                            } else {
+                                stringResource(R.string.feature_subject_player_enter_fullscreen)
+                            },
                         tint = Color.White,
                         modifier = Modifier.size(22.dp),
                     )
@@ -479,7 +503,7 @@ private fun BoxScope.PlayerErrorState(
     ) {
         Icon(
             imageVector = BgmIcons.ArrowBack,
-            contentDescription = "返回",
+            contentDescription = stringResource(R.string.feature_subject_cd_back),
             tint = Color.White,
         )
     }
@@ -504,16 +528,16 @@ private fun BoxScope.PlayerErrorState(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (onNextSource != null) {
                 OutlinedButton(onClick = onNextSource) {
-                    Text("换下一个源", color = Color.White)
+                    Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                 }
             }
             Button(onClick = onRetry) {
-                Text("重试播放")
+                Text(stringResource(R.string.feature_subject_player_retry_play))
             }
         }
         if (onRequestOpenSources != null) {
             TextButton(onClick = onRequestOpenSources) {
-                Text("AI 找源", color = Color.White.copy(alpha = 0.8f))
+                Text(stringResource(R.string.feature_subject_source_ai_search), color = Color.White.copy(alpha = 0.8f))
             }
         }
     }

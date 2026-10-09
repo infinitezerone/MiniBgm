@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -68,6 +69,7 @@ import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.common.bgmLogger
+import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
@@ -177,7 +179,7 @@ private fun BgmBbCodeQuote(
         ) {
             if (quote.author != null) {
                 Text(
-                    text = "引用 @${quote.author} 说：",
+                    text = stringResource(R.string.core_designsystem_bbcode_quote_format, quote.author),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -303,7 +305,7 @@ private fun BgmBbCodeImage(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "图片加载失败",
+                            text = stringResource(R.string.core_designsystem_bbcode_image_load_failed),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -328,7 +330,7 @@ private fun BgmBbCodeImage(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "点击重试",
+                                    text = stringResource(R.string.core_designsystem_bbcode_image_click_retry),
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             }
@@ -339,7 +341,7 @@ private fun BgmBbCodeImage(
                                     modifier = Modifier.height(32.dp),
                                 ) {
                                     Text(
-                                        text = "浏览器打开",
+                                        text = stringResource(R.string.core_designsystem_bbcode_open_browser),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 }
@@ -351,7 +353,12 @@ private fun BgmBbCodeImage(
                 key(retryCount) {
                     AsyncImage(
                         model = image.url,
-                        contentDescription = if (image.isMasked) "隐藏图片" else "评论图片",
+                        contentDescription =
+                            if (image.isMasked) {
+                                stringResource(R.string.core_designsystem_bbcode_image_masked_cd)
+                            } else {
+                                stringResource(R.string.core_designsystem_bbcode_image_comment_cd)
+                            },
                         contentScale = ContentScale.Fit,
                         onError = { state ->
                             isLoadFailed = true
@@ -385,14 +392,14 @@ private fun BgmBbCodeImage(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "隐藏内容",
+                            text = stringResource(R.string.core_designsystem_bbcode_masked_title),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "发布者已将此图片隐藏",
+                            text = stringResource(R.string.core_designsystem_bbcode_masked_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.75f),
                             textAlign = TextAlign.Center,
@@ -409,7 +416,7 @@ private fun BgmBbCodeImage(
                             contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                         ) {
                             Text(
-                                text = "显示",
+                                text = stringResource(R.string.core_designsystem_bbcode_action_show),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -436,11 +443,11 @@ private fun BgmBbCodeImage(
                     ) {
                         Icon(
                             imageVector = BgmIcons.VisibilityOff,
-                            contentDescription = "重新隐藏",
+                            contentDescription = stringResource(R.string.core_designsystem_bbcode_action_hide_cd),
                             modifier = Modifier.size(13.dp),
                         )
                         Text(
-                            text = "隐藏",
+                            text = stringResource(R.string.core_designsystem_bbcode_action_hide),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                         )

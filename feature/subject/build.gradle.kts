@@ -7,6 +7,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.feature.subject"
+    resourcePrefix = "feature_subject_"
 }
 
 dependencies {

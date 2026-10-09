@@ -13,9 +13,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 可折叠评论/回帖正文组件：
@@ -58,7 +60,14 @@ internal fun ExpandableCommentContent(
 
         if (canExpand) {
             Text(
-                text = if (isExpanded) "收起" else "展开全文",
+                text =
+                    if (isExpanded) {
+                        stringResource(
+                            R.string.feature_subject_collapse,
+                        )
+                    } else {
+                        stringResource(R.string.feature_subject_comment_expand_full)
+                    },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,

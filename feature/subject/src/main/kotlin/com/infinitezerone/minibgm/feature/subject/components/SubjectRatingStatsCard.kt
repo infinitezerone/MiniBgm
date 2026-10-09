@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -48,6 +49,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.statusWishContainerCol
 import com.infinitezerone.minibgm.core.model.CollectionCount
 import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.Tag
+import com.infinitezerone.minibgm.feature.subject.R
 
 /** 评分分布柱状图、全站收藏分布与热门标签卡片 */
 @Composable
@@ -145,7 +147,7 @@ private fun RatingDistributionSection(
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = "评分分布",
+                    text = stringResource(R.string.feature_subject_rating_distribution),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -163,13 +165,13 @@ private fun RatingDistributionSection(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "分",
+                        text = stringResource(R.string.feature_subject_score_unit),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     if (rating.total > 0) {
                         Text(
-                            text = "(${rating.total}人评分)",
+                            text = stringResource(R.string.feature_subject_rating_votes_parenthesis, rating.total),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -275,7 +277,7 @@ private fun CollectionStatsSection(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = "全站收藏状态",
+            text = stringResource(R.string.feature_subject_all_collections_status),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -287,31 +289,31 @@ private fun CollectionStatsSection(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CollectionStatusBadge(
-                label = "想看",
+                label = stringResource(R.string.feature_subject_status_wish),
                 count = collection.wish,
                 containerColor = statusWishContainerColor(),
                 contentColor = onStatusWishContainerColor(),
             )
             CollectionStatusBadge(
-                label = "在看",
+                label = stringResource(R.string.feature_subject_status_doing),
                 count = collection.doing,
                 containerColor = statusDoingContainerColor(),
                 contentColor = onStatusDoingContainerColor(),
             )
             CollectionStatusBadge(
-                label = "看过",
+                label = stringResource(R.string.feature_subject_status_collect),
                 count = collection.collect,
                 containerColor = statusCollectContainerColor(),
                 contentColor = onStatusCollectContainerColor(),
             )
             CollectionStatusBadge(
-                label = "搁置",
+                label = stringResource(R.string.feature_subject_status_on_hold),
                 count = collection.onHold,
                 containerColor = statusOnHoldContainerColor(),
                 contentColor = onStatusOnHoldContainerColor(),
             )
             CollectionStatusBadge(
-                label = "抛弃",
+                label = stringResource(R.string.feature_subject_status_dropped),
                 count = collection.dropped,
                 containerColor = statusDroppedContainerColor(),
                 contentColor = onStatusDroppedContainerColor(),
@@ -379,7 +381,7 @@ private fun TagsSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "热门标签 (${tags.size})",
+                text = stringResource(R.string.feature_subject_popular_tags, tags.size),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -397,7 +399,14 @@ private fun TagsSection(
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = if (isExpanded) "收起" else "展开全部",
+                            text =
+                                if (isExpanded) {
+                                    stringResource(
+                                        R.string.feature_subject_collapse,
+                                    )
+                                } else {
+                                    stringResource(R.string.feature_subject_expand_all)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
@@ -458,7 +467,7 @@ private fun TagsSection(
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Text(
-                            text = "+$hiddenCount 更多",
+                            text = stringResource(R.string.feature_subject_more_tags_count, hiddenCount),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,

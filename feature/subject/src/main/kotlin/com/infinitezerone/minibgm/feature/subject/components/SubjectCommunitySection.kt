@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectTopic
+import com.infinitezerone.minibgm.feature.subject.R
 
 internal const val BGM_BASE_URL = "https://bgm.tv"
 
@@ -80,7 +82,7 @@ fun SubjectCommunitySection(
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = "全网短评吐槽",
+                    text = stringResource(R.string.feature_subject_community_short_reviews),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -114,7 +116,7 @@ fun SubjectCommunitySection(
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                         } else {
                             Text(
-                                text = "暂无短评，快去发表你的看法吧~",
+                                text = stringResource(R.string.feature_subject_community_short_reviews_empty),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -154,7 +156,7 @@ fun SubjectCommunitySection(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = "查看更多短评 (已显示 5 / 共 $commentTotal 条)",
+                                    text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.SemiBold,
@@ -186,13 +188,18 @@ fun SubjectCommunitySection(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "正在加载更多短评...",
+                                            text = stringResource(R.string.feature_subject_community_short_reviews_loading),
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     } else {
                                         Text(
-                                            text = "加载更多短评 (已显示 ${comments.size} / 共 $commentTotal 条)",
+                                            text =
+                                                stringResource(
+                                                    R.string.feature_subject_community_load_more_short_reviews,
+                                                    comments.size,
+                                                    commentTotal,
+                                                ),
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.SemiBold,
@@ -212,7 +219,7 @@ fun SubjectCommunitySection(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "已显示全部 $commentTotal 条短评",
+                                        text = stringResource(R.string.feature_subject_community_all_short_reviews_shown, commentTotal),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     )
@@ -231,7 +238,7 @@ fun SubjectCommunitySection(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = "收起短评",
+                                    text = stringResource(R.string.feature_subject_community_collapse_short_reviews),
                                     style = MaterialTheme.labelMediumSmallOrFallback(),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -262,7 +269,7 @@ fun SubjectCommunitySection(
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    text = "讨论版交流区",
+                    text = stringResource(R.string.feature_subject_community_forum_section),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -293,7 +300,7 @@ fun SubjectCommunitySection(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "暂无相关讨论帖",
+                            text = stringResource(R.string.feature_subject_community_forum_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -465,7 +472,7 @@ fun SubjectTopicItem(
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 ) {
                     Text(
-                        text = "${topic.replyCount} 回复",
+                        text = stringResource(R.string.feature_subject_community_replies_count, topic.replyCount),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),

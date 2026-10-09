@@ -22,8 +22,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
@@ -85,7 +87,12 @@ fun TagActionBottomSheet(
             if (onToggleFilter != null) {
                 TagActionRow(
                     icon = BgmIcons.FilterList,
-                    title = if (isFiltered) "取消在当季片单中的筛选" else "在当季片单中以此标签筛选",
+                    title =
+                        if (isFiltered) {
+                            stringResource(R.string.core_designsystem_tag_unfilter_seasonal)
+                        } else {
+                            stringResource(R.string.core_designsystem_tag_filter_seasonal)
+                        },
                     onClick = {
                         onToggleFilter()
                         onDismiss()
@@ -96,8 +103,18 @@ fun TagActionBottomSheet(
             // 操作 2: 收藏常用（来源 2 随看随加）
             TagActionRow(
                 icon = if (isFavorite) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                title = if (isFavorite) "从常用筛选标签中移除" else "添加到我的常用筛选标签",
-                subtitle = if (isFavorite) "已在您的常用标签列表中" else "添加后将在季度片单与淘番榜单常驻展示",
+                title =
+                    if (isFavorite) {
+                        stringResource(R.string.core_designsystem_tag_remove_favorite)
+                    } else {
+                        stringResource(R.string.core_designsystem_tag_add_favorite)
+                    },
+                subtitle =
+                    if (isFavorite) {
+                        stringResource(R.string.core_designsystem_tag_favorite_desc_active)
+                    } else {
+                        stringResource(R.string.core_designsystem_tag_favorite_desc_inactive)
+                    },
                 onClick = {
                     onToggleFavorite()
                     onDismiss()
@@ -108,7 +125,7 @@ fun TagActionBottomSheet(
             if (onViewAllWithTag != null) {
                 TagActionRow(
                     icon = BgmIcons.SearchBorder,
-                    title = "浏览「$tag」全站相关作品",
+                    title = stringResource(R.string.core_designsystem_tag_browse_all, tag),
                     onClick = {
                         onViewAllWithTag()
                         onDismiss()

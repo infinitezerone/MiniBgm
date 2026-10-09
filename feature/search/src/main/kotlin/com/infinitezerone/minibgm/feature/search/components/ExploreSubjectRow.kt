@@ -109,7 +109,7 @@ private fun RowSubjectCard(
         modifier =
             modifier
                 .width(108.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .clickable {
                     onSubjectClick(
                         SubjectDetailRoute(
@@ -125,7 +125,7 @@ private fun RowSubjectCard(
         CoverImage(
             url = subject.images?.bestImage.orEmpty(),
             contentDescription = subject.displayName,
-            cornerRadius = 10.dp,
+            cornerRadius = 8.dp,
             aspectRatio = BGM_POSTER_ASPECT_RATIO,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -163,7 +163,7 @@ private fun RowSkeletonCard(modifier: Modifier = Modifier) {
                 Modifier
                     .fillMaxWidth()
                     .aspectRatio(BGM_POSTER_ASPECT_RATIO)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(10.dp)),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(8.dp)),
         )
         Box(
             modifier =

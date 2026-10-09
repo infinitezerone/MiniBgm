@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -36,6 +37,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicParentSubject
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 讨论帖主楼卡片（楼主原帖、关联番剧、主楼正文与表情表态）
@@ -103,7 +105,7 @@ fun TopicMainPostCard(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = topic.creator?.displayName ?: "未知用户",
+                        text = topic.creator?.displayName ?: stringResource(R.string.feature_subject_comment_user_default),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -127,7 +129,7 @@ fun TopicMainPostCard(
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                 ) {
                     Text(
-                        text = "#1 楼主",
+                        text = stringResource(R.string.feature_subject_topic_original_poster_first),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -234,7 +236,7 @@ private fun TopicLinkedSubjectBanner(
             }
             Icon(
                 imageVector = BgmIcons.ArrowForwardIos,
-                contentDescription = "查看条目详情",
+                contentDescription = stringResource(R.string.feature_subject_topic_view_subject_detail),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.size(14.dp),
             )

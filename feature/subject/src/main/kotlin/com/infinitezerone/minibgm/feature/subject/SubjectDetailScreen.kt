@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,6 +78,7 @@ import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverla
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -138,6 +140,21 @@ fun SubjectDetailScreen(
     var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
     var showAiringReminderPrompt by remember { mutableStateOf(false) }
 
+    val defaultTitle = stringResource(R.string.feature_subject_title)
+    val epFormat = stringResource(R.string.feature_subject_check_in_ep_format)
+    val epMarkSuccessFormat = stringResource(R.string.feature_subject_mark_ep_success)
+    val batchMarkSuccessFormat = stringResource(R.string.feature_subject_mark_batch_success)
+    val undoText = stringResource(R.string.feature_subject_undo)
+    val airingReminderSuccess = stringResource(R.string.feature_subject_airing_reminder_enabled)
+    val notInstalledTitleFormat = stringResource(R.string.feature_subject_app_not_installed_title)
+    val notInstalledMessageFormat = stringResource(R.string.feature_subject_app_not_installed_message)
+    val openBrowserText = stringResource(DesignSystemR.string.core_designsystem_action_open_browser)
+    val cancelText = stringResource(DesignSystemR.string.core_designsystem_action_cancel)
+    val batchWatchTitle = stringResource(R.string.feature_subject_batch_watch_dialog_title)
+    val batchWatchMessageFormat = stringResource(R.string.feature_subject_batch_watch_dialog_message)
+    val confirmText = stringResource(DesignSystemR.string.core_designsystem_action_confirm)
+    val shareChooserTitle = stringResource(R.string.feature_subject_cd_share)
+
     ObserveAsEvents(viewModel.uiEvents) { event ->
         when (event) {
             is SubjectDetailUiEvent.ShowMessage -> {
@@ -148,17 +165,15 @@ fun SubjectDetailScreen(
             }
             is SubjectDetailUiEvent.EpisodeMarked -> {
                 val epLabel =
-                    if (event.episodeType ==
-                        0
-                    ) {
-                        "第 ${event.epNumber} 话"
+                    if (event.episodeType == 0) {
+                        String.format(java.util.Locale.getDefault(), epFormat, event.epNumber)
                     } else {
                         "${EpisodeGroup.fromType(event.episodeType).label} ${event.epNumber}"
                     }
                 val snackbarResult =
                     snackbarHostState.showSnackbar(
-                        message = "已标记 $epLabel",
-                        actionLabel = "撤销",
+                        message = String.format(java.util.Locale.getDefault(), epMarkSuccessFormat, epLabel),
+                        actionLabel = undoText,
                         duration = SnackbarDuration.Short,
                     )
                 if (snackbarResult == SnackbarResult.ActionPerformed) {
@@ -172,8 +187,8 @@ fun SubjectDetailScreen(
             is SubjectDetailUiEvent.BatchMarked -> {
                 val snackbarResult =
                     snackbarHostState.showSnackbar(
-                        message = "已标记至第 ${event.targetEpNumber} 集",
-                        actionLabel = "撤销",
+                        message = String.format(java.util.Locale.getDefault(), batchMarkSuccessFormat, event.targetEpNumber),
+                        actionLabel = undoText,
                         duration = SnackbarDuration.Short,
                     )
                 if (snackbarResult == SnackbarResult.ActionPerformed) {
@@ -192,7 +207,7 @@ fun SubjectDetailScreen(
             if (granted) {
                 viewModel.enableAiringReminder()
                 coroutineScope.launch {
-                    snackbarHostState.showSnackbar("已开启追番开播提醒")
+                    snackbarHostState.showSnackbar(airingReminderSuccess)
                 }
             }
         }
@@ -262,10 +277,10 @@ fun SubjectDetailScreen(
                     val openInBrowser =
                         overlayHostState.await(
                             ConfirmDialogAction(
-                                title = "未安装 $appName 客户端",
-                                message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
-                                confirmText = "浏览器打开",
-                                dismissText = "取消",
+                                title = String.format(java.util.Locale.getDefault(), notInstalledTitleFormat, appName),
+                                message = String.format(java.util.Locale.getDefault(), notInstalledMessageFormat, appName),
+                                confirmText = openBrowserText,
+                                dismissText = cancelText,
                             ),
                         )
                     if (openInBrowser) {
@@ -285,10 +300,10 @@ fun SubjectDetailScreen(
                 val confirmed =
                     overlayHostState.await(
                         ConfirmDialogAction(
-                            title = "看到此集？",
-                            message = "是否将第 1 集至第 $targetEpNumber 集全部标记为已看过？",
-                            confirmText = "确认",
-                            dismissText = "取消",
+                            title = batchWatchTitle,
+                            message = String.format(java.util.Locale.getDefault(), batchWatchMessageFormat, targetEpNumber),
+                            confirmText = confirmText,
+                            dismissText = cancelText,
                         ),
                     )
                 if (confirmed) {
@@ -378,7 +393,7 @@ fun SubjectDetailScreen(
                 BgmTopAppBar(
                     title = {
                         Text(
-                            text = displaySubject?.displayName ?: "条目详情",
+                            text = displaySubject?.displayName ?: defaultTitle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -387,7 +402,7 @@ fun SubjectDetailScreen(
                         IconButton(onClick = onBackClick) {
                             Icon(
                                 imageVector = BgmIcons.ArrowBack,
-                                contentDescription = "返回",
+                                contentDescription = stringResource(R.string.feature_subject_cd_back),
                             )
                         }
                     },
@@ -399,12 +414,12 @@ fun SubjectDetailScreen(
                         ) {
                             Icon(
                                 imageVector = BgmIcons.OpenInBrowser,
-                                contentDescription = "在浏览器中打开",
+                                contentDescription = stringResource(R.string.feature_subject_open_in_browser),
                             )
                         }
                         IconButton(
                             onClick = {
-                                val shareTitle = displaySubject?.displayName ?: "条目详情"
+                                val shareTitle = displaySubject?.displayName ?: defaultTitle
                                 val shareText = "$shareTitle https://bgm.tv/subject/$subjectId"
                                 val sendIntent =
                                     android.content.Intent().apply {
@@ -412,12 +427,12 @@ fun SubjectDetailScreen(
                                         putExtra(android.content.Intent.EXTRA_TEXT, shareText)
                                         type = "text/plain"
                                     }
-                                context.startActivity(android.content.Intent.createChooser(sendIntent, "分享条目"))
+                                context.startActivity(android.content.Intent.createChooser(sendIntent, shareChooserTitle))
                             },
                         ) {
                             Icon(
                                 imageVector = BgmIcons.Share,
-                                contentDescription = "分享",
+                                contentDescription = stringResource(R.string.feature_subject_share_title),
                             )
                         }
                     },
@@ -481,7 +496,7 @@ fun SubjectDetailScreen(
                                             modifier = Modifier.size(48.dp),
                                         )
                                         Text(
-                                            text = "条目加载失败",
+                                            text = stringResource(R.string.feature_subject_load_failed),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -495,7 +510,7 @@ fun SubjectDetailScreen(
                                             onClick = viewModel::refresh,
                                             modifier = Modifier.padding(top = 8.dp),
                                         ) {
-                                            Text(text = "重新加载")
+                                            Text(text = stringResource(R.string.feature_subject_reload))
                                         }
                                     }
                                 }

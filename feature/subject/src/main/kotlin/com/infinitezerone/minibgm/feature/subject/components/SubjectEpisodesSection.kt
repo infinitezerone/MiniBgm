@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,7 @@ import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
+import com.infinitezerone.minibgm.feature.subject.R
 
 /** 分集/曲目/章节列表头部栏：总数/打卡进度、列表/网格切换与续看播放源通栏卡片 */
 @Composable
@@ -79,10 +81,10 @@ fun EpisodesSectionHeader(
 ) {
     val headerTitle =
         when (subjectType) {
-            SubjectType.MUSIC -> "曲目列表"
-            SubjectType.BOOK -> "章节与卷册"
-            SubjectType.GAME -> "关卡与章节"
-            SubjectType.ANIME, SubjectType.REAL -> "分集列表"
+            SubjectType.MUSIC -> stringResource(R.string.feature_subject_episodes_title_music)
+            SubjectType.BOOK -> stringResource(R.string.feature_subject_episodes_title_book)
+            SubjectType.GAME -> stringResource(R.string.feature_subject_episodes_title_game)
+            SubjectType.ANIME, SubjectType.REAL -> stringResource(R.string.feature_subject_episodes_title_episodes)
         }
 
     val progressLabel =
@@ -144,7 +146,12 @@ fun EpisodesSectionHeader(
                     ) {
                         Icon(
                             imageVector = BgmIcons.SwapVert,
-                            contentDescription = if (episodeSortDescending) "切换为最早在前" else "切换为最新在前",
+                            contentDescription =
+                                if (episodeSortDescending) {
+                                    stringResource(R.string.feature_subject_episodes_sort_asc)
+                                } else {
+                                    stringResource(R.string.feature_subject_episodes_sort_desc)
+                                },
                             tint =
                                 if (episodeSortDescending) {
                                     MaterialTheme.colorScheme.primary
@@ -162,7 +169,12 @@ fun EpisodesSectionHeader(
                 ) {
                     Icon(
                         imageVector = if (isGridView) BgmIcons.FormatListNumbered else BgmIcons.GridView,
-                        contentDescription = if (isGridView) "切换为列表视图" else "切换为网格视图",
+                        contentDescription =
+                            if (isGridView) {
+                                stringResource(R.string.feature_subject_episodes_view_list)
+                            } else {
+                                stringResource(R.string.feature_subject_episodes_view_grid)
+                            },
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp),
                     )
@@ -219,7 +231,11 @@ fun EpisodesSectionHeader(
 
                         if (nextUpEpisodeSort != null) {
                             Text(
-                                text = "续看第 ${nextUpEpisodeSort.toEpisodeLabel()} 话",
+                                text =
+                                    stringResource(
+                                        R.string.feature_subject_episodes_continue_format,
+                                        nextUpEpisodeSort.toEpisodeLabel(),
+                                    ),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -229,7 +245,7 @@ fun EpisodesSectionHeader(
                                 color = statusDoingContainerColor(),
                             ) {
                                 Text(
-                                    text = "待看",
+                                    text = stringResource(R.string.feature_subject_episodes_status_to_watch),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = onStatusDoingContainerColor(),
@@ -238,7 +254,7 @@ fun EpisodesSectionHeader(
                             }
                         } else {
                             Text(
-                                text = "播放来源与规则",
+                                text = stringResource(R.string.feature_subject_episodes_sources_and_rules),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -269,7 +285,7 @@ fun EpisodesSectionHeader(
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                     )
                                     Text(
-                                        text = "播放源",
+                                        text = stringResource(R.string.feature_subject_ep_sources),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -296,7 +312,7 @@ fun EpisodesSectionHeader(
                                         tint = MaterialTheme.colorScheme.onPrimary,
                                     )
                                     Text(
-                                        text = "播放",
+                                        text = stringResource(R.string.feature_subject_episodes_play),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onPrimary,
@@ -500,9 +516,9 @@ fun EpisodeListItem(
                 val group = EpisodeGroup.fromType(episode.type)
                 val fallbackTitle =
                     if (episode.isMain) {
-                        "第 ${episode.formattedNumber} 话"
+                        stringResource(R.string.feature_subject_episode_format, episode.formattedNumber)
                     } else {
-                        "${group.label} ${episode.sort.toInt()}"
+                        stringResource(R.string.feature_subject_episode_custom_format, group.label, episode.sort.toInt())
                     }
                 val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { fallbackTitle } }
                 Text(
@@ -545,7 +561,7 @@ fun EpisodeListItem(
                                 color = statusCollectContainerColor(),
                             ) {
                                 Text(
-                                    text = "已看",
+                                    text = stringResource(R.string.feature_subject_status_watched),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = onStatusCollectContainerColor(),
@@ -559,7 +575,7 @@ fun EpisodeListItem(
                                 color = statusAiringContainerColor(),
                             ) {
                                 Text(
-                                    text = "待播",
+                                    text = stringResource(R.string.feature_subject_status_future),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = onStatusAiringContainerColor(),
@@ -573,7 +589,7 @@ fun EpisodeListItem(
                                 color = statusDoingContainerColor(),
                             ) {
                                 Text(
-                                    text = "在看",
+                                    text = stringResource(R.string.feature_subject_status_watching),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = onStatusDoingContainerColor(),
@@ -587,7 +603,7 @@ fun EpisodeListItem(
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                             ) {
                                 Text(
-                                    text = "未看",
+                                    text = stringResource(R.string.feature_subject_status_unwatched),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
@@ -614,7 +630,15 @@ fun EpisodeListItem(
                                     },
                             )
                             Text(
-                                text = if (isFuture) "放送: ${episode.airdate}" else episode.airdate,
+                                text =
+                                    if (isFuture) {
+                                        stringResource(
+                                            R.string.feature_subject_airdate_format,
+                                            episode.airdate,
+                                        )
+                                    } else {
+                                        episode.airdate
+                                    },
                                 style = MaterialTheme.typography.labelSmall,
                                 color =
                                     if (isFuture) {
@@ -669,7 +693,7 @@ fun EpisodeListItem(
                                     modifier = Modifier.size(11.dp),
                                 )
                                 Text(
-                                    text = "${episode.comment} 吐槽",
+                                    text = stringResource(R.string.feature_subject_comments_short_format, episode.comment),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isHot) WishOrange else MaterialTheme.colorScheme.primary,
@@ -689,10 +713,10 @@ fun EpisodeListItem(
                 if (!isFuture && (onPlayClick != null || onOpenSources != null)) {
                     val playDescription =
                         if (episode.isMain) {
-                            "播放第 ${episode.formattedNumber} 话"
+                            stringResource(R.string.feature_subject_play_episode_format, episode.formattedNumber)
                         } else {
                             val group = EpisodeGroup.fromType(episode.type)
-                            "播放${group.label} ${episode.sort.toInt()}"
+                            stringResource(R.string.feature_subject_play_custom_episode_format, group.label, episode.sort.toInt())
                         }
                     val handleAction = onPlayClick ?: onOpenSources
                     if (handleAction != null) {
@@ -739,7 +763,12 @@ fun EpisodeListItem(
                 ) {
                     Icon(
                         imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
-                        contentDescription = if (isWatched) "已看过，点击取消打卡" else "未看，点击标记为已看",
+                        contentDescription =
+                            if (isWatched) {
+                                stringResource(R.string.feature_subject_ep_unwatch_hint)
+                            } else {
+                                stringResource(R.string.feature_subject_ep_mark_watched_hint)
+                            },
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -788,7 +817,7 @@ fun EpisodeGrid(
                                 }
                             "$prefix${episode.sort.toInt()}"
                         }
-                    val cellShape = RoundedCornerShape(10.dp)
+                    val cellShape = RoundedCornerShape(8.dp)
                     val cellBorder =
                         when {
                             isNextToWatch -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
@@ -1008,12 +1037,12 @@ fun EpisodeQuickRail(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "分集选集",
+                text = stringResource(R.string.feature_subject_episodes_select_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "全部 ${episodes.size} 话 ›",
+                text = stringResource(R.string.feature_subject_episodes_all_count_arrow, episodes.size),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -1170,15 +1199,25 @@ fun SpotlightEpisodeTucaoCard(
                     )
                 }
                 Column {
-                    val epLabel = if (episode.isMain) "第 ${episode.formattedNumber} 话" else episode.guideLabel
+                    val epLabel =
+                        if (episode.isMain) {
+                            stringResource(R.string.feature_subject_episode_format, episode.formattedNumber)
+                        } else {
+                            episode.guideLabel
+                        }
                     Text(
-                        text = "本集讨论高光 · $epLabel",
+                        text = stringResource(R.string.feature_subject_ep_highlight_banner_title, epLabel),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = if (episode.comment > 0) "共 ${episode.comment} 条讨论 · 点击查看热评 ›" else "暂无吐槽 · 抢先占楼发表 ›",
+                        text =
+                            if (episode.comment > 0) {
+                                stringResource(R.string.feature_subject_ep_comments_count, episode.comment)
+                            } else {
+                                stringResource(R.string.feature_subject_ep_no_comments)
+                            },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -44,6 +44,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +61,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.schedule.R
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
@@ -79,6 +81,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import kotlin.math.roundToInt
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +106,9 @@ fun ScheduleScreen(
     val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val notInstalledTitleFormat = stringResource(R.string.feature_schedule_app_not_installed_title)
+    val notInstalledMessageFormat = stringResource(R.string.feature_schedule_app_not_installed_message)
+    val openBrowserText = stringResource(DesignSystemR.string.core_designsystem_action_open_browser)
     val handleLaunchStreamingUrl: (String) -> Unit = { url ->
         context.launchStreamingUrl(
             url = url,
@@ -111,9 +117,9 @@ fun ScheduleScreen(
                     val confirmed =
                         overlayHostState.await(
                             ConfirmDialogAction(
-                                title = "未安装 $appName 客户端",
-                                message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
-                                confirmText = "浏览器打开",
+                                title = String.format(java.util.Locale.getDefault(), notInstalledTitleFormat, appName),
+                                message = String.format(java.util.Locale.getDefault(), notInstalledMessageFormat, appName),
+                                confirmText = openBrowserText,
                             ),
                         )
                     if (confirmed) {
@@ -176,7 +182,7 @@ fun ScheduleScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = "放送时刻表",
+                        text = stringResource(R.string.feature_schedule_title),
                     )
                 },
                 actions = {
@@ -184,14 +190,14 @@ fun ScheduleScreen(
                         IconButton(onClick = onAssistantClick) {
                             Icon(
                                 imageVector = BgmIcons.Assistant,
-                                contentDescription = "AI 追番助手",
+                                contentDescription = stringResource(R.string.feature_schedule_cd_ai_assistant),
                             )
                         }
                     }
                     IconButton(onClick = onSearchClick) {
                         Icon(
                             imageVector = BgmIcons.Search,
-                            contentDescription = "搜索条目",
+                            contentDescription = stringResource(R.string.feature_schedule_cd_search),
                         )
                     }
                 },
@@ -313,7 +319,7 @@ fun ScheduleScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 ScheduleErrorState(
-                                    errorMessage = uiState.error ?: "网络连接异常",
+                                    errorMessage = uiState.error ?: stringResource(R.string.feature_schedule_error_network),
                                     onRetry = viewModel::refresh,
                                     modifier = Modifier.widthIn(max = 840.dp),
                                 )
@@ -357,6 +363,7 @@ fun ScheduleScreen(
     }
 
     selectedScheduleForSources?.let { schedule ->
+        val aiSearchPromptFormat = stringResource(R.string.feature_schedule_ai_search_prompt)
         ScheduleSourcesBottomSheet(
             schedule = schedule,
             onDismissRequest = { selectedScheduleForSources = null },
@@ -366,7 +373,7 @@ fun ScheduleScreen(
                     {
                         val title = schedule.displayName
                         onSourceSearch(
-                            "帮我找《$title》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 ${schedule.bgmId}）",
+                            String.format(java.util.Locale.getDefault(), aiSearchPromptFormat, title, schedule.bgmId),
                         )
                     }
                 } else {
@@ -389,7 +396,7 @@ fun ScheduleScreen(
 
     if (uiState.showLoginPromptDialog) {
         BgmLoginPromptDialog(
-            description = "追番与打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+            description = stringResource(R.string.feature_schedule_login_prompt_desc),
             onLogin = {
                 viewModel.dismissLoginPrompt()
                 onLoginRequest()

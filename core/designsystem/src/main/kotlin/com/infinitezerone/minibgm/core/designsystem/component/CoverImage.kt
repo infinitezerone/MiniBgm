@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
@@ -43,6 +44,7 @@ fun CoverImage(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 12.dp,
+    shape: Shape = RoundedCornerShape(cornerRadius),
     aspectRatio: Float = BGM_POSTER_ASPECT_RATIO,
     contentScale: ContentScale = ContentScale.Crop,
     alignment: Alignment = Alignment.Center,
@@ -62,7 +64,7 @@ fun CoverImage(
         modifier =
             modifier
                 .aspectRatio(aspectRatio)
-                .clip(RoundedCornerShape(cornerRadius))
+                .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {

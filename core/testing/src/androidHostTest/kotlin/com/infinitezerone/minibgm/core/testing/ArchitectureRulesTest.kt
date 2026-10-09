@@ -465,9 +465,9 @@ class ArchitectureRulesTest {
     @Test
     fun ui_sources_only_use_ladder_radius_literals() {
         val violations = mutableListOf<String>()
-        val ladder = setOf("4", "8", "12", "16", "24")
-        val radiusLiteral = Regex("""RoundedCornerShape\\(([^()]*)\\)""")
-        val dpValue = Regex("""(\\d+)\\.dp""")
+        val ladder = setOf("0", "4", "8", "12", "16", "24")
+        val radiusLiteral = Regex("""(?:RoundedCornerShape\(([^()]*)\)|cornerRadius\s*=\s*\d+\.dp)""")
+        val dpValue = Regex("""(\d+)\.dp""")
 
         for (dir in listOf("feature", "app")) {
             val rootDir = File(projectRoot, dir)
@@ -480,7 +480,7 @@ class ArchitectureRulesTest {
                     val scanner = KotlinSourceScanner.fromFile(sourceFile)
                     val relPath = sourceFile.relativeTo(projectRoot).path
                     scanner.findMatches(radiusLiteral).forEach { match ->
-                        dpValue.findAll(match.lineContent).forEach { value ->
+                        dpValue.findAll(match.token).forEach { value ->
                             if (value.groupValues[1] !in ladder) {
                                 violations.add(
                                     "$relPath:${match.lineNumber} 圆角野值 " +

@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,8 @@ import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
+import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
@@ -134,15 +137,15 @@ fun SubjectSourcesBottomSheet(
                 ) {
                     // 分组 0：自备片单概览（条目级只看总量，逐话选择在分集入口完成）
                     if (onManageRules != null && boundPlaylists.isNotEmpty()) {
-                        SourcesSectionLabel("自备片单")
+                        SourcesSectionLabel(stringResource(R.string.feature_subject_source_user_playlist))
                         for (playlist in boundPlaylists) {
                             val hasFailure = playlist.entries.any { it.url in failedSourceReasons }
                             EpisodeSourceActionCard(
                                 title = playlist.name,
                                 subtitle =
                                     playbackSourceSubtitle(
-                                        "${playlist.entries.size} 条 · 在具体分集的播放入口中选择",
-                                        if (hasFailure) "存在上次播放失败的条目" else null,
+                                        stringResource(R.string.feature_subject_source_user_playlist_hint, playlist.entries.size),
+                                        if (hasFailure) stringResource(R.string.feature_subject_source_has_failed_entries) else null,
                                     ),
                                 iconVector = BgmIcons.PlayCircle,
                                 iconTint =
@@ -159,10 +162,10 @@ fun SubjectSourcesBottomSheet(
                     }
 
                     if (onInternalPlayClick != null) {
-                        SourcesSectionLabel("应用内播放")
+                        SourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_player))
                         EpisodeSourceActionCard(
-                            title = "一体化视频播放器",
-                            subtitle = "多源嗅探 · 分集选集 · 自动连播",
+                            title = stringResource(R.string.feature_subject_source_integrated_player),
+                            subtitle = stringResource(R.string.feature_subject_source_player_features),
                             iconVector = BgmIcons.PlayCircle,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = {
@@ -181,10 +184,10 @@ fun SubjectSourcesBottomSheet(
                     }
 
                     if (onAiSourceSearch != null) {
-                        SourcesSectionLabel("AI 找源")
+                        SourcesSectionLabel(stringResource(R.string.feature_subject_source_ai_search))
                         EpisodeSourceActionCard(
-                            title = "让 AI 助手找源",
-                            subtitle = "解析可播放地址与集数，结果在助手会话中展示",
+                            title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                            subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
                             iconVector = BgmIcons.AutoAwesome,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = { runAfterDismiss(onAiSourceSearch) },
@@ -194,15 +197,15 @@ fun SubjectSourcesBottomSheet(
 
                     if (onManageRules != null) {
                         EpisodeSourceActionCard(
-                            title = "播放源管理",
-                            subtitle = "导入自备片单 / 维护解析规则",
+                            title = stringResource(R.string.feature_subject_source_manage),
+                            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
                             iconVector = BgmIcons.Settings,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = { onManageRules() },
                             trailingContent = {
                                 Icon(
                                     imageVector = BgmIcons.OpenInNew,
-                                    contentDescription = "管理规则",
+                                    contentDescription = stringResource(R.string.feature_subject_source_manage_rules),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(18.dp),
                                 )
@@ -212,10 +215,10 @@ fun SubjectSourcesBottomSheet(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    SourcesSectionLabel("外部跳转")
+                    SourcesSectionLabel(stringResource(R.string.feature_subject_source_external_nav))
                     EpisodeSourceActionCard(
-                        title = "哔哩哔哩",
-                        subtitle = "打开 B 站客户端/网页搜索",
+                        title = stringResource(R.string.feature_subject_source_bilibili),
+                        subtitle = stringResource(R.string.feature_subject_source_bilibili_desc),
                         iconVector = BgmIcons.Tv,
                         onClick = {
                             runAfterDismiss {
@@ -225,8 +228,8 @@ fun SubjectSourcesBottomSheet(
                     )
 
                     EpisodeSourceActionCard(
-                        title = "蜜柑计划",
-                        subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
+                        title = stringResource(R.string.feature_subject_source_mikan),
+                        subtitle = stringResource(R.string.feature_subject_source_mikan_desc),
                         iconVector = BgmIcons.Download,
                         onClick = {
                             runAfterDismiss {
@@ -347,7 +350,7 @@ fun SubjectSourcesBottomSheet(
                     )
 
                     // 分组 1：内部播放
-                    SourcesSectionLabel("内部播放")
+                    SourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_playback))
 
                     if (enabledRules.isNotEmpty()) {
                         // 渲染已启用的自定义播放规则
@@ -372,7 +375,11 @@ fun SubjectSourcesBottomSheet(
                                 subtitle =
                                     playbackSourceSubtitle(
                                         rule.description.ifBlank {
-                                            if (onInternalPlayClick != null || isMedia) "应用内嗅探与播放" else "打开解析链接"
+                                            if (onInternalPlayClick != null || isMedia) {
+                                                stringResource(R.string.feature_subject_source_internal_sniff)
+                                            } else {
+                                                stringResource(R.string.feature_subject_source_open_link)
+                                            }
                                         },
                                         ruleFailure,
                                     ),
@@ -397,7 +404,12 @@ fun SubjectSourcesBottomSheet(
                                         }
                                     Icon(
                                         imageVector = trailingIcon,
-                                        contentDescription = if (onInternalPlayClick != null || isMedia) "播放" else "打开",
+                                        contentDescription =
+                                            if (onInternalPlayClick != null || isMedia) {
+                                                stringResource(R.string.feature_subject_source_action_play)
+                                            } else {
+                                                stringResource(R.string.feature_subject_source_action_open)
+                                            },
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                         modifier = Modifier.size(18.dp),
                                     )
@@ -427,14 +439,14 @@ fun SubjectSourcesBottomSheet(
                     } else if (onInternalPlayClick != null) {
                         // 无已启用自定义规则时的默认内置播放入口
                         EpisodeSourceActionCard(
-                            title = "应用内播放",
-                            subtitle = "尝试在应用内解析并播放该分集",
+                            title = stringResource(R.string.feature_subject_source_internal_player),
+                            subtitle = stringResource(R.string.feature_subject_source_try_internal_play),
                             iconVector = BgmIcons.PlayCircle,
                             iconTint = MaterialTheme.colorScheme.primary,
                             trailingContent = {
                                 Icon(
                                     imageVector = BgmIcons.KeyboardArrowRight,
-                                    contentDescription = "开始播放",
+                                    contentDescription = stringResource(R.string.feature_subject_source_start_play),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(20.dp),
                                 )
@@ -459,8 +471,8 @@ fun SubjectSourcesBottomSheet(
 
                     if (onManageRules != null) {
                         EpisodeSourceActionCard(
-                            title = "播放源管理",
-                            subtitle = "导入自备片单 / 维护解析规则",
+                            title = stringResource(R.string.feature_subject_source_manage),
+                            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
                             iconVector = BgmIcons.Settings,
                             iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = {
@@ -471,7 +483,7 @@ fun SubjectSourcesBottomSheet(
                             trailingContent = {
                                 Icon(
                                     imageVector = BgmIcons.OpenInNew,
-                                    contentDescription = "管理规则",
+                                    contentDescription = stringResource(R.string.feature_subject_source_manage_rules),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier.size(18.dp),
                                 )
@@ -483,10 +495,10 @@ fun SubjectSourcesBottomSheet(
 
                     // 分组 1.5：AI 找源——解析可播放地址，检索在助手会话中显式触发
                     if (onAiSourceSearch != null) {
-                        SourcesSectionLabel("AI 找源")
+                        SourcesSectionLabel(stringResource(R.string.feature_subject_source_ai_search))
                         EpisodeSourceActionCard(
-                            title = "让 AI 助手找源",
-                            subtitle = "解析可播放地址与集数，结果在助手会话中展示",
+                            title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                            subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
                             iconVector = BgmIcons.AutoAwesome,
                             iconTint = MaterialTheme.colorScheme.primary,
                             onClick = { runAfterDismiss(onAiSourceSearch) },
@@ -495,10 +507,10 @@ fun SubjectSourcesBottomSheet(
                     }
 
                     // 分组 2：外部跳转
-                    SourcesSectionLabel("外部跳转")
+                    SourcesSectionLabel(stringResource(R.string.feature_subject_source_external_nav))
                     EpisodeSourceActionCard(
-                        title = "哔哩哔哩",
-                        subtitle = "在 B 站中搜索当前分集",
+                        title = stringResource(R.string.feature_subject_source_bilibili),
+                        subtitle = stringResource(R.string.feature_subject_source_bilibili_ep_desc),
                         iconVector = BgmIcons.Tv,
                         onClick = {
                             runAfterDismiss {
@@ -508,8 +520,8 @@ fun SubjectSourcesBottomSheet(
                     )
 
                     EpisodeSourceActionCard(
-                        title = "蜜柑计划",
-                        subtitle = "在蜜柑计划中查看 BT 资源与字幕组",
+                        title = stringResource(R.string.feature_subject_source_mikan),
+                        subtitle = stringResource(R.string.feature_subject_source_mikan_desc),
                         iconVector = BgmIcons.Download,
                         onClick = {
                             runAfterDismiss {
@@ -523,12 +535,12 @@ fun SubjectSourcesBottomSheet(
                     for (target in externalPlayerTargets) {
                         val installed = target.packageName in installedExternalPlayerPackages
                         EpisodeSourceActionCard(
-                            title = "用 ${target.appName} 打开",
+                            title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
                             subtitle =
                                 if (installed) {
-                                    "用 ${target.appName} 播放当前直链 · 外部播放无法携带 Referer 等请求头"
+                                    stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
                                 } else {
-                                    "未检测到 ${target.appName}，安装后可用 · 外部播放无法携带 Referer 等请求头"
+                                    stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
                                 },
                             iconVector = BgmIcons.PlayCircle,
                             iconTint =
@@ -600,7 +612,7 @@ private fun SourcesSheetHeader(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "选择播放或跳转来源",
+                text = stringResource(R.string.feature_subject_source_choose_source),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -611,7 +623,7 @@ private fun SourcesSheetHeader(
         IconButton(onClick = onClose) {
             Icon(
                 imageVector = BgmIcons.Close,
-                contentDescription = "关闭",
+                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -635,14 +647,14 @@ internal fun PlaylistSourceSection(
     if (matches.isEmpty()) return
     val grouped = remember(matches) { matches.groupBy { it.playlist } }
 
-    SourcesSectionLabel("自备片单")
+    SourcesSectionLabel(stringResource(R.string.feature_subject_source_user_playlist))
 
     for ((playlist, items) in grouped) {
         val header =
             if (items.all { it.matched }) {
                 playlist.name
             } else {
-                "${playlist.name} · 未按话数匹配，展示前 ${items.size} 条"
+                stringResource(R.string.feature_subject_source_playlist_unmatched_hint, playlist.name, items.size)
             }
         Text(
             text = header,
@@ -666,7 +678,11 @@ internal fun PlaylistSourceSection(
                 subtitle =
                     playbackSourceSubtitle(
                         entry.siteName.ifBlank {
-                            if (entry.kind == PlaylistEntryKind.DIRECT) "应用内播放片单直链" else "外部打开片单页面"
+                            if (entry.kind == PlaylistEntryKind.DIRECT) {
+                                stringResource(R.string.feature_subject_source_play_playlist_direct)
+                            } else {
+                                stringResource(R.string.feature_subject_source_open_playlist_page)
+                            }
                         },
                         failure,
                     ),
@@ -727,10 +743,16 @@ internal fun PlaylistSourceSection(
 }
 
 /** 来源副标题：叠加最近一次播放失败归因 */
+@Composable
 internal fun playbackSourceSubtitle(
     base: String,
     failureReason: String?,
-): String = if (failureReason == null) base else "$base · 上次播放失败：$failureReason"
+): String =
+    if (failureReason == null) {
+        base
+    } else {
+        stringResource(R.string.feature_subject_source_last_failed_format, base, failureReason)
+    }
 
 @Composable
 internal fun EpisodeSourceActionCard(
@@ -743,7 +765,7 @@ internal fun EpisodeSourceActionCard(
     trailingContent: @Composable () -> Unit = {
         Icon(
             imageVector = BgmIcons.OpenInNew,
-            contentDescription = "打开",
+            contentDescription = stringResource(R.string.feature_subject_source_action_open),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(18.dp),
         )

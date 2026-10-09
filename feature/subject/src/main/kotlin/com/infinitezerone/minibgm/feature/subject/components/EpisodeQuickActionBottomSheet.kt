@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.statusAiringContainerC
 import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.feature.subject.R
 
 /** 分集轻量微操作面板（点击分集网格弹出，破解未看集数无法进入详情/吐槽的死胡同） */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -214,13 +216,20 @@ fun EpisodeQuickActionBottomSheet(
                         }
                         Column {
                             Text(
-                                text = "本集吐槽与讨论",
+                                text = stringResource(R.string.feature_subject_ep_quick_comments_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
-                                text = if (episode.comment > 0) "共 ${episode.comment} 条讨论 · 点击查看" else "暂无吐槽 · 抢先发表",
+                                text =
+                                    if (episode.comment >
+                                        0
+                                    ) {
+                                        stringResource(R.string.feature_subject_ep_quick_comments_count, episode.comment)
+                                    } else {
+                                        stringResource(R.string.feature_subject_ep_quick_no_comments)
+                                    },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -268,7 +277,16 @@ fun EpisodeQuickActionBottomSheet(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = if (isWatched) "取消打卡" else "标记已看")
+                    Text(
+                        text =
+                            if (isWatched) {
+                                stringResource(
+                                    R.string.feature_subject_ep_unwatch,
+                                )
+                            } else {
+                                stringResource(R.string.feature_subject_ep_mark_watched)
+                            },
+                    )
                 }
 
                 // 2. 播放 / 播放源（若可用）
@@ -287,7 +305,7 @@ fun EpisodeQuickActionBottomSheet(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "播放本集")
+                            Text(text = stringResource(R.string.feature_subject_ep_play_current))
                         }
                     } else if (onOpenSources != null) {
                         FilledTonalButton(
@@ -303,7 +321,7 @@ fun EpisodeQuickActionBottomSheet(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "播放源")
+                            Text(text = stringResource(R.string.feature_subject_ep_sources))
                         }
                     }
                 }
@@ -323,7 +341,7 @@ fun EpisodeQuickActionBottomSheet(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "看到此集 (1~${episode.episodeInt})")
+                    Text(text = stringResource(R.string.feature_subject_ep_watch_up_to_this, episode.episodeInt))
                 }
             }
         }

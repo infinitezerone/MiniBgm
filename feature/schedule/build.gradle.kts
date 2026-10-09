@@ -7,6 +7,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.feature.schedule"
+    resourcePrefix = "feature_schedule_"
 }
 
 dependencies {

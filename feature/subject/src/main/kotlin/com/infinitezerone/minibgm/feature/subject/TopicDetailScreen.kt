@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,12 +61,14 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrderTabs
 import com.infinitezerone.minibgm.feature.subject.components.TopicMainPostCard
 import com.infinitezerone.minibgm.feature.subject.components.TopicReplyCard
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 private const val BGM_BASE_URL = "https://bgm.tv"
 
@@ -100,7 +103,7 @@ fun TopicDetailScreen(
                 coroutineScope.launch {
                     val clipEntry = ClipEntry(ClipData.newPlainText("topic_content", text))
                     clipboard.setClipEntry(clipEntry)
-                    snackbarHostState.showSnackbar("已复制内容")
+                    snackbarHostState.showSnackbar(context.getString(R.string.feature_subject_topic_copied))
                 }
             }
         }
@@ -113,7 +116,7 @@ fun TopicDetailScreen(
     }
 
     val topic = uiState.topicDetail
-    val displayTitle = topic?.title ?: initialTitle.ifBlank { "讨论详情" }
+    val displayTitle = topic?.title ?: initialTitle.ifBlank { stringResource(R.string.feature_subject_topic_detail_title) }
     val opUserId = topic?.creator?.id
     val topicWebUrl =
         if (type == "group") {
@@ -149,7 +152,7 @@ fun TopicDetailScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         )
                     }
                 },
@@ -157,7 +160,7 @@ fun TopicDetailScreen(
                     IconButton(onClick = { context.launchWebUrl(topicWebUrl) }) {
                         Icon(
                             imageVector = BgmIcons.OpenInBrowser,
-                            contentDescription = "在浏览器中打开",
+                            contentDescription = stringResource(R.string.feature_subject_action_open_in_browser),
                         )
                     }
                 },
@@ -185,7 +188,7 @@ fun TopicDetailScreen(
                 ) {
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowUp,
-                        contentDescription = "回到顶部",
+                        contentDescription = stringResource(R.string.feature_subject_topic_back_to_top),
                     )
                 }
             }
@@ -206,7 +209,7 @@ fun TopicDetailScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "发表回帖请前往 Bangumi 网页版",
+                        text = stringResource(R.string.feature_subject_topic_web_reply_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -214,7 +217,10 @@ fun TopicDetailScreen(
                         onClick = { context.launchWebUrl(topicWebUrl) },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     ) {
-                        Text(text = "前往讨论", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            text = stringResource(R.string.feature_subject_topic_go_to_discuss),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
                     }
                 }
             }
@@ -249,12 +255,12 @@ fun TopicDetailScreen(
                             modifier = Modifier.padding(24.dp),
                         ) {
                             Text(
-                                text = uiState.error ?: "加载讨论帖失败",
+                                text = uiState.error ?: stringResource(R.string.feature_subject_topic_load_failed),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                             )
                             OutlinedButton(onClick = { viewModel.refresh(isUserPullToRefresh = false) }) {
-                                Text(text = "重新加载")
+                                Text(text = stringResource(DesignSystemR.string.core_designsystem_action_retry))
                             }
                         }
                     }
@@ -296,7 +302,12 @@ fun TopicDetailScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text(
-                                        text = if (topic.floorReplies.isNotEmpty()) "全部回复 (${topic.floorReplies.size})" else "暂无回帖",
+                                        text =
+                                            if (topic.floorReplies.isNotEmpty()) {
+                                                stringResource(R.string.feature_subject_topic_all_replies, topic.floorReplies.size)
+                                            } else {
+                                                stringResource(R.string.feature_subject_topic_no_replies)
+                                            },
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,

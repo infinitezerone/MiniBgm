@@ -10,8 +10,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 
 /**
@@ -25,7 +27,7 @@ fun BgmLoginPromptDialog(
     description: String,
     onLogin: () -> Unit,
     onDismiss: () -> Unit,
-    title: String = "请先登录 Bangumi 账号",
+    title: String = stringResource(R.string.core_designsystem_login_prompt_title),
     icon: ImageVector = BgmIcons.AccountCircle,
 ) {
     AlertDialog(
@@ -54,12 +56,12 @@ fun BgmLoginPromptDialog(
         },
         confirmButton = {
             Button(onClick = onLogin) {
-                Text("立即登录")
+                Text(stringResource(R.string.core_designsystem_action_login_now))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("稍后再说")
+                Text(stringResource(R.string.core_designsystem_action_dismiss_later))
             }
         },
     )

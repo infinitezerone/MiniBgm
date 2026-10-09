@@ -33,8 +33,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -45,19 +47,20 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import kotlin.math.roundToInt
 
 /** Bangumi 评分说明文案（1~10 分；0 分表示未评分） */
+@Composable
 private fun getScoreLabel(score: Int): String =
     when (score) {
-        1 -> "不忍直视"
-        2 -> "很差"
-        3 -> "差"
-        4 -> "较差"
-        5 -> "不过不失"
-        6 -> "还行"
-        7 -> "推荐"
-        8 -> "力荐"
-        9 -> "神作"
-        10 -> "极品"
-        else -> "未评分"
+        1 -> stringResource(R.string.core_designsystem_score_1)
+        2 -> stringResource(R.string.core_designsystem_score_2)
+        3 -> stringResource(R.string.core_designsystem_score_3)
+        4 -> stringResource(R.string.core_designsystem_score_4)
+        5 -> stringResource(R.string.core_designsystem_score_5)
+        6 -> stringResource(R.string.core_designsystem_score_6)
+        7 -> stringResource(R.string.core_designsystem_score_7)
+        8 -> stringResource(R.string.core_designsystem_score_8)
+        9 -> stringResource(R.string.core_designsystem_score_9)
+        10 -> stringResource(R.string.core_designsystem_score_10)
+        else -> stringResource(R.string.core_designsystem_collection_unrated)
     }
 
 /** 收藏状态 BottomSheet：单选状态、章节进度步进器、1~10 评分器、自定义与热门标签、私密开关、短评输入 */
@@ -108,7 +111,7 @@ fun CollectionStatusBottomSheet(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                text = "标记条目状态",
+                text = stringResource(R.string.core_designsystem_collection_sheet_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
@@ -116,7 +119,7 @@ fun CollectionStatusBottomSheet(
             // 1. 收藏状态单选
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "收藏类型",
+                    text = stringResource(R.string.core_designsystem_collection_type_header),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -175,7 +178,12 @@ fun CollectionStatusBottomSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (subjectType == SubjectType.BOOK) "阅读进度" else "收看进度",
+                            text =
+                                if (subjectType == SubjectType.BOOK) {
+                                    stringResource(R.string.core_designsystem_collection_progress_book)
+                                } else {
+                                    stringResource(R.string.core_designsystem_collection_progress_watch)
+                                },
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -184,7 +192,10 @@ fun CollectionStatusBottomSheet(
                                 onClick = { epStatus = totalEpisodes },
                                 modifier = Modifier.padding(0.dp),
                             ) {
-                                Text("全看完了", style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    stringResource(R.string.core_designsystem_collection_action_all_watched),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
                             }
                         }
                     }
@@ -198,21 +209,24 @@ fun CollectionStatusBottomSheet(
                             onClick = { if (epStatus > 0) epStatus-- },
                             enabled = epStatus > 0,
                         ) {
-                            Icon(imageVector = BgmIcons.Remove, contentDescription = "减一集")
+                            Icon(
+                                imageVector = BgmIcons.Remove,
+                                contentDescription = stringResource(R.string.core_designsystem_collection_action_dec_ep),
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(16.dp))
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "第 $epStatus 话",
+                                text = stringResource(R.string.core_designsystem_collection_current_ep, epStatus),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             if (totalEpisodes > 0) {
                                 Text(
-                                    text = "全 $totalEpisodes 话",
+                                    text = stringResource(R.string.core_designsystem_collection_total_ep, totalEpisodes),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -227,7 +241,10 @@ fun CollectionStatusBottomSheet(
                             },
                             enabled = totalEpisodes <= 0 || epStatus < totalEpisodes,
                         ) {
-                            Icon(imageVector = BgmIcons.Add, contentDescription = "加一集")
+                            Icon(
+                                imageVector = BgmIcons.Add,
+                                contentDescription = stringResource(R.string.core_designsystem_collection_action_inc_ep),
+                            )
                         }
                     }
                 }
@@ -241,12 +258,17 @@ fun CollectionStatusBottomSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "我的评分",
+                        text = stringResource(R.string.core_designsystem_collection_my_rating),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = if (rating == 0) "不评分" else "$rating 分 · ${getScoreLabel(rating)}",
+                        text =
+                            if (rating == 0) {
+                                stringResource(R.string.core_designsystem_collection_unrated)
+                            } else {
+                                stringResource(R.string.core_designsystem_collection_rating_format, rating, getScoreLabel(rating))
+                            },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (rating > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -265,7 +287,7 @@ fun CollectionStatusBottomSheet(
                         ) {
                             Icon(
                                 imageVector = if (star <= rating) BgmIcons.Star else BgmIcons.StarBorder,
-                                contentDescription = "$star 分",
+                                contentDescription = stringResource(R.string.core_designsystem_collection_star_cd, star),
                                 tint = if (star <= rating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                                 modifier = Modifier.size(22.dp),
                             )
@@ -285,15 +307,15 @@ fun CollectionStatusBottomSheet(
             // 4. 我的标签与热门标签
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "我的标签",
+                    text = stringResource(R.string.core_designsystem_collection_my_tags),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
                 OutlinedTextField(
                     value = tagsText,
                     onValueChange = { tagsText = it },
-                    label = { Text("标签 (空格分隔)") },
-                    placeholder = { Text("例如：热血 奇幻 MAPPA") },
+                    label = { Text(stringResource(R.string.core_designsystem_collection_tags_label)) },
+                    placeholder = { Text(stringResource(R.string.core_designsystem_collection_tags_placeholder)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -350,7 +372,7 @@ fun CollectionStatusBottomSheet(
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        text = "仅自己可见 (私密收藏)",
+                        text = stringResource(R.string.core_designsystem_collection_privacy_toggle),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -364,8 +386,8 @@ fun CollectionStatusBottomSheet(
             OutlinedTextField(
                 value = comment,
                 onValueChange = { comment = it },
-                label = { Text("简评 / 吐槽") },
-                placeholder = { Text("写下你的追番感想或评价...") },
+                label = { Text(stringResource(R.string.core_designsystem_collection_comment_label)) },
+                placeholder = { Text(stringResource(R.string.core_designsystem_collection_comment_placeholder)) },
                 minLines = 3,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
@@ -380,7 +402,7 @@ fun CollectionStatusBottomSheet(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(text = "取消")
+                    Text(text = stringResource(R.string.core_designsystem_action_cancel))
                 }
                 Button(
                     onClick = {
@@ -402,7 +424,7 @@ fun CollectionStatusBottomSheet(
                     },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text(text = "保存")
+                    Text(text = stringResource(R.string.core_designsystem_action_save))
                 }
             }
         }

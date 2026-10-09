@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -12,18 +13,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 评论/讨论版回复排序规则（贴吧/论坛通用标准：热门、正序、倒序）
  */
 enum class CommentSortOrder(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    HOT("热门"),
-    ASCENDING("正序"),
-    DESCENDING("倒序"),
+    HOT(R.string.feature_subject_comment_sort_hot),
+    ASCENDING(R.string.feature_subject_comment_sort_asc),
+    DESCENDING(R.string.feature_subject_comment_sort_desc),
 }
 
 /**
@@ -47,15 +50,15 @@ internal fun CommentSortOrderTabs(
             CommentSortOrder.entries.forEach { order ->
                 val isSelected = order == currentOrder
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                     modifier =
                         Modifier
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { onOrderSelected(order) },
                 ) {
                     Text(
-                        text = order.label,
+                        text = stringResource(order.labelRes),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color =

@@ -33,11 +33,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * Bangumi 官方表情表态 ID 到 tv 表情贴图文件名的映射表（对齐 next.bgm.tv 官方映射表）。
@@ -228,7 +230,7 @@ fun CommentReactionsBar(
                     ) {
                         Icon(
                             imageVector = BgmIcons.Add,
-                            contentDescription = "添加表态",
+                            contentDescription = stringResource(R.string.feature_subject_reaction_add),
                             tint =
                                 if (showPicker) {
                                     MaterialTheme.colorScheme.primary
@@ -239,7 +241,7 @@ fun CommentReactionsBar(
                         )
                         if (reactions.isEmpty()) {
                             Text(
-                                text = "表态",
+                                text = stringResource(R.string.feature_subject_reaction_cd),
                                 style = MaterialTheme.typography.labelSmall,
                                 color =
                                     if (showPicker) {
@@ -261,7 +263,7 @@ fun CommentReactionsBar(
             exit = fadeOut() + shrinkVertically(),
         ) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             ) {

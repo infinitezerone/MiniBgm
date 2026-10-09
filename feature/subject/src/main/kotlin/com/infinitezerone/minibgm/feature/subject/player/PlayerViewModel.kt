@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.ChineseConverter
@@ -17,6 +18,7 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -60,6 +62,7 @@ data class PlayerSourceTab(
     val name: String,
     val rule: PlaybackSourceRule? = null,
     val isDirect: Boolean = false,
+    @StringRes val nameRes: Int? = null,
 )
 
 /**
@@ -289,6 +292,12 @@ class PlayerViewModel(
                     id = "direct",
                     name = if (route.queue.size > 1) "自备片单" else "默认直链",
                     isDirect = true,
+                    nameRes =
+                        if (route.queue.size > 1) {
+                            R.string.feature_subject_source_user_playlist
+                        } else {
+                            R.string.feature_subject_player_source_default_direct
+                        },
                 ),
             )
         }

@@ -1,11 +1,13 @@
 package com.infinitezerone.minibgm.feature.subject.navigation
 
+import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.EpisodeDetailScreen
+import com.infinitezerone.minibgm.feature.subject.R
 
 /** 分集详情与讨论全屏三级页面的导航条目；由 `:app` 的 BgmNavHost 聚合（NiA 模式） */
 fun EntryProviderScope<NavKey>.episodeDetailEntry(
@@ -24,9 +26,24 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
     entry<EpisodeDetailRoute>(metadata = metadata) { route ->
         val epNumberText =
             if (route.episodeType == 0) {
-                "第 ${route.episodeSort.toEpisodeLabel()} 话"
+                if (route.episodeSort >
+                    0f
+                ) {
+                    stringResource(R.string.feature_subject_episode_format, route.episodeSort.toEpisodeLabel())
+                } else {
+                    ""
+                }
             } else {
-                "SP ${route.episodeSort.toInt()}"
+                val group =
+                    com.infinitezerone.minibgm.core.model.EpisodeGroup
+                        .fromType(route.episodeType)
+                if (route.episodeSort >
+                    0f
+                ) {
+                    stringResource(R.string.feature_subject_episode_custom_format, group.label, route.episodeSort.toInt())
+                } else {
+                    group.label
+                }
             }
         val displayTitle = route.episodeNameCn.ifBlank { route.episodeName.ifBlank { epNumberText } }
 
@@ -43,14 +60,7 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
                     onSubjectClick(targetSubjectId)
                 }
             },
-            onEpisodeClick = { targetEpId ->
-                onEpisodeClick(
-                    EpisodeDetailRoute(
-                        episodeId = targetEpId,
-                        subjectId = route.subjectId,
-                    ),
-                )
-            },
+            onEpisodeClick = onEpisodeClick,
             onCharacterClick = onCharacterClick,
             onPersonClick = onPersonClick,
             onTopicClick = onTopicClick,

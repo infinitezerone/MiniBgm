@@ -4,6 +4,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
@@ -21,6 +22,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 条目详情页的所有浮层与抽屉（快捷打卡、登录提示、权限弹窗、详情抽屉与播放源抽屉）统一收敛组件。
@@ -78,7 +80,7 @@ internal fun SubjectDetailOverlays(
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
-            description = "追番、收藏与章节打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+            description = stringResource(R.string.feature_subject_login_prompt_desc),
             onLogin = onLoginClick,
             onDismiss = onDismissLoginPrompt,
         )

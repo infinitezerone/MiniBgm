@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,17 +61,19 @@ import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
+import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 关联条目分类枚举（对齐 Bangumi 官网分类规则） */
 enum class RelationCategory(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    MAIN_STORY("正传/续作"),
-    ORIGINAL("改编原著"),
-    MUSIC("原声音乐"),
-    SPINOFF("衍生/特典"),
-    GAME("游戏"),
-    OTHER("其他"),
+    MAIN_STORY(R.string.feature_subject_relation_cat_main_story),
+    ORIGINAL(R.string.feature_subject_relation_cat_original),
+    MUSIC(R.string.feature_subject_relation_cat_music),
+    SPINOFF(R.string.feature_subject_relation_cat_spinoff),
+    GAME(R.string.feature_subject_relation_cat_game),
+    OTHER(R.string.feature_subject_relation_cat_other),
     ;
 
     companion object {
@@ -141,9 +145,10 @@ fun RelationsSection(
     val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var isGridView by rememberSaveable { mutableStateOf(false) }
+    val thisWorkLabel = stringResource(R.string.feature_subject_this_work)
 
     val mainStoryTimelineNodes =
-        remember(uniqueRelations, currentSubjectId, currentSubjectName, currentSubjectCover, currentSubjectScore) {
+        remember(uniqueRelations, currentSubjectId, currentSubjectName, currentSubjectCover, currentSubjectScore, thisWorkLabel) {
             if (currentSubjectId == null) return@remember emptyList()
             val prequels =
                 uniqueRelations
@@ -173,7 +178,7 @@ fun RelationsSection(
                 TimelineStoryNode(
                     id = currentSubjectId,
                     name = currentSubjectName,
-                    relationLabel = "本作",
+                    relationLabel = thisWorkLabel,
                     coverUrl = currentSubjectCover,
                     score = currentSubjectScore,
                     isCurrent = true,
@@ -226,10 +231,10 @@ fun RelationsSection(
         ) {
             val titleText =
                 if (selectedCategory != null) {
-                    val catLabel = RelationCategory.valueOf(selectedCategory!!).label
-                    "关联作品 · $catLabel (${filteredRelations.size})"
+                    val catLabel = stringResource(RelationCategory.valueOf(selectedCategory!!).labelRes)
+                    stringResource(R.string.feature_subject_relations_title_with_category, catLabel, filteredRelations.size)
                 } else {
-                    "关联作品 (${uniqueRelations.size})"
+                    stringResource(R.string.feature_subject_relations_title, uniqueRelations.size)
                 }
 
             Text(
@@ -266,7 +271,12 @@ fun RelationsSection(
                                 },
                         )
                         Text(
-                            text = if (isGridView) "横滑模式" else "海报墙 (${uniqueRelations.size})",
+                            text =
+                                if (isGridView) {
+                                    stringResource(R.string.feature_subject_view_mode_scroll_mode)
+                                } else {
+                                    stringResource(R.string.feature_subject_view_mode_grid, uniqueRelations.size)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color =
@@ -302,7 +312,7 @@ fun RelationsSection(
                         onClick = { selectedCategory = null },
                         label = {
                             Text(
-                                text = "全部 (${uniqueRelations.size})",
+                                text = stringResource(R.string.feature_subject_relations_all, uniqueRelations.size),
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         },
@@ -326,7 +336,7 @@ fun RelationsSection(
                         },
                         label = {
                             Text(
-                                text = "${category.label} ($count)",
+                                text = "${stringResource(category.labelRes)} ($count)",
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         },
@@ -412,13 +422,13 @@ fun MainStoryTimeline(
                 tint = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = "主线系列观影顺序 (${nodes.size})",
+                text = stringResource(R.string.feature_subject_main_series_order, nodes.size),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = "前传 · 本作 · 续作",
+                text = stringResource(R.string.feature_subject_order_summary),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             )
@@ -524,7 +534,14 @@ private fun TimelineNodeCard(
                     modifier = Modifier.align(Alignment.TopStart),
                 ) {
                     Text(
-                        text = if (node.isCurrent) "当前 · 本作" else "$index. ${node.relationLabel}",
+                        text =
+                            if (node.isCurrent) {
+                                stringResource(
+                                    R.string.feature_subject_current_work,
+                                )
+                            } else {
+                                "$index. ${node.relationLabel}"
+                            },
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.82f,
                         fontWeight = FontWeight.Bold,
@@ -685,12 +702,12 @@ fun CharactersSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "登场角色与声优",
+                text = stringResource(R.string.feature_subject_characters_and_actors),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "${characters.size} 位角色",
+                text = stringResource(R.string.feature_subject_characters_count, characters.size),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -768,7 +785,7 @@ private fun CharacterCard(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = BgmIcons.ZoomIn,
-                            contentDescription = "查看全身立绘",
+                            contentDescription = stringResource(R.string.feature_subject_view_full_character_image),
                             tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(15.dp),
                         )
@@ -806,7 +823,7 @@ private fun CharacterCard(
                             url = actorImage,
                             contentDescription = actor.name,
                             modifier = Modifier.size(18.dp),
-                            cornerRadius = 9.dp,
+                            shape = CircleShape,
                             aspectRatio = 1f,
                             alignment = Alignment.TopCenter,
                             placeholder = CoverPlaceholder.Person,
@@ -845,7 +862,7 @@ fun StaffSection(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
-            text = "制作团队",
+            text = stringResource(R.string.feature_subject_production_staff),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -928,7 +945,12 @@ fun StaffSection(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (isExpanded) "收起制作团队" else "查看完整制作团队 (${entries.size})",
+                            text =
+                                if (isExpanded) {
+                                    stringResource(R.string.feature_subject_collapse_staff)
+                                } else {
+                                    stringResource(R.string.feature_subject_expand_staff, entries.size)
+                                },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
@@ -968,7 +990,7 @@ fun CharacterImagePreviewDialog(
                 ) {
                     Icon(
                         imageVector = BgmIcons.Close,
-                        contentDescription = "关闭",
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                         tint = Color.White,
                     )
                 }
@@ -1027,7 +1049,7 @@ fun CharacterImagePreviewDialog(
                     if (actor != null && actor.name.isNotBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "声优：${actor.name}",
+                            text = stringResource(R.string.feature_subject_actor_format, actor.name),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.8f),
                         )
@@ -1041,7 +1063,7 @@ fun CharacterImagePreviewDialog(
                             onViewDetail(character.id)
                         },
                     ) {
-                        Text("查看角色详情")
+                        Text(stringResource(R.string.feature_subject_view_character_detail))
                     }
                 }
             }

@@ -17,8 +17,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -60,7 +62,7 @@ fun AiringReminderPermissionDialog(
         },
         title = {
             Text(
-                text = "开启追番更新提醒？",
+                text = stringResource(R.string.core_designsystem_airing_perm_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -69,9 +71,9 @@ fun AiringReminderPermissionDialog(
             Column {
                 val detailText =
                     if (!subjectTitle.isNullOrBlank()) {
-                        "已将《$subjectTitle》加入追番！开启通知权限后，MiniBgm 可以在该番剧每日开播和更新时提前提醒你，不错过每一话精彩。"
+                        stringResource(R.string.core_designsystem_airing_perm_msg_with_title, subjectTitle)
                     } else {
-                        "已将番剧加入追番！开启通知权限后，MiniBgm 可以在番剧每日开播和更新时提前提醒你，不错过每一话精彩。"
+                        stringResource(R.string.core_designsystem_airing_perm_msg_generic)
                     }
                 Text(
                     text = detailText,
@@ -80,7 +82,7 @@ fun AiringReminderPermissionDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "提示：可在「我的 - 设置」中自定义每日提醒时刻与延迟时间。",
+                    text = stringResource(R.string.core_designsystem_airing_perm_tip),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                 )
@@ -92,7 +94,7 @@ fun AiringReminderPermissionDialog(
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text(
-                    text = "开启通知",
+                    text = stringResource(R.string.core_designsystem_action_enable_notification),
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -100,7 +102,7 @@ fun AiringReminderPermissionDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "暂不需要",
+                    text = stringResource(R.string.core_designsystem_action_not_now),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

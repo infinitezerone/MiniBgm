@@ -90,7 +90,7 @@ fun SeasonalAnimeCard(
                 CoverImage(
                     url = subject.images?.bestImage.orEmpty(),
                     contentDescription = primaryTitle,
-                    cornerRadius = 10.dp,
+                    cornerRadius = 8.dp,
                     aspectRatio = BGM_POSTER_ASPECT_RATIO,
                     modifier =
                         Modifier

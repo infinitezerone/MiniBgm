@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
+import com.infinitezerone.minibgm.feature.subject.R
 
 private const val MAX_FEATURED_ITEMS = 10
 private const val POSTER_GRID_COLUMNS = 3
@@ -152,7 +154,14 @@ fun RelatedWorksSection(
                             tint = toggleContentColor,
                         )
                         Text(
-                            text = if (isGridView) "横滑精选" else "海报墙 (${aggregatedWorks.size})",
+                            text =
+                                if (isGridView) {
+                                    stringResource(
+                                        R.string.feature_subject_view_mode_scroll,
+                                    )
+                                } else {
+                                    stringResource(R.string.feature_subject_view_mode_grid, aggregatedWorks.size)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = toggleContentColor,
@@ -172,7 +181,12 @@ fun RelatedWorksSection(
                     FilterChip(
                         selected = selectedRoleFilter == null,
                         onClick = { selectedRoleFilter = null },
-                        label = { Text("全部 (${aggregatedWorks.size})", style = MaterialTheme.typography.labelSmall) },
+                        label = {
+                            Text(
+                                stringResource(R.string.feature_subject_relations_all, aggregatedWorks.size),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
                         border = null,
                         colors =
                             FilterChipDefaults.filterChipColors(
@@ -262,13 +276,13 @@ fun RelatedWorksSection(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "查看全部",
+                                    text = stringResource(R.string.feature_subject_view_all),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
-                                    text = "共 ${filteredWorks.size} 部",
+                                    text = stringResource(R.string.feature_subject_total_works_count, filteredWorks.size),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -320,7 +334,7 @@ fun RelatedWorksSection(
                         onClick = { gridDisplayLimit += 24 },
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     ) {
-                        Text("展开更多作品 (剩余 $remainingCount 部)")
+                        Text(stringResource(R.string.feature_subject_expand_more_works, remainingCount))
                     }
                 }
             }
@@ -351,7 +365,7 @@ private fun RelatedWorkCard(
                     url = work.coverImage,
                     contentDescription = work.displayName,
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 6.dp,
+                    cornerRadius = 8.dp,
                     aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
                 )
                 if (work.staff.isNotBlank()) {

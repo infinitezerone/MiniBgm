@@ -24,7 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.R
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -52,8 +54,8 @@ interface OverlayRequest<out R>
 data class ConfirmDialogAction(
     val title: String,
     val message: String,
-    val confirmText: String = "确定",
-    val dismissText: String = "取消",
+    val confirmText: String? = null,
+    val dismissText: String? = null,
     val isDestructive: Boolean = false,
     val isPrimary: Boolean = false,
     val icon: ImageVector? = null,
@@ -67,7 +69,7 @@ data class SingleChoiceDialogAction<T : Any>(
     val options: List<T>,
     val selectedOption: T,
     val optionLabel: (T) -> String = { it.toString() },
-    val dismissText: String = "关闭",
+    val dismissText: String? = null,
 ) : OverlayRequest<T?>
 
 /**
@@ -181,6 +183,7 @@ class OverlayProviderScope internal constructor() {
                 title = { Text(text = action.title) },
                 text = { Text(text = action.message) },
                 confirmButton = {
+                    val confirmLabel = action.confirmText ?: stringResource(R.string.core_designsystem_action_confirm)
                     when {
                         action.isDestructive -> {
                             Button(
@@ -191,24 +194,25 @@ class OverlayProviderScope internal constructor() {
                                         contentColor = MaterialTheme.colorScheme.onError,
                                     ),
                             ) {
-                                Text(text = action.confirmText)
+                                Text(text = confirmLabel)
                             }
                         }
                         action.isPrimary -> {
                             Button(onClick = { onRespond(true) }) {
-                                Text(text = action.confirmText)
+                                Text(text = confirmLabel)
                             }
                         }
                         else -> {
                             TextButton(onClick = { onRespond(true) }) {
-                                Text(text = action.confirmText)
+                                Text(text = confirmLabel)
                             }
                         }
                     }
                 },
                 dismissButton = {
+                    val dismissLabel = action.dismissText ?: stringResource(R.string.core_designsystem_action_cancel)
                     TextButton(onClick = { onRespond(false) }) {
-                        Text(text = action.dismissText)
+                        Text(text = dismissLabel)
                     }
                 },
             )
@@ -251,8 +255,9 @@ class OverlayProviderScope internal constructor() {
                     }
                 },
                 confirmButton = {
+                    val dismissLabel = typedRequest.dismissText ?: stringResource(R.string.core_designsystem_action_close)
                     TextButton(onClick = { onRespond(null) }) {
-                        Text(text = typedRequest.dismissText)
+                        Text(text = dismissLabel)
                     }
                 },
             )

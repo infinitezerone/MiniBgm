@@ -21,10 +21,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.schedule.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @Composable
 fun ScheduleDayEmptyNote(
@@ -45,7 +48,12 @@ fun ScheduleDayEmptyNote(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = if (onlyWatching) "今天没有你追的番更新哦，去【全网开播】看看新番吧" else "本日暂无新番排播",
+                text =
+                    if (onlyWatching) {
+                        stringResource(R.string.feature_schedule_empty_watchlist)
+                    } else {
+                        stringResource(R.string.feature_schedule_empty_day)
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = TextAlign.Center,
@@ -56,7 +64,7 @@ fun ScheduleDayEmptyNote(
                     onClick = onSwitchToAll,
                     shape = RoundedCornerShape(8.dp),
                 ) {
-                    Text("查看全网开播")
+                    Text(stringResource(R.string.feature_schedule_btn_view_all_broadcast))
                 }
             }
         }
@@ -82,14 +90,14 @@ fun OfflineCacheBanner(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "离线缓存数据 · 下拉或点击重试",
+                text = stringResource(R.string.feature_schedule_offline_cache_tip),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
             IconButton(onClick = onRetry, modifier = Modifier.size(24.dp)) {
                 Icon(
                     imageVector = BgmIcons.Refresh,
-                    contentDescription = "重试",
+                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_retry),
                     tint = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.size(16.dp),
                 )
@@ -110,10 +118,10 @@ fun ScheduleErrorState(
             modifier
                 .fillMaxSize()
                 .padding(24.dp),
-        title = "放送表加载失败",
+        title = stringResource(R.string.feature_schedule_load_failed_title),
         icon = BgmIcons.CloudOff,
         iconTint = MaterialTheme.colorScheme.error,
-        actionLabel = "重试",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_retry),
         onAction = onRetry,
     )
 }

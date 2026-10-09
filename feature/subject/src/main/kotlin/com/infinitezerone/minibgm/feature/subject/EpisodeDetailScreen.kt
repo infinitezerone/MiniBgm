@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +58,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,15 +74,18 @@ import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
+import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrderTabs
 import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 分集详情与讨论全屏三级页面（由 Navigation 3 栈式路由驱动）。
@@ -96,7 +101,7 @@ fun EpisodeDetailScreen(
     initialEpisodeTitle: String = "",
     onBackClick: () -> Unit,
     onSubjectClick: (Long) -> Unit,
-    onEpisodeClick: (Long) -> Unit,
+    onEpisodeClick: (EpisodeDetailRoute) -> Unit,
     onCharacterClick: (Long) -> Unit,
     onPersonClick: (Long) -> Unit,
     onTopicClick: (Long, String) -> Unit = { _, _ -> },
@@ -123,7 +128,7 @@ fun EpisodeDetailScreen(
                 coroutineScope.launch {
                     val clipEntry = ClipEntry(ClipData.newPlainText("comment", text))
                     clipboard.setClipEntry(clipEntry)
-                    snackbarHostState.showSnackbar("已复制评论内容")
+                    snackbarHostState.showSnackbar(context.getString(R.string.feature_subject_ep_copied_content))
                 }
             }
         }
@@ -142,9 +147,9 @@ fun EpisodeDetailScreen(
             val confirmed =
                 overlayHostState.await(
                     ConfirmDialogAction(
-                        title = "未安装 $appName 客户端",
-                        message = "未检测到 $appName 客户端，是否在应用内使用浏览器打开该播放源？",
-                        confirmText = "浏览器打开",
+                        title = context.getString(R.string.feature_subject_ep_app_not_installed_title, appName),
+                        message = context.getString(R.string.feature_subject_ep_app_not_installed_desc, appName),
+                        confirmText = context.getString(DesignSystemR.string.core_designsystem_action_open_browser),
                     ),
                 )
             if (confirmed) {
@@ -159,7 +164,7 @@ fun EpisodeDetailScreen(
         if (episode != null) {
             episode.guideLabel
         } else {
-            initialEpNumberText.ifBlank { "分集详情" }
+            initialEpNumberText.ifBlank { stringResource(R.string.feature_subject_ep_detail_title) }
         }
     val displayTitle = episode?.displayTitle ?: initialEpisodeTitle.ifBlank { episodeNumberText }
 
@@ -168,7 +173,13 @@ fun EpisodeDetailScreen(
             { url ->
                 when (val link = BgmUrlParser.parse(url)) {
                     is BgmLink.Subject -> onSubjectClick(link.subjectId)
-                    is BgmLink.Episode -> onEpisodeClick(link.episodeId)
+                    is BgmLink.Episode ->
+                        onEpisodeClick(
+                            EpisodeDetailRoute(
+                                episodeId = link.episodeId,
+                                subjectId = subjectId,
+                            ),
+                        )
                     is BgmLink.Character -> onCharacterClick(link.characterId)
                     is BgmLink.Person -> onPersonClick(link.personId)
                     is BgmLink.Topic -> onTopicClick(link.topicId, "")
@@ -188,8 +199,14 @@ fun EpisodeDetailScreen(
         topBar = {
             BgmTopAppBar(
                 title = {
+                    val fullTitle =
+                        when {
+                            episodeNumberText.isBlank() -> displayTitle
+                            displayTitle.isBlank() || displayTitle == episodeNumberText -> episodeNumberText
+                            else -> "$episodeNumberText $displayTitle"
+                        }
                     Text(
-                        text = "$episodeNumberText $displayTitle",
+                        text = fullTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -198,7 +215,7 @@ fun EpisodeDetailScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         )
                     }
                 },
@@ -210,7 +227,7 @@ fun EpisodeDetailScreen(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Play,
-                                    contentDescription = "播放本集",
+                                    contentDescription = stringResource(R.string.feature_subject_ep_play_current),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
@@ -223,7 +240,12 @@ fun EpisodeDetailScreen(
                         ) {
                             Icon(
                                 imageVector = if (uiState.isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
-                                contentDescription = if (uiState.isWatched) "已看过" else "未看过",
+                                contentDescription =
+                                    if (uiState.isWatched) {
+                                        stringResource(R.string.feature_subject_ep_status_watched)
+                                    } else {
+                                        stringResource(R.string.feature_subject_ep_status_unwatched)
+                                    },
                                 tint =
                                     if (uiState.isWatched) {
                                         MaterialTheme.colorScheme.primary
@@ -279,22 +301,24 @@ fun EpisodeDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                    ) {
-                                        Text(
-                                            text = episodeNumberText,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                        )
+                                    if (episodeNumberText.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                        ) {
+                                            Text(
+                                                text = episodeNumberText,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            )
+                                        }
                                     }
 
                                     if (episode != null && episode.type != 0) {
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
+                                            shape = RoundedCornerShape(4.dp),
                                             color = MaterialTheme.colorScheme.secondaryContainer,
                                         ) {
                                             Text(
@@ -310,8 +334,18 @@ fun EpisodeDetailScreen(
                                     if (episode != null) {
                                         val metaParts =
                                             listOfNotNull(
-                                                episode.airdate.takeIf { it.isNotBlank() }?.let { "放送：$it" },
-                                                episode.duration.takeIf { it.isNotBlank() }?.let { "时长：$it" },
+                                                episode.airdate.takeIf { it.isNotBlank() }?.let {
+                                                    stringResource(
+                                                        R.string.feature_subject_ep_air_date,
+                                                        it,
+                                                    )
+                                                },
+                                                episode.duration.takeIf { it.isNotBlank() }?.let {
+                                                    stringResource(
+                                                        R.string.feature_subject_ep_duration,
+                                                        it,
+                                                    )
+                                                },
                                             )
                                         if (metaParts.isNotEmpty()) {
                                             Text(
@@ -368,7 +402,7 @@ fun EpisodeDetailScreen(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "播放本集",
+                                                text = stringResource(R.string.feature_subject_ep_play_current),
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.labelLarge,
                                             )
@@ -398,7 +432,12 @@ fun EpisodeDetailScreen(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = if (uiState.isWatched) "已看过" else "标记已看",
+                                                text =
+                                                    if (uiState.isWatched) {
+                                                        stringResource(R.string.feature_subject_ep_status_watched)
+                                                    } else {
+                                                        stringResource(R.string.feature_subject_ep_mark_watched)
+                                                    },
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.labelLarge,
                                             )
@@ -432,7 +471,7 @@ fun EpisodeDetailScreen(
                                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                                 Text(
-                                                    text = "选择播放源",
+                                                    text = stringResource(R.string.feature_subject_ep_choose_source),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -457,7 +496,11 @@ fun EpisodeDetailScreen(
                                                         tint = MaterialTheme.colorScheme.primary,
                                                     )
                                                     Text(
-                                                        text = "看到此集 (1~${episode.episodeInt})",
+                                                        text =
+                                                            stringResource(
+                                                                R.string.feature_subject_ep_watch_up_to_this,
+                                                                episode.episodeInt,
+                                                            ),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.primary,
                                                         fontWeight = FontWeight.SemiBold,
@@ -487,7 +530,18 @@ fun EpisodeDetailScreen(
                                 ) {
                                     if (prevEp != null) {
                                         Surface(
-                                            onClick = { onEpisodeClick(prevEp.id) },
+                                            onClick = {
+                                                onEpisodeClick(
+                                                    EpisodeDetailRoute(
+                                                        episodeId = prevEp.id,
+                                                        subjectId = subjectId,
+                                                        episodeSort = prevEp.sort,
+                                                        episodeType = prevEp.type,
+                                                        episodeName = prevEp.name,
+                                                        episodeNameCn = prevEp.nameCn,
+                                                    ),
+                                                )
+                                            },
                                             shape = RoundedCornerShape(12.dp),
                                             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
                                             modifier = Modifier.weight(1f).height(46.dp),
@@ -498,19 +552,19 @@ fun EpisodeDetailScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = BgmIcons.KeyboardArrowLeft,
-                                                    contentDescription = "上一集",
+                                                    contentDescription = stringResource(R.string.feature_subject_ep_previous),
                                                     modifier = Modifier.size(18.dp),
                                                     tint = MaterialTheme.colorScheme.primary,
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
-                                                        text = "上一集",
+                                                        text = stringResource(R.string.feature_subject_ep_previous),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                     Text(
-                                                        text = "第 ${prevEp.formattedNumber} 话",
+                                                        text = prevEp.guideLabel,
                                                         style = MaterialTheme.typography.labelMedium,
                                                         fontWeight = FontWeight.Bold,
                                                         maxLines = 1,
@@ -527,7 +581,18 @@ fun EpisodeDetailScreen(
 
                                     if (nextEp != null) {
                                         Surface(
-                                            onClick = { onEpisodeClick(nextEp.id) },
+                                            onClick = {
+                                                onEpisodeClick(
+                                                    EpisodeDetailRoute(
+                                                        episodeId = nextEp.id,
+                                                        subjectId = subjectId,
+                                                        episodeSort = nextEp.sort,
+                                                        episodeType = nextEp.type,
+                                                        episodeName = nextEp.name,
+                                                        episodeNameCn = nextEp.nameCn,
+                                                    ),
+                                                )
+                                            },
                                             shape = RoundedCornerShape(12.dp),
                                             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
                                             modifier = Modifier.weight(1f).height(46.dp),
@@ -542,12 +607,12 @@ fun EpisodeDetailScreen(
                                                     modifier = Modifier.weight(1f),
                                                 ) {
                                                     Text(
-                                                        text = "下一集",
+                                                        text = stringResource(R.string.feature_subject_ep_next),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
                                                     Text(
-                                                        text = "第 ${nextEp.formattedNumber} 话",
+                                                        text = nextEp.guideLabel,
                                                         style = MaterialTheme.typography.labelMedium,
                                                         fontWeight = FontWeight.Bold,
                                                         maxLines = 1,
@@ -557,7 +622,7 @@ fun EpisodeDetailScreen(
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Icon(
                                                     imageVector = BgmIcons.KeyboardArrowRight,
-                                                    contentDescription = "下一集",
+                                                    contentDescription = stringResource(R.string.feature_subject_ep_next),
                                                     modifier = Modifier.size(18.dp),
                                                     tint = MaterialTheme.colorScheme.primary,
                                                 )
@@ -582,7 +647,7 @@ fun EpisodeDetailScreen(
                             var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
 
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.88f),
                                 modifier =
                                     Modifier
@@ -606,11 +671,11 @@ fun EpisodeDetailScreen(
                                                 modifier =
                                                     Modifier
                                                         .size(3.dp, 12.dp)
-                                                        .clip(RoundedCornerShape(1.5.dp))
+                                                        .clip(CircleShape)
                                                         .background(MaterialTheme.colorScheme.primary),
                                             )
                                             Text(
-                                                text = "剧情梗概",
+                                                text = stringResource(R.string.feature_subject_ep_synopsis),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface,
@@ -622,7 +687,7 @@ fun EpisodeDetailScreen(
                                                 label = "desc_expand_arrow",
                                             )
                                             Surface(
-                                                shape = RoundedCornerShape(10.dp),
+                                                shape = RoundedCornerShape(8.dp),
                                                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
                                             ) {
                                                 Row(
@@ -631,7 +696,12 @@ fun EpisodeDetailScreen(
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                                 ) {
                                                     Text(
-                                                        text = if (isDescExpanded) "收起" else "展开",
+                                                        text =
+                                                            if (isDescExpanded) {
+                                                                stringResource(R.string.feature_subject_collapse)
+                                                            } else {
+                                                                stringResource(R.string.feature_subject_expand)
+                                                            },
                                                         style = MaterialTheme.typography.labelSmall,
                                                         fontWeight = FontWeight.Medium,
                                                         color = MaterialTheme.colorScheme.primary,
@@ -679,7 +749,7 @@ fun EpisodeDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
-                                    text = "本集吐槽与讨论",
+                                    text = stringResource(R.string.feature_subject_ep_quick_comments_title),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                 )
@@ -690,7 +760,7 @@ fun EpisodeDetailScreen(
                                         color = MaterialTheme.colorScheme.primaryContainer,
                                     ) {
                                         Text(
-                                            text = "$totalCount 条",
+                                            text = stringResource(R.string.feature_subject_ep_comments_total, totalCount),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -731,7 +801,7 @@ fun EpisodeDetailScreen(
                                         strokeWidth = 2.dp,
                                     )
                                     Text(
-                                        text = "正在获取单集吐槽...",
+                                        text = stringResource(R.string.feature_subject_ep_comments_loading),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -760,7 +830,7 @@ fun EpisodeDetailScreen(
                                         modifier = Modifier.size(36.dp),
                                     )
                                     Text(
-                                        text = "吐槽加载失败",
+                                        text = stringResource(R.string.feature_subject_ep_comments_load_failed),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -781,7 +851,7 @@ fun EpisodeDetailScreen(
                                             modifier = Modifier.size(16.dp),
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = "重新加载")
+                                        Text(text = stringResource(DesignSystemR.string.core_designsystem_action_retry))
                                     }
                                 }
                             }
@@ -794,7 +864,7 @@ fun EpisodeDetailScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    text = "本集暂无吐槽，快来做第一个讨论的人吧",
+                                    text = stringResource(R.string.feature_subject_ep_comments_empty),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(20.dp),
@@ -869,7 +939,7 @@ fun EpisodeDetailScreen(
 
     if (uiState.showLoginPromptDialog) {
         BgmLoginPromptDialog(
-            description = "分集打卡需要同步至您的 Bangumi 账号，登录后即可随手打卡并同步进度。",
+            description = stringResource(R.string.feature_subject_ep_login_prompt_desc),
             onLogin = {
                 viewModel.dismissLoginPrompt()
                 onLoginRequest()
