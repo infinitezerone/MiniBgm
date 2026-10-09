@@ -536,17 +536,17 @@ internal fun PlayerGestureDetector(
             Box(modifier = Modifier.fillMaxSize()) {
                 when (val state = hudState) {
                     is GestureHudState.Brightness -> {
-                        SideCapsuleIndicator(
+                        TopCapsuleIndicator(
                             icon = BgmIcons.BrightnessLow,
                             percent = state.percent,
-                            modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp),
+                            modifier = Modifier.align(Alignment.TopCenter),
                         )
                     }
                     is GestureHudState.Volume -> {
-                        SideCapsuleIndicator(
+                        TopCapsuleIndicator(
                             icon = if (state.percent == 0) BgmIcons.VolumeMute else BgmIcons.VolumeUp,
                             percent = state.percent,
-                            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 24.dp),
+                            modifier = Modifier.align(Alignment.TopCenter),
                         )
                     }
                     is GestureHudState.Seek -> {
@@ -571,47 +571,47 @@ internal fun PlayerGestureDetector(
 }
 
 /**
- * 屏幕边缘竖向微胶囊指示器（对标 iOS/B站侧边条，不遮挡画面正中视线）
+ * 屏幕顶部正上方横向灵动微胶囊指示器（防大拇指遮挡、视线居中自然、不挡字幕）
  */
 @Composable
-private fun SideCapsuleIndicator(
+private fun TopCapsuleIndicator(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     percent: Int,
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Black.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(percent = 50),
+        color = Color.Black.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier,
+        modifier = modifier.padding(top = 16.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 14.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
-            // 垂直胶囊填充轨
+            // 横向胶囊填充轨
             Box(
                 modifier =
                     Modifier
-                        .width(5.dp)
-                        .height(84.dp)
-                        .background(Color.White.copy(alpha = 0.25f), shape = RoundedCornerShape(2.4.dp)),
-                contentAlignment = Alignment.BottomCenter,
+                        .width(108.dp)
+                        .height(5.dp)
+                        .background(Color.White.copy(alpha = 0.25f), shape = RoundedCornerShape(percent = 50)),
+                contentAlignment = Alignment.CenterStart,
             ) {
                 Box(
                     modifier =
                         Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight((percent / 100f).coerceIn(0f, 1f))
-                            .background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(2.4.dp)),
+                            .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(percent = 50)),
                 )
             }
             Text(
