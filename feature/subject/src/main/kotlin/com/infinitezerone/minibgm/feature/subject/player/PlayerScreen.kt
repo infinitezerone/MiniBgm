@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -764,17 +765,23 @@ fun PlayerScreen(
                     onTabSelected = { currentTab = it },
                 )
 
-                // 下半部：Tab 页面内容
-                if (currentTab == 0) {
-                    LazyColumn(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
+                // 下半部：两个 Tab 共用同一个 LazyColumn。
+                // 留白、首尾间距、滚动行为因此只有一份定义，左右边界天然对齐；
+                // 原先讨论 Tab 是包在 weight(1f) 里的普通 Column，长剧情简介会被直接裁掉。
+                val tabListState = rememberLazyListState()
+                LaunchedEffect(currentTab) { tabListState.scrollToItem(0) }
+
+                LazyColumn(
+                    state = tabListState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (currentTab == 0) {
                         // 1. 番剧头部信息区：标题、评分、年份、可折叠简介、右侧醒目追番按钮
                         item {
                             BiliPlayerSubjectHeader(
@@ -830,22 +837,23 @@ fun PlayerScreen(
                                 onSelectEpisode = viewModel::selectEpisode,
                             )
                         }
+                    } else {
+                        // 讨论/吐槽 Tab
+                        item {
+                            BiliEpisodeDiscussionTab(
+                                episodeSort = uiState.episodeSort,
+                                episodeName = uiState.episodeName,
+                                commentCount = uiState.currentEpisodeCommentCount,
+                                desc = uiState.currentEpisodeDesc,
+                                airdate = uiState.currentEpisodeAirdate,
+                                onGoToDiscussion = {
+                                    if (uiState.episodeId > 0 && onEpisodeDetailClick != null) {
+                                        onEpisodeDetailClick(uiState.subjectId, uiState.episodeId)
+                                    }
+                                },
+                            )
+                        }
                     }
-                } else {
-                    // 讨论/吐槽 Tab
-                    BiliEpisodeDiscussionTab(
-                        episodeSort = uiState.episodeSort,
-                        episodeName = uiState.episodeName,
-                        commentCount = uiState.currentEpisodeCommentCount,
-                        desc = uiState.currentEpisodeDesc,
-                        airdate = uiState.currentEpisodeAirdate,
-                        onGoToDiscussion = {
-                            if (uiState.episodeId > 0 && onEpisodeDetailClick != null) {
-                                onEpisodeDetailClick(uiState.subjectId, uiState.episodeId)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                    )
                 }
             }
         }

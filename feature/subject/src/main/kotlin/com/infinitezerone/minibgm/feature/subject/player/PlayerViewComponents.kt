@@ -1448,6 +1448,9 @@ internal fun BiliEpisodeRowCard(
  *
  * 去掉原先两层 surfaceContainerLow 卡片容器——浅色主题下 surfaceContainerLow 就是纯白，
  * 与灰底背景只差一个色阶，卡片边界靠"猜"；改用分隔线切段，层级更清楚也更轻。
+ *
+ * 自身不带左右留白：留白由宿主的 LazyColumn 统一提供，避免两个 Tab 各写死 padding
+ * 导致边界对不齐（底部间距同理，由宿主 contentPadding 决定）。
  */
 @Composable
 internal fun BiliEpisodeDiscussionTab(
@@ -1462,7 +1465,7 @@ internal fun BiliEpisodeDiscussionTab(
     val haptic = LocalHapticFeedback.current
 
     Column(
-        modifier = modifier.fillMaxWidth().padding(16.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Column {
