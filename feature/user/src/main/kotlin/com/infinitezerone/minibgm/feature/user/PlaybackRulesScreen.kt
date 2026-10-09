@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,7 +55,6 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.feature.user.components.MAX_IMPORT_BYTES
 import com.infinitezerone.minibgm.feature.user.components.PLAYLIST_MIME_TYPES
-import com.infinitezerone.minibgm.feature.user.components.PlaybackPositionRow
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
 import com.infinitezerone.minibgm.feature.user.components.PlaylistCard
 import com.infinitezerone.minibgm.feature.user.components.PlaylistEmptyCard
@@ -128,7 +125,6 @@ fun PlaybackRulesScreen(
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isImportingPlaylistJson by remember { mutableStateOf(false) }
     var showVarsHint by rememberSaveable { mutableStateOf(false) }
-    var showPositionsSection by rememberSaveable { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
 
     val playlistPicker =
@@ -506,117 +502,6 @@ fun PlaybackRulesScreen(
 
                     item(key = "playlist_template") {
                         PlaylistTemplateCard()
-                    }
-
-                    // 续播断点记录（紧凑折叠项，不破坏整体布局）
-                    if (uiState.playbackPositions.isNotEmpty()) {
-                        item(key = "positions_collapsible") {
-                            HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                                modifier = Modifier.padding(vertical = 4.dp),
-                            )
-                            Surface(
-                                shape = BgmShapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp)) {
-                                    Row(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .clickable { showPositionsSection = !showPositionsSection },
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = stringResource(R.string.feature_user_positions_toggle_title),
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            Text(
-                                                text =
-                                                    stringResource(
-                                                        R.string.feature_user_positions_toggle_subtitle,
-                                                        uiState.playbackPositions.size,
-                                                    ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        TextButton(onClick = { showPositionsSection = !showPositionsSection }) {
-                                            Text(
-                                                if (showPositionsSection) {
-                                                    stringResource(R.string.feature_user_action_collapse)
-                                                } else {
-                                                    stringResource(R.string.feature_user_action_expand)
-                                                },
-                                            )
-                                        }
-                                    }
-
-                                    AnimatedVisibility(visible = showPositionsSection) {
-                                        Column(
-                                            modifier = Modifier.padding(top = 10.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.End,
-                                            ) {
-                                                TextButton(
-                                                    onClick = {
-                                                        scope.launch {
-                                                            val confirmed =
-                                                                overlayHostState.await(
-                                                                    ConfirmDialogAction(
-                                                                        title =
-                                                                            context.getString(
-                                                                                R.string.feature_user_positions_clear_all_title,
-                                                                            ),
-                                                                        message =
-                                                                            context.getString(
-                                                                                R.string.feature_user_positions_clear_all_message,
-                                                                            ),
-                                                                        confirmText =
-                                                                            context.getString(
-                                                                                R.string.feature_user_action_clear,
-                                                                            ),
-                                                                        isDestructive = true,
-                                                                    ),
-                                                                )
-                                                            if (confirmed) {
-                                                                uiState.playbackPositions.keys.forEach {
-                                                                    viewModel.clearPlaybackPosition(it)
-                                                                }
-                                                            }
-                                                        }
-                                                    },
-                                                ) {
-                                                    Text(
-                                                        stringResource(R.string.feature_user_action_clear),
-                                                        color = MaterialTheme.colorScheme.error,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                    )
-                                                }
-                                            }
-
-                                            uiState.playbackPositions.entries
-                                                .toList()
-                                                .sortedByDescending { it.value }
-                                                .forEach { entry ->
-                                                    PlaybackPositionRow(
-                                                        url = entry.key,
-                                                        positionMs = entry.value,
-                                                        onClear = { viewModel.clearPlaybackPosition(entry.key) },
-                                                    )
-                                                }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
