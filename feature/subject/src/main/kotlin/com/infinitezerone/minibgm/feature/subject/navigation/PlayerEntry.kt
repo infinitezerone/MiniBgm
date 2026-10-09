@@ -10,6 +10,8 @@ import com.infinitezerone.minibgm.feature.subject.player.PlayerScreen
  */
 fun EntryProviderScope<NavKey>.playerEntry(
     onBackClick: () -> Unit,
+    onSubjectClick: ((Long) -> Unit)? = null,
+    onEpisodeDetailClick: ((subjectId: Long, episodeId: Long) -> Unit)? = null,
     /** 播放器内「AI 找源」逃生口；携带路由以生成上下文化的找源提问 */
     onRequestOpenSources: ((PlayerRoute) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
@@ -19,6 +21,8 @@ fun EntryProviderScope<NavKey>.playerEntry(
         PlayerScreen(
             route = route,
             onBackClick = onBackClick,
+            onSubjectClick = onSubjectClick,
+            onEpisodeDetailClick = onEpisodeDetailClick,
             onRequestOpenSources = onRequestOpenSources?.let { callback -> ({ callback(route) }) },
             onManageRules = onManageRules,
         )

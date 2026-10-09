@@ -939,4 +939,75 @@ class PlayerViewModelTest {
             assertEquals("https://cdn.example.com/rule2_stream.m3u8", state.streamUrl)
             assertFalse(state.isResolvingSource)
         }
+
+    @Test
+    fun manualToggleWatched_whenNotWatched_marksWatched() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            val vm =
+                PlayerViewModel(
+                    route = route(),
+                    collectionRepository = collectionRepo,
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                )
+
+            assertFalse(vm.uiState.value.isWatched)
+
+            vm.manualToggleWatched()
+            advanceUntilIdle()
+
+            assertTrue(vm.uiState.value.isWatched)
+            assertEquals(1, collectionRepo.updateEpisodeCallCount)
+
+            val event = vm.events.first()
+            assertTrue(event is PlayerUiEvent.ShowSnackbar)
+        }
+
+    @Test
+    fun manualToggleWatched_whenAlreadyWatched_unmarksWatched() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            val vm =
+                PlayerViewModel(
+                    route = route(),
+                    collectionRepository = collectionRepo,
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                )
+
+            // 先标记为已看
+            vm.manualToggleWatched()
+            advanceUntilIdle()
+            assertTrue(vm.uiState.value.isWatched)
+
+            // 再次调用切换为未看
+            vm.manualToggleWatched()
+            advanceUntilIdle()
+
+            assertFalse(vm.uiState.value.isWatched)
+            assertEquals(2, collectionRepo.updateEpisodeCallCount)
+
+            val event = vm.events.first()
+            assertTrue(event is PlayerUiEvent.ShowSnackbar)
+        }
+
+    @Test
+    fun manualToggleWatched_whenNotLoggedIn_doesNothing() =
+        runTest {
+            val collectionRepo = FakeCollectionRepository()
+            val vm =
+                PlayerViewModel(
+                    route = route(),
+                    collectionRepository = collectionRepo,
+                    authRepository = FakeAuthRepository(initialLoggedIn = false),
+                    settingsRepository = FakeSettingsRepository(),
+                )
+
+            vm.manualToggleWatched()
+            advanceUntilIdle()
+
+            assertFalse(vm.uiState.value.isWatched)
+            assertEquals(0, collectionRepo.updateEpisodeCallCount)
+        }
 }

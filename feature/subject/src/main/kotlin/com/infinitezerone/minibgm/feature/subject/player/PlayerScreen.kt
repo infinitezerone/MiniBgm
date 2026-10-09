@@ -108,6 +108,8 @@ fun PlayerScreen(
     route: PlayerRoute,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onSubjectClick: ((Long) -> Unit)? = null,
+    onEpisodeDetailClick: ((subjectId: Long, episodeId: Long) -> Unit)? = null,
     onRequestOpenSources: (() -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     viewModel: PlayerViewModel =
@@ -144,6 +146,7 @@ fun PlayerScreen(
     var scrubProgress by remember { mutableFloatStateOf(0f) }
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
+    var isEpisodesListView by remember { mutableStateOf(false) }
 
     // 视频真实宽高比：监听播放器尺寸与音视频轨道事件
     var videoAspectRatio by remember { mutableStateOf<Rational?>(null) }
@@ -785,7 +788,7 @@ fun PlayerScreen(
                     }
 
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 56.dp),
+                    columns = if (isEpisodesListView) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 56.dp),
                     modifier =
                         Modifier
                             .fillMaxWidth()
@@ -796,10 +799,35 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        PlayerHeaderInfo(
+                        PlayerSubjectBannerCard(
                             subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                            episodeTitle = epLabel + if (uiState.episodeName.isNotBlank()) " · ${uiState.episodeName}" else "",
+                            coverUrl = uiState.subjectCoverUrl,
+                            score = uiState.subjectScore,
+                            airDate = uiState.subjectDate,
+                            collectionType = uiState.subjectCollectionType,
+                            onSubjectClick = {
+                                if (uiState.subjectId > 0 && onSubjectClick != null) {
+                                    onSubjectClick(uiState.subjectId)
+                                }
+                            },
+                        )
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        PlayerEpisodeActionBar(
+                            epLabel = epLabel,
+                            episodeName = uiState.episodeName,
                             isWatched = uiState.isWatched,
+                            commentCount = uiState.currentEpisodeCommentCount,
+                            desc = uiState.currentEpisodeDesc,
+                            airdate = uiState.currentEpisodeAirdate,
+                            onToggleWatched = viewModel::manualToggleWatched,
+                            onEpisodeDetailClick =
+                                if (uiState.episodeId > 0 && onEpisodeDetailClick != null) {
+                                    { onEpisodeDetailClick(uiState.subjectId, uiState.episodeId) }
+                                } else {
+                                    null
+                                },
                         )
                     }
 
@@ -821,6 +849,8 @@ fun PlayerScreen(
                             episodeCount = uiState.episodes.size,
                             autoNextEnabled = uiState.autoNextEnabled,
                             onToggleAutoNext = viewModel::toggleAutoNext,
+                            isListView = isEpisodesListView,
+                            onToggleViewMode = { isEpisodesListView = !isEpisodesListView },
                             paginationChunks = paginationLabels,
                             selectedChunkIndex = selectedChunkIndex,
                             onSelectChunk = { selectedChunkIndex = it },
@@ -829,11 +859,19 @@ fun PlayerScreen(
 
                     items(displayEpisodes, key = { "${it.type}_${it.id}_${it.sort}" }) { ep ->
                         val isSelected = ep.sort == uiState.episodeSort && (ep.id == 0L || ep.id == uiState.episodeId)
-                        EpisodeGridCard(
-                            episode = ep,
-                            isSelected = isSelected,
-                            onClick = { viewModel.selectEpisode(ep) },
-                        )
+                        if (isEpisodesListView) {
+                            EpisodeListCard(
+                                episode = ep,
+                                isSelected = isSelected,
+                                onClick = { viewModel.selectEpisode(ep) },
+                            )
+                        } else {
+                            EpisodeGridCard(
+                                episode = ep,
+                                isSelected = isSelected,
+                                onClick = { viewModel.selectEpisode(ep) },
+                            )
+                        }
                     }
                 }
             }

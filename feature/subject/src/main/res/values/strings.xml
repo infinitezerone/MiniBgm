@@ -280,6 +280,14 @@
     <string name="feature_subject_player_sniffing_stream">嗅探视频直链...</string>
     <string name="feature_subject_player_sniffing_stream_with_attempt">嗅探视频直链...（第 %1$d/%2$d 次尝试）</string>
     <string name="feature_subject_player_watched">已看</string>
+    <string name="feature_subject_player_mark_as_watched">打卡已看</string>
+    <string name="feature_subject_player_unmark_watched">已看过 · 撤销</string>
+    <string name="feature_subject_player_episode_comments">吐槽</string>
+    <string name="feature_subject_player_view_mode_grid">网格</string>
+    <string name="feature_subject_player_view_mode_list">列表</string>
+    <string name="feature_subject_player_episode_desc_title">剧情简介</string>
+    <string name="feature_subject_player_airdate">首播于 %1$s</string>
+    <string name="feature_subject_player_view_subject_detail">条目详情</string>
     <string name="feature_subject_player_failures_count">%1$d 次打不开</string>
     <string name="feature_subject_player_sources">播放源</string>
     <string name="feature_subject_player_source_default_direct">默认直链</string>

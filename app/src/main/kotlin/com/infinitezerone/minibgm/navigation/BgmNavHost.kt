@@ -19,6 +19,7 @@ import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
+import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
@@ -29,6 +30,7 @@ import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
@@ -333,6 +335,12 @@ fun BgmNavHost(
                             if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
                                 playerEntry(
                                     onBackClick = { navState.goBack() },
+                                    onSubjectClick = { subjectId ->
+                                        navState.navigateTo(SubjectDetailRoute(subjectId))
+                                    },
+                                    onEpisodeDetailClick = { subjectId, episodeId ->
+                                        navState.navigateTo(EpisodeDetailRoute(subjectId = subjectId, episodeId = episodeId))
+                                    },
                                     onRequestOpenSources = { route ->
                                         val title = route.subjectName.ifBlank { context.getString(R.string.app_subject_fallback_title) }
                                         navState.navigateTo(

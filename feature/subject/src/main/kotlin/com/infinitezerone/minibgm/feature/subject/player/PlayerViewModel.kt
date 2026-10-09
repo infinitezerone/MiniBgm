@@ -13,12 +13,15 @@ import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -66,7 +69,7 @@ data class PlayerSourceTab(
 )
 
 /**
- * 分集网格条目
+ * 分集网格/列表条目
  */
 data class PlayerEpisodeItem(
     val id: Long = 0L,
@@ -74,6 +77,11 @@ data class PlayerEpisodeItem(
     val type: Int = 0,
     val name: String = "",
     val nameCn: String = "",
+    val duration: String = "",
+    val airdate: String = "",
+    val commentCount: Int = 0,
+    val desc: String = "",
+    val isWatched: Boolean = false,
 ) {
     val displayName: String
         get() =
@@ -95,6 +103,13 @@ data class PlayerUiState(
     val episodeSort: Float = 1f,
     val episodeType: Int = 0,
     val subjectName: String = "",
+    val subjectCoverUrl: String = "",
+    val subjectScore: Double = 0.0,
+    val subjectDate: String = "",
+    val subjectCollectionType: Int? = null,
+    val currentEpisodeDesc: String = "",
+    val currentEpisodeAirdate: String = "",
+    val currentEpisodeCommentCount: Int = 0,
     val requestHeaders: Map<String, String> = emptyMap(),
     val isWatched: Boolean = false,
     val autoMarked: Boolean = false,
@@ -169,8 +184,9 @@ private data class PlayerRepoSnapshot(
     val rules: List<PlaybackSourceRule> = emptyList(),
     val failureCounts: Map<String, Int> = emptyMap(),
     val subject: Subject? = null,
-    val episodes: List<PlayerEpisodeItem> = emptyList(),
+    val rawEpisodes: List<Episode> = emptyList(),
     val pipEnabled: Boolean = true,
+    val collection: UserCollection? = null,
 )
 
 /**
@@ -357,23 +373,22 @@ class PlayerViewModel(
             flowOf(null)
         }
 
-    /** 全部分集流：过滤正片/PV 以外类型、按类型与序号排序后投影为网格条目 */
-    private val episodesFlow: Flow<List<PlayerEpisodeItem>> =
+    /** 收藏状态流：用于同步在看/看过等收藏进度与看过分集状态 */
+    private val collectionFlow: Flow<UserCollection?> =
+        if (route.subjectId > 0) {
+            collectionRepository.getCollectionStream(route.subjectId)
+        } else {
+            flowOf(null)
+        }
+
+    /** 全部分集流：过滤正片/PV 以外类型、按类型与序号排序 */
+    private val rawEpisodesFlow: Flow<List<Episode>> =
         if (route.subjectId > 0) {
             (subjectRepository?.getEpisodesStream(route.subjectId) ?: flowOf(emptyList()))
                 .map { eps ->
                     eps
                         .filter { it.type == 0 || it.type == 1 }
                         .sortedWith(compareBy({ it.type }, { it.sort }))
-                        .map { ep ->
-                            PlayerEpisodeItem(
-                                id = ep.id,
-                                sort = ep.episodeNumber,
-                                type = ep.type,
-                                name = ep.name,
-                                nameCn = ep.nameCn,
-                            )
-                        }
                 }
         } else {
             flowOf(emptyList())
@@ -390,7 +405,7 @@ class PlayerViewModel(
     /**
      * 数据侧单点投影：全部仓库流 combine 成一个 [PlayerRepoSnapshot] 快照流。
      *
-     * 条目/分集/PiP 三路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
+     * 条目/分集/PiP/收藏 四路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
      * 其余场景给空默认值，快照仍可即时产出）。
      */
     private val repoSnapshots: Flow<PlayerRepoSnapshot> =
@@ -409,18 +424,20 @@ class PlayerViewModel(
             },
             combine(
                 subjectFlow,
-                episodesFlow,
-            ) { subject, episodes ->
-                subject to episodes
+                rawEpisodesFlow,
+                collectionFlow,
+            ) { subject, episodes, collection ->
+                Triple(subject, episodes, collection)
             },
-        ) { (positions, rules), (failureCounts, pipEnabled), (subject, episodes) ->
+        ) { (positions, rules), (failureCounts, pipEnabled), (subject, episodes, collection) ->
             PlayerRepoSnapshot(
                 positions = positions,
                 rules = rules,
                 failureCounts = failureCounts,
                 subject = subject,
-                episodes = episodes,
+                rawEpisodes = episodes,
                 pipEnabled = pipEnabled,
+                collection = collection,
             )
         }
 
@@ -511,10 +528,59 @@ class PlayerViewModel(
                     )
                 sourcesChanged = true
             }
-            // 全部分集列表（由条目详情流持续同步）
-            if (snapshot.episodes.isNotEmpty() && snapshot.episodes != next.episodes) {
-                next = next.copy(episodes = snapshot.episodes)
+            // 全部分集列表与当前分集元数据（由条目详情流与收藏流持续同步）
+            val watchedCount = snapshot.collection?.epStatus ?: 0
+            val mappedEpisodes =
+                if (snapshot.rawEpisodes.isNotEmpty()) {
+                    snapshot.rawEpisodes.map { ep ->
+                        PlayerEpisodeItem(
+                            id = ep.id,
+                            sort = ep.episodeNumber,
+                            type = ep.type,
+                            name = ep.name,
+                            nameCn = ep.nameCn,
+                            duration = ep.duration,
+                            airdate = ep.airdate,
+                            commentCount = ep.comment,
+                            desc = ep.desc,
+                            isWatched = isEpisodeWatched(ep, watchedCount),
+                        )
+                    }
+                } else {
+                    next.episodes.map { ep ->
+                        ep.copy(
+                            isWatched = if (ep.type == 0 && ep.sort.toInt() > 0) watchedCount >= ep.sort.toInt() else false,
+                        )
+                    }
+                }
+
+            if (mappedEpisodes.isNotEmpty() && mappedEpisodes != next.episodes) {
+                next = next.copy(episodes = mappedEpisodes)
             }
+
+            val currentEp =
+                mappedEpisodes.firstOrNull {
+                    (next.episodeId > 0 && it.id == next.episodeId) ||
+                        (it.sort == next.episodeSort && it.type == next.episodeType)
+                }
+            val currentWatched =
+                if (snapshot.collection != null && currentEp != null) {
+                    currentEp.isWatched
+                } else {
+                    next.isWatched
+                }
+
+            next =
+                next.copy(
+                    isWatched = currentWatched,
+                    currentEpisodeDesc = currentEp?.desc ?: next.currentEpisodeDesc,
+                    currentEpisodeAirdate = currentEp?.airdate ?: next.currentEpisodeAirdate,
+                    currentEpisodeCommentCount = currentEp?.commentCount ?: next.currentEpisodeCommentCount,
+                    subjectCoverUrl = snapshot.subject?.images?.large ?: snapshot.subject?.images?.common ?: next.subjectCoverUrl,
+                    subjectScore = snapshot.subject?.rating?.score ?: next.subjectScore,
+                    subjectDate = snapshot.subject?.date?.ifBlank { snapshot.subject.airDate } ?: next.subjectDate,
+                    subjectCollectionType = snapshot.collection?.type ?: next.subjectCollectionType,
+                )
             // 源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
             // selectedSourceIndex 有位置语义，重排会让选中项错位）
             if (snapshot.failureCounts != next.sourceFailureCounts) {
@@ -630,6 +696,11 @@ class PlayerViewModel(
         session.hasTriggeredAutoMark = false
         session.currentIndex = index
         val entry = queue[index]
+        val currentEp =
+            _uiState.value.episodes.firstOrNull {
+                (entry.episodeId > 0 && it.id == entry.episodeId) ||
+                    (it.sort == entry.episodeSort && it.type == entry.episodeType)
+            }
         _uiState.update {
             it.copy(
                 episodeId = entry.episodeId,
@@ -639,7 +710,10 @@ class PlayerViewModel(
                 episodeType = entry.episodeType,
                 requestHeaders = entry.requestHeaders,
                 currentIndex = index,
-                isWatched = false,
+                isWatched = currentEp?.isWatched ?: false,
+                currentEpisodeDesc = currentEp?.desc ?: "",
+                currentEpisodeAirdate = currentEp?.airdate ?: "",
+                currentEpisodeCommentCount = currentEp?.commentCount ?: 0,
                 autoMarked = false,
                 resumePositionMs = session.positionsMap[entry.streamUrl] ?: 0L,
             )
@@ -684,6 +758,11 @@ class PlayerViewModel(
         val isDirect = state.currentSource?.isDirect == true
         val directEntry = if (isDirect && queueIndex >= 0) queue[queueIndex] else null
         val directMissing = isDirect && directEntry == null
+        val currentEp =
+            state.episodes.firstOrNull {
+                (episode.id > 0 && it.id == episode.id) ||
+                    (it.sort == episode.sort && it.type == episode.type)
+            }
 
         _uiState.update {
             it.copy(
@@ -692,7 +771,10 @@ class PlayerViewModel(
                 episodeSort = episode.sort,
                 episodeType = episode.type,
                 currentIndex = if (queueIndex >= 0) queueIndex else it.currentIndex,
-                isWatched = false,
+                isWatched = currentEp?.isWatched ?: false,
+                currentEpisodeDesc = currentEp?.desc ?: episode.desc,
+                currentEpisodeAirdate = currentEp?.airdate ?: episode.airdate,
+                currentEpisodeCommentCount = currentEp?.commentCount ?: episode.commentCount,
                 autoMarked = false,
                 // 非直链源保留当前画面（不清空），等嗅探完成再替换，避免换集瞬间黑屏；
                 // 直链源精确取队列中的对应集，未命中就如实报缺，绝不串到别的集
@@ -712,6 +794,40 @@ class PlayerViewModel(
             )
         }
         resolveCurrentEpisodeStream()
+    }
+
+    /**
+     * 手动切换当前分集的看过/未看标记（支持用户点击打卡与撤销打卡）。
+     */
+    fun manualToggleWatched() {
+        if (!isLoggedIn.value) {
+            viewModelScope.launch {
+                _events.send(PlayerUiEvent.ShowSnackbar("请先登录 Bangumi"))
+            }
+            return
+        }
+        val targetWatched = !_uiState.value.isWatched
+        val epNumber = _uiState.value.episodeSort.toInt()
+        viewModelScope.launch {
+            val result =
+                collectionRepository.updateEpisodeStatus(
+                    subjectId = _uiState.value.subjectId,
+                    episodeId = _uiState.value.episodeId,
+                    isWatched = targetWatched,
+                    epNumber = epNumber,
+                )
+            result
+                .onSuccess {
+                    _uiState.update { it.copy(isWatched = targetWatched) }
+                    _events.send(
+                        PlayerUiEvent.ShowSnackbar(
+                            if (targetWatched) "已标记为看过（第 $epNumber 话）" else "已撤回看过标记（第 $epNumber 话）",
+                        ),
+                    )
+                }.onError { _, message ->
+                    _events.send(PlayerUiEvent.ShowSnackbar(message))
+                }
+        }
     }
 
     /**
