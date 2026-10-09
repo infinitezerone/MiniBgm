@@ -23,9 +23,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.feature.search.R
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -127,7 +129,7 @@ fun WaterfallGridList(
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text(
-                            text = "正在探索更多番剧...",
+                            text = stringResource(R.string.feature_search_exploring_more),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -139,7 +141,7 @@ fun WaterfallGridList(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "已经到底啦，共发现 ${subjects.size} 部条目",
+                        text = stringResource(R.string.feature_search_end_of_list, subjects.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )

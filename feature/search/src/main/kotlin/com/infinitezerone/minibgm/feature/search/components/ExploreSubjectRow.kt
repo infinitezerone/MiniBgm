@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -33,6 +34,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.feature.search.R
 
 private val ROW_LIMIT = 12
 
@@ -68,10 +70,10 @@ fun ExploreSubjectRow(
             )
             if (onOpenMore != null) {
                 TextButton(onClick = onOpenMore, contentPadding = PaddingValues(horizontal = 6.dp)) {
-                    Text(text = "更多", style = MaterialTheme.typography.labelMedium)
+                    Text(text = stringResource(R.string.feature_search_action_more), style = MaterialTheme.typography.labelMedium)
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = "查看「$title」完整榜单",
+                        contentDescription = stringResource(R.string.feature_search_cd_view_full_list, title),
                         modifier = Modifier.size(16.dp).padding(start = 2.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
@@ -141,7 +143,7 @@ private fun RowSubjectCard(
         )
 
         Text(
-            text = if (score > 0) "★ ${"%.1f".format(score)}" else "暂无评分",
+            text = if (score > 0) "★ ${"%.1f".format(score)}" else stringResource(R.string.feature_search_no_rating),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color =

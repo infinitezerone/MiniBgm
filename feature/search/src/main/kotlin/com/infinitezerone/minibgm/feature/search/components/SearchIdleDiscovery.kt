@@ -26,10 +26,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 
 /** 搜索初始/空闲状态视图（真实搜索历史与纯净搜索引导，不包含任何虚假数据） */
 @OptIn(ExperimentalLayoutApi::class)
@@ -64,7 +66,7 @@ fun SearchIdleView(
                                 modifier = Modifier.size(18.dp),
                             )
                             Text(
-                                text = "历史搜索",
+                                text = stringResource(R.string.feature_search_history_title),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -82,7 +84,7 @@ fun SearchIdleView(
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "清空全部",
+                                text = stringResource(R.string.feature_search_action_clear_all),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
                             )
@@ -119,7 +121,7 @@ fun SearchIdleView(
                                     ) {
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "删除记录",
+                                            contentDescription = stringResource(R.string.feature_search_cd_delete_history),
                                             tint = MaterialTheme.colorScheme.outline,
                                             modifier = Modifier.size(12.dp),
                                         )
@@ -162,7 +164,7 @@ fun SearchIdleView(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "搜索 Bangumi 条目",
+                    text = stringResource(R.string.feature_search_idle_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -171,7 +173,7 @@ fun SearchIdleView(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "输入中文译名、日文原名或制作人员\n点击上方分类切换动画、书籍、游戏、音乐等品类",
+                    text = stringResource(R.string.feature_search_idle_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

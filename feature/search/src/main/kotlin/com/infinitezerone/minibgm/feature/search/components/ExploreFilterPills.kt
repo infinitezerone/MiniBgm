@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +36,7 @@ import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreMood
 import com.infinitezerone.minibgm.feature.search.ExploreSort
 import com.infinitezerone.minibgm.feature.search.ExploreUiState
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonOption
 import com.infinitezerone.minibgm.feature.search.customFilterSummary
 
@@ -56,7 +58,7 @@ fun MoodFilterRow(
                 onClick = { onMoodSelect(mood) },
                 label = {
                     Text(
-                        text = mood.label,
+                        text = stringResource(mood.labelRes),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (selectedMood == mood) FontWeight.Bold else FontWeight.Normal,
                     )
@@ -128,7 +130,7 @@ fun ActiveCustomFilterBar(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = uiState.customFilterSummary,
+                        text = uiState.customFilterSummary(),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -143,7 +145,14 @@ fun ActiveCustomFilterBar(
                             } else {
                                 BgmIcons.KeyboardArrowDown
                             },
-                        contentDescription = if (expanded) "收起已选标签" else "展开已选标签",
+                        contentDescription =
+                            stringResource(
+                                if (expanded) {
+                                    R.string.feature_search_cd_collapse_tags
+                                } else {
+                                    R.string.feature_search_cd_expand_tags
+                                },
+                            ),
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -156,7 +165,7 @@ fun ActiveCustomFilterBar(
                 modifier = Modifier.height(36.dp),
             ) {
                 Text(
-                    text = "清除全部",
+                    text = stringResource(R.string.feature_search_action_clear_all_filter),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
@@ -218,7 +227,7 @@ fun ActiveFilterPillRow(
         if (selectedSeason != ALL_TIME_SEASON) {
             item {
                 ActiveFilterChip(
-                    text = selectedSeason.label,
+                    text = stringResource(selectedSeason.labelRes, *selectedSeason.labelArgs.toTypedArray()),
                     onClear = onClearSeason,
                 )
             }
@@ -236,7 +245,7 @@ fun ActiveFilterPillRow(
         if (selectedCategory != ExploreCategory.ANIME) {
             item {
                 ActiveFilterChip(
-                    text = selectedCategory.label,
+                    text = stringResource(selectedCategory.labelRes),
                     onClear = onClearCategory,
                 )
             }
@@ -245,7 +254,7 @@ fun ActiveFilterPillRow(
         if (selectedSort != ExploreSort.RANK) {
             item {
                 ActiveFilterChip(
-                    text = selectedSort.label,
+                    text = stringResource(selectedSort.labelRes),
                     onClear = onClearSort,
                 )
             }
@@ -258,7 +267,7 @@ fun ActiveFilterPillRow(
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {
                     Text(
-                        text = "清除全部",
+                        text = stringResource(R.string.feature_search_action_clear_all_filter),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -293,7 +302,7 @@ fun ActiveFilterChip(
             )
             Icon(
                 imageVector = BgmIcons.Close,
-                contentDescription = "移除",
+                contentDescription = stringResource(R.string.feature_search_cd_remove),
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(12.dp),
             )

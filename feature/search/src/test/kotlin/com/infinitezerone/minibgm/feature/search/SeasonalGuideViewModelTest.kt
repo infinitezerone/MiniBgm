@@ -35,6 +35,21 @@ class SeasonalGuideViewModelTest {
 
     private val fixedDate = LocalDate.of(2026, 2, 15) // Q1 Winter 2026
 
+    /** 单元测试无 Android 资源表：用固定文案模拟 labelRes 解析，断言摘要拼装格式。 */
+    private fun SeasonalGuideUiState.filterSummaryForTest(
+        scopeLabel: String? = null,
+        originLabel: String? = null,
+        formLabel: String? = null,
+    ): String =
+        filterSummary(
+            scopeLabel = scopeLabel,
+            originLabel = originLabel,
+            formLabel = formLabel,
+            excludedTagLabels = emptyList(),
+            purifyLabel = null,
+            fallbackLabel = "全部",
+        )
+
     private fun createViewModel(
         searchRepository: FakeSearchRepository = FakeSearchRepository(),
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
@@ -303,19 +318,19 @@ class SeasonalGuideViewModelTest {
             val viewModel = createViewModel()
             advanceUntilIdle()
 
-            assertEquals("全部", viewModel.uiState.value.filterSummary)
+            assertEquals("全部", viewModel.uiState.value.filterSummaryForTest())
 
             viewModel.selectOrigin(SeasonOriginFilter.JAPAN)
             advanceUntilIdle()
-            assertEquals("日本", viewModel.uiState.value.filterSummary)
+            assertEquals("日本", viewModel.uiState.value.filterSummaryForTest(originLabel = "日本"))
 
             viewModel.selectForm(SeasonFormFilter.MOVIE)
             advanceUntilIdle()
-            assertEquals("日本 · 剧场版", viewModel.uiState.value.filterSummary)
+            assertEquals("日本 · 剧场版", viewModel.uiState.value.filterSummaryForTest(originLabel = "日本", formLabel = "剧场版"))
 
             viewModel.selectOrigin(SeasonOriginFilter.ALL)
             advanceUntilIdle()
-            assertEquals("剧场版", viewModel.uiState.value.filterSummary)
+            assertEquals("剧场版", viewModel.uiState.value.filterSummaryForTest(formLabel = "剧场版"))
         }
 
     @Test

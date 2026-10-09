@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,8 @@ import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 骨架屏加载状态 */
 @Composable
@@ -128,7 +131,7 @@ fun SearchNoResultsState(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "未找到关于「$query」的作品",
+            text = stringResource(R.string.feature_search_no_results_title, query),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -137,7 +140,7 @@ fun SearchNoResultsState(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "建议：检查关键词是否有误，尝试搜索日文原名、缩写，或切换至「全部」分类再次尝试",
+            text = stringResource(R.string.feature_search_no_results_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -148,11 +151,11 @@ fun SearchNoResultsState(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (selectedType != 0) {
                 Button(onClick = onResetCategory) {
-                    Text("切至全部分类")
+                    Text(stringResource(R.string.feature_search_action_reset_category))
                 }
             }
             OutlinedButton(onClick = onClearQuery) {
-                Text("清空重搜")
+                Text(stringResource(R.string.feature_search_action_clear_and_search))
             }
         }
     }
@@ -168,9 +171,9 @@ fun SearchErrorState(
     BgmStatusState(
         message = errorMessage,
         modifier = modifier.padding(28.dp),
-        title = "搜索遇到问题",
+        title = stringResource(R.string.feature_search_error_title),
         titleColor = MaterialTheme.colorScheme.error,
-        actionLabel = "重试",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_retry),
         onAction = onRetry,
     )
 }
@@ -182,8 +185,8 @@ fun SearchLoginDialog(
     onConfirmLogin: () -> Unit,
 ) {
     BgmLoginPromptDialog(
-        title = "登录以同步追番进度",
-        description = "登录 Bangumi 账号后，即可一键标记在看、在读、在听、在玩，并同步至你的个人收藏库。",
+        title = stringResource(R.string.feature_search_login_dialog_title),
+        description = stringResource(R.string.feature_search_login_dialog_desc),
         onLogin = onConfirmLogin,
         onDismiss = onDismiss,
     )

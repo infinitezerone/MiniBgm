@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
@@ -106,7 +107,7 @@ fun SearchScreen(
 
                 uiState.error != null && uiState.results.isEmpty() -> {
                     SearchErrorState(
-                        errorMessage = uiState.error ?: "搜索发生错误",
+                        errorMessage = uiState.error ?: stringResource(R.string.feature_search_search_error),
                         onRetry = viewModel::search,
                         modifier = Modifier.fillMaxSize(),
                     )

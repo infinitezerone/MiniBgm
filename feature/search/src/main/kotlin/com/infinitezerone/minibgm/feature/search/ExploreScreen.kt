@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -126,7 +127,7 @@ fun ExploreScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = "探索发现",
+                        text = stringResource(R.string.feature_search_explore_title),
                         fontWeight = FontWeight.Bold,
                     )
                 },
@@ -135,7 +136,7 @@ fun ExploreScreen(
                         IconButton(onClick = exploreViewModel::resetToRows) {
                             Icon(
                                 imageVector = BgmIcons.ArrowBack,
-                                contentDescription = "返回精选",
+                                contentDescription = stringResource(R.string.feature_search_cd_back_to_featured),
                             )
                         }
                     }
@@ -152,7 +153,7 @@ fun ExploreScreen(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.FilterList,
-                                    contentDescription = "高级筛选",
+                                    contentDescription = stringResource(R.string.feature_search_cd_advanced_filter),
                                     tint =
                                         if (isFilterActive) {
                                             MaterialTheme.colorScheme.primary
@@ -168,7 +169,7 @@ fun ExploreScreen(
                     IconButton(onClick = onSearchClick) {
                         Icon(
                             imageVector = BgmIcons.SearchBorder,
-                            contentDescription = "搜索",
+                            contentDescription = stringResource(R.string.feature_search_action_search),
                         )
                     }
                 },
@@ -207,7 +208,12 @@ fun ExploreScreen(
                     ) {
                         item(key = "seasonal_row") {
                             ExploreSubjectRow(
-                                title = "本季新番 · ${seasonalUiState.selectedYear} ${seasonalUiState.selectedQuarter.displayLabel}",
+                                title =
+                                    stringResource(
+                                        R.string.feature_search_seasonal_row_title,
+                                        seasonalUiState.selectedYear,
+                                        stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
+                                    ),
                                 subjects = seasonalUiState.subjects,
                                 isLoading = seasonalUiState.isLoading,
                                 onSubjectClick = onSubjectClick,
@@ -219,7 +225,7 @@ fun ExploreScreen(
                             val rowState = exploreUiState.rowStates[row] ?: ExploreRowState()
                             item(key = "explore_row_${row.name}") {
                                 ExploreSubjectRow(
-                                    title = row.label,
+                                    title = stringResource(row.labelRes),
                                     subjects = rowState.subjects,
                                     isLoading = rowState.isLoading,
                                     onSubjectClick = onSubjectClick,
@@ -234,7 +240,12 @@ fun ExploreScreen(
                         exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 ExploreSubjectRow(
-                                    title = "本季新番 · ${seasonalUiState.selectedYear} ${seasonalUiState.selectedQuarter.displayLabel}",
+                                    title =
+                                        stringResource(
+                                            R.string.feature_search_seasonal_row_title,
+                                            seasonalUiState.selectedYear,
+                                            stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
+                                        ),
                                     subjects = seasonalUiState.subjects,
                                     isLoading = seasonalUiState.isLoading,
                                     onSubjectClick = onSubjectClick,
@@ -252,7 +263,7 @@ fun ExploreScreen(
                         // 错误重试态
                         exploreUiState.error != null && exploreUiState.subjects.isEmpty() -> {
                             ExploreErrorState(
-                                errorMessage = exploreUiState.error ?: "未知网络异常",
+                                errorMessage = exploreUiState.error ?: stringResource(R.string.feature_search_unknown_error),
                                 onRetry = exploreViewModel::refresh,
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -338,7 +349,7 @@ fun ExploreScreen(
     // 未登录引导弹窗
     if (exploreUiState.showLoginPromptDialog) {
         BgmLoginPromptDialog(
-            description = "一键「想看 / 追番」需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。",
+            description = stringResource(R.string.feature_search_explore_login_desc),
             onLogin = {
                 exploreViewModel.dismissLoginPrompt()
                 onLoginRequest()

@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,7 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.search.R
 
 /**
  * 双列瀑布流卡片（海报主导型）：
@@ -162,6 +164,7 @@ fun WaterfallSubjectCard(
 }
 
 /** 元数据行：播出年月 · 在追热度（近作）/ 评分人数（长青作） */
+@Composable
 private fun buildCardMetaLine(
     subject: Subject,
     doingCount: Int,
@@ -172,9 +175,9 @@ private fun buildCardMetaLine(
         mutableListOf<String>().apply {
             if (dateText.isNotBlank()) add(dateText)
             if (isRecent && doingCount > 50) {
-                add("${formatCount(doingCount)} 在追")
+                add(stringResource(R.string.feature_search_meta_doing, formatCount(doingCount)))
             } else if ((subject.rating?.total ?: 0) > 0) {
-                add("${formatCount(subject.rating!!.total)} 评")
+                add(stringResource(R.string.feature_search_meta_rating, formatCount(subject.rating!!.total)))
             }
         }
     return parts.joinToString(" · ")
@@ -212,7 +215,14 @@ private fun WishFAB(
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = if (isWished) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                    contentDescription = if (isWished) "已想看" else "想看",
+                    contentDescription =
+                        stringResource(
+                            if (isWished) {
+                                R.string.feature_search_collection_wished
+                            } else {
+                                R.string.feature_search_collection_wish
+                            },
+                        ),
                     tint = Color.White,
                     modifier = Modifier.size(16.dp),
                 )

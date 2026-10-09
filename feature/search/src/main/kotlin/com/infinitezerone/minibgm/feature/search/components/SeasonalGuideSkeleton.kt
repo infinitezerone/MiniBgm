@@ -26,13 +26,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonQuarter
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 骨架屏加载列表（行式：58dp 封面块 + 三根文本条，与真实行等高） */
 @Composable
@@ -164,7 +167,7 @@ fun SeasonalGuideErrorState(
         modifier = modifier.padding(24.dp),
         icon = BgmIcons.RefreshBorder,
         iconTint = MaterialTheme.colorScheme.error,
-        actionLabel = "重试",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_retry),
         onAction = onRetry,
     )
 }
@@ -191,12 +194,17 @@ fun SeasonalGuideEmptyState(
                 tint = MaterialTheme.colorScheme.outline,
             )
             Text(
-                text = "${selectedYear}年 ${selectedQuarter.displayLabel} 暂无收录番剧",
+                text =
+                    stringResource(
+                        R.string.feature_search_seasonal_empty_title,
+                        selectedYear,
+                        stringResource(selectedQuarter.displayLabelRes),
+                    ),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "可尝试切换年份或季度查看其他番剧导视",
+                text = stringResource(R.string.feature_search_seasonal_empty_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -299,7 +307,14 @@ fun SeasonalGuideTriStateFilterChip(
                 ) {
                     Icon(
                         imageVector = if (isFavorite) BgmIcons.Star else BgmIcons.StarBorder,
-                        contentDescription = if (isFavorite) "取消偏好收藏" else "收藏为常用偏好",
+                        contentDescription =
+                            stringResource(
+                                if (isFavorite) {
+                                    R.string.feature_search_cd_remove_favorite
+                                } else {
+                                    R.string.feature_search_cd_add_favorite
+                                },
+                            ),
                         tint =
                             if (isFavorite) {
                                 MaterialTheme.colorScheme.primary

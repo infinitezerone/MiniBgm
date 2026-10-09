@@ -33,13 +33,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SearchCategory
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 顶部现代一体化搜索栏（符合 Edge-to-Edge 与 M3 TopAppBar 状态栏规范） */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,7 +83,7 @@ fun SearchTopHeader(
                 ) {
                     if (query.isEmpty()) {
                         Text(
-                            text = "搜索动画、原名、制作人员...",
+                            text = stringResource(R.string.feature_search_search_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                             maxLines = 1,
@@ -115,7 +118,7 @@ fun SearchTopHeader(
                     ) {
                         Icon(
                             imageVector = BgmIcons.Clear,
-                            contentDescription = "清空输入",
+                            contentDescription = stringResource(R.string.feature_search_cd_clear_input),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp),
                         )
@@ -128,7 +131,7 @@ fun SearchTopHeader(
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = BgmIcons.ArrowBack,
-                        contentDescription = "返回",
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -140,7 +143,7 @@ fun SearchTopHeader(
                 modifier = Modifier.padding(end = 4.dp),
             ) {
                 Text(
-                    text = "搜索",
+                    text = stringResource(R.string.feature_search_action_search),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -198,7 +201,7 @@ fun SearchCategoryTabs(
                             },
                     )
                     Text(
-                        text = category.label,
+                        text = stringResource(category.labelRes),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color =

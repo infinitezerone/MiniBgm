@@ -19,12 +19,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonAiringScope
 import com.infinitezerone.minibgm.feature.search.SeasonFormFilter
 import com.infinitezerone.minibgm.feature.search.SeasonOriginFilter
@@ -71,21 +73,24 @@ fun SeasonalFilterOptionsBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "筛选与排序",
+                    text = stringResource(R.string.feature_search_filter_sheet_short_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 TextButton(onClick = onDismiss) {
-                    Text(text = "完成", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = stringResource(R.string.feature_search_action_done),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
 
             // 当季放送范围：全部在播 / 仅首播新番 / 仅跨季续播（仅在当季生效展示）
             if (uiState.isCurrentSeason) {
-                FilterOptionSection(label = "放送范围") {
+                FilterOptionSection(label = stringResource(R.string.feature_search_filter_section_airing_scope)) {
                     SeasonAiringScope.entries.forEach { scope ->
                         SeasonalGuideFilterChip(
-                            label = scope.label,
+                            label = stringResource(scope.labelRes),
                             selected = uiState.selectedAiringScope == scope,
                             onClick = { onSelectAiringScope(scope) },
                         )
@@ -93,39 +98,46 @@ fun SeasonalFilterOptionsBottomSheet(
                 }
             }
 
-            FilterOptionSection(label = "产地") {
+            FilterOptionSection(label = stringResource(R.string.feature_search_filter_section_origin)) {
                 SeasonOriginFilter.entries.forEach { origin ->
                     SeasonalGuideFilterChip(
-                        label = origin.label,
+                        label = stringResource(origin.labelRes),
                         selected = uiState.selectedOrigin == origin,
                         onClick = { onSelectOrigin(origin) },
                     )
                 }
             }
 
-            FilterOptionSection(label = "放送形式") {
+            FilterOptionSection(label = stringResource(R.string.feature_search_filter_section_form)) {
                 SeasonFormFilter.entries.forEach { form ->
                     SeasonalGuideFilterChip(
-                        label = form.label,
+                        label = stringResource(form.labelRes),
                         selected = uiState.selectedForm == form,
                         onClick = { onSelectForm(form) },
                     )
                 }
             }
 
-            FilterOptionSection(label = "排序") {
+            FilterOptionSection(label = stringResource(R.string.feature_search_filter_section_sort)) {
                 SeasonSortOption.entries.forEach { sort ->
                     SeasonalGuideFilterChip(
-                        label = sort.label,
+                        label = stringResource(sort.labelRes),
                         selected = uiState.selectedSort == sort,
                         onClick = { onSelectSort(sort) },
                     )
                 }
             }
 
-            FilterOptionSection(label = "浏览体验") {
+            FilterOptionSection(label = stringResource(R.string.feature_search_filter_section_browse)) {
                 SeasonalGuideFilterChip(
-                    label = if (uiState.purifyContent) "净化已开启（折叠短片/泡面）" else "内容净化（全部平铺）",
+                    label =
+                        stringResource(
+                            if (uiState.purifyContent) {
+                                R.string.feature_search_purify_on
+                            } else {
+                                R.string.feature_search_purify_off
+                            },
+                        ),
                     selected = uiState.purifyContent,
                     onClick = onTogglePurifyContent,
                 )
@@ -151,7 +163,7 @@ fun SeasonalFilterOptionsBottomSheet(
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "题材与标签",
+                            text = stringResource(R.string.feature_search_tags_title),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -160,9 +172,13 @@ fun SeasonalFilterOptionsBottomSheet(
                         Text(
                             text =
                                 if (activeCount > 0) {
-                                    "已选 ${uiState.selectedTags.size} 个 · 排除 ${uiState.excludedTags.size} 个"
+                                    stringResource(
+                                        R.string.feature_search_tags_summary,
+                                        uiState.selectedTags.size,
+                                        uiState.excludedTags.size,
+                                    )
                                 } else {
-                                    "按题材与特色标签筛选（支持包含/排除）"
+                                    stringResource(R.string.feature_search_tags_summary_empty)
                                 },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -172,7 +188,7 @@ fun SeasonalFilterOptionsBottomSheet(
                     }
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowDown,
-                        contentDescription = "打开标签管理",
+                        contentDescription = stringResource(R.string.feature_search_cd_open_tag_manager),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp),
                     )

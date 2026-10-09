@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,9 +45,11 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SearchSort
 import com.infinitezerone.minibgm.feature.search.SearchViewMode
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 搜索结果列表（支持多维排序、列表/网格双模切换与无限滚动触底加载） */
 @Composable
@@ -112,13 +115,13 @@ fun SearchResultsList(
 
         val countText =
             if (isLoading) {
-                "正在按「${selectedSort.label}」检索作品..."
+                stringResource(R.string.feature_search_searching_by_sort, stringResource(selectedSort.labelRes))
             } else if (totalCount > 0 && totalCount > results.size) {
-                "共找到 $totalCount 部作品 (已加载 ${results.size} 部)"
+                stringResource(R.string.feature_search_result_count_with_loaded, totalCount, results.size)
             } else if (totalCount > 0) {
-                "共找到 $totalCount 部作品"
+                stringResource(R.string.feature_search_result_count, totalCount)
             } else {
-                "共找到 ${results.size} 部作品"
+                stringResource(R.string.feature_search_result_count, results.size)
             }
 
         Row(
@@ -188,7 +191,9 @@ fun SearchResultsList(
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    TextButton(onClick = onRetrySearch) { Text("重试") }
+                                    TextButton(onClick = onRetrySearch) {
+                                        Text(stringResource(DesignSystemR.string.core_designsystem_action_retry))
+                                    }
                                 }
                             }
                         }
@@ -215,7 +220,7 @@ fun SearchResultsList(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Text(
-                                        text = "本地索引命中",
+                                        text = stringResource(R.string.feature_search_local_match),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -223,7 +228,7 @@ fun SearchResultsList(
                                     )
                                 }
                                 Text(
-                                    text = "查看",
+                                    text = stringResource(R.string.feature_search_action_view),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
@@ -337,7 +342,7 @@ fun SearchSortFilterBar(
                         },
                 ) {
                     Text(
-                        text = sort.label,
+                        text = stringResource(sort.labelRes),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color =
@@ -365,7 +370,14 @@ fun SearchSortFilterBar(
                     } else {
                         BgmIcons.ViewList
                     },
-                contentDescription = if (viewMode == SearchViewMode.LIST) "切换为海报网格" else "切换为详细列表",
+                contentDescription =
+                    stringResource(
+                        if (viewMode == SearchViewMode.LIST) {
+                            R.string.feature_search_cd_switch_to_grid
+                        } else {
+                            R.string.feature_search_cd_switch_to_list
+                        },
+                    ),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(19.dp),
             )
@@ -396,7 +408,7 @@ fun SearchResultsFooter(
                     strokeWidth = 2.dp,
                 )
                 Text(
-                    text = "正在加载更多作品...",
+                    text = stringResource(R.string.feature_search_loading_more),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -408,7 +420,7 @@ fun SearchResultsFooter(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "已展示全部 $totalCount 部相关作品",
+                text = stringResource(R.string.feature_search_all_results_shown, totalCount),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f),
             )

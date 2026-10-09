@@ -362,7 +362,7 @@ class ExploreViewModel(
     private fun upcomingSeasonOption(): SeasonOption =
         SeasonOption(
             id = "upcoming",
-            label = "即将开播",
+            labelRes = R.string.feature_search_row_upcoming,
             airDateFilter = listOf(">=${java.time.LocalDate.now().plusDays(1)}"),
             category = TimeCategory.ALL,
         )

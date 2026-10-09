@@ -25,10 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonQuarter
 
 /**
@@ -68,7 +70,7 @@ fun SeasonPickerBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "选择新番档期",
+                    text = stringResource(R.string.feature_search_season_picker_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -78,7 +80,12 @@ fun SeasonPickerBottomSheet(
                     },
                 ) {
                     Text(
-                        text = "回到当前季 ($currentYear ${currentQuarter.displayLabel})",
+                        text =
+                            stringResource(
+                                R.string.feature_search_back_to_current_season,
+                                currentYear,
+                                stringResource(currentQuarter.displayLabelRes),
+                            ),
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -86,7 +93,7 @@ fun SeasonPickerBottomSheet(
 
             // 1. 年份选择（横向滚动 Chip）
             Text(
-                text = "年份",
+                text = stringResource(R.string.feature_search_season_picker_year),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 6.dp),
@@ -102,7 +109,7 @@ fun SeasonPickerBottomSheet(
                         onClick = { tempYear = year },
                         label = {
                             Text(
-                                text = "${year}年",
+                                text = stringResource(R.string.feature_search_season_year_format, year),
                                 fontWeight = if (isYearSelected) FontWeight.Bold else FontWeight.Normal,
                             )
                         },
@@ -120,7 +127,7 @@ fun SeasonPickerBottomSheet(
 
             // 2. 季度选择卡片（2x2 网格，点击即选中并确认）
             Text(
-                text = "季度",
+                text = stringResource(R.string.feature_search_season_picker_quarter),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -167,7 +174,7 @@ private fun SeasonQuarterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val dateSpan = quarter.airDateLabel
+    val dateSpan = stringResource(quarter.airDateLabelRes)
 
     Surface(
         onClick = onClick,
@@ -199,7 +206,7 @@ private fun SeasonQuarterCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = quarter.displayLabel,
+                    text = stringResource(quarter.displayLabelRes),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                     color =
@@ -211,7 +218,7 @@ private fun SeasonQuarterCard(
                 )
                 if (isCurrent) {
                     Text(
-                        text = "当季",
+                        text = stringResource(R.string.feature_search_current_season),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,

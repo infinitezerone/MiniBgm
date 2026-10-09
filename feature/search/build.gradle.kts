@@ -7,6 +7,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.feature.search"
+    resourcePrefix = "feature_search_"
 }
 
 dependencies {

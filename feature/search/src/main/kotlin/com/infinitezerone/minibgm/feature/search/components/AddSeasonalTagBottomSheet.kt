@@ -34,11 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 
 /**
  * 季度片单题材与标签筛选抽屉：
@@ -119,13 +121,13 @@ fun AddSeasonalTagBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "题材与标签筛选",
+                        text = stringResource(R.string.feature_search_tag_sheet_title),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "点击切换：未选 → 包含(✓) → 排除(✕) → 未选",
+                        text = stringResource(R.string.feature_search_tag_sheet_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -133,7 +135,7 @@ fun AddSeasonalTagBottomSheet(
                 if (totalActiveCount > 0) {
                     TextButton(onClick = onClearSelectedTags) {
                         Text(
-                            text = "清空全部 ($totalActiveCount)",
+                            text = stringResource(R.string.feature_search_action_clear_all_count, totalActiveCount),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -163,14 +165,14 @@ fun AddSeasonalTagBottomSheet(
                         onValueChange = { inputText = it },
                         placeholder = {
                             Text(
-                                text = "搜索或自填标签（实时过滤）",
+                                text = stringResource(R.string.feature_search_tag_search_hint),
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = BgmIcons.Search,
-                                contentDescription = "搜索标签",
+                                contentDescription = stringResource(R.string.feature_search_cd_search_tags),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp),
                             )
@@ -180,7 +182,7 @@ fun AddSeasonalTagBottomSheet(
                                 IconButton(onClick = { inputText = "" }) {
                                     Icon(
                                         imageVector = BgmIcons.Close,
-                                        contentDescription = "清除搜索词",
+                                        contentDescription = stringResource(R.string.feature_search_cd_clear_search),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp),
                                     )
@@ -214,7 +216,7 @@ fun AddSeasonalTagBottomSheet(
                         enabled = inputText.isNotBlank(),
                         shape = RoundedCornerShape(8.dp),
                     ) {
-                        Text("包含")
+                        Text(stringResource(R.string.feature_search_action_include))
                     }
 
                     OutlinedButton(
@@ -228,7 +230,7 @@ fun AddSeasonalTagBottomSheet(
                         enabled = inputText.isNotBlank(),
                         shape = RoundedCornerShape(8.dp),
                     ) {
-                        Text("排除")
+                        Text(stringResource(R.string.feature_search_action_exclude))
                     }
                 }
 
@@ -236,7 +238,7 @@ fun AddSeasonalTagBottomSheet(
                 if (totalActiveCount > 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "当前已生效筛选",
+                            text = stringResource(R.string.feature_search_active_filters_title),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
@@ -267,7 +269,7 @@ fun AddSeasonalTagBottomSheet(
                                         )
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "取消包含",
+                                            contentDescription = stringResource(R.string.feature_search_cd_cancel_include),
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(14.dp),
                                         )
@@ -295,7 +297,7 @@ fun AddSeasonalTagBottomSheet(
                                         )
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "取消排除",
+                                            contentDescription = stringResource(R.string.feature_search_cd_cancel_exclude),
                                             tint = MaterialTheme.colorScheme.onErrorContainer,
                                             modifier = Modifier.size(14.dp),
                                         )
@@ -314,7 +316,7 @@ fun AddSeasonalTagBottomSheet(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = "★ 我的常用偏好",
+                                text = stringResource(R.string.feature_search_favorite_prefs_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -360,7 +362,7 @@ fun AddSeasonalTagBottomSheet(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = "核心题材分类",
+                                text = stringResource(R.string.feature_search_genres_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -407,7 +409,7 @@ fun AddSeasonalTagBottomSheet(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
-                                text = "特色微观标签",
+                                text = stringResource(R.string.feature_search_hot_tags_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -453,7 +455,7 @@ fun AddSeasonalTagBottomSheet(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = "未找到匹配标签，可直接点击右上「包含」或「排除」自填添加",
+                            text = stringResource(R.string.feature_search_tag_no_match),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

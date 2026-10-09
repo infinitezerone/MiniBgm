@@ -21,6 +21,18 @@ class ExploreViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
+    /**
+     * 摘要文案的资源解析在 Composable 层完成，单元测试无法直接调用 @Composable；
+     * 这里走纯函数版本并预置已解析的标签文案，断言拼装格式。
+     */
+    private fun ExploreUiState.customFilterSummaryForTest(sortLabel: String? = null): String =
+        customFilterSummary(
+            seasonLabel = null,
+            categoryLabel = null,
+            sortLabel = sortLabel,
+            emptyLabel = "未筛选",
+        )
+
     @Test
     fun initialLoadTriggersAdvancedSearchSuccessfully() =
         runTest {
@@ -108,7 +120,7 @@ class ExploreViewModelTest {
                 advanceUntilIdle()
                 assertEquals(mood, viewModel.uiState.value.selectedMood)
                 assertFalse(
-                    "预设 ${mood.label} 不应激活自定义筛选栏",
+                    "预设 ${mood.name} 不应激活自定义筛选栏",
                     viewModel.uiState.value.isCustomFilterActive,
                 )
             }
@@ -149,11 +161,14 @@ class ExploreViewModelTest {
             viewModel.onTagToggle("冒险")
             advanceUntilIdle()
 
-            assertEquals("#科幻 · #冒险 (2)", viewModel.uiState.value.customFilterSummary)
+            assertEquals("#科幻 · #冒险 (2)", viewModel.uiState.value.customFilterSummaryForTest())
 
             viewModel.onSortSelect(ExploreSort.HEAT)
             advanceUntilIdle()
-            assertEquals("#科幻 · #冒险 · 热门排行 (3)", viewModel.uiState.value.customFilterSummary)
+            assertEquals(
+                "#科幻 · #冒险 · 热门排行 (3)",
+                viewModel.uiState.value.customFilterSummaryForTest(sortLabel = "热门排行"),
+            )
         }
 
     @Test

@@ -1,6 +1,9 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.model.Subject
 import java.time.LocalDate
 import java.util.Locale
@@ -17,13 +20,29 @@ import java.util.Locale
  */
 enum class SeasonQuarter(
     val month: Int,
-    val label: String,
-    val displayLabel: String,
+    @StringRes val labelRes: Int,
+    @StringRes val displayLabelRes: Int,
 ) {
-    WINTER(1, "冬", "1月冬"),
-    SPRING(4, "春", "4月春"),
-    SUMMER(7, "夏", "7月夏"),
-    AUTUMN(10, "秋", "10月秋"),
+    WINTER(
+        1,
+        R.string.feature_search_quarter_winter,
+        R.string.feature_search_quarter_winter_display,
+    ),
+    SPRING(
+        4,
+        R.string.feature_search_quarter_spring,
+        R.string.feature_search_quarter_spring_display,
+    ),
+    SUMMER(
+        7,
+        R.string.feature_search_quarter_summer,
+        R.string.feature_search_quarter_summer_display,
+    ),
+    AUTUMN(
+        10,
+        R.string.feature_search_quarter_autumn,
+        R.string.feature_search_quarter_autumn_display,
+    ),
     ;
 
     /**
@@ -41,13 +60,14 @@ enum class SeasonQuarter(
     }
 
     /** 首播窗口的中文简写。档期卡片拿它当副标——「10月秋」的列表里出现 9 月的日期时不至于让人困惑 */
-    val airDateLabel: String
+    @get:StringRes
+    val airDateLabelRes: Int
         get() =
             when (this) {
-                WINTER -> "首播 12月下旬 ~ 3月中旬"
-                SPRING -> "首播 3月下旬 ~ 6月中旬"
-                SUMMER -> "首播 6月下旬 ~ 9月中旬"
-                AUTUMN -> "首播 9月下旬 ~ 12月中旬"
+                WINTER -> R.string.feature_search_quarter_winter_air
+                SPRING -> R.string.feature_search_quarter_spring_air
+                SUMMER -> R.string.feature_search_quarter_summer_air
+                AUTUMN -> R.string.feature_search_quarter_autumn_air
             }
 
     companion object {
@@ -99,13 +119,13 @@ enum class SeasonalViewMode {
  * 支持按标准 ISO 产地代码（`countryOfOrigin`）精确匹配，同时携带服务端下推的 `metaTag` 备选。
  */
 enum class SeasonOriginFilter(
-    val label: String,
+    @StringRes val labelRes: Int,
     val code: String?,
     val metaTag: String?,
 ) {
-    ALL("全部", null, null),
-    JAPAN("日本", "JP", "日本"),
-    CHINA("国产", "CN", "中国"),
+    ALL(R.string.feature_search_origin_all, null, null),
+    JAPAN(R.string.feature_search_origin_japan, "JP", "日本"),
+    CHINA(R.string.feature_search_origin_china, "CN", "中国"),
     ;
 
     fun matches(subject: Subject): Boolean {
@@ -123,15 +143,15 @@ enum class SeasonOriginFilter(
  * 覆盖所有核心动画形式（TV / 剧场版 / 网络动画 / OVA），支持多代码集合自适应匹配。
  */
 enum class SeasonFormFilter(
-    val label: String,
+    @StringRes val labelRes: Int,
     val formats: Set<String>,
     val metaTag: String?,
 ) {
-    ALL("全部", emptySet(), null),
-    TV("TV 动画", setOf("TV", "TV_SHORT"), "TV"),
-    MOVIE("剧场版", setOf("MOVIE", "剧场版"), "剧场版"),
-    WEB("网络动画", setOf("WEB", "ONA"), "WEB"),
-    OVA("OVA / OAD", setOf("OVA", "OAD"), "OVA"),
+    ALL(R.string.feature_search_form_all, emptySet(), null),
+    TV(R.string.feature_search_form_tv, setOf("TV", "TV_SHORT"), "TV"),
+    MOVIE(R.string.feature_search_form_movie, setOf("MOVIE", "剧场版"), "剧场版"),
+    WEB(R.string.feature_search_form_web, setOf("WEB", "ONA"), "WEB"),
+    OVA(R.string.feature_search_form_ova, setOf("OVA", "OAD"), "OVA"),
     ;
 
     fun matches(subject: Subject): Boolean {
@@ -155,14 +175,14 @@ enum class SeasonFormFilter(
  * - `TITLE` 标题拼音/英文升序（A-Z）。
  */
 enum class SeasonSortOption(
-    val label: String,
+    @StringRes val labelRes: Int,
     val apiValue: String,
 ) {
-    HEAT("综合热度", "heat"),
-    SCORE("评分最高", "score"),
-    AIR_DATE_DESC("首播(新到旧)", "air_date_desc"),
-    AIR_DATE_ASC("首播(早到晚)", "air_date_asc"),
-    TITLE("标题A-Z", "title"),
+    HEAT(R.string.feature_search_season_sort_heat, "heat"),
+    SCORE(R.string.feature_search_season_sort_score, "score"),
+    AIR_DATE_DESC(R.string.feature_search_season_sort_air_desc, "air_date_desc"),
+    AIR_DATE_ASC(R.string.feature_search_season_sort_air_asc, "air_date_asc"),
+    TITLE(R.string.feature_search_season_sort_title, "title"),
     ;
 
     companion object {
@@ -177,11 +197,11 @@ enum class SeasonSortOption(
  * - [CONTINUING_ONLY] 仅跨季续播（仅查看半年番后半、年番及接档连载作品）。
  */
 enum class SeasonAiringScope(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    ALL("全部在播"),
-    NEW_ONLY("仅首播新番"),
-    CONTINUING_ONLY("仅跨季续播"),
+    ALL(R.string.feature_search_airing_scope_all),
+    NEW_ONLY(R.string.feature_search_airing_scope_new),
+    CONTINUING_ONLY(R.string.feature_search_airing_scope_continuing),
     ;
 
     companion object {
@@ -252,27 +272,44 @@ data class SeasonalGuideUiState(
     /** 依净化规则与展开状态计算出的界面展示单元列表 */
     val displayItems: List<SeasonalDisplayItem>
         get() = buildSeasonalDisplayItems(subjects, purifyContent, expandedGroupKeys)
+}
 
-    /**
-     * 筛选栏收起后，那一行摘要里显示的当前筛选，如「全部在播 · 日本 · 剧场版 · #百合」「全部」。
-     */
-    val filterSummary: String
-        get() {
-            val scopeLabel =
-                if (isCurrentSeason && selectedAiringScope != SeasonAiringScope.ALL) {
-                    selectedAiringScope.label
-                } else {
-                    null
-                }
-            val originLabel = selectedOrigin.label.takeIf { selectedOrigin != SeasonOriginFilter.ALL }
-            val formLabel = selectedForm.label.takeIf { selectedForm != SeasonFormFilter.ALL }
-            val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
-            val excludedTagsLabel = if (excludedTags.isNotEmpty()) excludedTags.joinToString(" · ") { "排除:$it" } else null
-            val purifyLabel = if (!purifyContent) "全部平铺" else null
-            return listOfNotNull(scopeLabel, originLabel, formLabel, tagsLabel, excludedTagsLabel, purifyLabel)
-                .joinToString(" · ")
-                .ifEmpty { SeasonOriginFilter.ALL.label }
+/**
+ * 筛选栏收起后，那一行摘要里显示的当前筛选，如「全部在播 · 日本 · 剧场版 · #百合」「全部」。
+ */
+@Composable
+fun SeasonalGuideUiState.filterSummary(): String {
+    val scopeLabel =
+        if (isCurrentSeason && selectedAiringScope != SeasonAiringScope.ALL) {
+            stringResource(selectedAiringScope.labelRes)
+        } else {
+            null
         }
+    val originLabel =
+        if (selectedOrigin != SeasonOriginFilter.ALL) stringResource(selectedOrigin.labelRes) else null
+    val formLabel = if (selectedForm != SeasonFormFilter.ALL) stringResource(selectedForm.labelRes) else null
+    val excludedTagLabels = excludedTags.map { stringResource(R.string.feature_search_filter_exclude_tag, it) }
+    val purifyLabel = if (!purifyContent) stringResource(R.string.feature_search_filter_all_flat) else null
+    val fallbackLabel = stringResource(SeasonOriginFilter.ALL.labelRes)
+    return filterSummary(scopeLabel, originLabel, formLabel, excludedTagLabels, purifyLabel, fallbackLabel)
+}
+
+/**
+ * 纯函数版本：各类标签文案由调用方解析后传入，便于在 Composable 之外复用与单元测试。
+ */
+internal fun SeasonalGuideUiState.filterSummary(
+    scopeLabel: String?,
+    originLabel: String?,
+    formLabel: String?,
+    excludedTagLabels: List<String>,
+    purifyLabel: String?,
+    fallbackLabel: String,
+): String {
+    val tagsLabel = if (selectedTags.isNotEmpty()) selectedTags.joinToString(" · ") { "#$it" } else null
+    val excludedTagsLabel = excludedTagLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    return listOfNotNull(scopeLabel, originLabel, formLabel, tagsLabel, excludedTagsLabel, purifyLabel)
+        .joinToString(" · ")
+        .ifEmpty { fallbackLabel }
 }
 
 /**

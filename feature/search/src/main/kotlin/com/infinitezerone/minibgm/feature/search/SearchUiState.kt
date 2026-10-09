@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -9,14 +10,14 @@ import com.infinitezerone.minibgm.core.model.Subject
 /** 搜索分类定义：全部 (0)、动画 (2)、书籍 (1)、游戏 (4)、音乐 (3) */
 enum class SearchCategory(
     val type: Int,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    ALL(0, "全部", BgmIcons.Assistant),
-    ANIME(2, "动画", BgmIcons.Tv),
-    BOOK(1, "书籍", BgmIcons.Book),
-    GAME(4, "游戏", BgmIcons.Game),
-    MUSIC(3, "音乐", BgmIcons.Music),
+    ALL(0, R.string.feature_search_category_all, BgmIcons.Assistant),
+    ANIME(2, R.string.feature_search_category_anime, BgmIcons.Tv),
+    BOOK(1, R.string.feature_search_category_book, BgmIcons.Book),
+    GAME(4, R.string.feature_search_category_game, BgmIcons.Game),
+    MUSIC(3, R.string.feature_search_category_music, BgmIcons.Music),
     ;
 
     companion object {
@@ -26,13 +27,13 @@ enum class SearchCategory(
 
 /** 搜索结果排序维度（直接对接 Bangumi 官方 v0 全量服务端排序规则） */
 enum class SearchSort(
-    val label: String,
+    @StringRes val labelRes: Int,
     val serverSort: String,
 ) {
-    MATCH("综合匹配", "match"),
-    HEAT("热门收藏", "heat"),
-    SCORE("高分优先", "score"),
-    RANK("排名靠前", "rank"),
+    MATCH(R.string.feature_search_search_sort_match, "match"),
+    HEAT(R.string.feature_search_search_sort_heat, "heat"),
+    SCORE(R.string.feature_search_search_sort_score, "score"),
+    RANK(R.string.feature_search_search_sort_rank, "rank"),
 }
 
 /** 搜索视图模式 */

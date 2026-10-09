@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 1. 探索页壳与顶部栏 -->
+    <string name="feature_search_explore_title">探索发现</string>
+    <string name="feature_search_cd_back_to_featured">返回精选</string>
+    <string name="feature_search_cd_advanced_filter">高级筛选</string>
+    <string name="feature_search_action_search">搜索</string>
+    <string name="feature_search_seasonal_row_title">本季新番 · %1$d %2$s</string>
+    <string name="feature_search_unknown_error">未知网络异常</string>
+    <string name="feature_search_explore_login_desc">一键「想看 / 追番」需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。</string>
+
+    <!-- 2. 探索分类 / 排序 / 心境 / 标签维度 -->
+    <string name="feature_search_time_category_year">按年份/年代</string>
+    <string name="feature_search_time_category_all">全部时间</string>
+    <string name="feature_search_category_all">全部</string>
+    <string name="feature_search_category_anime">动画</string>
+    <string name="feature_search_category_book">书籍</string>
+    <string name="feature_search_category_game">游戏</string>
+    <string name="feature_search_category_music">音乐</string>
+    <string name="feature_search_explore_sort_heat">热门排行</string>
+    <string name="feature_search_explore_sort_score">评分最高</string>
+    <string name="feature_search_explore_sort_rank">排名优先</string>
+    <string name="feature_search_mood_masterpiece">封神必看</string>
+    <string name="feature_search_mood_hot">热门流行</string>
+    <string name="feature_search_mood_healing">深夜解压</string>
+    <string name="feature_search_mood_shonen">热血高燃</string>
+    <string name="feature_search_mood_suspense">烧脑悬疑</string>
+    <string name="feature_search_mood_tears">催泪后劲</string>
+    <string name="feature_search_mood_romance">纯爱心动</string>
+    <string name="feature_search_mood_fantasy">异界奇幻</string>
+    <string name="feature_search_mood_blind_box">随心盲盒</string>
+    <string name="feature_search_tag_group_genre">题材风格</string>
+    <string name="feature_search_tag_group_studio">制作厂牌/监督</string>
+    <string name="feature_search_tag_group_form">形式与受众</string>
+
+    <!-- 3. 时间/年代筛选项 -->
+    <string name="feature_search_season_year_format">%1$d年</string>
+    <string name="feature_search_season_2010s">2010 年代 (2010-2019)</string>
+    <string name="feature_search_season_2000s">2000 年代 (2000-2009)</string>
+    <string name="feature_search_season_1990s">90 年代 (1990-1999)</string>
+    <string name="feature_search_season_before_1990">80 年代及更早 (&lt;1990)</string>
+
+    <!-- 4. 探索榜单行 -->
+    <string name="feature_search_row_hot">热门流行</string>
+    <string name="feature_search_row_masterpiece">封神必看</string>
+    <string name="feature_search_row_upcoming">即将开播</string>
+    <string name="feature_search_action_more">更多</string>
+    <string name="feature_search_cd_view_full_list">查看「%1$s」完整榜单</string>
+    <string name="feature_search_no_rating">暂无评分</string>
+
+    <!-- 5. 探索筛选条与高级筛选抽屉 -->
+    <string name="feature_search_custom_filter_summary_none">未筛选</string>
+    <string name="feature_search_cd_expand_tags">展开已选标签</string>
+    <string name="feature_search_cd_collapse_tags">收起已选标签</string>
+    <string name="feature_search_action_clear_all_filter">清除全部</string>
+    <string name="feature_search_cd_remove">移除</string>
+    <string name="feature_search_filter_sheet_title">多维深度筛选</string>
+    <string name="feature_search_action_reset_filter">重置筛选</string>
+    <string name="feature_search_filter_section_sort_rule">排序规则</string>
+    <string name="feature_search_filter_section_category">媒介分类</string>
+    <string name="feature_search_filter_section_time">播出时间与年代</string>
+    <string name="feature_search_filter_selected_count">已选组合标签 (%1$d)</string>
+    <string name="feature_search_action_clear_tags">清空标签</string>
+    <string name="feature_search_favorite_tags_title">★ 我的常用标签</string>
+    <string name="feature_search_cd_delete_favorite_tag">删除常用标签</string>
+    <string name="feature_search_filter_section_custom_tag">自定义特色标签</string>
+    <string name="feature_search_custom_tag_hint">输入任意 Bangumi 标签（如 赛博朋克、机娘、芳文社）</string>
+    <string name="feature_search_action_add">添加</string>
+    <string name="feature_search_action_view_results">查看发现结果</string>
+
+    <!-- 6. 探索页滚动状态 -->
+    <string name="feature_search_exploring_more">正在探索更多番剧...</string>
+    <string name="feature_search_end_of_list">已经到底啦，共发现 %1$d 部条目</string>
+    <string name="feature_search_spotlight_doing">%1$s 人在追</string>
+    <string name="feature_search_spotlight_rating">%1$s 人评分</string>
+    <string name="feature_search_community_hot_comment">社区热评</string>
+    <string name="feature_search_community_hot_comment_rated">社区热评 ★%1$d</string>
+    <string name="feature_search_action_added_wish">已在想看</string>
+    <string name="feature_search_action_add_wish">+ 加入想看</string>
+    <string name="feature_search_meta_doing">%1$s 在追</string>
+    <string name="feature_search_meta_rating">%1$s 评</string>
+    <string name="feature_search_collection_wish">想看</string>
+    <string name="feature_search_collection_wished">已想看</string>
+
+    <!-- 7. 探索空态与错误态 -->
+    <string name="feature_search_explore_empty_title">暂无匹配条目</string>
+    <string name="feature_search_explore_empty_message">当前筛选条件下未发现条目，可尝试重置标签或切换其他场景</string>
+    <string name="feature_search_explore_error_title">探索加载失败</string>
+
+    <!-- 8. 搜索页顶部与空闲态 -->
+    <string name="feature_search_search_hint">搜索动画、原名、制作人员...</string>
+    <string name="feature_search_cd_clear_input">清空输入</string>
+    <string name="feature_search_history_title">历史搜索</string>
+    <string name="feature_search_action_clear_all">清空全部</string>
+    <string name="feature_search_cd_delete_history">删除记录</string>
+    <string name="feature_search_idle_title">搜索 Bangumi 条目</string>
+    <string name="feature_search_idle_desc">输入中文译名、日文原名或制作人员\n点击上方分类切换动画、书籍、游戏、音乐等品类</string>
+
+    <!-- 9. 搜索结果与排序 -->
+    <string name="feature_search_search_sort_match">综合匹配</string>
+    <string name="feature_search_search_sort_heat">热门收藏</string>
+    <string name="feature_search_search_sort_score">高分优先</string>
+    <string name="feature_search_search_sort_rank">排名靠前</string>
+    <string name="feature_search_searching_by_sort">正在按「%1$s」检索作品...</string>
+    <string name="feature_search_result_count">共找到 %1$d 部作品</string>
+    <string name="feature_search_result_count_with_loaded">共找到 %1$d 部作品 (已加载 %2$d 部)</string>
+    <string name="feature_search_metric_all_episodes">全 %1$d %2$s</string>
+    <string name="feature_search_local_match">本地索引命中</string>
+    <string name="feature_search_action_view">查看</string>
+    <string name="feature_search_cd_switch_to_grid">切换为海报网格</string>
+    <string name="feature_search_cd_switch_to_list">切换为详细列表</string>
+    <string name="feature_search_loading_more">正在加载更多作品...</string>
+    <string name="feature_search_all_results_shown">已展示全部 %1$d 部相关作品</string>
+
+    <!-- 10. 搜索空态、错误态与登录引导 -->
+    <string name="feature_search_no_results_title">未找到关于「%1$s」的作品</string>
+    <string name="feature_search_no_results_hint">建议：检查关键词是否有误，尝试搜索日文原名、缩写，或切换至「全部」分类再次尝试</string>
+    <string name="feature_search_action_reset_category">切至全部分类</string>
+    <string name="feature_search_action_clear_and_search">清空重搜</string>
+    <string name="feature_search_search_error">搜索发生错误</string>
+    <string name="feature_search_tag_subjects_load_failed">获取标签作品失败</string>
+    <string name="feature_search_error_title">搜索遇到问题</string>
+    <string name="feature_search_login_dialog_title">登录以同步追番进度</string>
+    <string name="feature_search_login_dialog_desc">登录 Bangumi 账号后，即可一键标记在看、在读、在听、在玩，并同步至你的个人收藏库。</string>
+
+    <!-- 11. 季度分季与筛选维度 -->
+    <string name="feature_search_quarter_winter">冬</string>
+    <string name="feature_search_quarter_spring">春</string>
+    <string name="feature_search_quarter_summer">夏</string>
+    <string name="feature_search_quarter_autumn">秋</string>
+    <string name="feature_search_quarter_winter_display">1月冬</string>
+    <string name="feature_search_quarter_spring_display">4月春</string>
+    <string name="feature_search_quarter_summer_display">7月夏</string>
+    <string name="feature_search_quarter_autumn_display">10月秋</string>
+    <string name="feature_search_quarter_winter_air">首播 12月下旬 ~ 3月中旬</string>
+    <string name="feature_search_quarter_spring_air">首播 3月下旬 ~ 6月中旬</string>
+    <string name="feature_search_quarter_summer_air">首播 6月下旬 ~ 9月中旬</string>
+    <string name="feature_search_quarter_autumn_air">首播 9月下旬 ~ 12月中旬</string>
+    <string name="feature_search_origin_all">全部</string>
+    <string name="feature_search_origin_japan">日本</string>
+    <string name="feature_search_origin_china">国产</string>
+    <string name="feature_search_form_all">全部</string>
+    <string name="feature_search_form_tv">TV 动画</string>
+    <string name="feature_search_form_movie">剧场版</string>
+    <string name="feature_search_form_web">网络动画</string>
+    <string name="feature_search_form_ova">OVA / OAD</string>
+    <string name="feature_search_season_sort_heat">综合热度</string>
+    <string name="feature_search_season_sort_score">评分最高</string>
+    <string name="feature_search_season_sort_air_desc">首播(新到旧)</string>
+    <string name="feature_search_season_sort_air_asc">首播(早到晚)</string>
+    <string name="feature_search_season_sort_title">标题A-Z</string>
+    <string name="feature_search_airing_scope_all">全部在播</string>
+    <string name="feature_search_airing_scope_new">仅首播新番</string>
+    <string name="feature_search_airing_scope_continuing">仅跨季续播</string>
+    <string name="feature_search_filter_exclude_tag">排除:%1$s</string>
+    <string name="feature_search_filter_all_flat">全部平铺</string>
+
+    <!-- 12. 季度片单页与档期选择 -->
+    <string name="feature_search_seasonal_guide_title">季度片单</string>
+    <string name="feature_search_seasonal_load_failed">加载季度片单失败</string>
+    <string name="feature_search_seasonal_login_title">登录开启快捷追番</string>
+    <string name="feature_search_seasonal_login_desc">登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。</string>
+    <string name="feature_search_season_picker_title">选择新番档期</string>
+    <string name="feature_search_back_to_current_season">回到当前季 (%1$d %2$s)</string>
+    <string name="feature_search_season_picker_year">年份</string>
+    <string name="feature_search_season_picker_quarter">季度</string>
+    <string name="feature_search_current_season">当季</string>
+    <string name="feature_search_season_pill_format">%1$d · %2$s</string>
+
+    <!-- 13. 季度档期筛选条与筛选抽屉 -->
+    <string name="feature_search_cd_select_season">选择档期</string>
+    <string name="feature_search_cd_open_filter_sheet">打开筛选抽屉</string>
+    <string name="feature_search_cd_switch_to_compact_list">切换为紧凑列表</string>
+    <string name="feature_search_filter_sheet_short_title">筛选与排序</string>
+    <string name="feature_search_action_done">完成</string>
+    <string name="feature_search_filter_section_airing_scope">放送范围</string>
+    <string name="feature_search_filter_section_origin">产地</string>
+    <string name="feature_search_filter_section_form">放送形式</string>
+    <string name="feature_search_filter_section_sort">排序</string>
+    <string name="feature_search_filter_section_browse">浏览体验</string>
+    <string name="feature_search_purify_on">净化已开启（折叠短片/泡面）</string>
+    <string name="feature_search_purify_off">内容净化（全部平铺）</string>
+    <string name="feature_search_tags_title">题材与标签</string>
+    <string name="feature_search_tags_summary">已选 %1$d 个 · 排除 %2$d 个</string>
+    <string name="feature_search_tags_summary_empty">按题材与特色标签筛选（支持包含/排除）</string>
+    <string name="feature_search_cd_open_tag_manager">打开标签管理</string>
+
+    <!-- 14. 季度题材标签三态抽屉 -->
+    <string name="feature_search_tag_sheet_title">题材与标签筛选</string>
+    <string name="feature_search_tag_sheet_subtitle">点击切换：未选 → 包含(✓) → 排除(✕) → 未选</string>
+    <string name="feature_search_action_clear_all_count">清空全部 (%1$d)</string>
+    <string name="feature_search_tag_search_hint">搜索或自填标签（实时过滤）</string>
+    <string name="feature_search_cd_search_tags">搜索标签</string>
+    <string name="feature_search_cd_clear_search">清除搜索词</string>
+    <string name="feature_search_action_include">包含</string>
+    <string name="feature_search_action_exclude">排除</string>
+    <string name="feature_search_active_filters_title">当前已生效筛选</string>
+    <string name="feature_search_cd_cancel_include">取消包含</string>
+    <string name="feature_search_cd_cancel_exclude">取消排除</string>
+    <string name="feature_search_favorite_prefs_title">★ 我的常用偏好</string>
+    <string name="feature_search_genres_title">核心题材分类</string>
+    <string name="feature_search_hot_tags_title">特色微观标签</string>
+    <string name="feature_search_tag_no_match">未找到匹配标签，可直接点击右上「包含」或「排除」自填添加</string>
+
+    <!-- 15. 季度片单卡片与行 -->
+    <string name="feature_search_continuing_from_ep">第 %1$d 话起</string>
+    <string name="feature_search_continuing_airing">跨季在播</string>
+    <string name="feature_search_tba">待定</string>
+    <string name="feature_search_episodes_count">%1$d话</string>
+    <string name="feature_search_air_date_suffix">%1$s 首播</string>
+    <string name="feature_search_doing_count_suffix">%1$s追</string>
+    <string name="feature_search_collection_doing">在追</string>
+    <string name="feature_search_collection_watching">在看</string>
+    <string name="feature_search_collection_follow">追番</string>
+    <string name="feature_search_folded_capsule">已折叠 %1$d 部短片 / 泡面番 / 动态漫</string>
+    <string name="feature_search_action_collapse">收起</string>
+    <string name="feature_search_action_expand">点击展开</string>
+    <string name="feature_search_cd_remove_favorite">取消偏好收藏</string>
+    <string name="feature_search_cd_add_favorite">收藏为常用偏好</string>
+
+    <!-- 16. 季度空态 -->
+    <string name="feature_search_seasonal_empty_title">%1$d年 %2$s 暂无收录番剧</string>
+    <string name="feature_search_seasonal_empty_hint">可尝试切换年份或季度查看其他番剧导视</string>
+</resources>

@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.DEFAULT_SEASONS
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
 import com.infinitezerone.minibgm.feature.search.ExploreSort
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonOption
 import com.infinitezerone.minibgm.feature.search.TAG_GROUPS
 import com.infinitezerone.minibgm.feature.search.TimeCategory
@@ -97,7 +99,7 @@ fun ExploreFilterBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "多维深度筛选",
+                    text = stringResource(R.string.feature_search_filter_sheet_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -110,7 +112,10 @@ fun ExploreFilterBottomSheet(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("重置筛选", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        text = stringResource(R.string.feature_search_action_reset_filter),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
 
@@ -127,7 +132,7 @@ fun ExploreFilterBottomSheet(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 // Section A: 排序规则
-                FilterSection(title = "排序规则") {
+                FilterSection(title = stringResource(R.string.feature_search_filter_section_sort_rule)) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -136,7 +141,12 @@ fun ExploreFilterBottomSheet(
                             FilterChip(
                                 selected = selectedSort == sort,
                                 onClick = { onSortSelect(sort) },
-                                label = { Text(text = sort.label, style = MaterialTheme.typography.labelSmall) },
+                                label = {
+                                    Text(
+                                        text = stringResource(sort.labelRes),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
                                 border = null,
                                 colors =
                                     FilterChipDefaults.filterChipColors(
@@ -159,7 +169,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section B: 媒介分类
-                FilterSection(title = "媒介分类") {
+                FilterSection(title = stringResource(R.string.feature_search_filter_section_category)) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -168,7 +178,12 @@ fun ExploreFilterBottomSheet(
                             FilterChip(
                                 selected = selectedCategory == category,
                                 onClick = { onCategorySelect(category) },
-                                label = { Text(text = category.label, style = MaterialTheme.typography.labelSmall) },
+                                label = {
+                                    Text(
+                                        text = stringResource(category.labelRes),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
                                 border = null,
                                 colors =
                                     FilterChipDefaults.filterChipColors(
@@ -183,7 +198,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section C: 播出时间与年代范围
-                FilterSection(title = "播出时间与年代") {
+                FilterSection(title = stringResource(R.string.feature_search_filter_section_time)) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         // 时间分类切换药丸
                         Row(
@@ -201,7 +216,12 @@ fun ExploreFilterBottomSheet(
                                             onSeasonSelect(firstOfCategory)
                                         }
                                     },
-                                    label = { Text(text = cat.label, style = MaterialTheme.typography.labelSmall) },
+                                    label = {
+                                        Text(
+                                            text = stringResource(cat.labelRes),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    },
                                     border = null,
                                     colors =
                                         FilterChipDefaults.filterChipColors(
@@ -225,7 +245,12 @@ fun ExploreFilterBottomSheet(
                                 FilterChip(
                                     selected = selectedSeason.id == season.id,
                                     onClick = { onSeasonSelect(season) },
-                                    label = { Text(text = season.label, style = MaterialTheme.typography.labelSmall) },
+                                    label = {
+                                        Text(
+                                            text = stringResource(season.labelRes, *season.labelArgs.toTypedArray()),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    },
                                     border = null,
                                     colors =
                                         FilterChipDefaults.filterChipColors(
@@ -243,10 +268,13 @@ fun ExploreFilterBottomSheet(
                 // Section D: 已生效标签总览与快捷清除
                 if (selectedTags.isNotEmpty()) {
                     FilterSection(
-                        title = "已选组合标签 (${selectedTags.size})",
+                        title = stringResource(R.string.feature_search_filter_selected_count, selectedTags.size),
                         trailing = {
                             TextButton(onClick = onClearAllTags) {
-                                Text("清空标签", style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    text = stringResource(R.string.feature_search_action_clear_tags),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
                             }
                         },
                     ) {
@@ -274,7 +302,7 @@ fun ExploreFilterBottomSheet(
                                         )
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "移除",
+                                            contentDescription = stringResource(R.string.feature_search_cd_remove),
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.size(12.dp),
                                         )
@@ -287,7 +315,7 @@ fun ExploreFilterBottomSheet(
 
                 // Section E0: 我的常用标签
                 if (customFilterTags.isNotEmpty()) {
-                    FilterSection(title = "★ 我的常用标签") {
+                    FilterSection(title = stringResource(R.string.feature_search_favorite_tags_title)) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -302,7 +330,7 @@ fun ExploreFilterBottomSheet(
                                     trailingIcon = {
                                         Icon(
                                             imageVector = BgmIcons.Close,
-                                            contentDescription = "删除常用标签",
+                                            contentDescription = stringResource(R.string.feature_search_cd_delete_favorite_tag),
                                             modifier =
                                                 Modifier
                                                     .size(14.dp)
@@ -325,7 +353,7 @@ fun ExploreFilterBottomSheet(
 
                 // Section E: 标签多维矩阵（支持多选组合）
                 TAG_GROUPS.forEach { group ->
-                    FilterSection(title = group.name) {
+                    FilterSection(title = stringResource(group.nameRes)) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -352,7 +380,7 @@ fun ExploreFilterBottomSheet(
                 }
 
                 // Section F: 自定义标签精准输入
-                FilterSection(title = "自定义特色标签") {
+                FilterSection(title = stringResource(R.string.feature_search_filter_section_custom_tag)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -363,7 +391,7 @@ fun ExploreFilterBottomSheet(
                             onValueChange = { customTagText = it },
                             placeholder = {
                                 Text(
-                                    "输入任意 Bangumi 标签（如 赛博朋克、机娘、芳文社）",
+                                    stringResource(R.string.feature_search_custom_tag_hint),
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             },
@@ -390,7 +418,7 @@ fun ExploreFilterBottomSheet(
                             },
                             enabled = customTagText.isNotBlank(),
                         ) {
-                            Text("添加")
+                            Text(stringResource(R.string.feature_search_action_add))
                         }
                     }
                 }
@@ -401,7 +429,7 @@ fun ExploreFilterBottomSheet(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
             ) {
-                Text("查看发现结果")
+                Text(stringResource(R.string.feature_search_action_view_results))
             }
         }
     }

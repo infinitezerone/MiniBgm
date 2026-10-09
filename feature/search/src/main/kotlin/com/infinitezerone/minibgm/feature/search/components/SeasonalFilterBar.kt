@@ -23,17 +23,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonAiringScope
 import com.infinitezerone.minibgm.feature.search.SeasonFormFilter
 import com.infinitezerone.minibgm.feature.search.SeasonOriginFilter
 import com.infinitezerone.minibgm.feature.search.SeasonSortOption
 import com.infinitezerone.minibgm.feature.search.SeasonalGuideUiState
 import com.infinitezerone.minibgm.feature.search.SeasonalViewMode
+import com.infinitezerone.minibgm.feature.search.filterSummary
 
 /**
  * 季度片单顶部常驻筛选条（单行）：
@@ -93,14 +96,19 @@ fun SeasonalFilterBar(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = "${uiState.selectedYear} · ${uiState.selectedQuarter.displayLabel}",
+                        text =
+                            stringResource(
+                                R.string.feature_search_season_pill_format,
+                                uiState.selectedYear,
+                                stringResource(uiState.selectedQuarter.displayLabelRes),
+                            ),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowDown,
-                        contentDescription = "选择档期",
+                        contentDescription = stringResource(R.string.feature_search_cd_select_season),
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -131,7 +139,7 @@ fun SeasonalFilterBar(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = uiState.filterSummary,
+                        text = uiState.filterSummary(),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -140,7 +148,7 @@ fun SeasonalFilterBar(
                     )
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowDown,
-                        contentDescription = "打开筛选抽屉",
+                        contentDescription = stringResource(R.string.feature_search_cd_open_filter_sheet),
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -160,11 +168,13 @@ fun SeasonalFilterBar(
                             BgmIcons.ViewList
                         },
                     contentDescription =
-                        if (uiState.viewMode == SeasonalViewMode.LIST) {
-                            "切换为海报网格"
-                        } else {
-                            "切换为紧凑列表"
-                        },
+                        stringResource(
+                            if (uiState.viewMode == SeasonalViewMode.LIST) {
+                                R.string.feature_search_cd_switch_to_grid
+                            } else {
+                                R.string.feature_search_cd_switch_to_compact_list
+                            },
+                        ),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(19.dp),
                 )

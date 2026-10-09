@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.search.R
 
 /**
  * 季度片单 2:3 黄金比例海报展板卡片
@@ -117,7 +119,7 @@ fun SeasonalAnimeCard(
                         modifier = Modifier.align(Alignment.TopEnd),
                     ) {
                         Text(
-                            text = continuingEpisodeText ?: "跨季在播",
+                            text = continuingEpisodeText ?: stringResource(R.string.feature_search_continuing_airing),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -152,9 +154,9 @@ fun SeasonalAnimeCard(
                 ) {
                     val displayDate =
                         if (isContinuing) {
-                            continuingEpisodeText ?: "跨季在播"
+                            continuingEpisodeText ?: stringResource(R.string.feature_search_continuing_airing)
                         } else {
-                            airDate.ifBlank { "待定" }
+                            airDate.ifBlank { stringResource(R.string.feature_search_tba) }
                         }
                     Text(
                         text = displayDate,
@@ -174,7 +176,7 @@ fun SeasonalAnimeCard(
                     if (subject.eps > 0) {
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                            text = "${subject.eps}话",
+                            text = stringResource(R.string.feature_search_episodes_count, subject.eps),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline,
                         )
@@ -222,13 +224,13 @@ fun SeasonalAnimeCard(
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text =
-                            if (isDoing) {
-                                "在追"
-                            } else if (isWished) {
-                                "想看"
-                            } else {
-                                "追番"
-                            },
+                            stringResource(
+                                when {
+                                    isDoing -> R.string.feature_search_collection_doing
+                                    isWished -> R.string.feature_search_collection_wish
+                                    else -> R.string.feature_search_collection_follow
+                                },
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isDoing) FontWeight.Bold else FontWeight.Medium,
                     )

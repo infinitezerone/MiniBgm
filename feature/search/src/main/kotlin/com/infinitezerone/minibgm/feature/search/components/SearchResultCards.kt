@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -63,6 +64,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.search.R
 
 /** 高质感详细卡片（多品类自适应徽章、关键词高亮、度量适配与 1-Tap 快捷三态打卡） */
 @Composable
@@ -99,7 +101,7 @@ fun SearchResultCard(
     val metricText =
         when {
             subjectType == SubjectType.GAME -> null
-            episodesNum > 0 -> "全 $episodesNum ${subjectType.unitName}"
+            episodesNum > 0 -> stringResource(R.string.feature_search_metric_all_episodes, episodesNum, subjectType.unitName)
             else -> null
         }
 

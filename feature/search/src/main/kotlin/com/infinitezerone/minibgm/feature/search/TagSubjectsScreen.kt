@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
@@ -33,6 +34,7 @@ import com.infinitezerone.minibgm.feature.search.components.SearchResultsList
 import com.infinitezerone.minibgm.feature.search.components.SearchSkeletonLoading
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 标签专题条目展示界面：
@@ -75,7 +77,7 @@ fun TagSubjectsScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -114,7 +116,7 @@ fun TagSubjectsScreen(
 
                 uiState.errorMessage != null && uiState.subjects.isEmpty() -> {
                     SearchErrorState(
-                        errorMessage = uiState.errorMessage ?: "获取标签作品失败",
+                        errorMessage = uiState.errorMessage ?: stringResource(R.string.feature_search_tag_subjects_load_failed),
                         onRetry = viewModel::retry,
                         modifier = Modifier.fillMaxSize(),
                     )

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,6 +63,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 季度片单界面（独立二级页容器）
@@ -85,7 +87,7 @@ fun SeasonalGuideScreen(
             BgmTopAppBar(
                 title = {
                     Text(
-                        text = "季度片单",
+                        text = stringResource(R.string.feature_search_seasonal_guide_title),
                         fontWeight = FontWeight.Bold,
                     )
                 },
@@ -93,7 +95,7 @@ fun SeasonalGuideScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = BgmIcons.ArrowBack,
-                            contentDescription = "返回",
+                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                         )
                     }
                 },
@@ -240,7 +242,7 @@ fun SeasonalGuideContent(
 
                     uiState.error != null && uiState.subjects.isEmpty() -> {
                         SeasonalGuideErrorState(
-                            errorMessage = uiState.error ?: "加载季度片单失败",
+                            errorMessage = uiState.error ?: stringResource(R.string.feature_search_seasonal_load_failed),
                             onRetry = viewModel::retry,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -280,7 +282,11 @@ fun SeasonalGuideContent(
                                         val nextEp = uiState.continuingNextEpisodes[item.subject.id]
                                         val continuingEpText =
                                             if (isContinuing) {
-                                                if (nextEp != null && nextEp > 1) "第 $nextEp 话起" else "跨季在播"
+                                                if (nextEp != null && nextEp > 1) {
+                                                    stringResource(R.string.feature_search_continuing_from_ep, nextEp)
+                                                } else {
+                                                    stringResource(R.string.feature_search_continuing_airing)
+                                                }
                                             } else {
                                                 null
                                             }
@@ -328,7 +334,7 @@ fun SeasonalGuideContent(
                                     ) {
                                         TextButton(onClick = viewModel::loadMore) {
                                             Text(
-                                                text = "加载失败，点击重试",
+                                                text = stringResource(DesignSystemR.string.core_designsystem_status_error),
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
                                         }
@@ -344,7 +350,11 @@ fun SeasonalGuideContent(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
-                                            text = "已经到底啦，共发现 ${uiState.filteredSubjects.size} 部条目",
+                                            text =
+                                                stringResource(
+                                                    R.string.feature_search_end_of_list,
+                                                    uiState.filteredSubjects.size,
+                                                ),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         )
@@ -395,7 +405,11 @@ fun SeasonalGuideContent(
                                         val nextEp = uiState.continuingNextEpisodes[item.subject.id]
                                         val continuingEpText =
                                             if (isContinuing) {
-                                                if (nextEp != null && nextEp > 1) "第 $nextEp 话起" else "跨季在播"
+                                                if (nextEp != null && nextEp > 1) {
+                                                    stringResource(R.string.feature_search_continuing_from_ep, nextEp)
+                                                } else {
+                                                    stringResource(R.string.feature_search_continuing_airing)
+                                                }
                                             } else {
                                                 null
                                             }
@@ -444,7 +458,7 @@ fun SeasonalGuideContent(
                                     ) {
                                         TextButton(onClick = viewModel::loadMore) {
                                             Text(
-                                                text = "加载失败，点击重试",
+                                                text = stringResource(DesignSystemR.string.core_designsystem_status_error),
                                                 style = MaterialTheme.typography.bodyMedium,
                                             )
                                         }
@@ -460,7 +474,11 @@ fun SeasonalGuideContent(
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
-                                            text = "已经到底啦，共发现 ${uiState.filteredSubjects.size} 部条目",
+                                            text =
+                                                stringResource(
+                                                    R.string.feature_search_end_of_list,
+                                                    uiState.filteredSubjects.size,
+                                                ),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                         )
@@ -481,8 +499,8 @@ fun SeasonalGuideContent(
 
         if (uiState.showLoginPromptDialog) {
             BgmLoginPromptDialog(
-                title = "登录开启快捷追番",
-                description = "登录 Bangumi 账号后，即可一键追踪当季新番，收藏状态将实时同步至云端与放送日历。",
+                title = stringResource(R.string.feature_search_seasonal_login_title),
+                description = stringResource(R.string.feature_search_seasonal_login_desc),
                 onLogin = {
                     viewModel.dismissLoginPrompt()
                     onLoginRequest()

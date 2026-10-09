@@ -14,10 +14,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.feature.search.R
 
 /**
  * 季度片单内容净化折叠胶囊：
@@ -48,14 +50,21 @@ fun SeasonalFoldedCapsule(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "已折叠 ${subjects.size} 部短片 / 泡面番 / 动态漫",
+                text = stringResource(R.string.feature_search_folded_capsule, subjects.size),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = if (isExpanded) "收起" else "点击展开",
+                text =
+                    stringResource(
+                        if (isExpanded) {
+                            R.string.feature_search_action_collapse
+                        } else {
+                            R.string.feature_search_action_expand
+                        },
+                    ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,

@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +46,7 @@ import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.search.R
 
 /**
  * 发现流顶部「今日焦点 / 深度安利」大卡（打破千篇一律的网格货架，注入编辑感与视觉重心）：
@@ -182,7 +184,7 @@ fun ExploreSpotlightCard(
                                     modifier = Modifier.size(12.dp),
                                 )
                                 Text(
-                                    text = "${formatCount(doingCount)} 人在追",
+                                    text = stringResource(R.string.feature_search_spotlight_doing, formatCount(doingCount)),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -206,7 +208,7 @@ fun ExploreSpotlightCard(
                                     modifier = Modifier.size(12.dp),
                                 )
                                 Text(
-                                    text = "${formatCount(ratingTotal)} 人评分",
+                                    text = stringResource(R.string.feature_search_spotlight_rating, formatCount(ratingTotal)),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -238,7 +240,15 @@ fun ExploreSpotlightCard(
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                             ) {
                                 Text(
-                                    text = "社区热评" + if (hotComment.rate > 0) " ★${hotComment.rate}" else "",
+                                    text =
+                                        if (hotComment.rate > 0) {
+                                            stringResource(
+                                                R.string.feature_search_community_hot_comment_rated,
+                                                hotComment.rate,
+                                            )
+                                        } else {
+                                            stringResource(R.string.feature_search_community_hot_comment)
+                                        },
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -319,7 +329,14 @@ fun ExploreSpotlightCard(
                                     modifier = Modifier.size(14.dp),
                                 )
                                 Text(
-                                    text = if (isWished) "已在想看" else "+ 加入想看",
+                                    text =
+                                        stringResource(
+                                            if (isWished) {
+                                                R.string.feature_search_action_added_wish
+                                            } else {
+                                                R.string.feature_search_action_add_wish
+                                            },
+                                        ),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = wishTextColor,

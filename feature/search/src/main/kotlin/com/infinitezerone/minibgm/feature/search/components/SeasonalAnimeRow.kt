@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.search.components
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,7 @@ import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.BgmSharedElementKeys
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.bgmSharedElement
+import com.infinitezerone.minibgm.feature.search.R
 
 /** 封面海报宽度：84dp 配合 0.7f 比例（约 120dp 高），呈现典雅海报质感的同时提供充裕的信息排版空间 */
 private val ROW_COVER_WIDTH = 84.dp
@@ -84,22 +87,31 @@ fun SeasonalAnimeRow(
         subject.platform.takeIf { it.isNotBlank() && it != "其他" }
             ?: subject.metaTags.firstOrNull { it in setOf("TV", "WEB", "剧场版", "OVA", "OAD") }
 
-    val metaItems =
-        remember(subject, isContinuing, continuingEpisodeText) {
-            val dateLabel =
-                if (isContinuing) {
-                    continuingEpisodeText ?: "跨季在播"
+    val dateLabel =
+        if (isContinuing) {
+            continuingEpisodeText ?: stringResource(R.string.feature_search_continuing_airing)
+        } else {
+            airDate.takeIf { it.isNotBlank() }?.let {
+                if (it.length >= 5) {
+                    stringResource(R.string.feature_search_air_date_suffix, it.substring(5))
                 } else {
-                    airDate.takeIf { it.isNotBlank() }?.let { if (it.length >= 5) it.substring(5) + " 首播" else it }
+                    it
                 }
-            listOfNotNull(
-                dateLabel,
-                "${subject.eps}话".takeIf { subject.eps > 0 },
-                subject.broadcastStation.takeIf { it.isNotBlank() },
-                if (rank > 0) "#$rank" else null,
-                if (doingCount > 0) "${formatCount(doingCount)}追" else null,
-            )
+            }
         }
+    val episodesLabel =
+        if (subject.eps > 0) stringResource(R.string.feature_search_episodes_count, subject.eps) else null
+    val doingLabel =
+        if (doingCount > 0) stringResource(R.string.feature_search_doing_count_suffix, formatCount(doingCount)) else null
+
+    val metaItems =
+        listOfNotNull(
+            dateLabel,
+            episodesLabel,
+            subject.broadcastStation.takeIf { it.isNotBlank() },
+            if (rank > 0) "#$rank" else null,
+            doingLabel,
+        )
 
     val genres =
         remember(subject.id, subject.genres, subject.tags) {
@@ -283,7 +295,7 @@ private data class CollectionPillStyle(
     val containerColor: Color,
     val contentColor: Color,
     val icon: ImageVector,
-    val label: String,
+    @StringRes val labelRes: Int,
 )
 
 /** 尾部快捷追番胶囊：清晰展示「想看」「已想看」「在看」并提供触感反馈 */
@@ -300,21 +312,21 @@ private fun QuickCollectionPill(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     icon = BgmIcons.Check,
-                    label = "在看",
+                    labelRes = R.string.feature_search_collection_watching,
                 )
             isWished ->
                 CollectionPillStyle(
                     containerColor = RatingGold.copy(alpha = 0.16f),
                     contentColor = RatingGold,
                     icon = BgmIcons.Bookmark,
-                    label = "已想看",
+                    labelRes = R.string.feature_search_collection_wished,
                 )
             else ->
                 CollectionPillStyle(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     icon = BgmIcons.BookmarkBorder,
-                    label = "想看",
+                    labelRes = R.string.feature_search_collection_wish,
                 )
         }
 
@@ -330,12 +342,12 @@ private fun QuickCollectionPill(
         ) {
             Icon(
                 imageVector = style.icon,
-                contentDescription = style.label,
+                contentDescription = stringResource(style.labelRes),
                 tint = style.contentColor,
                 modifier = Modifier.size(13.dp),
             )
             Text(
-                text = style.label,
+                text = stringResource(style.labelRes),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = style.contentColor,

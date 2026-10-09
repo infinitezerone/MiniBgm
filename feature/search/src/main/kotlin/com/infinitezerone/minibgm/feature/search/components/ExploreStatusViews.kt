@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
@@ -31,6 +32,8 @@ import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.skeletonNode
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.search.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /** 探索页双列瀑布流与焦点大卡骨架屏加载状态 */
 @Composable
@@ -258,12 +261,12 @@ fun ExploreEmptyState(
     modifier: Modifier = Modifier,
 ) {
     BgmStatusState(
-        message = "当前筛选条件下未发现条目，可尝试重置标签或切换其他场景",
+        message = stringResource(R.string.feature_search_explore_empty_message),
         modifier = modifier.padding(24.dp),
-        title = "暂无匹配条目",
+        title = stringResource(R.string.feature_search_explore_empty_title),
         icon = BgmIcons.ExploreOff,
         iconSize = 64.dp,
-        actionLabel = "重置筛选",
+        actionLabel = stringResource(R.string.feature_search_action_reset_filter),
         onAction = onReset,
     )
 }
@@ -277,9 +280,9 @@ fun ExploreErrorState(
     BgmStatusState(
         message = errorMessage,
         modifier = modifier.padding(24.dp),
-        title = "探索加载失败",
+        title = stringResource(R.string.feature_search_explore_error_title),
         titleColor = MaterialTheme.colorScheme.error,
-        actionLabel = "重试",
+        actionLabel = stringResource(DesignSystemR.string.core_designsystem_action_retry),
         onAction = onRetry,
     )
 }

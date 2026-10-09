@@ -1,6 +1,9 @@
 package com.infinitezerone.minibgm.feature.search
 
+import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.model.Subject
 import java.time.LocalDate
 
@@ -8,68 +11,69 @@ import java.time.LocalDate
 @Immutable
 data class SeasonOption(
     val id: String,
-    val label: String,
+    @StringRes val labelRes: Int,
+    val labelArgs: List<Any> = emptyList(),
     val airDateFilter: List<String>? = null,
     val category: TimeCategory = TimeCategory.YEAR,
 )
 
 enum class TimeCategory(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    YEAR("按年份/年代"),
-    ALL("全部时间"),
+    YEAR(R.string.feature_search_time_category_year),
+    ALL(R.string.feature_search_time_category_all),
 }
 
 /** 探索分类定义：动画 (2)、书籍 (1)、游戏 (4)、音乐 (3)、全部 (null) */
 enum class ExploreCategory(
     val type: Int?,
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    ANIME(2, "动画"),
-    BOOK(1, "书籍"),
-    GAME(4, "游戏"),
-    MUSIC(3, "音乐"),
-    ALL(null, "全部"),
+    ANIME(2, R.string.feature_search_category_anime),
+    BOOK(1, R.string.feature_search_category_book),
+    GAME(4, R.string.feature_search_category_game),
+    MUSIC(3, R.string.feature_search_category_music),
+    ALL(null, R.string.feature_search_category_all),
 }
 
 /** 排序方式定义 */
 enum class ExploreSort(
     val sortKey: String,
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    HEAT("heat", "热门排行"),
-    SCORE("score", "评分最高"),
-    RANK("rank", "排名优先"),
+    HEAT("heat", R.string.feature_search_explore_sort_heat),
+    SCORE("score", R.string.feature_search_explore_sort_score),
+    RANK("rank", R.string.feature_search_explore_sort_rank),
 }
 
 /** 心境/场景预设筛选（小红书/盲盒安利流） */
 enum class ExploreMood(
-    val label: String,
+    @StringRes val labelRes: Int,
     val tags: List<String> = emptyList(),
     val sort: ExploreSort,
 ) {
-    MASTERPIECE("封神必看", emptyList(), ExploreSort.RANK),
-    HOT("热门流行", emptyList(), ExploreSort.HEAT),
-    HEALING("深夜解压", listOf("治愈", "日常"), ExploreSort.RANK),
-    SHONEN("热血高燃", listOf("热血", "战斗"), ExploreSort.HEAT),
-    SUSPENSE("烧脑悬疑", listOf("悬疑", "推理"), ExploreSort.RANK),
-    TEARS("催泪后劲", listOf("催泪", "感动"), ExploreSort.RANK),
-    ROMANCE("纯爱心动", listOf("恋爱", "纯爱"), ExploreSort.RANK),
-    FANTASY("异界奇幻", listOf("奇幻", "冒险"), ExploreSort.HEAT),
-    BLIND_BOX("随心盲盒", emptyList(), ExploreSort.RANK),
+    MASTERPIECE(R.string.feature_search_mood_masterpiece, emptyList(), ExploreSort.RANK),
+    HOT(R.string.feature_search_mood_hot, emptyList(), ExploreSort.HEAT),
+    HEALING(R.string.feature_search_mood_healing, listOf("治愈", "日常"), ExploreSort.RANK),
+    SHONEN(R.string.feature_search_mood_shonen, listOf("热血", "战斗"), ExploreSort.HEAT),
+    SUSPENSE(R.string.feature_search_mood_suspense, listOf("悬疑", "推理"), ExploreSort.RANK),
+    TEARS(R.string.feature_search_mood_tears, listOf("催泪", "感动"), ExploreSort.RANK),
+    ROMANCE(R.string.feature_search_mood_romance, listOf("恋爱", "纯爱"), ExploreSort.RANK),
+    FANTASY(R.string.feature_search_mood_fantasy, listOf("奇幻", "冒险"), ExploreSort.HEAT),
+    BLIND_BOX(R.string.feature_search_mood_blind_box, emptyList(), ExploreSort.RANK),
 }
 
 /** 标签维度分组 */
 @Immutable
 data class TagGroup(
-    val name: String,
+    @StringRes val nameRes: Int,
     val tags: List<String>,
 )
 
 val TAG_GROUPS =
     listOf(
         TagGroup(
-            name = "题材风格",
+            nameRes = R.string.feature_search_tag_group_genre,
             tags =
                 listOf(
                     "奇幻",
@@ -103,7 +107,7 @@ val TAG_GROUPS =
                 ),
         ),
         TagGroup(
-            name = "制作厂牌/监督",
+            nameRes = R.string.feature_search_tag_group_studio,
             tags =
                 listOf(
                     "京阿尼",
@@ -130,7 +134,7 @@ val TAG_GROUPS =
                 ),
         ),
         TagGroup(
-            name = "形式与受众",
+            nameRes = R.string.feature_search_tag_group_form,
             tags =
                 listOf(
                     "TV",
@@ -156,7 +160,14 @@ fun generateFullTimeOptions(
     val options = mutableListOf<SeasonOption>()
 
     // 1. 全部时间 (默认)
-    options.add(SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL))
+    options.add(
+        SeasonOption(
+            id = "all",
+            labelRes = R.string.feature_search_time_category_all,
+            airDateFilter = null,
+            category = TimeCategory.ALL,
+        ),
+    )
 
     // 2. 年份维度（近 6 年单年）
     for (yearOffset in 0..5) {
@@ -164,7 +175,8 @@ fun generateFullTimeOptions(
         options.add(
             SeasonOption(
                 id = "$y-full",
-                label = "${y}年",
+                labelRes = R.string.feature_search_season_year_format,
+                labelArgs = listOf(y),
                 airDateFilter = listOf(">=$y-01-01", "<${y + 1}-01-01"),
                 category = TimeCategory.YEAR,
             ),
@@ -175,7 +187,7 @@ fun generateFullTimeOptions(
     options.add(
         SeasonOption(
             id = "2010s",
-            label = "2010 年代 (2010-2019)",
+            labelRes = R.string.feature_search_season_2010s,
             airDateFilter = listOf(">=2010-01-01", "<2020-01-01"),
             category = TimeCategory.YEAR,
         ),
@@ -183,7 +195,7 @@ fun generateFullTimeOptions(
     options.add(
         SeasonOption(
             id = "2000s",
-            label = "2000 年代 (2000-2009)",
+            labelRes = R.string.feature_search_season_2000s,
             airDateFilter = listOf(">=2000-01-01", "<2010-01-01"),
             category = TimeCategory.YEAR,
         ),
@@ -191,7 +203,7 @@ fun generateFullTimeOptions(
     options.add(
         SeasonOption(
             id = "1990s",
-            label = "90 年代 (1990-1999)",
+            labelRes = R.string.feature_search_season_1990s,
             airDateFilter = listOf(">=1990-01-01", "<2000-01-01"),
             category = TimeCategory.YEAR,
         ),
@@ -199,7 +211,7 @@ fun generateFullTimeOptions(
     options.add(
         SeasonOption(
             id = "1980s-before",
-            label = "80 年代及更早 (<1990)",
+            labelRes = R.string.feature_search_season_before_1990,
             airDateFilter = listOf("<1990-01-01"),
             category = TimeCategory.YEAR,
         ),
@@ -221,16 +233,21 @@ fun getCurrentSeasonList(): List<SeasonOption> {
 val DEFAULT_SEASONS = getCurrentSeasonList()
 val ALL_TIME_SEASON =
     DEFAULT_SEASONS.firstOrNull { it.category == TimeCategory.ALL }
-        ?: SeasonOption(id = "all", label = "全部时间", airDateFilter = null, category = TimeCategory.ALL)
+        ?: SeasonOption(
+            id = "all",
+            labelRes = R.string.feature_search_time_category_all,
+            airDateFilter = null,
+            category = TimeCategory.ALL,
+        )
 val CURRENT_SEASON = ALL_TIME_SEASON
 
 /** 探索首页的横滑行定义（B站/AniList 式客观维度榜单：时间 × 热度，题材留给筛选器） */
 enum class ExploreRow(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    HOT("热门流行"),
-    MASTERPIECE("封神必看"),
-    UPCOMING("即将开播"),
+    HOT(R.string.feature_search_row_hot),
+    MASTERPIECE(R.string.feature_search_row_masterpiece),
+    UPCOMING(R.string.feature_search_row_upcoming),
 }
 
 /** 单个横滑行的数据状态；失败即空列表（行级 fail-open，不阻塞其他区块） */
@@ -292,25 +309,45 @@ val ExploreUiState.isCustomFilterActive: Boolean
             )
 
 /** 生成已选自定义筛选条件的紧凑单行摘要文本 */
-val ExploreUiState.customFilterSummary: String
-    get() {
-        val parts = mutableListOf<String>()
-        if (selectedSeason != ALL_TIME_SEASON) {
-            parts.add(selectedSeason.label)
-        }
-        if (selectedCategory != ExploreCategory.ANIME) {
-            parts.add(selectedCategory.label)
-        }
-        selectedTags.forEach { tag ->
-            parts.add("#$tag")
-        }
-        if (selectedSort != ExploreSort.RANK) {
-            parts.add(selectedSort.label)
-        }
-        val count = parts.size
-        return if (parts.isEmpty()) {
-            "未筛选"
-        } else {
-            "${parts.joinToString(" · ")} ($count)"
-        }
+@Composable
+fun ExploreUiState.customFilterSummary(): String =
+    customFilterSummary(
+        seasonLabel =
+            if (selectedSeason != ALL_TIME_SEASON) {
+                stringResource(selectedSeason.labelRes, *selectedSeason.labelArgs.toTypedArray())
+            } else {
+                null
+            },
+        categoryLabel =
+            if (selectedCategory != ExploreCategory.ANIME) {
+                stringResource(selectedCategory.labelRes)
+            } else {
+                null
+            },
+        sortLabel = if (selectedSort != ExploreSort.RANK) stringResource(selectedSort.labelRes) else null,
+        emptyLabel = stringResource(R.string.feature_search_custom_filter_summary_none),
+    )
+
+/**
+ * 纯函数版本：各类标签文案由调用方解析后传入，便于在 Composable 之外复用与单元测试。
+ */
+internal fun ExploreUiState.customFilterSummary(
+    seasonLabel: String?,
+    categoryLabel: String?,
+    sortLabel: String?,
+    emptyLabel: String,
+): String {
+    val parts = mutableListOf<String>()
+    seasonLabel?.let(parts::add)
+    categoryLabel?.let(parts::add)
+    selectedTags.forEach { tag ->
+        parts.add("#$tag")
     }
+    sortLabel?.let(parts::add)
+    val count = parts.size
+    return if (parts.isEmpty()) {
+        emptyLabel
+    } else {
+        "${parts.joinToString(" · ")} ($count)"
+    }
+}
