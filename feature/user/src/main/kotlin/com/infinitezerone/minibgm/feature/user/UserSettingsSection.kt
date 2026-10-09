@@ -122,6 +122,7 @@ internal fun SettingsSection(
             PlaybackSettingsCard(
                 pipEnabled = pipEnabled,
                 onTogglePipEnabled = onTogglePipEnabled,
+                onOpenPlaybackRules = onOpenPlaybackRules,
             )
         }
 
@@ -133,7 +134,6 @@ internal fun SettingsSection(
         SyncAndReminderSettingsCard(
             syncInterval = syncInterval,
             onOpenSyncDialog = onOpenSyncDialog,
-            onOpenPlaybackRules = onOpenPlaybackRules,
             airingReminderEnabled = airingReminderEnabled,
             onToggleAiringReminder = onToggleAiringReminder,
             hasNotificationPermission = hasNotificationPermission,
@@ -250,6 +250,7 @@ internal fun AppearanceSettingsCard(
 internal fun PlaybackSettingsCard(
     pipEnabled: Boolean,
     onTogglePipEnabled: (Boolean) -> Unit,
+    onOpenPlaybackRules: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -268,6 +269,16 @@ internal fun PlaybackSettingsCard(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
             )
+
+            if (onOpenPlaybackRules != null) {
+                SettingsItemRow(
+                    icon = BgmIcons.PlayCircle,
+                    iconTint = MaterialTheme.colorScheme.tertiary,
+                    title = stringResource(R.string.feature_user_title_playback_rules),
+                    subtitle = stringResource(R.string.feature_user_settings_playback_manage_desc),
+                    onClick = onOpenPlaybackRules,
+                )
+            }
 
             SettingsItemRow(
                 icon = BgmIcons.PictureInPicture,
@@ -330,7 +341,6 @@ internal fun PreferenceSettingsCard(
 internal fun SyncAndReminderSettingsCard(
     syncInterval: SyncInterval,
     onOpenSyncDialog: () -> Unit,
-    onOpenPlaybackRules: (() -> Unit)?,
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     hasNotificationPermission: Boolean,
@@ -371,16 +381,6 @@ internal fun SyncAndReminderSettingsCard(
                 subtitle = stringResource(R.string.feature_user_settings_sync_period, syncInterval.displayName),
                 onClick = onOpenSyncDialog,
             )
-
-            if (onOpenPlaybackRules != null) {
-                SettingsItemRow(
-                    icon = BgmIcons.PlayCircle,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
-                    title = stringResource(R.string.feature_user_title_playback_rules),
-                    subtitle = stringResource(R.string.feature_user_settings_playback_manage_desc),
-                    onClick = onOpenPlaybackRules,
-                )
-            }
 
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 18.dp),

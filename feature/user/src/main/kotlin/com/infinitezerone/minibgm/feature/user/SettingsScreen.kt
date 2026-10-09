@@ -522,6 +522,7 @@ fun SettingsScreenContent(
                     PlaybackSettingsCard(
                         pipEnabled = pipEnabled,
                         onTogglePipEnabled = onTogglePipEnabled,
+                        onOpenPlaybackRules = onPlaybackRulesClick,
                     )
                 }
             }
@@ -552,7 +553,6 @@ fun SettingsScreenContent(
                             }
                         }
                     },
-                    onOpenPlaybackRules = onPlaybackRulesClick,
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
                     hasNotificationPermission = hasNotificationPermission,
