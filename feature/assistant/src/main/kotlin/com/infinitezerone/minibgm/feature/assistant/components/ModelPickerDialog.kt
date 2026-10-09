@@ -39,10 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.feature.assistant.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 智能模型聚合卡片组件
@@ -63,11 +66,14 @@ internal fun ModelSelectorCard(
     val isRemoteSynced = remoteModelsCount > 0
     val subtitle =
         if (isRemoteSynced) {
-            "已同步 $remoteModelsCount 个可用模型 · 点击切换"
+            stringResource(R.string.feature_assistant_model_subtitle_synced, remoteModelsCount)
         } else if (selectedPreset != null) {
-            "${selectedPreset.name} 预设推荐 · 点击切换"
+            stringResource(
+                R.string.feature_assistant_model_subtitle_preset,
+                stringResource(selectedPreset.nameRes),
+            )
         } else {
-            "点击选择模型"
+            stringResource(R.string.feature_assistant_model_subtitle_hint)
         }
 
     Surface(
@@ -99,7 +105,7 @@ internal fun ModelSelectorCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "模型 (Model)",
+                    text = stringResource(R.string.feature_assistant_model_field_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -114,7 +120,7 @@ internal fun ModelSelectorCard(
                 )
                 if (isModelKnownUnsupportedToolCall(currentModelDisplay)) {
                     Text(
-                        text = "官方暂不支持工具调用（无法查番或打卡）",
+                        text = stringResource(R.string.feature_assistant_model_no_tool_call),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 1,
@@ -138,7 +144,7 @@ internal fun ModelSelectorCard(
                     } else {
                         Icon(
                             imageVector = BgmIcons.Refresh,
-                            contentDescription = "同步可用模型",
+                            contentDescription = stringResource(R.string.feature_assistant_model_cd_sync),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp),
                         )
@@ -206,12 +212,20 @@ internal fun ModelPickerDialog(
         title = {
             Column {
                 Text(
-                    text = "选择模型",
+                    text = stringResource(R.string.feature_assistant_model_picker_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = if (remoteModels.isNotEmpty()) "已连接远端服务 · ${remoteModels.size} 个模型就绪" else "服务商推荐模型库",
+                    text =
+                        if (remoteModels.isNotEmpty()) {
+                            stringResource(
+                                R.string.feature_assistant_model_picker_subtitle_remote,
+                                remoteModels.size,
+                            )
+                        } else {
+                            stringResource(R.string.feature_assistant_model_picker_subtitle_preset)
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -227,14 +241,17 @@ internal fun ModelPickerDialog(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("搜索模型名称...") },
+                    placeholder = { Text(stringResource(R.string.feature_assistant_model_picker_search_placeholder)) },
                     leadingIcon = {
                         Icon(BgmIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(BgmIcons.Clear, contentDescription = "清除搜索")
+                                Icon(
+                                    BgmIcons.Clear,
+                                    contentDescription = stringResource(R.string.feature_assistant_model_picker_cd_clear_search),
+                                )
                             }
                         }
                     },
@@ -251,7 +268,12 @@ internal fun ModelPickerDialog(
                     FilterChip(
                         selected = selectedCapabilityFilter == null,
                         onClick = { selectedCapabilityFilter = null },
-                        label = { Text("全部", style = MaterialTheme.typography.labelSmall) },
+                        label = {
+                            Text(
+                                stringResource(R.string.feature_assistant_model_filter_all),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
                     )
                     ModelCapability.entries.forEach { cap ->
                         val isSelected = selectedCapabilityFilter == cap
@@ -260,7 +282,9 @@ internal fun ModelPickerDialog(
                             onClick = {
                                 selectedCapabilityFilter = if (isSelected) null else cap
                             },
-                            label = { Text(cap.label, style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(stringResource(cap.labelRes), style = MaterialTheme.typography.labelSmall)
+                            },
                         )
                     }
                 }
@@ -292,13 +316,17 @@ internal fun ModelPickerDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "使用「$trimmedQuery」",
+                                    text =
+                                        stringResource(
+                                            R.string.feature_assistant_model_use_query,
+                                            trimmedQuery,
+                                        ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Text(
-                                    text = "直接填入作为自定义模型",
+                                    text = stringResource(R.string.feature_assistant_model_use_query_desc),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -310,7 +338,7 @@ internal fun ModelPickerDialog(
                 if (filteredModels.isEmpty() && (!isSearching || hasExactMatch)) {
                     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "未找到匹配模型",
+                            text = stringResource(R.string.feature_assistant_model_picker_empty),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -321,7 +349,11 @@ internal fun ModelPickerDialog(
                         if (!isSearching && selectedCapabilityFilter == null && remoteModels.isNotEmpty()) {
                             item {
                                 Text(
-                                    text = "远端已同步模型 (${remoteModels.size})",
+                                    text =
+                                        stringResource(
+                                            R.string.feature_assistant_model_picker_group_remote,
+                                            remoteModels.size,
+                                        ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold,
@@ -343,7 +375,7 @@ internal fun ModelPickerDialog(
                                 item {
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = "推荐候选模型",
+                                        text = stringResource(R.string.feature_assistant_model_picker_group_preset),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.Bold,
@@ -380,7 +412,7 @@ internal fun ModelPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("关闭")
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_close))
             }
         },
     )
@@ -424,7 +456,7 @@ internal fun ModelPickerItem(
                                 color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
                             ) {
                                 Text(
-                                    text = "官方暂无工具调用支持",
+                                    text = stringResource(R.string.feature_assistant_model_unsupported_tool),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
@@ -442,7 +474,7 @@ internal fun ModelPickerItem(
                                     },
                             ) {
                                 Text(
-                                    text = cap.label,
+                                    text = stringResource(cap.labelRes),
                                     style = MaterialTheme.typography.labelSmall,
                                     color =
                                         when (cap) {
@@ -460,7 +492,7 @@ internal fun ModelPickerItem(
             if (isSelected) {
                 Icon(
                     imageVector = BgmIcons.Check,
-                    contentDescription = "当前使用",
+                    contentDescription = stringResource(R.string.feature_assistant_model_cd_current),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp),
                 )

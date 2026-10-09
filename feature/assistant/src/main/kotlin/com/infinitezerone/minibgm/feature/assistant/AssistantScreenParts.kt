@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,13 +67,15 @@ import com.infinitezerone.minibgm.feature.assistant.components.PendingActionCard
 import com.infinitezerone.minibgm.feature.assistant.components.PlayableSourcesCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
-internal val PROMPT_SUGGESTIONS =
+/** 建议提问示例的文案资源 id（展示在快捷 chip 上，点击后作为 prompt 发送） */
+internal val PROMPT_SUGGESTION_RES =
     listOf(
-        "今天有哪些动画更新？",
-        "查看我正在追看的番剧",
-        "推荐一部本季高分动画",
-        "把《葬送的芙莉莲》第12集标记为已看",
+        R.string.feature_assistant_prompt_airing_today,
+        R.string.feature_assistant_prompt_watching,
+        R.string.feature_assistant_prompt_recommend,
+        R.string.feature_assistant_prompt_mark_watched,
     )
 
 /** 会话切换底部面板：列出全部会话（最近更新在前），支持切换、新建、重命名与删除 */
@@ -113,7 +116,7 @@ internal fun SessionSwitcherSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "会话记录",
+                    text = stringResource(R.string.feature_assistant_session_sheet_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
@@ -124,19 +127,25 @@ internal fun SessionSwitcherSheet(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("新会话")
+                    Text(stringResource(R.string.feature_assistant_session_new))
                 }
             }
             HorizontalDivider()
             if (sessions.isEmpty()) {
                 Text(
-                    text = "暂无历史会话",
+                    text = stringResource(R.string.feature_assistant_session_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )
             }
             sessions.forEach { session ->
+                val renameSessionCd = stringResource(R.string.feature_assistant_session_rename_cd)
+                val deleteSessionCd = stringResource(R.string.feature_assistant_session_delete_cd)
+                val deleteSessionTitle = stringResource(R.string.feature_assistant_session_delete_dialog_title)
+                val deleteSessionMessage =
+                    stringResource(R.string.feature_assistant_session_delete_message, session.title)
+                val deleteSessionConfirmText = stringResource(R.string.feature_assistant_action_delete)
                 Row(
                     modifier =
                         Modifier
@@ -181,7 +190,7 @@ internal fun SessionSwitcherSheet(
                     }) {
                         Icon(
                             imageVector = BgmIcons.EditBorder,
-                            contentDescription = "重命名会话",
+                            contentDescription = renameSessionCd,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -190,9 +199,9 @@ internal fun SessionSwitcherSheet(
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
-                                        title = "删除会话",
-                                        message = "确定要删除会话「${session.title}」及其所有记录吗？删除后无法恢复。",
-                                        confirmText = "删除",
+                                        title = deleteSessionTitle,
+                                        message = deleteSessionMessage,
+                                        confirmText = deleteSessionConfirmText,
                                         isDestructive = true,
                                     ),
                                 )
@@ -203,7 +212,7 @@ internal fun SessionSwitcherSheet(
                     }) {
                         Icon(
                             imageVector = BgmIcons.DeleteBorder,
-                            contentDescription = "删除会话",
+                            contentDescription = deleteSessionCd,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -217,7 +226,7 @@ internal fun SessionSwitcherSheet(
                 var text by remember { mutableStateOf(request.currentTitle) }
                 AlertDialog(
                     onDismissRequest = { onRespond(null) },
-                    title = { Text("重命名会话") },
+                    title = { Text(stringResource(R.string.feature_assistant_session_rename_dialog_title)) },
                     text = {
                         OutlinedTextField(
                             value = text,
@@ -231,12 +240,12 @@ internal fun SessionSwitcherSheet(
                             onClick = { onRespond(text.trim()) },
                             enabled = text.trim().isNotBlank(),
                         ) {
-                            Text("保存")
+                            Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { onRespond(null) }) {
-                            Text("取消")
+                            Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
                         }
                     },
                 )
@@ -276,7 +285,7 @@ internal fun EmptyAssistantGuide(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "MiniBgm AI 智能助手",
+            text = stringResource(R.string.feature_assistant_empty_guide_title),
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -284,7 +293,7 @@ internal fun EmptyAssistantGuide(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "支持自然语言查询时刻表、追番进度，打卡分集与管理收藏需经确认后同步，安全无忧。",
+            text = stringResource(R.string.feature_assistant_empty_guide_desc),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -293,7 +302,7 @@ internal fun EmptyAssistantGuide(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "可以尝试提问：",
+            text = stringResource(R.string.feature_assistant_empty_guide_try),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
         )
@@ -304,7 +313,8 @@ internal fun EmptyAssistantGuide(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            PROMPT_SUGGESTIONS.forEach { prompt ->
+            PROMPT_SUGGESTION_RES.forEach { promptRes ->
+                val prompt = stringResource(promptRes)
                 SuggestionChip(
                     onClick = { onSelectPrompt(prompt) },
                     label = {
@@ -359,14 +369,19 @@ internal fun ChatMessageItem(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "思考过程",
+                            text = stringResource(R.string.feature_assistant_thinking_title),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            text = if (isThinkingExpanded) "收起" else "展开",
+                            text =
+                                if (isThinkingExpanded) {
+                                    stringResource(R.string.feature_assistant_collapse)
+                                } else {
+                                    stringResource(R.string.feature_assistant_expand)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -428,7 +443,7 @@ internal fun ChatMessageItem(
             } else {
                 val displayContent =
                     if (parsedContent.thinking != null && parsedContent.mainContent.isBlank()) {
-                        "（已完成思考，请展开上方查看）"
+                        stringResource(R.string.feature_assistant_thinking_only_hint)
                     } else {
                         parsedContent.mainContent
                     }
@@ -462,7 +477,7 @@ internal fun ChatMessageItem(
                 ) {
                     Icon(
                         imageVector = if (copied) BgmIcons.Check else BgmIcons.ContentCopy,
-                        contentDescription = "复制回答",
+                        contentDescription = stringResource(R.string.feature_assistant_cd_copy_answer),
                         tint =
                             if (copied) {
                                 MaterialTheme.colorScheme.primary
@@ -477,7 +492,10 @@ internal fun ChatMessageItem(
                 TextButton(
                     onClick = { onRetryMessage(message.id) },
                 ) {
-                    Text("重试", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        text = stringResource(DesignSystemR.string.core_designsystem_action_retry),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             }
         }
@@ -532,12 +550,17 @@ internal fun DeepResolveEntry(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "常规找源没有找到可播放来源",
+                    text = stringResource(R.string.feature_assistant_deep_resolve_no_source),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = if (isRunning) "正在真实加载来源页并捕获媒体请求…" else "可用 WebView 深度解析尝试真实加载来源页（约 30 秒）",
+                    text =
+                        if (isRunning) {
+                            stringResource(R.string.feature_assistant_deep_resolve_running)
+                        } else {
+                            stringResource(R.string.feature_assistant_deep_resolve_hint)
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -545,7 +568,9 @@ internal fun DeepResolveEntry(
             if (isRunning) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
-                TextButton(onClick = onClick) { Text("深度解析") }
+                TextButton(onClick = onClick) {
+                    Text(stringResource(R.string.feature_assistant_deep_resolve_action))
+                }
             }
         }
     }
@@ -619,7 +644,7 @@ internal fun AssistantLoadingBubble(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     AnimatedContent(
-                        targetState = toolActivity ?: "AI 正在思考并检索...",
+                        targetState = toolActivity ?: stringResource(R.string.feature_assistant_loading_thinking),
                         label = "ToolActivityTransition",
                     ) { targetText ->
                         Text(
@@ -633,9 +658,15 @@ internal fun AssistantLoadingBubble(
                     Text(
                         text =
                             buildString {
-                                append("已思考 ${elapsedSeconds.coerceAtLeast(0)} 秒")
+                                append(
+                                    stringResource(
+                                        R.string.feature_assistant_loading_elapsed,
+                                        elapsedSeconds.coerceAtLeast(0),
+                                    ),
+                                )
                                 if (activityStepCount > 0) {
-                                    append(" · 第 $activityStepCount 步")
+                                    append(" · ")
+                                    append(stringResource(R.string.feature_assistant_loading_step, activityStepCount))
                                 }
                             },
                         style = MaterialTheme.typography.labelSmall,

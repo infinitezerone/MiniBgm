@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RA
 import com.infinitezerone.minibgm.core.model.PendingAction
 import com.infinitezerone.minibgm.feature.assistant.ActionStatus
 import com.infinitezerone.minibgm.feature.assistant.PendingActionCardState
+import com.infinitezerone.minibgm.feature.assistant.R
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 待确认写操作交互卡片。
@@ -81,7 +84,7 @@ fun PendingActionCard(
                         shape = RoundedCornerShape(4.dp),
                     ) {
                         Text(
-                            text = "拟定更新",
+                            text = stringResource(R.string.feature_assistant_pending_proposed),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -89,7 +92,12 @@ fun PendingActionCard(
                     }
 
                     Text(
-                        text = if (action is PendingAction.ImportPlaybackRules) "确认导入社区播放源？" else "确认更新追番进度？",
+                        text =
+                            if (action is PendingAction.ImportPlaybackRules) {
+                                stringResource(R.string.feature_assistant_pending_confirm_import)
+                            } else {
+                                stringResource(R.string.feature_assistant_pending_confirm_progress)
+                            },
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -103,7 +111,7 @@ fun PendingActionCard(
                 when (cardState.status) {
                     ActionStatus.PENDING -> {
                         Text(
-                            text = "等待确认",
+                            text = stringResource(R.string.feature_assistant_pending_status_waiting),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -116,7 +124,7 @@ fun PendingActionCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "正在提交...",
+                                text = stringResource(R.string.feature_assistant_pending_status_submitting),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -132,7 +140,7 @@ fun PendingActionCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "已同步",
+                                text = stringResource(R.string.feature_assistant_pending_status_synced),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold,
@@ -149,7 +157,7 @@ fun PendingActionCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "已取消",
+                                text = stringResource(R.string.feature_assistant_pending_status_cancelled),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.outline,
                             )
@@ -165,7 +173,7 @@ fun PendingActionCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "执行失败",
+                                text = stringResource(R.string.feature_assistant_pending_status_failed),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -220,13 +228,20 @@ fun PendingActionCard(
                         )
                     }
                 } else {
+                    val fallbackTitle =
+                        stringResource(R.string.feature_assistant_pending_subject_number, action.subjectId)
+                    val quotedTitle =
+                        stringResource(
+                            R.string.feature_assistant_pending_subject_quoted,
+                            action.subjectTitle.trim(),
+                        )
                     val displayTitle =
-                        remember(action.subjectTitle, action.subjectId) {
+                        remember(action.subjectTitle, fallbackTitle, quotedTitle) {
                             val clean = action.subjectTitle.trim()
                             when {
-                                clean.isBlank() -> "条目 #${action.subjectId}"
+                                clean.isBlank() -> fallbackTitle
                                 clean.startsWith("《") && clean.endsWith("》") -> clean
-                                else -> "《$clean》"
+                                else -> quotedTitle
                             }
                         }
 
@@ -258,17 +273,37 @@ fun PendingActionCard(
 
                         when (action) {
                             is PendingAction.UpdateEpisode -> {
-                                val statusLabel = if (action.isWatched) "标记为已看" else "标记为未看"
+                                val statusLabel =
+                                    if (action.isWatched) {
+                                        stringResource(R.string.feature_assistant_pending_mark_watched)
+                                    } else {
+                                        stringResource(R.string.feature_assistant_pending_mark_unwatched)
+                                    }
                                 Text(
-                                    text = "$statusLabel · 第 ${action.episodeNumber} 话",
+                                    text =
+                                        stringResource(
+                                            R.string.feature_assistant_pending_episode_line,
+                                            statusLabel,
+                                            action.episodeNumber,
+                                        ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             is PendingAction.UpdateCollection -> {
-                                val parts = mutableListOf("标记为${action.collectionType.label}")
-                                action.rating?.let { parts.add("评分：${it}分") }
-                                if (action.isPrivate) parts.add("私密")
+                                val parts =
+                                    mutableListOf(
+                                        stringResource(
+                                            R.string.feature_assistant_pending_mark_collection,
+                                            action.collectionType.label,
+                                        ),
+                                    )
+                                action.rating?.let {
+                                    parts.add(stringResource(R.string.feature_assistant_pending_rating, it))
+                                }
+                                if (action.isPrivate) {
+                                    parts.add(stringResource(R.string.feature_assistant_pending_private))
+                                }
                                 Text(
                                     text = parts.joinToString(" · "),
                                     style = MaterialTheme.typography.bodyMedium,
@@ -277,7 +312,11 @@ fun PendingActionCard(
                                 if (!action.comment.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "短评：\"${action.comment}\"",
+                                        text =
+                                            stringResource(
+                                                R.string.feature_assistant_pending_comment,
+                                                action.comment.orEmpty(),
+                                            ),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         maxLines = 2,
@@ -295,7 +334,11 @@ fun PendingActionCard(
             if (cardState.status == ActionStatus.FAILED && !cardState.errorMessage.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "原因：${cardState.errorMessage}",
+                    text =
+                        stringResource(
+                            R.string.feature_assistant_pending_fail_reason,
+                            cardState.errorMessage.orEmpty(),
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -320,7 +363,10 @@ fun PendingActionCard(
                                 modifier = Modifier.size(15.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("取消", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -334,7 +380,10 @@ fun PendingActionCard(
                                 modifier = Modifier.size(15.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("确认提交", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                stringResource(R.string.feature_assistant_pending_action_confirm),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
                         }
                     }
                 }
@@ -354,7 +403,10 @@ fun PendingActionCard(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                             modifier = Modifier.height(32.dp),
                         ) {
-                            Text("重试提交", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                stringResource(R.string.feature_assistant_pending_action_retry),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
                         }
                     }
                 }

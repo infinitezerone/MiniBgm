@@ -8,6 +8,9 @@ import com.infinitezerone.minibgm.feature.assistant.components.providerDisplayNa
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+/** 调用方传入的自定义服务商兜底文案；生产代码里取自 `feature_assistant_config_custom_provider_name` */
+private const val CUSTOM_PROVIDER_LABEL = "自定义端点"
+
 class AssistantConfigDialogTest {
     @Test
     fun autoDetectProvider_recognizes_gemini() {
@@ -71,11 +74,16 @@ class AssistantConfigDialogTest {
     fun defaultProfileName_usesProviderLabelAndModel() {
         assertEquals(
             "Gemini · gemini-2.5-flash",
-            defaultProfileName(AiConfig.PROVIDER_GEMINI, "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+            defaultProfileName(
+                AiConfig.PROVIDER_GEMINI,
+                "gemini-2.5-flash",
+                "https://generativelanguage.googleapis.com/v1beta/openai/",
+                CUSTOM_PROVIDER_LABEL,
+            ),
         )
         assertEquals(
             "Ollama · qwen2.5:7b",
-            defaultProfileName(AiConfig.PROVIDER_OLLAMA, "qwen2.5:7b", "http://10.0.2.2:11434"),
+            defaultProfileName(AiConfig.PROVIDER_OLLAMA, "qwen2.5:7b", "http://10.0.2.2:11434", CUSTOM_PROVIDER_LABEL),
         )
     }
 
@@ -83,12 +91,17 @@ class AssistantConfigDialogTest {
     fun defaultProfileName_customProviderFallsBackToHost() {
         assertEquals(
             "api.groq.com · gpt-4o-mini",
-            defaultProfileName(AiConfig.PROVIDER_CUSTOM, "gpt-4o-mini", "https://api.groq.com/openai/v1"),
+            defaultProfileName(
+                AiConfig.PROVIDER_CUSTOM,
+                "gpt-4o-mini",
+                "https://api.groq.com/openai/v1",
+                CUSTOM_PROVIDER_LABEL,
+            ),
         )
-        // 端点解析不出主机名（如空串）时兜底，不抛异常
+        // 端点解析不出主机名（如空串）时用调用方传入的兜底文案，不抛异常
         assertEquals(
-            "自定义端点 · gpt-4o-mini",
-            defaultProfileName(AiConfig.PROVIDER_CUSTOM, "gpt-4o-mini", ""),
+            "$CUSTOM_PROVIDER_LABEL · gpt-4o-mini",
+            defaultProfileName(AiConfig.PROVIDER_CUSTOM, "gpt-4o-mini", "", CUSTOM_PROVIDER_LABEL),
         )
     }
 

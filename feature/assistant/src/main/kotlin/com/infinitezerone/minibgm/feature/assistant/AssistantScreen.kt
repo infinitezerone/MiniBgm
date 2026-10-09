@@ -53,6 +53,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.assistant.components.AssistantConfigDialog
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @Composable
 fun AssistantScreen(
@@ -189,7 +191,7 @@ fun AssistantScreenContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "AI 追番助手",
+                            text = stringResource(R.string.feature_assistant_app_title),
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
@@ -199,7 +201,7 @@ fun AssistantScreenContent(
                         IconButton(onClick = onBackClick) {
                             Icon(
                                 imageVector = BgmIcons.ArrowBack,
-                                contentDescription = "返回",
+                                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
                             )
                         }
                     }
@@ -208,29 +210,39 @@ fun AssistantScreenContent(
                     IconButton(onClick = { onToggleSessionSwitcher(true) }) {
                         Icon(
                             imageVector = BgmIcons.ChatBubble,
-                            contentDescription = "会话列表",
+                            contentDescription = stringResource(R.string.feature_assistant_cd_session_list),
                         )
                     }
                     IconButton(onClick = { onToggleConfigDialog(true) }) {
                         Icon(
                             imageVector = BgmIcons.Settings,
-                            contentDescription = "AI 设置",
+                            contentDescription = stringResource(R.string.feature_assistant_cd_ai_settings),
                         )
                     }
                     if (uiState.messages.isNotEmpty()) {
+                        val currentSessionTitle =
+                            stringResource(R.string.feature_assistant_session_current_title)
+                        val activeTitle =
+                            uiState.sessions
+                                .firstOrNull { it.id == uiState.activeSessionId }
+                                ?.title
+                                ?.ifBlank { currentSessionTitle } ?: currentSessionTitle
+                        val deleteSessionTitle =
+                            stringResource(R.string.feature_assistant_session_delete_dialog_title)
+                        val deleteSessionMessage =
+                            stringResource(
+                                R.string.feature_assistant_session_delete_message_chat,
+                                activeTitle,
+                            )
+                        val deleteSessionConfirmText = stringResource(R.string.feature_assistant_action_delete)
                         IconButton(onClick = {
-                            val activeTitle =
-                                uiState.sessions
-                                    .firstOrNull { it.id == uiState.activeSessionId }
-                                    ?.title
-                                    ?.ifBlank { "当前会话" } ?: "当前会话"
                             coroutineScope.launch {
                                 val confirmed =
                                     overlayHostState.await(
                                         ConfirmDialogAction(
-                                            title = "删除会话",
-                                            message = "确定要删除会话「$activeTitle」及其所有聊天记录吗？删除后无法恢复。",
-                                            confirmText = "删除",
+                                            title = deleteSessionTitle,
+                                            message = deleteSessionMessage,
+                                            confirmText = deleteSessionConfirmText,
                                             isDestructive = true,
                                         ),
                                     )
@@ -241,7 +253,7 @@ fun AssistantScreenContent(
                         }) {
                             Icon(
                                 imageVector = BgmIcons.DeleteBorder,
-                                contentDescription = "删除当前会话",
+                                contentDescription = stringResource(R.string.feature_assistant_cd_delete_current_session),
                             )
                         }
                     }
@@ -266,7 +278,8 @@ fun AssistantScreenContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        items(PROMPT_SUGGESTIONS) { prompt ->
+                        items(PROMPT_SUGGESTION_RES) { promptRes ->
+                            val prompt = stringResource(promptRes)
                             SuggestionChip(
                                 onClick = {
                                     focusManager.clearFocus()
@@ -309,7 +322,7 @@ fun AssistantScreenContent(
                             onValueChange = onInputChanged,
                             placeholder = {
                                 Text(
-                                    text = "问问 AI 追番助手...",
+                                    text = stringResource(R.string.feature_assistant_input_placeholder),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -363,7 +376,7 @@ fun AssistantScreenContent(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Stop,
-                                    contentDescription = "停止生成",
+                                    contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
                                     tint = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.size(18.dp),
                                 )
@@ -391,7 +404,7 @@ fun AssistantScreenContent(
                             ) {
                                 Icon(
                                     imageVector = BgmIcons.Send,
-                                    contentDescription = "发送",
+                                    contentDescription = stringResource(R.string.feature_assistant_cd_send),
                                     tint =
                                         if (canSend) {
                                             MaterialTheme.colorScheme.onPrimary

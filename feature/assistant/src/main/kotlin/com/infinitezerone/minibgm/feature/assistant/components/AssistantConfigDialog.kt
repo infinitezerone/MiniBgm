@@ -45,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -56,7 +58,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
+import com.infinitezerone.minibgm.feature.assistant.R
 import kotlinx.coroutines.launch
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -72,6 +76,7 @@ fun AssistantConfigDialog(
     onDeleteProfile: (String) -> Unit = {},
 ) {
     val clipboard = LocalClipboard.current
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
 
@@ -212,24 +217,29 @@ fun AssistantConfigDialog(
                     val rawMsg = result.message.ifBlank { result.throwable.message.orEmpty() }
                     val summary =
                         when {
-                            "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "鉴权失败 (HTTP 401)"
-                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> "访问受限 (HTTP 403)"
-                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "连接超时 / 无法访问"
-                            else -> "连通失败"
+                            "401" in rawMsg || "unauthorized" in rawMsg.lowercase() ->
+                                context.getString(R.string.feature_assistant_config_err_summary_auth)
+                            "403" in rawMsg || "forbidden" in rawMsg.lowercase() ->
+                                context.getString(R.string.feature_assistant_config_err_summary_forbidden)
+                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() ->
+                                context.getString(R.string.feature_assistant_config_err_summary_timeout)
+                            else -> context.getString(R.string.feature_assistant_config_err_summary_generic)
                         }
                     val detail =
                         when {
-                            "401" in rawMsg || "unauthorized" in rawMsg.lowercase() -> "API Key 无效、已过期或无权访问该模型，请检查密钥"
+                            "401" in rawMsg || "unauthorized" in rawMsg.lowercase() ->
+                                context.getString(R.string.feature_assistant_config_err_detail_auth)
                             "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
                                 if ("groq" in normalized.lowercase()) {
-                                    "Groq 不向中国大陆及香港地区提供服务，可改用 DeepSeek、智谱 GLM、阿里百炼等国内服务商。"
+                                    context.getString(R.string.feature_assistant_config_err_detail_groq_region)
                                 } else {
-                                    "端点拒绝访问（HTTP 403），请检查账号权限或 IP 地域限制"
+                                    context.getString(R.string.feature_assistant_config_err_detail_forbidden)
                                 }
                             }
-                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() -> "请检查网络连接与接口地址是否正确"
+                            "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() ->
+                                context.getString(R.string.feature_assistant_config_err_detail_timeout)
                             rawMsg.isNotBlank() -> rawMsg
-                            else -> "请确认端点与网络可用性后重试"
+                            else -> context.getString(R.string.feature_assistant_config_err_detail_generic)
                         }
                     diagnosticState = ConnectionDiagnosticState.Failure(summary = summary, detail = detail)
                 }
@@ -254,7 +264,12 @@ fun AssistantConfigDialog(
         onSaveConfig(newConfig)
         val name =
             profileName.trim().ifBlank {
-                defaultProfileName(selectedProvider, finalModel, normalized)
+                defaultProfileName(
+                    provider = selectedProvider,
+                    model = finalModel,
+                    endpoint = normalized,
+                    customProviderLabel = context.getString(R.string.feature_assistant_config_custom_provider_name),
+                )
             }
         onSaveProfile(editingProfileId, name, newConfig)
         onDismiss()
@@ -281,18 +296,21 @@ fun AssistantConfigDialog(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "AI 智能体配置",
+                        text = stringResource(R.string.feature_assistant_config_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "端点服务、模型路由与凭据方案",
+                        text = stringResource(R.string.feature_assistant_config_subtitle),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(imageVector = BgmIcons.Close, contentDescription = "关闭")
+                    Icon(
+                        imageVector = BgmIcons.Close,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                    )
                 }
             }
 
@@ -308,7 +326,7 @@ fun AssistantConfigDialog(
             ) {
                 // 服务商一键预设区
                 Text(
-                    text = "快捷服务商预设",
+                    text = stringResource(R.string.feature_assistant_config_presets_header),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
@@ -323,7 +341,7 @@ fun AssistantConfigDialog(
                         FilterChip(
                             selected = isSelected,
                             onClick = { applyPreset(preset) },
-                            label = { Text(preset.name) },
+                            label = { Text(stringResource(preset.nameRes)) },
                             leadingIcon =
                                 if (isSelected) {
                                     {
@@ -348,7 +366,7 @@ fun AssistantConfigDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "配置方案池",
+                        text = stringResource(R.string.feature_assistant_config_profiles_header),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
@@ -363,7 +381,7 @@ fun AssistantConfigDialog(
                     ) {
                         Icon(BgmIcons.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("新建方案")
+                        Text(stringResource(R.string.feature_assistant_config_new_profile))
                     }
                 }
 
@@ -380,7 +398,12 @@ fun AssistantConfigDialog(
                                 selected = isEditing,
                                 onClick = { loadProfileToDraft(profile) },
                                 label = {
-                                    val label = if (isActive) "${profile.name} (生效中)" else profile.name
+                                    val label =
+                                        if (isActive) {
+                                            stringResource(R.string.feature_assistant_config_profile_active_suffix, profile.name)
+                                        } else {
+                                            profile.name
+                                        }
                                     Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 },
                                 colors =
@@ -393,6 +416,8 @@ fun AssistantConfigDialog(
                     }
 
                     if (editingProfileId != null) {
+                        val clonedProfileName =
+                            stringResource(R.string.feature_assistant_config_profile_clone_suffix, profileName)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End,
@@ -400,7 +425,7 @@ fun AssistantConfigDialog(
                         ) {
                             TextButton(onClick = {
                                 editingProfileId = null
-                                profileName = if (profileName.isNotBlank()) "$profileName (副本)" else ""
+                                profileName = if (profileName.isNotBlank()) clonedProfileName else ""
                             }) {
                                 Icon(
                                     imageVector = BgmIcons.Add,
@@ -408,7 +433,7 @@ fun AssistantConfigDialog(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("克隆为新方案")
+                                Text(stringResource(R.string.feature_assistant_config_clone_profile))
                             }
                             Spacer(modifier = Modifier.width(4.dp))
                             TextButton(onClick = { showDeleteConfirmDialog = true }) {
@@ -419,7 +444,10 @@ fun AssistantConfigDialog(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("删除当前方案", color = MaterialTheme.colorScheme.error)
+                                Text(
+                                    stringResource(R.string.feature_assistant_config_delete_profile),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
                             }
                         }
                     }
@@ -431,8 +459,17 @@ fun AssistantConfigDialog(
                 OutlinedTextField(
                     value = profileName,
                     onValueChange = { profileName = it },
-                    label = { Text("方案名称") },
-                    placeholder = { Text(defaultProfileName(selectedProvider, model, endpoint)) },
+                    label = { Text(stringResource(R.string.feature_assistant_config_profile_name_label)) },
+                    placeholder = {
+                        Text(
+                            defaultProfileName(
+                                provider = selectedProvider,
+                                model = model,
+                                endpoint = endpoint,
+                                customProviderLabel = stringResource(R.string.feature_assistant_config_custom_provider_name),
+                            ),
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -451,8 +488,8 @@ fun AssistantConfigDialog(
                         availableRemoteModels = emptyList()
                         diagnosticState = ConnectionDiagnosticState.Idle
                     },
-                    label = { Text("服务地址 (Base URL)") },
-                    placeholder = { Text("例如 https://api.deepseek.com/v1") },
+                    label = { Text(stringResource(R.string.feature_assistant_config_endpoint_label)) },
+                    placeholder = { Text(stringResource(R.string.feature_assistant_config_endpoint_placeholder)) },
                     trailingIcon = {
                         if (endpoint.isNotBlank()) {
                             IconButton(onClick = {
@@ -461,7 +498,10 @@ fun AssistantConfigDialog(
                                 availableRemoteModels = emptyList()
                                 diagnosticState = ConnectionDiagnosticState.Idle
                             }) {
-                                Icon(BgmIcons.Clear, contentDescription = "清空端点")
+                                Icon(
+                                    BgmIcons.Clear,
+                                    contentDescription = stringResource(R.string.feature_assistant_config_cd_clear_endpoint),
+                                )
                             }
                         }
                     },
@@ -475,8 +515,16 @@ fun AssistantConfigDialog(
                 OutlinedTextField(
                     value = apiKey,
                     onValueChange = { onApiKeyUpdated(it) },
-                    label = { Text("API Key / 访问凭据") },
-                    placeholder = { Text(if (selectedProvider == AiConfig.PROVIDER_OLLAMA) "本地 Ollama 免密钥" else "填入 API Key") },
+                    label = { Text(stringResource(R.string.feature_assistant_config_api_key_label)) },
+                    placeholder = {
+                        Text(
+                            if (selectedProvider == AiConfig.PROVIDER_OLLAMA) {
+                                stringResource(R.string.feature_assistant_config_api_key_placeholder_local)
+                            } else {
+                                stringResource(R.string.feature_assistant_config_api_key_placeholder)
+                            },
+                        )
+                    },
                     singleLine = true,
                     visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -497,12 +545,20 @@ fun AssistantConfigDialog(
                                     }
                                 }
                             }) {
-                                Icon(BgmIcons.ContentPaste, contentDescription = "粘贴剪贴板内容")
+                                Icon(
+                                    BgmIcons.ContentPaste,
+                                    contentDescription = stringResource(R.string.feature_assistant_config_cd_paste),
+                                )
                             }
                             IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
                                 Icon(
                                     imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
-                                    contentDescription = if (isApiKeyVisible) "隐藏密钥" else "显示明文",
+                                    contentDescription =
+                                        if (isApiKeyVisible) {
+                                            stringResource(R.string.feature_assistant_config_cd_hide_key)
+                                        } else {
+                                            stringResource(R.string.feature_assistant_config_cd_show_key)
+                                        },
                                 )
                             }
                         }
@@ -550,7 +606,11 @@ fun AssistantConfigDialog(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = mismatchWarning,
+                                        text =
+                                            stringResource(
+                                                mismatchWarning.messageRes,
+                                                *mismatchWarning.args.toTypedArray(),
+                                            ),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                     )
@@ -575,7 +635,10 @@ fun AssistantConfigDialog(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("正在探测端点连通性并同步可用模型...", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    stringResource(R.string.feature_assistant_config_testing_endpoint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
                             }
                         }
                     }
@@ -600,7 +663,11 @@ fun AssistantConfigDialog(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "连通正常 · 延迟 ${state.latencyMs}ms",
+                                        text =
+                                            stringResource(
+                                                R.string.feature_assistant_config_conn_ok_latency,
+                                                state.latencyMs,
+                                            ),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -608,9 +675,12 @@ fun AssistantConfigDialog(
                                     Text(
                                         text =
                                             if (state.models.isNotEmpty()) {
-                                                "已成功同步 ${state.models.size} 个可用模型至上方列表"
+                                                stringResource(
+                                                    R.string.feature_assistant_config_conn_synced_models,
+                                                    state.models.size,
+                                                )
                                             } else {
-                                                "端点响应正常，但未返回模型列表"
+                                                stringResource(R.string.feature_assistant_config_conn_no_models)
                                             },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -621,7 +691,10 @@ fun AssistantConfigDialog(
                                         onClick = { showModelPickerSheet = true },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     ) {
-                                        Text("选择模型", style = MaterialTheme.typography.labelSmall)
+                                        Text(
+                                            stringResource(R.string.feature_assistant_config_select_model),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
                                     }
                                 }
                             }
@@ -681,11 +754,11 @@ fun AssistantConfigDialog(
                     if (diagnosticState is ConnectionDiagnosticState.Testing) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("测试中")
+                        Text(stringResource(R.string.feature_assistant_config_action_testing))
                     } else {
                         Icon(imageVector = BgmIcons.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("测试连接")
+                        Text(stringResource(R.string.feature_assistant_config_action_test_connection))
                     }
                 }
 
@@ -693,7 +766,7 @@ fun AssistantConfigDialog(
                     onClick = { commitAndSave() },
                     modifier = Modifier.weight(1.3f),
                 ) {
-                    Text("保存并启用")
+                    Text(stringResource(R.string.feature_assistant_config_action_save_enable))
                 }
             }
         }
@@ -717,11 +790,15 @@ fun AssistantConfigDialog(
 
     // 删除方案确认防误触弹窗
     if (showDeleteConfirmDialog && editingProfileId != null) {
-        val targetName = profileName.ifBlank { "当前方案" }
+        val targetName = profileName.ifBlank { stringResource(R.string.feature_assistant_config_current_profile) }
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
-            title = { Text("确认删除方案") },
-            text = { Text("确定要删除方案「$targetName」吗？删除后配置不可恢复。") },
+            title = { Text(stringResource(R.string.feature_assistant_config_delete_dialog_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.feature_assistant_config_delete_dialog_message, targetName),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -733,12 +810,15 @@ fun AssistantConfigDialog(
                         applyPreset(PROVIDER_PRESETS.first())
                     },
                 ) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(R.string.feature_assistant_action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
                 }
             },
         )

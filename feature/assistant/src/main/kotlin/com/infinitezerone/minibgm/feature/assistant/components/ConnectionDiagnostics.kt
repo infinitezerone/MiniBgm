@@ -1,5 +1,8 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
+import androidx.annotation.StringRes
+import com.infinitezerone.minibgm.feature.assistant.R
+
 /** 连通测试诊断状态机 */
 internal sealed interface ConnectionDiagnosticState {
     data object Idle : ConnectionDiagnosticState
@@ -21,11 +24,11 @@ internal sealed interface ConnectionDiagnosticState {
  * 模型特征能力标签
  */
 internal enum class ModelCapability(
-    val label: String,
+    @StringRes val labelRes: Int,
 ) {
-    REASONING("推理"),
-    VISION("视觉"),
-    LIGHTWEIGHT("轻量"),
+    REASONING(R.string.feature_assistant_capability_reasoning),
+    VISION(R.string.feature_assistant_capability_vision),
+    LIGHTWEIGHT(R.string.feature_assistant_capability_lightweight),
 }
 
 /**

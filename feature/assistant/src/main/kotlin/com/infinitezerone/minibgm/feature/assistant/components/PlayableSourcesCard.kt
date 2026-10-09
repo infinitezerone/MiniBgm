@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -28,6 +29,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.assistant.R
 
 /**
  * 找源结果卡片：把工具返回的可播放清单按集数列出。
@@ -55,7 +57,7 @@ fun PlayableSourcesCard(
         Column(modifier = Modifier.padding(vertical = 6.dp)) {
             Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                 Text(
-                    text = "可播放清单",
+                    text = stringResource(R.string.feature_assistant_playable_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -63,9 +65,21 @@ fun PlayableSourcesCard(
                 Text(
                     text =
                         buildString {
-                            append(sources.title.ifBlank { "本条目" })
+                            append(
+                                if (sources.title.isBlank()) {
+                                    stringResource(R.string.feature_assistant_playable_default_title)
+                                } else {
+                                    sources.title
+                                },
+                            )
                             if (sources.source.isNotBlank()) append(" · ${sources.source}")
-                            append(" · ${sources.episodes.size} 条")
+                            append(" · ")
+                            append(
+                                stringResource(
+                                    R.string.feature_assistant_playable_episode_count,
+                                    sources.episodes.size,
+                                ),
+                            )
                         },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -118,7 +132,12 @@ private fun PlayableSourceRow(
     ) {
         Icon(
             imageVector = if (playable) BgmIcons.Play else BgmIcons.OpenInNew,
-            contentDescription = if (playable) "播放" else "外部打开",
+            contentDescription =
+                if (playable) {
+                    stringResource(R.string.feature_assistant_playable_cd_play)
+                } else {
+                    stringResource(R.string.feature_assistant_playable_cd_open_external)
+                },
             tint =
                 when {
                     failureReason != null -> MaterialTheme.colorScheme.error
@@ -129,14 +148,24 @@ private fun PlayableSourceRow(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = episode.label.ifBlank { "第 $rowNumber 条" },
+                text =
+                    if (episode.label.isBlank()) {
+                        stringResource(R.string.feature_assistant_playable_row_number, rowNumber)
+                    } else {
+                        episode.label
+                    },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = playbackSourceSubtitle(episode.siteName.ifBlank { hostOf(episode.url) }, failureReason),
+                text =
+                    playbackSourceSubtitle(
+                        episode.siteName.ifBlank { hostOf(episode.url) },
+                        failureReason,
+                        stringResource(R.string.feature_assistant_source_last_failed_format),
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color =
                     if (failureReason != null) {
@@ -151,9 +180,9 @@ private fun PlayableSourceRow(
         Text(
             text =
                 when {
-                    failureReason != null -> "打不开"
-                    playable -> "播放"
-                    else -> "打开"
+                    failureReason != null -> stringResource(R.string.feature_assistant_playable_action_unavailable)
+                    playable -> stringResource(R.string.feature_assistant_playable_action_play)
+                    else -> stringResource(R.string.feature_assistant_playable_action_open)
                 },
             style = MaterialTheme.typography.labelMedium,
             color =
@@ -171,7 +200,13 @@ private fun PlayableSourceRow(
 private fun playbackSourceSubtitle(
     base: String,
     failureReason: String?,
-): String = if (failureReason == null) base else "$base · 上次播放失败：$failureReason"
+    failedFormat: String,
+): String =
+    if (failureReason == null) {
+        base
+    } else {
+        String.format(java.util.Locale.getDefault(), failedFormat, base, failureReason)
+    }
 
 private fun PlayableSource.toPlayerRoute(sources: PlayableEpisodeList): PlayerRoute {
     val playable = sources.episodes.filter { it.kind == PlaylistEntryKind.DIRECT }

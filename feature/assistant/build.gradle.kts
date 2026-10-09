@@ -7,6 +7,7 @@ plugins {
 
 androidLibrary {
     namespace = "com.infinitezerone.minibgm.feature.assistant"
+    resourcePrefix = "feature_assistant_"
 }
 
 dependencies {
