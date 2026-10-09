@@ -16,10 +16,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val tier = (project.findProperty("minibgm.tier") as? String) ?: "standard"
+val tier = (project.findProperty("minibgm.tier") as? String) ?: "preview"
 val isPreview = tier == "preview"
-val enableAi = (project.findProperty("minibgm.enableAi") as? String)?.toBoolean() ?: isPreview
-val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.toBoolean() ?: isPreview
+val enableAi = (project.findProperty("minibgm.enableAi") as? String)?.toBoolean() ?: true
+val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.toBoolean() ?: true
 
 androidApplication {
     namespace = "com.infinitezerone.minibgm"
