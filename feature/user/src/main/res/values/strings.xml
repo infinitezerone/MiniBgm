@@ -168,6 +168,21 @@
     <string name="feature_user_rules_empty">暂无自定义播放规则，可点击「添加」或「导入」配置。</string>
     <string name="feature_user_rules_delete_title">确认删除规则</string>
     <string name="feature_user_rules_delete_message">确定要删除播放规则「%1$s」吗？</string>
+    <string name="feature_user_tab_rules">解析规则</string>
+    <string name="feature_user_tab_playlists">自备片单</string>
+    <string name="feature_user_action_add_rule">添加规则</string>
+    <string name="feature_user_action_add_playlist">导入片单</string>
+    <string name="feature_user_rule_add_choice_title">添加解析规则</string>
+    <string name="feature_user_rule_choice_site_probe">站点探测（自动识别 MacCMS）</string>
+    <string name="feature_user_rule_choice_subscription">订阅导入（TVBox 规则集）</string>
+    <string name="feature_user_rule_choice_import_json">批量导入 JSON 规则</string>
+    <string name="feature_user_rule_choice_manual">手动创建自定义规则</string>
+    <string name="feature_user_playlist_add_choice_title">导入自备片单</string>
+    <string name="feature_user_playlist_choice_file">从文件选择 JSON</string>
+    <string name="feature_user_playlist_choice_paste">粘贴 JSON 文本</string>
+    <string name="feature_user_menu_rule_vars">占位符变量说明</string>
+    <string name="feature_user_positions_toggle_title">断点续播进度记录</string>
+    <string name="feature_user_positions_toggle_subtitle">共 %1$d 条记录 · 播放器自动保留最近 50 条</string>
 
     <!-- 9. 播放规则对话框 -->
     <string name="feature_user_rule_vars_title">支持的占位符变量</string>

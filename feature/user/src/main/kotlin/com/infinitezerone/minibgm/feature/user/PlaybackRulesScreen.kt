@@ -1,7 +1,10 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,19 +16,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +50,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -66,9 +75,37 @@ import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
+private enum class RuleAddOption {
+    SITE_PROBE,
+    SUBSCRIPTION,
+    IMPORT_JSON,
+    MANUAL,
+    ;
+
+    fun label(context: Context): String =
+        when (this) {
+            SITE_PROBE -> context.getString(R.string.feature_user_rule_choice_site_probe)
+            SUBSCRIPTION -> context.getString(R.string.feature_user_rule_choice_subscription)
+            IMPORT_JSON -> context.getString(R.string.feature_user_rule_choice_import_json)
+            MANUAL -> context.getString(R.string.feature_user_rule_choice_manual)
+        }
+}
+
+private enum class PlaylistAddOption {
+    PICK_FILE,
+    PASTE_JSON,
+    ;
+
+    fun label(context: Context): String =
+        when (this) {
+            PICK_FILE -> context.getString(R.string.feature_user_playlist_choice_file)
+            PASTE_JSON -> context.getString(R.string.feature_user_playlist_choice_paste)
+        }
+}
+
 /**
  * 播放源管理界面：
- * 主入口是用户自备片单（JSON 导入，支持文件与粘贴），高级入口是第三方解析规则。
+ * 采用双 Tab 清晰切分「解析规则」与「自备片单」，操作收拢至右下角悬浮按钮，降低视觉与心智负担。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,11 +122,13 @@ fun PlaybackRulesScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
     var ruleToEdit by remember { mutableStateOf<PlaybackSourceRule?>(null) }
     var isAddingRule by remember { mutableStateOf(false) }
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isImportingPlaylistJson by remember { mutableStateOf(false) }
-    var showAdvancedRules by rememberSaveable { mutableStateOf(false) }
+    var showVarsHint by rememberSaveable { mutableStateOf(false) }
+    var showPositionsSection by rememberSaveable { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
 
     val playlistPicker =
@@ -155,270 +194,429 @@ fun PlaybackRulesScreen(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    IconButton(onClick = { isImportingPlaylistJson = true }) {
-                        Icon(
-                            imageVector = BgmIcons.ContentPaste,
-                            contentDescription = stringResource(R.string.feature_user_playlist_paste_title),
-                        )
-                    }
-                    IconButton(onClick = { playlistPicker.launch(PLAYLIST_MIME_TYPES) }) {
-                        Icon(
-                            imageVector = BgmIcons.Upload,
-                            contentDescription = stringResource(R.string.feature_user_playlist_cd_import_file),
-                        )
+                    if (selectedTabIndex == 0) {
+                        IconButton(onClick = { showVarsHint = !showVarsHint }) {
+                            Icon(
+                                imageVector = BgmIcons.Info,
+                                contentDescription = stringResource(R.string.feature_user_menu_rule_vars),
+                                tint = if (showVarsHint) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
             )
         },
+        floatingActionButton = {
+            if (!uiState.isLoading) {
+                if (selectedTabIndex == 0) {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                val choice =
+                                    overlayHostState.await(
+                                        SingleChoiceDialogAction(
+                                            title = context.getString(R.string.feature_user_rule_add_choice_title),
+                                            options = RuleAddOption.entries,
+                                            selectedOption = RuleAddOption.SITE_PROBE,
+                                            optionLabel = { it.label(context) },
+                                        ),
+                                    )
+                                when (choice) {
+                                    RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
+                                    RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
+                                    RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
+                                    RuleAddOption.MANUAL -> isAddingRule = true
+                                    null -> {}
+                                }
+                            }
+                        },
+                        icon = { Icon(imageVector = BgmIcons.Add, contentDescription = null) },
+                        text = { Text(stringResource(R.string.feature_user_action_add_rule)) },
+                    )
+                } else {
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            scope.launch {
+                                val choice =
+                                    overlayHostState.await(
+                                        SingleChoiceDialogAction(
+                                            title = context.getString(R.string.feature_user_playlist_add_choice_title),
+                                            options = PlaylistAddOption.entries,
+                                            selectedOption = PlaylistAddOption.PICK_FILE,
+                                            optionLabel = { it.label(context) },
+                                        ),
+                                    )
+                                when (choice) {
+                                    PlaylistAddOption.PICK_FILE -> playlistPicker.launch(PLAYLIST_MIME_TYPES)
+                                    PlaylistAddOption.PASTE_JSON -> isImportingPlaylistJson = true
+                                    null -> {}
+                                }
+                            }
+                        },
+                        icon = { Icon(imageVector = BgmIcons.Upload, contentDescription = null) },
+                        text = { Text(stringResource(R.string.feature_user_action_add_playlist)) },
+                    )
+                }
+            }
+        },
         snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         modifier = modifier,
     ) { innerPadding ->
-        if (uiState.isLoading) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                contentAlignment = Alignment.Center,
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+        ) {
+            PrimaryTabRow(
+                selectedTabIndex = selectedTabIndex,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else {
-            LazyColumn(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                item(key = "playlist_header") {
-                    SectionHeader(
-                        title = stringResource(R.string.feature_user_playlist_section_title),
-                        supporting = stringResource(R.string.feature_user_playlist_section_desc),
-                        trailing = {
-                            if (uiState.playlists.isNotEmpty()) {
-                                TextButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val confirmed =
-                                                overlayHostState.await(
-                                                    ConfirmDialogAction(
-                                                        title = context.getString(R.string.feature_user_playlist_clear_all_title),
-                                                        message =
-                                                            context.getString(
-                                                                R.string.feature_user_playlist_clear_all_message,
-                                                            ),
-                                                        confirmText = context.getString(R.string.feature_user_action_clear),
-                                                        isDestructive = true,
-                                                    ),
-                                                )
-                                            if (confirmed) {
-                                                viewModel.clearPlaylists()
-                                            }
-                                        }
-                                    },
-                                ) {
-                                    Text(stringResource(R.string.feature_user_action_clear), color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        },
-                    )
-                }
-
-                if (uiState.playlists.isEmpty()) {
-                    item(key = "playlist_empty") {
-                        PlaylistEmptyCard(
-                            onPickFile = { playlistPicker.launch(PLAYLIST_MIME_TYPES) },
-                            onPasteJson = { isImportingPlaylistJson = true },
-                        )
-                    }
-                } else {
-                    items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
-                        PlaylistCard(
-                            playlist = playlist,
-                            onDelete = {
-                                scope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_playlist_delete_title),
-                                                message =
-                                                    context.getString(
-                                                        R.string.feature_user_playlist_delete_message,
-                                                        playlist.name,
-                                                        playlist.entries.size,
-                                                    ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        viewModel.deletePlaylist(playlist.id)
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-
-                item(key = "playlist_template") {
-                    PlaylistTemplateCard()
-                }
-
-                item(key = "positions_header") {
-                    SectionHeader(
-                        title = stringResource(R.string.feature_user_positions_section_title),
-                        supporting = stringResource(R.string.feature_user_positions_section_desc),
-                        trailing = {
-                            if (uiState.playbackPositions.isNotEmpty()) {
-                                TextButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val confirmed =
-                                                overlayHostState.await(
-                                                    ConfirmDialogAction(
-                                                        title = context.getString(R.string.feature_user_positions_clear_all_title),
-                                                        message =
-                                                            context.getString(
-                                                                R.string.feature_user_positions_clear_all_message,
-                                                            ),
-                                                        confirmText = context.getString(R.string.feature_user_action_clear),
-                                                        isDestructive = true,
-                                                    ),
-                                                )
-                                            if (confirmed) {
-                                                uiState.playbackPositions.keys.forEach { viewModel.clearPlaybackPosition(it) }
-                                            }
-                                        }
-                                    },
-                                ) {
-                                    Text(stringResource(R.string.feature_user_action_clear), color = MaterialTheme.colorScheme.error)
-                                }
-                            }
-                        },
-                    )
-                }
-
-                if (uiState.playbackPositions.isEmpty()) {
-                    item(key = "positions_empty") {
-                        Text(
-                            text = stringResource(R.string.feature_user_positions_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                        )
-                    }
-                } else {
-                    items(
-                        uiState.playbackPositions.entries
-                            .toList()
-                            .sortedByDescending { it.value },
-                        key = { "position_" + it.key },
-                    ) { entry ->
-                        PlaybackPositionRow(
-                            url = entry.key,
-                            positionMs = entry.value,
-                            onClear = { viewModel.clearPlaybackPosition(entry.key) },
-                        )
-                    }
-                }
-
-                item(key = "advanced_header") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        )
-                        SectionHeader(
-                            title = stringResource(R.string.feature_user_rules_section_title),
-                            supporting =
-                                if (showAdvancedRules) {
-                                    stringResource(R.string.feature_user_rules_section_desc_expanded)
-                                } else {
-                                    stringResource(R.string.feature_user_rules_section_desc_count, uiState.rules.size)
-                                },
-                            trailing = {
-                                // 尾部只留展开/收起：操作按钮放下面的独立行，
-                                // 全塞进尾部会把标题列挤成竖排单字
-                                TextButton(onClick = { showAdvancedRules = !showAdvancedRules }) {
-                                    Text(
-                                        if (showAdvancedRules) {
-                                            stringResource(R.string.feature_user_action_collapse)
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(stringResource(R.string.feature_user_tab_rules))
+                            if (uiState.rules.isNotEmpty()) {
+                                Badge(
+                                    containerColor =
+                                        if (selectedTabIndex == 0) {
+                                            MaterialTheme.colorScheme.primary
                                         } else {
-                                            stringResource(R.string.feature_user_action_expand)
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
                                         },
-                                    )
-                                }
-                            },
-                        )
-                        if (showAdvancedRules) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { viewModel.openSubscriptionImport() }) {
-                                    Text(stringResource(R.string.feature_user_action_subscribe))
-                                }
-                                TextButton(onClick = { viewModel.openSiteProbe() }) {
-                                    Text(stringResource(R.string.feature_user_probe_action))
-                                }
-                                TextButton(onClick = { isImportingRuleJson = true }) {
-                                    Text(stringResource(R.string.feature_user_action_import))
-                                }
-                                TextButton(onClick = { isAddingRule = true }) {
-                                    Text(stringResource(R.string.feature_user_action_add))
+                                    contentColor =
+                                        if (selectedTabIndex == 0) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                ) {
+                                    Text("${uiState.rules.size}")
                                 }
                             }
                         }
-                    }
-                }
+                    },
+                )
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { selectedTabIndex = 1 },
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(stringResource(R.string.feature_user_tab_playlists))
+                            if (uiState.playlists.isNotEmpty()) {
+                                Badge(
+                                    containerColor =
+                                        if (selectedTabIndex == 1) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
+                                        },
+                                    contentColor =
+                                        if (selectedTabIndex == 1) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                ) {
+                                    Text("${uiState.playlists.size}")
+                                }
+                            }
+                        }
+                    },
+                )
+            }
 
-                if (showAdvancedRules) {
-                    item(key = "template_hint") {
-                        RuleVariablesHintCard()
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+            } else if (selectedTabIndex == 0) {
+                // TAB 0: 解析规则
+                LazyColumn(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item(key = "vars_hint") {
+                        AnimatedVisibility(visible = showVarsHint) {
+                            Column(modifier = Modifier.padding(bottom = 6.dp)) {
+                                RuleVariablesHintCard()
+                            }
+                        }
                     }
 
                     if (uiState.rules.isEmpty()) {
-                        item(key = "rule_empty") {
+                        item(key = "rules_empty_hero") {
                             Surface(
                                 shape = BgmShapes.medium,
                                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text(
-                                    text = stringResource(R.string.feature_user_rules_empty),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(14.dp),
-                                )
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.PlayCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(40.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.feature_user_rules_empty),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
+                                            Text(stringResource(R.string.feature_user_probe_title))
+                                        }
+                                        TextButton(onClick = { viewModel.openSubscriptionImport() }) {
+                                            Text(stringResource(R.string.feature_user_subscription_title))
+                                        }
+                                    }
+                                }
                             }
+                        }
+                    } else {
+                        items(uiState.rules, key = { it.id }) { rule ->
+                            PlaybackRuleCard(
+                                rule = rule,
+                                onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
+                                onEdit = { ruleToEdit = rule },
+                                onDelete = {
+                                    scope.launch {
+                                        val confirmed =
+                                            overlayHostState.await(
+                                                ConfirmDialogAction(
+                                                    title = context.getString(R.string.feature_user_rules_delete_title),
+                                                    message =
+                                                        context.getString(
+                                                            R.string.feature_user_rules_delete_message,
+                                                            rule.name,
+                                                        ),
+                                                    confirmText = context.getString(R.string.feature_user_action_delete),
+                                                    isDestructive = true,
+                                                ),
+                                            )
+                                        if (confirmed) {
+                                            viewModel.deleteRule(rule.id)
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            } else {
+                // TAB 1: 自备片单
+                LazyColumn(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (uiState.playlists.isNotEmpty()) {
+                        item(key = "playlists_header") {
+                            SectionHeader(
+                                title = stringResource(R.string.feature_user_playlist_section_title),
+                                supporting = stringResource(R.string.feature_user_playlist_section_desc),
+                                trailing = {
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val confirmed =
+                                                    overlayHostState.await(
+                                                        ConfirmDialogAction(
+                                                            title = context.getString(R.string.feature_user_playlist_clear_all_title),
+                                                            message =
+                                                                context.getString(
+                                                                    R.string.feature_user_playlist_clear_all_message,
+                                                                ),
+                                                            confirmText = context.getString(R.string.feature_user_action_clear),
+                                                            isDestructive = true,
+                                                        ),
+                                                    )
+                                                if (confirmed) {
+                                                    viewModel.clearPlaylists()
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.feature_user_action_clear),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                            )
+                        }
+
+                        items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
+                            PlaylistCard(
+                                playlist = playlist,
+                                onDelete = {
+                                    scope.launch {
+                                        val confirmed =
+                                            overlayHostState.await(
+                                                ConfirmDialogAction(
+                                                    title = context.getString(R.string.feature_user_playlist_delete_title),
+                                                    message =
+                                                        context.getString(
+                                                            R.string.feature_user_playlist_delete_message,
+                                                            playlist.name,
+                                                            playlist.entries.size,
+                                                        ),
+                                                    confirmText = context.getString(R.string.feature_user_action_delete),
+                                                    isDestructive = true,
+                                                ),
+                                            )
+                                        if (confirmed) {
+                                            viewModel.deletePlaylist(playlist.id)
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    } else {
+                        item(key = "playlist_empty") {
+                            PlaylistEmptyCard(
+                                onPickFile = { playlistPicker.launch(PLAYLIST_MIME_TYPES) },
+                                onPasteJson = { isImportingPlaylistJson = true },
+                            )
                         }
                     }
 
-                    items(uiState.rules, key = { it.id }) { rule ->
-                        PlaybackRuleCard(
-                            rule = rule,
-                            onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
-                            onEdit = { ruleToEdit = rule },
-                            onDelete = {
-                                scope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_rules_delete_title),
-                                                message =
-                                                    context.getString(
-                                                        R.string.feature_user_rules_delete_message,
-                                                        rule.name,
+                    item(key = "playlist_template") {
+                        PlaylistTemplateCard()
+                    }
+
+                    // 续播断点记录（紧凑折叠项，不破坏整体布局）
+                    if (uiState.playbackPositions.isNotEmpty()) {
+                        item(key = "positions_collapsible") {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
+                            Surface(
+                                shape = BgmShapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable { showPositionsSection = !showPositionsSection },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = stringResource(R.string.feature_user_positions_toggle_title),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                            Text(
+                                                text =
+                                                    stringResource(
+                                                        R.string.feature_user_positions_toggle_subtitle,
+                                                        uiState.playbackPositions.size,
                                                     ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        viewModel.deleteRule(rule.id)
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        TextButton(onClick = { showPositionsSection = !showPositionsSection }) {
+                                            Text(
+                                                if (showPositionsSection) {
+                                                    stringResource(R.string.feature_user_action_collapse)
+                                                } else {
+                                                    stringResource(R.string.feature_user_action_expand)
+                                                },
+                                            )
+                                        }
+                                    }
+
+                                    AnimatedVisibility(visible = showPositionsSection) {
+                                        Column(
+                                            modifier = Modifier.padding(top = 10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                            ) {
+                                                TextButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            val confirmed =
+                                                                overlayHostState.await(
+                                                                    ConfirmDialogAction(
+                                                                        title =
+                                                                            context.getString(
+                                                                                R.string.feature_user_positions_clear_all_title,
+                                                                            ),
+                                                                        message =
+                                                                            context.getString(
+                                                                                R.string.feature_user_positions_clear_all_message,
+                                                                            ),
+                                                                        confirmText =
+                                                                            context.getString(
+                                                                                R.string.feature_user_action_clear,
+                                                                            ),
+                                                                        isDestructive = true,
+                                                                    ),
+                                                                )
+                                                            if (confirmed) {
+                                                                uiState.playbackPositions.keys.forEach {
+                                                                    viewModel.clearPlaybackPosition(it)
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                ) {
+                                                    Text(
+                                                        stringResource(R.string.feature_user_action_clear),
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                    )
+                                                }
+                                            }
+
+                                            uiState.playbackPositions.entries
+                                                .toList()
+                                                .sortedByDescending { it.value }
+                                                .forEach { entry ->
+                                                    PlaybackPositionRow(
+                                                        url = entry.key,
+                                                        positionMs = entry.value,
+                                                        onClear = { viewModel.clearPlaybackPosition(entry.key) },
+                                                    )
+                                                }
+                                        }
                                     }
                                 }
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -493,5 +691,6 @@ fun PlaybackRulesScreen(
 
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
+        singleChoiceDialog()
     }
 }
