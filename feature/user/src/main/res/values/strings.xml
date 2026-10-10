@@ -98,6 +98,13 @@
     <string name="feature_user_settings_binge_finale_off">已关闭（囤番条目完全静默）</string>
     <string name="feature_user_settings_system_notification_title">系统通知管理</string>
     <string name="feature_user_settings_system_notification_desc">前往系统设置调整静音、振动与悬浮横幅权限</string>
+    <string name="feature_user_settings_keep_alive_title">后台运行与准时送达</string>
+    <string name="feature_user_settings_keep_alive_desc_active">已允许无限制后台运行，开播提醒可准时唤醒</string>
+    <string name="feature_user_settings_keep_alive_desc_inactive">若锁屏或未开 App 时无法收到提醒，请允许后台运行与自启动</string>
+    <string name="feature_user_keep_alive_dialog_title">后台保活与准时送达设置</string>
+    <string name="feature_user_keep_alive_dialog_message">由于各厂商系统（ColorOS / HyperOS / OriginOS 等）的深度待机与省电策略，若未加入白名单，定时开播提醒可能会被系统延迟或合并。\n\n为确保不打开应用时也能准时收到开播通知，建议开启：\n1.「允许完全后台行为 / 无限制」\n2.「允许应用自启动 / 后台自启动」\n3. 多任务任务栏卡片「加锁」</string>
+    <string name="feature_user_keep_alive_action_battery">忽略电池优化</string>
+    <string name="feature_user_keep_alive_action_autostart">前往自启动设置</string>
     <string name="feature_user_notification_rationale_title">需要系统通知权限</string>
     <string name="feature_user_notification_rationale_message">您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。</string>
     <string name="feature_user_reminder_enabled_toast">已开启追番开播提醒（如需横幅/振动可在系统设置中开启）</string>

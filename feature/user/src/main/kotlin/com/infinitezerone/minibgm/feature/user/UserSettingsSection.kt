@@ -74,6 +74,8 @@ internal fun SettingsSection(
     airingNotificationOffsetMinutes: Int = -15,
     onOpenTimingBottomSheet: () -> Unit = {},
     onOpenSystemNotificationSettings: () -> Unit = {},
+    isIgnoringBatteryOptimizations: Boolean = false,
+    onOpenKeepAliveSettings: () -> Unit = {},
     onOpenSyncDialog: () -> Unit,
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
@@ -148,6 +150,8 @@ internal fun SettingsSection(
             airingBingeFinaleEnabled = airingBingeFinaleEnabled,
             onToggleAiringBingeFinale = onToggleAiringBingeFinale,
             onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
+            isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
+            onOpenKeepAliveSettings = onOpenKeepAliveSettings,
         )
 
         AiAndStorageSettingsCard(
@@ -355,6 +359,8 @@ internal fun SyncAndReminderSettingsCard(
     airingBingeFinaleEnabled: Boolean,
     onToggleAiringBingeFinale: (Boolean) -> Unit,
     onOpenSystemNotificationSettings: () -> Unit,
+    isIgnoringBatteryOptimizations: Boolean = false,
+    onOpenKeepAliveSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -533,6 +539,30 @@ internal fun SyncAndReminderSettingsCard(
                         title = stringResource(R.string.feature_user_settings_system_notification_title),
                         subtitle = stringResource(R.string.feature_user_settings_system_notification_desc),
                         onClick = onOpenSystemNotificationSettings,
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    )
+
+                    // 5. 后台运行与准时送达（电池优化与自启动）
+                    SettingsItemRow(
+                        icon = BgmIcons.Bolt,
+                        iconTint =
+                            if (isIgnoringBatteryOptimizations) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.tertiary
+                            },
+                        title = stringResource(R.string.feature_user_settings_keep_alive_title),
+                        subtitle =
+                            if (isIgnoringBatteryOptimizations) {
+                                stringResource(R.string.feature_user_settings_keep_alive_desc_active)
+                            } else {
+                                stringResource(R.string.feature_user_settings_keep_alive_desc_inactive)
+                            },
+                        onClick = onOpenKeepAliveSettings,
                     )
                 }
             }

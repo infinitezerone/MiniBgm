@@ -70,6 +70,7 @@ import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.user.components.AiSettingsDialog
 import com.infinitezerone.minibgm.feature.user.components.AiringTimingBottomSheet
+import com.infinitezerone.minibgm.feature.user.util.BackgroundKeepAliveHelper
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -103,13 +104,16 @@ fun SettingsScreen(
     }
 
     var hasNotificationPermission by remember { mutableStateOf(true) }
+    var isIgnoringBatteryOptimizations by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
     }
 
     // 清理缓存期间行内置忙（onClick 置空防重入），结果按真实成败反馈
@@ -207,6 +211,27 @@ fun SettingsScreen(
                     putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                 }
             context.startActivity(intent)
+        },
+        isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
+        onOpenKeepAliveSettings = {
+            coroutineScope.launch {
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = context.getString(R.string.feature_user_keep_alive_dialog_title),
+                            message = context.getString(R.string.feature_user_keep_alive_dialog_message),
+                            confirmText = context.getString(R.string.feature_user_keep_alive_action_battery),
+                            dismissText = context.getString(R.string.feature_user_keep_alive_action_autostart),
+                            isPrimary = true,
+                            icon = BgmIcons.Bolt,
+                        ),
+                    )
+                if (confirmed) {
+                    BackgroundKeepAliveHelper.requestIgnoreBatteryOptimizations(context)
+                } else {
+                    BackgroundKeepAliveHelper.openAutoStartSettings(context)
+                }
+            }
         },
         amoledDarkMode = uiState.amoledDarkMode,
         onToggleAmoledDarkMode = viewModel::setAmoledDarkMode,
@@ -451,6 +476,8 @@ fun SettingsScreenContent(
     airingNotificationOffsetMinutes: Int = -15,
     onSelectAiringNotificationOffsetMinutes: (Int) -> Unit = {},
     onOpenSystemNotificationSettings: () -> Unit = {},
+    isIgnoringBatteryOptimizations: Boolean = false,
+    onOpenKeepAliveSettings: () -> Unit = {},
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -582,6 +609,8 @@ fun SettingsScreenContent(
                     airingBingeFinaleEnabled = airingBingeFinaleEnabled,
                     onToggleAiringBingeFinale = onToggleAiringBingeFinale,
                     onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
+                    isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
+                    onOpenKeepAliveSettings = onOpenKeepAliveSettings,
                 )
             }
 
