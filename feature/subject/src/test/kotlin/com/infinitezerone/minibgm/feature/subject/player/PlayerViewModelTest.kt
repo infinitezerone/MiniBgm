@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
@@ -15,6 +16,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -1118,5 +1120,70 @@ class PlayerViewModelTest {
             assertEquals(3003L, state.episodeId)
             assertEquals(1, state.comments.size)
             assertEquals("新分集吐槽", state.comments.single().content)
+        }
+
+    @Test
+    fun setCommentSortOrder_resortsComments() =
+        runTest {
+            val communityRepo = FakeCommunityRepository()
+            communityRepo.getEpisodeCommentsResult =
+                AppResult.Success(
+                    listOf(
+                        EpisodeComment(id = 101L, content = "第一条", floor = 1),
+                        EpisodeComment(id = 102L, content = "第二条", floor = 2),
+                    ),
+                )
+
+            val vm = viewModel(communityRepository = communityRepo)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(101L, 102L),
+                vm.uiState.value.comments
+                    .map { it.id },
+            )
+
+            vm.setCommentSortOrder(CommentSortOrder.DESCENDING)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(102L, 101L),
+                vm.uiState.value.comments
+                    .map { it.id },
+            )
+            assertEquals(CommentSortOrder.DESCENDING, vm.uiState.value.commentSortOrder)
+        }
+
+    @Test
+    fun toggleCommentReaction_optimisticUpdate() =
+        runTest {
+            val communityRepo = FakeCommunityRepository()
+            communityRepo.getEpisodeCommentsResult =
+                AppResult.Success(
+                    listOf(
+                        EpisodeComment(id = 101L, content = "第一条", floor = 1, reactions = emptyList()),
+                    ),
+                )
+
+            val authRepo =
+                FakeAuthRepository(
+                    initialLoggedIn = true,
+                    initialProfile = UserProfile(id = 12345L),
+                )
+            val vm = viewModel(communityRepository = communityRepo, authRepository = authRepo)
+            advanceUntilIdle()
+
+            val comment =
+                vm.uiState.value.comments
+                    .single()
+            vm.toggleCommentReaction(comment, reactionValue = 48)
+            advanceUntilIdle()
+
+            val updatedComment =
+                vm.uiState.value.comments
+                    .single()
+            val reaction = updatedComment.reactions.firstOrNull { it.value == 48 }
+            assertTrue(reaction != null)
+            assertEquals(1, reaction?.count)
         }
 }

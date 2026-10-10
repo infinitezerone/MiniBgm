@@ -518,20 +518,3 @@ class EpisodeDetailViewModel(
         commentSortOrder.value = order
     }
 }
-
-/** 单集吐槽排序算法 */
-private fun sortEpisodeComments(
-    comments: List<EpisodeComment>,
-    sortOrder: CommentSortOrder,
-): List<EpisodeComment> =
-    when (sortOrder) {
-        CommentSortOrder.HOT ->
-            comments.sortedWith(
-                compareByDescending<EpisodeComment> { it.reactions.sumOf { r -> r.count } }
-                    .thenBy { if (it.floor > 0) it.floor else Int.MAX_VALUE },
-            )
-        CommentSortOrder.ASCENDING ->
-            comments.sortedBy { if (it.floor > 0) it.floor else Int.MAX_VALUE }
-        CommentSortOrder.DESCENDING ->
-            comments.sortedByDescending { it.floor }
-    }

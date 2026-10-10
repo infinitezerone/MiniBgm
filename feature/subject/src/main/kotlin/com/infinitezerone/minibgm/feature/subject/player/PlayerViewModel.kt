@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.feature.subject.player
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
@@ -17,6 +16,7 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -25,7 +25,9 @@ import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.EpisodeCommentsDelegate
 import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -117,8 +119,10 @@ data class PlayerUiState(
     val currentEpisodeAirdate: String = "",
     val currentEpisodeCommentCount: Int = 0,
     val comments: List<EpisodeComment> = emptyList(),
+    val commentSortOrder: CommentSortOrder = CommentSortOrder.HOT,
     val isCommentsLoading: Boolean = false,
     val commentsError: String? = null,
+    val currentUserId: Long? = null,
     val requestHeaders: Map<String, String> = emptyMap(),
     val isWatched: Boolean = false,
     val autoMarked: Boolean = false,
@@ -378,7 +382,14 @@ class PlayerViewModel(
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var resolveJob: Job? = null
-    private var commentsJob: Job? = null
+
+    val commentsDelegate =
+        EpisodeCommentsDelegate(
+            communityRepository = communityRepository,
+            authRepository = authRepository,
+            scope = viewModelScope,
+            onMessage = { message -> _events.trySend(PlayerUiEvent.ShowSnackbar(message)) },
+        )
 
     /** 条目流：仅在有 subjectId 且注入了条目仓库时订阅 */
     private val subjectFlow: Flow<Subject?> =
@@ -457,6 +468,21 @@ class PlayerViewModel(
         }
 
     init {
+        viewModelScope.launch {
+            commentsDelegate.state.collect { cs ->
+                _uiState.update { current ->
+                    current.copy(
+                        comments = cs.comments,
+                        commentSortOrder = cs.sortOrder,
+                        isCommentsLoading = cs.isLoading,
+                        commentsError = cs.error,
+                        currentEpisodeCommentCount = cs.commentCount,
+                        currentUserId = cs.currentUserId,
+                    )
+                }
+            }
+        }
+
         // 数据侧单点投影：任一仓库流变化即产出新快照，统一并入 _uiState（规范第 1 条）。
         // 首次进页优先选中上次成功起播的源——在收集开始前读一次（与迁移前一致的 only-once 语义）
         viewModelScope.launch {
@@ -837,7 +863,7 @@ class PlayerViewModel(
             )
         }
         resolveCurrentEpisodeStream()
-        loadComments(force = true)
+        commentsDelegate.loadComments(episode.id, force = true)
     }
 
     /**
@@ -879,41 +905,29 @@ class PlayerViewModel(
      */
     fun loadComments(force: Boolean = false) {
         val epId = _uiState.value.episodeId
-        if (epId <= 0L || communityRepository == null) return
-        // 已在飞行中的请求不再重复发起：切集时 selectEpisode 已经 force 拉过一轮，
-        // 屏上的 LaunchedEffect 会再触发一次，没有这条保护就会把刚发出的请求取消重来。
-        if (!force && (commentsJob?.isActive == true || _uiState.value.comments.isNotEmpty())) return
+        if (epId <= 0L) return
+        commentsDelegate.loadComments(epId, force)
+    }
 
-        commentsJob?.cancel()
-        commentsJob =
-            viewModelScope.launch {
-                _uiState.update { it.copy(isCommentsLoading = true, commentsError = null) }
-                when (val result = communityRepository.getEpisodeComments(epId)) {
-                    is AppResult.Success -> {
-                        val parsedComments =
-                            result.data.mapIndexed { index, comment ->
-                                if (comment.floor <= 0) comment.copy(floor = index + 1) else comment
-                            }
-                        _uiState.update { current ->
-                            current.copy(
-                                comments = parsedComments,
-                                currentEpisodeCommentCount = parsedComments.size,
-                                isCommentsLoading = false,
-                                commentsError = null,
-                            )
-                        }
-                    }
-                    is AppResult.Error -> {
-                        _uiState.update { current ->
-                            current.copy(
-                                isCommentsLoading = false,
-                                commentsError = if (current.comments.isEmpty()) result.message else null,
-                            )
-                        }
-                    }
-                    is AppResult.Loading -> Unit
-                }
-            }
+    /** 切换单集吐槽排序规则（热门 / 楼层 / 最新） */
+    fun setCommentSortOrder(order: CommentSortOrder) {
+        commentsDelegate.setSortOrder(order)
+    }
+
+    /** 切换对吐槽短评的表情表态 */
+    fun toggleCommentReaction(
+        comment: EpisodeComment,
+        reaction: CommentReaction,
+    ) {
+        commentsDelegate.toggleCommentReaction(comment, reaction)
+    }
+
+    /** 切换对吐槽短评的表情表态（按表情数值） */
+    fun toggleCommentReaction(
+        comment: EpisodeComment,
+        reactionValue: Int,
+    ) {
+        commentsDelegate.toggleCommentReaction(comment, reactionValue)
     }
 
     /**

@@ -21,15 +21,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -60,7 +57,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,9 +75,8 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
-import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrderTabs
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
+import com.infinitezerone.minibgm.feature.subject.components.episodeCommentsSection
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -272,6 +267,7 @@ fun EpisodeDetailScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.TopCenter,
             ) {
+                val commentsTitle = stringResource(R.string.feature_subject_ep_quick_comments_title)
                 LazyColumn(
                     modifier =
                         Modifier
@@ -737,158 +733,26 @@ fun EpisodeDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     }
 
-                    // 6. 吐槽标题行
-                    item(key = "comments_header") {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.feature_subject_ep_quick_comments_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                                val totalCount = if (uiState.comments.isNotEmpty()) uiState.comments.size else (episode?.comment ?: 0)
-                                if (totalCount > 0) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.feature_subject_ep_comments_total, totalCount),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (uiState.comments.isNotEmpty()) {
-                                CommentSortOrderTabs(
-                                    currentOrder = uiState.commentSortOrder,
-                                    onOrderSelected = { order ->
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        viewModel.setCommentSortOrder(order)
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    // 7. 吐槽列表状态 (Loading / Error / Empty / Virtualized items)
-                    if (uiState.isCommentsLoading && uiState.comments.isEmpty()) {
-                        item(key = "comments_loading") {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_ep_comments_loading),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    } else if (uiState.commentsError != null && uiState.comments.isEmpty()) {
-                        item(key = "comments_error") {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 16.dp),
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(20.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(36.dp),
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_ep_comments_load_failed),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = uiState.commentsError.orEmpty(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                    )
-                                    FilledTonalButton(
-                                        onClick = { viewModel.retryLoadComments() },
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = stringResource(DesignSystemR.string.core_designsystem_action_retry))
-                                    }
-                                }
-                            }
-                        }
-                    } else if (uiState.comments.isEmpty()) {
-                        item(key = "comments_empty") {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.feature_subject_ep_comments_empty),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(20.dp),
-                                )
-                            }
-                        }
-                    } else {
-                        itemsIndexed(
-                            items = uiState.comments,
-                            key = { _, it -> it.id },
-                            contentType = { _, _ -> "episode_comment" },
-                        ) { index, comment ->
-                            EpisodeCommentItem(
-                                comment = comment,
-                                floorNumber = if (comment.floor > 0) comment.floor else (index + 1),
-                                onUrlClick = handleLinkClick,
-                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
-                                onCopyComment = handleCopyComment,
-                                currentUserId = uiState.currentUserId,
-                                onReactionClick = { reaction -> viewModel.toggleCommentReaction(comment, reaction) },
-                                onAddReaction = { reactionValue -> viewModel.toggleCommentReaction(comment, reactionValue) },
-                            )
-                        }
-                    }
+                    // 6. 吐槽列表状态与单项 (Loading / Error / Empty / Items)
+                    episodeCommentsSection(
+                        comments = uiState.comments,
+                        commentCount = if (uiState.comments.isNotEmpty()) uiState.comments.size else (episode?.comment ?: 0),
+                        isLoading = uiState.isCommentsLoading,
+                        error = uiState.commentsError,
+                        sortOrder = uiState.commentSortOrder,
+                        currentUserId = uiState.currentUserId,
+                        onSortChange = { order ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.setCommentSortOrder(order)
+                        },
+                        onRetry = { viewModel.retryLoadComments() },
+                        onReactionClick = { comment, reaction -> viewModel.toggleCommentReaction(comment, reaction) },
+                        onAddReaction = { comment, reactionValue -> viewModel.toggleCommentReaction(comment, reactionValue) },
+                        onCopyComment = handleCopyComment,
+                        onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                        onUrlClick = handleLinkClick,
+                        title = commentsTitle,
+                    )
                 }
             }
         }

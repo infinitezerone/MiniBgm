@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
 import android.app.PictureInPictureParams
+import android.content.ClipData
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
@@ -24,8 +25,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -38,19 +37,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -67,10 +61,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -94,7 +89,7 @@ import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
-import com.infinitezerone.minibgm.feature.subject.components.EpisodeCommentItem
+import com.infinitezerone.minibgm.feature.subject.components.episodeCommentsSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -134,6 +129,18 @@ fun PlayerScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val configuration = LocalConfiguration.current
+    val clipboardManager = LocalClipboard.current
+
+    val handleCopyComment: (String) -> Unit = { text ->
+        coroutineScope.launch {
+            clipboardManager.setClipEntry(ClipEntry(ClipData.newPlainText("Comment", text)))
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = context.getString(R.string.feature_subject_ep_copied_content),
+                duration = SnackbarDuration.Short,
+            )
+        }
+    }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -831,30 +838,6 @@ fun PlayerScreen(
                     modifier = Modifier.padding(top = 4.dp),
                 )
 
-                // 吐槽列表小标题
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_tab_discussion),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (uiState.currentEpisodeCommentCount > 0) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = uiState.currentEpisodeCommentCount.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
                 val commentsListState = rememberLazyListState()
 
                 LazyColumn(
@@ -867,95 +850,21 @@ fun PlayerScreen(
                     contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    when {
-                        uiState.isCommentsLoading && uiState.comments.isEmpty() -> {
-                            item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(32.dp),
-                                        strokeWidth = 2.5.dp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        }
-
-                        uiState.commentsError != null && uiState.comments.isEmpty() -> {
-                            item {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    Text(
-                                        text =
-                                            uiState.commentsError ?: stringResource(
-                                                R.string.feature_subject_ep_comments_load_failed,
-                                            ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                    OutlinedButton(onClick = { viewModel.loadComments(force = true) }) {
-                                        Text(stringResource(R.string.feature_subject_player_retry_comments))
-                                    }
-                                }
-                            }
-                        }
-
-                        uiState.comments.isEmpty() -> {
-                            item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_ep_comments_empty),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-
-                        else -> {
-                            itemsIndexed(uiState.comments, key = { _, c -> c.id }) { index, comment ->
-                                EpisodeCommentItem(
-                                    comment = comment,
-                                    floorNumber = comment.floor.takeIf { it > 0 } ?: (index + 1),
-                                    onUrlClick = { url -> context.launchWebUrl(url) },
-                                    onUserClick = null,
-                                    currentUserId = null,
-                                )
-                                if (index < uiState.comments.lastIndex) {
-                                    HorizontalDivider(
-                                        thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                        modifier = Modifier.padding(vertical = 6.dp),
-                                    )
-                                }
-                            }
-
-                            if (onEpisodeDetailClick != null && uiState.episodeId > 0) {
-                                item {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        TextButton(onClick = { onEpisodeDetailClick(uiState.subjectId, uiState.episodeId) }) {
-                                            Text(
-                                                text = stringResource(R.string.feature_subject_player_discussion_open_detail),
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    episodeCommentsSection(
+                        comments = uiState.comments,
+                        commentCount = uiState.currentEpisodeCommentCount,
+                        isLoading = uiState.isCommentsLoading,
+                        error = uiState.commentsError,
+                        sortOrder = uiState.commentSortOrder,
+                        currentUserId = uiState.currentUserId,
+                        onSortChange = viewModel::setCommentSortOrder,
+                        onRetry = { viewModel.loadComments(force = true) },
+                        onReactionClick = viewModel::toggleCommentReaction,
+                        onAddReaction = viewModel::toggleCommentReaction,
+                        onCopyComment = handleCopyComment,
+                        onUserClick = { username -> context.launchWebUrl("https://bgm.tv/user/$username") },
+                        onUrlClick = { url -> context.launchWebUrl(url) },
+                    )
                 }
             }
         }
