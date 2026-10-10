@@ -15,16 +15,14 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 提交前唯一入口（含"绿≠测过"的 XML 真实性校验）：
 
 ```bash
-bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ spotlessApply → 架构红线 → 触及模块测试（含 :app 单测）→ :app:assembleDebug → 结果校验
+# Windows: .\tools\jgate.ps1  |  Linux/CI: bash tools/jgate
+# 流程：素材体积 → Rust 门禁 → spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 结果校验
 ```
 
-- 验证目标是"改动"而非"全仓库"，按改动自动推断：`@` 有改动验工作副本，`@` 干净退到 `@-`（`jj commit` 之后复跑）；触及基础数据层（`:core:model/common/data/network/database/datastore`）、`build-logic/`、`gradle/`、根构建脚本或版本目录 → 自动提升为全模块单测 + Debug 装配；都推不出来时**明确报错**——不静默放行，也不静默全量。
-- `--plan` 只打印验证计划（零副作用）；`--all` 显式全量（追加 `:app:assembleRelease` 与 `:core:testing:crapCheck`，用于 PR 前与发版）；显式传模块（`bash tools/jgate feature/user sync/work`）则跳过推断。日常提交与 `jj commit` / `jj git push` 均不跑 release。
-- KMP 模块：纯 Kotlin 逻辑测试放 `commonTest`，依赖 Android 运行时/Robolectric 的放 `androidHostTest`；Android-only 模块（`:app`、`:feature:*`、`:sync:work`、`:core:designsystem`、`:core:navigation`、`:core:webview`）用 `testDebugUnitTest` 且没有 allTests。NO-SOURCE 空跑由 jgate 的源码与 XML 双向校验拦下。全量 `allTests testDebugUnitTest` 用于底层跨切面改动与 PR 前。
-- 素材体积门：改动涉及的图片单张 > 200 KB 或合计 > 1 MB 直接拦下。截图一律压成 800px 宽的 WebP 再提交，转完删原图。**不要指望 git pre-commit 钩子**——jj 不运行钩子。
-- 模块依赖边变化后跑 `./gradlew graphUpdate` 重建各 README 依赖图。
-- Android Lint 增量门禁：基线在各模块 `lint-baseline.xml`，CI 只拦新增；勿手工编辑基线。
-- Rust ECH 原生库（`:core:network` + `crates/minibgm-ech`）：任何 Android 打包都需要 Rust 工具链 + NDK；`libminibgm_ech.so` 是构建产物，**缺库一律硬失败**，禁止静默回退 CIO。环境要求、NDK 解析与排障见 `crates/minibgm-ech/README.md`。
+- 目标按改动自动推断（工作副本 `@` → 最近提交 `@-`）；触及底层基础层（`:core:model/data/network/database/datastore`、`build-logic`、根配置）自动提升为全量。日常提交不跑 release；编码中间态秒级红线自检使用 `.\tools\quick-check.ps1`。
+- 素材体积门：图片单张 > 200 KB 或合计 > 1 MB 硬拦（必须压为 800px WebP）。jj 不运行 git 钩子，门禁由 jgate 兜底。
+- 模块依赖变化后跑 `./gradlew graphUpdate` 重建依赖图；Android Lint 增量基线在各模块 `lint-baseline.xml`。
+- Rust ECH 原生库（`:core:network` + `crates/minibgm-ech`）：Android 打包强制需要 Rust 工具链 + NDK，缺库硬失败，禁止静默回退 CIO。
 
 ## 硬红线
 
@@ -42,18 +40,16 @@ bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ sp
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（模块内白名单见 ArchitectureRulesTest）。
 - Ktor 401 自动刷新；刷新彻底失败自动登出——调用方永远不会看到 401。
 
-## 规范先例
+## 规范先例与协同流
 
-新模式的唯一入口，不适配就停下提决策，勿发明新模式：只读特性 → `:feature:schedule`；带参详情 → `:feature:subject`；用户触发写操作 → `CollectionRepository`；认证 → `AuthRepository` + `BgmPkce`；测试形态 → 对应 `*ViewModelTest`；新红线 → 先写 ArchitectureRulesTest。详细实现剧本参见 `.agents/skills/minibgm-playbooks/SKILL.md`。
+新模式的唯一入口，不适配就停下提决策，勿发明新模式：只读特性 → `:feature:schedule`；带参详情 → `:feature:subject`；写操作 → `CollectionRepository`；认证 → `AuthRepository` + `BgmPkce`；新红线 → 先写 ArchitectureRulesTest。详细实现剧本参见 `.agents/skills/minibgm-playbooks/SKILL.md`。
 
-## Agent 协同流与工程飞轮
+AI 协同流水线（机械执行，严禁甩锅排错）：
 
-机械执行：AI 处理非简单单点改动时必须遵守闭环流水线，严禁直接大改代码或甩锅排错：
-
-1. **前置反诘（Spec 对齐）**：编码前对照《硬红线》与《规范先例》反查依赖、真值来源、状态流向与 UI 浮层，输出 Mini-Spec 与改动栈，用户确认后开工。
-2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次改动严格遵守单一目的；中间态使用 `tools/quick-check.ps1` 秒级自查红线。
-3. **自愈验证（Autonomous Loop）**：编码完成自主运行 `tools/jgate.ps1`；若未通过，必须自行抓取日志修复直至完全绿灯，严禁“写完代码让用户试跑”。
-4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷或确立新范式后，必须执行《MiniBgm 飞轮协议》：Encode lessons into structure（教训直接固化入 `ArchitectureRulesTest` 机械断言、`AGENTS.md` 规则或 `.agents/skills/minibgm-playbooks` 剧本，绝不只留纯文本日记）。详细机制见 `.agents/skills/minibgm-flywheel/SKILL.md`。
+1. **前置反诘（Spec 对齐）**：编码前反查硬红线与先例，输出 Mini-Spec 与改动栈，用户确认后开工。
+2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次提交单一目的；中间态用 `.\tools\quick-check.ps1` 秒级自查红线。
+3. **自愈验证（Autonomous Loop）**：编码完成自主运行 `.\tools\jgate.ps1`，若未通过必须自行抓取日志修复直至全绿，严禁让用户试跑。
+4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷后执行《MiniBgm 飞轮协议》（Encode lessons into structure，直接固化入 `ArchitectureRulesTest`、`AGENTS.md` 或 `.agents/skills/minibgm-playbooks`，不留纯文本日记，详见 `.agents/skills/minibgm-flywheel/SKILL.md`）。
 
 ## 发布
 
