@@ -129,8 +129,10 @@ internal fun PlayerEpisodeQueueDrawer(
                             selected = isSelected,
                             onClick = { onSelectSource(index) },
                             label = {
+                                val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
+                                val displayLabel = formatSourceDisplayName(rawName, index, source.isDirect)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(source.nameRes?.let { stringResource(it) } ?: source.name)
+                                    Text(displayLabel)
                                     SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
                                 }
                             },

@@ -294,6 +294,7 @@
     <string name="feature_subject_player_source_default_direct">默认直链</string>
     <string name="feature_subject_player_manage_sources">播放源管理</string>
     <string name="feature_subject_player_total_episodes_count">共 %1$d 话</string>
+    <string name="feature_subject_player_sources_count_format">共 %1$d 条线路</string>
     <string name="feature_subject_player_playing">播放中</string>
     <string name="feature_subject_player_unresolved_stream">播放源解析未完成</string>
     <string name="feature_subject_player_no_online_stream">暂无在线可播直链</string>

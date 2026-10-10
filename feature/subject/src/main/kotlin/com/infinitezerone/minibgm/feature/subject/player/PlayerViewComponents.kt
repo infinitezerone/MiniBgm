@@ -1048,8 +1048,43 @@ internal fun BiliSubjectTitleBar(
 }
 
 /**
- * 播放源横向选择条：源名做成轻量胶囊；打不开的源降透明度并在右侧挂一个告警图标，
- * 把"这条源不可用"从原来挤在胶囊内的小字改成不撑高胶囊的角标。
+ * 将技术向的规则名称（如域名 cj.lziapi.com）清洗为用户友好的线路名（如 线路 1 · lziapi），
+ * 若规则本身已有中文或自定义友好名称则予以保留。
+ */
+internal fun formatSourceDisplayName(
+    rawName: String,
+    index: Int,
+    isDirect: Boolean,
+): String {
+    if (isDirect) return rawName
+    val trimmed = rawName.trim()
+    val isDomainOrUrl = trimmed.contains(".") || trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    if (!isDomainOrUrl) {
+        return trimmed.ifBlank { "线路 ${index + 1}" }
+    }
+    val host =
+        trimmed
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .substringBefore("/")
+            .substringBefore(":")
+    val cleanHost =
+        host
+            .removePrefix("www.")
+            .removePrefix("cj.")
+            .removePrefix("api.")
+            .substringBefore(".")
+    return if (cleanHost.isNotBlank()) {
+        "线路 ${index + 1} · $cleanHost"
+    } else {
+        "线路 ${index + 1}"
+    }
+}
+
+/**
+ * 竖屏播放页 - 播放线路分区：
+ * 采用与选集区一致的标准分区排版（左侧标题+线路数，右侧管理入口），
+ * 单项采用圆角卡片呈现，彻底替换原先类似开发者悬浮调试工具条的单行紧缩样式。
  */
 @Composable
 internal fun BiliPlayerSourceBar(
@@ -1061,61 +1096,112 @@ internal fun BiliPlayerSourceBar(
     onManageRules: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.feature_subject_player_source_label),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.feature_subject_player_sources),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (sources.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.feature_subject_player_sources_count_format, sources.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            val manageAction = onManageRules ?: onRequestOpenSources
+            if (manageAction != null) {
+                Row(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = manageAction)
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_manage_sources),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Icon(
+                        imageVector = BgmIcons.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         LazyRow(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             itemsIndexed(sources) { index, source ->
                 val isSelected = index == selectedIndex
                 val failureCount = sourceFailureCounts[source.id] ?: 0
                 val isFailing = failureCount > 0 && !isSelected
+                val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
+                val displayLabel = formatSourceDisplayName(rawName, index, source.isDirect)
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BiliTogglePill(
-                        label = source.nameRes?.let { stringResource(it) } ?: source.name,
-                        selected = isSelected,
-                        onClick = { onSelectSource(index) },
-                        modifier = if (isFailing) Modifier.alpha(0.5f) else Modifier,
-                    )
-                    if (isFailing) {
-                        Spacer(modifier = Modifier.width(3.dp))
+                Surface(
+                    onClick = { onSelectSource(index) },
+                    shape = RoundedCornerShape(8.dp),
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                    contentColor =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    modifier =
+                        Modifier
+                            .height(34.dp)
+                            .alpha(if (isFailing) 0.55f else 1f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Icon(
-                            imageVector = BgmIcons.Warning,
-                            contentDescription =
-                                stringResource(R.string.feature_subject_player_failures_count, failureCount),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(12.dp),
+                            imageVector = if (source.isDirect) BgmIcons.CloudQueue else BgmIcons.Tv,
+                            contentDescription = null,
+                            tint =
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                },
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text(
+                            text = displayLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
                         )
                     }
                 }
-            }
-        }
-
-        val manageAction = onManageRules ?: onRequestOpenSources
-        if (manageAction != null) {
-            Spacer(modifier = Modifier.width(4.dp))
-            IconButton(
-                onClick = manageAction,
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.Settings,
-                    contentDescription = stringResource(R.string.feature_subject_player_manage_sources),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
             }
         }
     }
