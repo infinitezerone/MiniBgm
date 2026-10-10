@@ -1197,7 +1197,7 @@ internal fun BiliEpisodesSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         LazyRow(
             state = lazyListState,
@@ -1387,8 +1387,8 @@ internal fun BiliEpisodeRowCard(
             },
         modifier =
             modifier
-                .width(64.dp)
-                .height(46.dp)
+                .width(54.dp)
+                .height(40.dp)
                 .semantics(mergeDescendants = true) {
                     contentDescription = if (stateLabel != null) "$sortLabel, $stateLabel" else sortLabel
                 },
@@ -1399,7 +1399,7 @@ internal fun BiliEpisodeRowCard(
         ) {
             Text(
                 text = sortLabel,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
             )
@@ -1438,9 +1438,9 @@ private fun BiliPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
-    height: Dp = 28.dp,
-    textStyle: TextStyle = MaterialTheme.typography.labelSmall,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp),
+    height: Dp = 32.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelMedium,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp),
 ) {
     Row(
         modifier =
@@ -1451,14 +1451,14 @@ private fun BiliPill(
                 .clickable(onClick = onClick)
                 .padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (leadingIcon != null) {
             Icon(
                 imageVector = leadingIcon,
                 contentDescription = null,
                 tint = contentColor,
-                modifier = Modifier.size(13.dp),
+                modifier = Modifier.size(14.dp),
             )
         }
         Text(
@@ -1471,7 +1471,7 @@ private fun BiliPill(
     }
 }
 
-/** 可切换的小标签：选中 = 主色实心，未选 = 中性容器色。 */
+/** 可切换的小标签：选中 = primaryContainer，未选 = 中性容器色。 */
 @Composable
 private fun BiliTogglePill(
     label: String,
@@ -1479,28 +1479,34 @@ private fun BiliTogglePill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
+    height: Dp = 28.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelSmall,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp),
 ) {
     BiliPill(
         label = label,
         containerColor =
             if (selected) {
-                MaterialTheme.colorScheme.primary
+                MaterialTheme.colorScheme.primaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             },
         contentColor =
             if (selected) {
-                MaterialTheme.colorScheme.onPrimary
+                MaterialTheme.colorScheme.onPrimaryContainer
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         onClick = onClick,
         modifier = modifier,
         leadingIcon = leadingIcon,
+        height = height,
+        textStyle = textStyle,
+        contentPadding = contentPadding,
     )
 }
 
-/** 追番药丸：三态只换填充色与文案，按钮形态始终一致。 */
+/** 追番药丸：三态只换填充色与文案，按钮形态与打卡/找源胶囊保持严格一致（高度 32dp）。 */
 @Composable
 private fun BiliFollowPill(
     collectionType: Int?,
@@ -1523,13 +1529,13 @@ private fun BiliFollowPill(
             if (isTracked) {
                 MaterialTheme.colorScheme.surfaceContainerHigh
             } else {
-                MaterialTheme.colorScheme.primary
+                MaterialTheme.colorScheme.primaryContainer
             },
         contentColor =
             if (isTracked) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
-                MaterialTheme.colorScheme.onPrimary
+                MaterialTheme.colorScheme.onPrimaryContainer
             },
         leadingIcon = if (isTracked) BgmIcons.Check else null,
         onClick = {
@@ -1539,7 +1545,7 @@ private fun BiliFollowPill(
         modifier = modifier,
         height = 32.dp,
         textStyle = MaterialTheme.typography.labelMedium,
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
     )
 }
 
@@ -1565,6 +1571,9 @@ internal fun PlayerEpisodeOverviewCard(
     onToggleWatched: () -> Unit,
     onToggleFollow: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
+    subjectName: String = "",
+    score: Double = 0.0,
+    onSubjectClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var isDescExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1572,23 +1581,54 @@ internal fun PlayerEpisodeOverviewCard(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 1. 标题与分集徽标
+        // 1. 番剧标题（轻量跳转入口）
+        if (subjectName.isNotBlank()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable(enabled = onSubjectClick != null) { onSubjectClick?.invoke() }
+                        .padding(vertical = 2.dp),
+            ) {
+                Text(
+                    text = subjectName,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (onSubjectClick != null) {
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = BgmIcons.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.feature_subject_player_view_subject_detail),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+
+        // 2. 标题与分集徽标
         Row(
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
                 shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
             ) {
                 Text(
                     text = epLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
 
@@ -1603,16 +1643,25 @@ internal fun PlayerEpisodeOverviewCard(
             )
         }
 
-        // 2. 播映信息
-        if (airDate.isNotBlank()) {
+        // 3. 播映与评分元信息
+        val metaParts =
+            buildList {
+                if (airDate.isNotBlank()) {
+                    add(stringResource(R.string.feature_subject_player_airdate, airDate))
+                }
+                if (score > 0.0) {
+                    add(stringResource(R.string.feature_subject_rating_score_stars, score.formatScore()))
+                }
+            }
+        if (metaParts.isNotEmpty()) {
             Text(
-                text = stringResource(R.string.feature_subject_player_airdate, airDate),
+                text = metaParts.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
             )
         }
 
-        // 3. 核心轻量操作胶囊行（打卡、追番、AI 找源）
+        // 4. 核心轻量操作胶囊行（打卡、追番、AI 找源）
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1630,7 +1679,10 @@ internal fun PlayerEpisodeOverviewCard(
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onToggleWatched()
                 },
-                leadingIcon = BgmIcons.Check,
+                leadingIcon = if (isWatched) BgmIcons.Check else null,
+                height = 32.dp,
+                textStyle = MaterialTheme.typography.labelMedium,
+                contentPadding = PaddingValues(horizontal = 12.dp),
             )
 
             BiliFollowPill(
@@ -1639,56 +1691,42 @@ internal fun PlayerEpisodeOverviewCard(
             )
 
             if (onRequestOpenSources != null) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onRequestOpenSources() },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_subject_source_ai_search),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                BiliPill(
+                    label = stringResource(R.string.feature_subject_source_ai_search),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    leadingIcon = BgmIcons.AutoAwesome,
+                    onClick = onRequestOpenSources,
+                    height = 32.dp,
+                    textStyle = MaterialTheme.typography.labelMedium,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                )
             }
         }
 
-        // 4. 剧情简介（若有内容展示优雅折叠面板）
+        // 5. 剧情简介（去盒子化：自然流式段落与折叠开关）
         if (description.isNotBlank()) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
+            Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { isDescExpanded = !isDescExpanded },
+                        .clickable { isDescExpanded = !isDescExpanded }
+                        .padding(vertical = 2.dp),
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text(
-                        text = description.trim(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp,
-                        maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description.trim(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                    maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
                     Text(
                         text =
                             if (isDescExpanded) {
@@ -1697,121 +1735,23 @@ internal fun PlayerEpisodeOverviewCard(
                                 stringResource(R.string.feature_subject_expand)
                             },
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 竖屏播放页 - 条目信息关联卡片
- */
-@Composable
-internal fun PlayerSubjectCard(
-    subjectName: String,
-    coverUrl: String,
-    score: Double,
-    airDate: String,
-    summary: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CoverImage(
-                url = coverUrl,
-                contentDescription = subjectName,
-                modifier = Modifier.width(44.dp).height(58.dp),
-                cornerRadius = 8.dp,
-                placeholder = CoverPlaceholder.Subject,
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = subjectName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (score > 0.0) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Star,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = score.formatScore(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                    }
-                    if (airDate.isNotBlank()) {
-                        Text(
-                            text = airDate.take(4) + "年",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                if (summary.isNotBlank()) {
-                    Text(
-                        text = summary.trim(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    Icon(
+                        imageVector = if (isDescExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp),
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Icon(
-                imageVector = BgmIcons.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp),
-            )
         }
     }
 }
 
 /**
- * 竖屏播放页 - 简介 Tab 内容（分集信息与操作、选集横滑、播放源切换、番剧卡片）
+ * 竖屏播放页 - 简介 Tab 内容（分集信息与操作、选集横滑、播放源切换）
  */
 @Composable
 internal fun PlayerIntroContent(
@@ -1835,7 +1775,7 @@ internal fun PlayerIntroContent(
         contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // 1. 分集详细信息、打卡/追番操作与剧情简介
+        // 1. 番剧标题、当前分集、打卡/追番/找源操作与剧情简介
         item(key = "episode_overview") {
             PlayerEpisodeOverviewCard(
                 epLabel = epLabel,
@@ -1847,6 +1787,9 @@ internal fun PlayerIntroContent(
                 onToggleWatched = onToggleWatched,
                 onToggleFollow = onToggleFollow,
                 onRequestOpenSources = onRequestOpenSources,
+                subjectName = uiState.subjectName,
+                score = uiState.subjectScore,
+                onSubjectClick = onSubjectClick,
             )
         }
 
@@ -1873,20 +1816,6 @@ internal fun PlayerIntroContent(
                     onSelectSource = onSelectSource,
                     onRequestOpenSources = onRequestOpenSources,
                     onManageRules = onManageRules,
-                )
-            }
-        }
-
-        // 4. 关联番剧卡片
-        if (uiState.subjectName.isNotBlank()) {
-            item(key = "subject_card") {
-                PlayerSubjectCard(
-                    subjectName = uiState.subjectName,
-                    coverUrl = uiState.subjectCoverUrl,
-                    score = uiState.subjectScore,
-                    airDate = uiState.subjectDate,
-                    summary = uiState.subjectSummary,
-                    onClick = onSubjectClick,
                 )
             }
         }
