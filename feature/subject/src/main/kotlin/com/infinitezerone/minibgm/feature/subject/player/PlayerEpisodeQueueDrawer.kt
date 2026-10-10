@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,8 +56,12 @@ internal fun PlayerEpisodeQueueDrawer(
     sourceFailureCounts: Map<String, Int>,
     selectedSourceIndex: Int,
     autoNextEnabled: Boolean,
+    selectedEpisodeId: Long = 0L,
+    selectedEpisodeType: Int = 0,
     totalEpisodes: Int = 0,
+    hasMoreEpisodes: Boolean = false,
     isLoadingMoreEpisodes: Boolean = false,
+    onLoadMoreEpisodes: () -> Unit = {},
     onToggleAutoNext: () -> Unit,
     onSelectSource: (Int) -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
@@ -77,11 +82,15 @@ internal fun PlayerEpisodeQueueDrawer(
         }
 
     val initialChunkIndex =
-        remember(episodes, selectedEpisodeSort) {
+        remember(episodes, selectedEpisodeSort, selectedEpisodeId, selectedEpisodeType) {
             if (chunks.isNotEmpty()) {
                 chunks
-                    .indexOfFirst { chunk -> chunk.any { it.sort == selectedEpisodeSort } }
-                    .takeIf { it >= 0 } ?: 0
+                    .indexOfFirst { chunk ->
+                        chunk.any {
+                            (selectedEpisodeId > 0 && it.id == selectedEpisodeId) ||
+                                (it.sort == selectedEpisodeSort && it.type == selectedEpisodeType)
+                        }
+                    }.takeIf { it >= 0 } ?: 0
             } else {
                 0
             }
@@ -207,7 +216,9 @@ internal fun PlayerEpisodeQueueDrawer(
                 val displayEpisodes = if (chunks.isNotEmpty()) chunks.getOrElse(selectedChunkIndex) { episodes } else episodes
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(displayEpisodes) { _, ep ->
-                        val selected = ep.sort == selectedEpisodeSort
+                        val selected =
+                            (selectedEpisodeId > 0 && ep.id == selectedEpisodeId) ||
+                                (ep.sort == selectedEpisodeSort && ep.type == selectedEpisodeType)
                         Row(
                             modifier =
                                 Modifier
@@ -258,6 +269,32 @@ internal fun PlayerEpisodeQueueDrawer(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (hasMoreEpisodes) {
+                        item {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable(onClick = onLoadMoreEpisodes)
+                                        .padding(vertical = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isLoadingMoreEpisodes) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Text(
+                                        text = stringResource(R.string.feature_subject_load_more_episodes),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
                             }

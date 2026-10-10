@@ -1192,7 +1192,7 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun longSeries_updatesTotalEpisodesAndLoadsAllEpisodes() =
+    fun longSeries_updatesTotalEpisodesAndLoadsMoreEpisodes() =
         runTest {
             val fakeSubjectRepo = FakeSubjectRepository()
             val initialEpisodes =
@@ -1217,5 +1217,10 @@ class PlayerViewModelTest {
                 vm.uiState.value.episodes
                     .isNotEmpty(),
             )
+            assertTrue(vm.uiState.value.hasMoreEpisodes)
+
+            vm.loadMoreEpisodes()
+            advanceUntilIdle()
+            assertEquals(1, fakeSubjectRepo.loadMoreEpisodesCallCount)
         }
 }

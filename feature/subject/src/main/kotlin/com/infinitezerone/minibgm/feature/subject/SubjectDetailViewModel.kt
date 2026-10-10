@@ -40,7 +40,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -416,13 +415,6 @@ class SubjectDetailViewModel(
                                     current.episodesError
                                 },
                         )
-                    }
-
-                    // 连载长篇番剧（如蜡笔小新、柯南等）：首屏 100 话秒开后，后台自动续拉剩余剧集补全
-                    if (subjectRepository.hasMoreEpisodesStream(subjectId).first()) {
-                        viewModelScope.launch {
-                            subjectRepository.loadAllEpisodes(subjectId)
-                        }
                     }
 
                     // 3. 收藏状态（本地优先，用户下拉时才强制向远端同步）

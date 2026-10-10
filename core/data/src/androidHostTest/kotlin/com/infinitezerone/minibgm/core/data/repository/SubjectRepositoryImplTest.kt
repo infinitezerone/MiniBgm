@@ -372,16 +372,4 @@ class SubjectRepositoryImplTest {
             assertEquals(150, repo.getEpisodesStream(1L).first().size)
             assertEquals(false, repo.hasMoreEpisodesStream(1L).first())
         }
-
-    @Test
-    fun loadAllEpisodes_loadsAllRemainingPagesConcurrently() =
-        runTest {
-            val api = FakeBangumiApiService().apply { allEpisodes = (1..350).map { Episode(id = it.toLong(), sort = it.toFloat()) } }
-            val repo = SubjectRepositoryImpl(api)
-
-            assertIs<AppResult.Success<List<Episode>>>(repo.loadAllEpisodes(1L))
-            assertEquals(350, repo.getEpisodesStream(1L).first().size)
-            assertEquals(false, repo.hasMoreEpisodesStream(1L).first())
-            assertEquals(350, repo.getTotalEpisodesStream(1L).first())
-        }
 }

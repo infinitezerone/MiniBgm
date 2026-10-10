@@ -14,9 +14,6 @@ import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -59,9 +56,6 @@ interface SubjectRepository {
     /** 兼容旧调用：载入分集首屏（升序）并返回列表 */
     suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>>
 
-    /** 一次性完整拉取该条目的所有分集（针对超 100 话的长篇/年番动画） */
-    suspend fun loadAllEpisodes(subjectId: Long): AppResult<List<Episode>> = fetchEpisodes(subjectId)
-
     /** 分集分页窗口大小 */
     companion object {
         const val EPISODE_PAGE_SIZE = 100
@@ -87,8 +81,6 @@ internal class SubjectRepositoryImpl(
     private val maxMemoryEntries: Int = DEFAULT_MAX_ENTRIES,
 ) : SubjectRepository {
     private val cacheMutex = Mutex()
-    private val loadAllMutex = Mutex()
-    private val inFlightLoadAll = mutableSetOf<Long>()
     private val subjectsState = MutableStateFlow<Map<Long, Subject>>(emptyMap())
     private val episodesState = MutableStateFlow<Map<Long, List<Episode>>>(emptyMap())
     private val episodesHasMoreState = MutableStateFlow<Map<Long, Boolean>>(emptyMap())
@@ -213,78 +205,6 @@ internal class SubjectRepositoryImpl(
         } catch (e: Throwable) {
             AppResult.Error(e, e.toUserFriendlyMessage("获取剧集列表"))
         }
-
-    override suspend fun loadAllEpisodes(subjectId: Long): AppResult<List<Episode>> {
-        val alreadyRunning =
-            loadAllMutex.withLock {
-                if (subjectId in inFlightLoadAll) {
-                    true
-                } else {
-                    inFlightLoadAll.add(subjectId)
-                    false
-                }
-            }
-        if (alreadyRunning) {
-            return AppResult.Success(episodesState.value[subjectId].orEmpty())
-        }
-        return try {
-            val currentCursor = cacheMutex.withLock { episodeCursors[subjectId] }
-            if (currentCursor == null) {
-                val firstPageResult = loadEpisodes(subjectId, descending = false)
-                if (firstPageResult !is AppResult.Success) {
-                    return firstPageResult
-                }
-            }
-            val cursor = cacheMutex.withLock { episodeCursors[subjectId] }
-            if (cursor == null || !hasMore(cursor)) {
-                return AppResult.Success(episodesState.value[subjectId].orEmpty())
-            }
-            val total = cursor.total
-            val currentOffset = cursor.nextOffset
-            val remainingOffsets = (currentOffset until total step SubjectRepository.EPISODE_PAGE_SIZE).toList()
-
-            for (batch in remainingOffsets.chunked(4)) {
-                val pages =
-                    coroutineScope {
-                        batch
-                            .map { offset ->
-                                async {
-                                    apiService.getEpisodes(
-                                        subjectId = subjectId,
-                                        limit = SubjectRepository.EPISODE_PAGE_SIZE,
-                                        offset = offset,
-                                    )
-                                }
-                            }.awaitAll()
-                    }
-                cacheMutex.withLock {
-                    val newMap = episodesState.value.toMutableMap()
-                    val existing = newMap[subjectId].orEmpty()
-                    val combined = (existing + pages.flatMap { it.data }).distinctBy { it.id }.sortedBy { it.sort }
-                    newMap[subjectId] = combined
-                    val latestOffset = minOf(total, batch.last() + SubjectRepository.EPISODE_PAGE_SIZE)
-                    val newCursor = cursor.copy(nextOffset = latestOffset)
-                    episodeCursors[subjectId] = newCursor
-                    val newHasMore = episodesHasMoreState.value.toMutableMap()
-                    newHasMore[subjectId] = hasMore(newCursor)
-                    val newTotals = episodesTotalState.value.toMutableMap()
-                    newTotals[subjectId] = total
-                    episodesState.value = newMap
-                    episodesHasMoreState.value = newHasMore
-                    episodesTotalState.value = newTotals
-                }
-            }
-            AppResult.Success(episodesState.value[subjectId].orEmpty())
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取全部剧集"))
-        } finally {
-            loadAllMutex.withLock {
-                inFlightLoadAll.remove(subjectId)
-            }
-        }
-    }
 
     private suspend fun cacheEpisodePage(
         subjectId: Long,

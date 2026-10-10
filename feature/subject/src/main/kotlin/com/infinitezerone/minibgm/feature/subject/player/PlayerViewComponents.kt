@@ -1218,7 +1218,9 @@ internal fun BiliEpisodesSection(
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     modifier: Modifier = Modifier,
     totalEpisodes: Int = 0,
+    hasMoreEpisodes: Boolean = false,
     isLoadingMoreEpisodes: Boolean = false,
+    onLoadMoreEpisodes: () -> Unit = {},
     autoNextEnabled: Boolean = true,
     onToggleAutoNext: () -> Unit = {},
     onOpenAllEpisodes: () -> Unit = {},
@@ -1310,6 +1312,35 @@ internal fun BiliEpisodesSection(
                     onClick = { onSelectEpisode(ep) },
                 )
             }
+            if (hasMoreEpisodes) {
+                item(key = "load_more_episodes_card") {
+                    Surface(
+                        onClick = onLoadMoreEpisodes,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.height(46.dp),
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                        ) {
+                            if (isLoadingMoreEpisodes) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.feature_subject_load_more_episodes),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1329,7 +1360,9 @@ internal fun PlayerEpisodesBottomSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     totalEpisodes: Int = 0,
+    hasMoreEpisodes: Boolean = false,
     isLoadingMoreEpisodes: Boolean = false,
+    onLoadMoreEpisodes: () -> Unit = {},
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val chunks =
@@ -1451,6 +1484,31 @@ internal fun PlayerEpisodesBottomSheet(
                         },
                         modifier = Modifier.width(60.dp),
                     )
+                }
+            }
+
+            if (hasMoreEpisodes) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onLoadMoreEpisodes)
+                            .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isLoadingMoreEpisodes) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.feature_subject_load_more_episodes),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
             }
         }
@@ -1884,6 +1942,7 @@ internal fun PlayerIntroContent(
     onManageRules: (() -> Unit)?,
     onSubjectClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLoadMoreEpisodes: () -> Unit = {},
 ) {
     LazyColumn(
         modifier =
@@ -1919,7 +1978,9 @@ internal fun PlayerIntroContent(
                     selectedEpisodeSort = uiState.episodeSort,
                     selectedEpisodeId = uiState.episodeId,
                     totalEpisodes = uiState.totalEpisodes,
+                    hasMoreEpisodes = uiState.hasMoreEpisodes,
                     isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                    onLoadMoreEpisodes = onLoadMoreEpisodes,
                     onSelectEpisode = onSelectEpisode,
                     onOpenAllEpisodes = onOpenAllEpisodes,
                 )

@@ -546,12 +546,6 @@ class PlayerViewModel(
                 if (route.subjectName.isBlank()) {
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
                 }
-                // 长篇番剧（如蜡笔小新、柯南等）：首屏 100 话秒开后，后台自动续拉剩余全部剧集
-                if (subjectRepository?.hasMoreEpisodesStream(route.subjectId)?.first() == true) {
-                    _uiState.update { it.copy(isLoadingMoreEpisodes = true) }
-                    subjectRepository.loadAllEpisodes(route.subjectId)
-                    _uiState.update { it.copy(isLoadingMoreEpisodes = false) }
-                }
             }
         }
 
@@ -731,14 +725,24 @@ class PlayerViewModel(
     }
 
     /**
-     * 显式续拉更多分集（后台全量补齐）
+     * 显式续拉下一屏分集
      */
     fun loadMoreEpisodes() {
-        if (route.subjectId <= 0 || _uiState.value.isLoadingMoreEpisodes) return
+        if (route.subjectId <= 0 || _uiState.value.isLoadingMoreEpisodes || !_uiState.value.hasMoreEpisodes) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMoreEpisodes = true) }
-            subjectRepository?.loadAllEpisodes(route.subjectId)
-            _uiState.update { it.copy(isLoadingMoreEpisodes = false) }
+            val result = subjectRepository?.loadMoreEpisodes(route.subjectId, descending = false)
+            _uiState.update { current ->
+                val nextHasMore =
+                    when (result) {
+                        is com.infinitezerone.minibgm.core.common.AppResult.Success -> result.data
+                        else -> current.hasMoreEpisodes
+                    }
+                current.copy(
+                    isLoadingMoreEpisodes = false,
+                    hasMoreEpisodes = nextHasMore,
+                )
+            }
         }
     }
 

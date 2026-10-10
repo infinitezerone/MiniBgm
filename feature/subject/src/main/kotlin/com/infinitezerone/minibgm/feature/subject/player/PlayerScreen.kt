@@ -650,12 +650,16 @@ fun PlayerScreen(
                         currentIndex = uiState.currentIndex,
                         episodes = uiState.episodes,
                         selectedEpisodeSort = uiState.episodeSort,
+                        selectedEpisodeId = uiState.episodeId,
+                        selectedEpisodeType = uiState.episodeType,
                         sources = uiState.sources,
                         sourceFailureCounts = uiState.sourceFailureCounts,
                         selectedSourceIndex = uiState.selectedSourceIndex,
                         autoNextEnabled = uiState.autoNextEnabled,
                         totalEpisodes = uiState.totalEpisodes,
+                        hasMoreEpisodes = uiState.hasMoreEpisodes,
                         isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                        onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                         onToggleAutoNext = viewModel::toggleAutoNext,
                         onSelectSource = viewModel::selectSource,
                         onSelectEpisode = { ep ->
@@ -874,6 +878,7 @@ fun PlayerScreen(
                                         onSubjectClick(uiState.subjectId)
                                     }
                                 },
+                                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                             )
                         }
                         PlayerPortraitTab.DISCUSSION -> {
@@ -912,7 +917,9 @@ fun PlayerScreen(
                 selectedEpisodeSort = uiState.episodeSort,
                 selectedEpisodeId = uiState.episodeId,
                 totalEpisodes = uiState.totalEpisodes,
+                hasMoreEpisodes = uiState.hasMoreEpisodes,
                 isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                 onSelectEpisode = viewModel::selectEpisode,
                 onDismiss = { isEpisodeBottomSheetOpen = false },
             )

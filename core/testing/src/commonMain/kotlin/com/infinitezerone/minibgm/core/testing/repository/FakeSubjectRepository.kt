@@ -193,8 +193,6 @@ class FakeSubjectRepository : SubjectRepository {
         return AppResult.Success(false)
     }
 
-    override suspend fun loadAllEpisodes(subjectId: Long): AppResult<List<Episode>> = fetchEpisodes(subjectId)
-
     override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> {
         fetchEpisodesCallCount++
         val result = fetchEpisodesResult(subjectId)
