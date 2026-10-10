@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,10 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,9 +58,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.formatScore
+import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
@@ -917,55 +918,91 @@ internal fun PlayerEmptyView(
 private const val BILI_EPISODE_CHUNK_SIZE = 30
 
 /**
- * 剧名标题栏：大字标题 + 纯文字元信息行（评分 / 年份 / 追番状态），右侧挂追番药丸。
+ * 播放页主信息条：当前分集标题 (左) + [已看] 与 [追番] 胶囊 (右)；
+ * 第二行显示番剧名 (可点跳详情)、评分、首播年份及追番状态。
  *
- * 常驻在播放器正下方，不随「简介 / 讨论」Tab 切换消失——"在看什么"与"要不要追番"
- * 是本页最高频的信息与写操作，切到讨论区也必须看得见、点得到。
- *
- * 刻意不用带底色的评分徽章与三种混用的 M3 Button：追番三态只换填充色与文案，
- * 形态恒定；评分走「图标 + 数字」的纯文字排布，避免在扁平内容区里叠出第二层容器感。
+ * 合并原先分散的番剧标题栏与单集打卡栏，将追番核心动作（看过打卡、追番状态）
+ * 提至第一视觉焦点，常驻显示在播放器正下方。
  */
 @Composable
 internal fun BiliSubjectTitleBar(
     subjectName: String,
+    epLabel: String,
+    episodeName: String,
     score: Double,
     airDate: String,
     collectionType: Int?,
+    isWatched: Boolean,
     onSubjectClick: () -> Unit,
     onToggleFollow: () -> Unit,
+    onToggleWatched: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val haptic = LocalHapticFeedback.current
+    val currentEpTitle =
+        if (episodeName.isNotBlank()) {
+            "$epLabel · $episodeName"
+        } else {
+            epLabel.ifBlank { subjectName }
+        }
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = subjectName,
+                text = currentEpTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(onClick = onSubjectClick),
+                modifier = Modifier.weight(1f),
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
+            BiliTogglePill(
+                label =
+                    if (isWatched) {
+                        stringResource(R.string.feature_subject_player_watched)
+                    } else {
+                        stringResource(R.string.feature_subject_player_mark_as_watched)
+                    },
+                selected = isWatched,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onToggleWatched()
+                },
+                leadingIcon = BgmIcons.Check,
+            )
+            Spacer(modifier = Modifier.width(6.dp))
             BiliFollowPill(
                 collectionType = collectionType,
                 onClick = onToggleFollow,
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
         Row(
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (subjectName.isNotBlank() && currentEpTitle != subjectName) {
+                Text(
+                    text = subjectName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = onSubjectClick),
+                )
+            }
             if (score > 0.0) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -975,11 +1012,11 @@ internal fun BiliSubjectTitleBar(
                         imageVector = BgmIcons.Star,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(13.dp),
+                        modifier = Modifier.size(12.dp),
                     )
                     Text(
                         text = score.formatScore(),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -1000,65 +1037,6 @@ internal fun BiliSubjectTitleBar(
                 )
             }
         }
-    }
-}
-
-/**
- * 当前分集信息行：左侧分集标题与首播日期，右侧吐槽与打卡两枚轻量胶囊。
- *
- * 刻意不再用 Surface 包一层底色卡片——浅色主题下 surfaceContainerLow 是纯白，
- * 铺在灰底内容区上会形成一块边界模糊的"白板"，比不包更脏。
- */
-@Composable
-internal fun BiliCurrentEpisodeInfoBar(
-    epLabel: String,
-    episodeName: String,
-    isWatched: Boolean,
-    airdate: String,
-    onToggleWatched: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val haptic = LocalHapticFeedback.current
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = epLabel + if (episodeName.isNotBlank()) " · $episodeName" else "",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (airdate.isNotBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = stringResource(R.string.feature_subject_player_airdate, airdate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(10.dp))
-
-        BiliTogglePill(
-            label =
-                if (isWatched) {
-                    stringResource(R.string.feature_subject_player_watched)
-                } else {
-                    stringResource(R.string.feature_subject_player_mark_as_watched)
-                },
-            selected = isWatched,
-            onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onToggleWatched()
-            },
-            leadingIcon = BgmIcons.Check,
-        )
     }
 }
 
@@ -1137,22 +1115,19 @@ internal fun BiliPlayerSourceBar(
 }
 
 /**
- * 选集区：横向滑动单集条，右上角可切换为整季网格。
- *
- * 标题行的"自动连播"收敛成切换胶囊（选中才显勾），"展开/收起"改成主色纯文字 + 箭头，
- * 不再用 M3 Switch 撑高整行，也修掉了原先硬编码在组件里的展开文案。
+ * 选集区：横向滑动单集条，右上角"全部 >"点击呼出半屏选集底栏。
  */
 @Composable
 internal fun BiliEpisodesSection(
     episodes: List<PlayerEpisodeItem>,
     selectedEpisodeSort: Float,
     selectedEpisodeId: Long,
-    autoNextEnabled: Boolean,
-    onToggleAutoNext: () -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     modifier: Modifier = Modifier,
+    autoNextEnabled: Boolean = true,
+    onToggleAutoNext: () -> Unit = {},
+    onOpenAllEpisodes: () -> Unit = {},
 ) {
-    var isExpandedGrid by remember { mutableStateOf(false) }
     val lazyListState = rememberLazyListState()
 
     val selectedIndex =
@@ -1165,7 +1140,7 @@ internal fun BiliEpisodesSection(
         }
 
     LaunchedEffect(selectedIndex) {
-        if (selectedIndex in episodes.indices && !isExpandedGrid) {
+        if (selectedIndex in episodes.indices) {
             lazyListState.animateScrollToItem((selectedIndex - 1).coerceAtLeast(0))
         }
     }
@@ -1177,7 +1152,7 @@ internal fun BiliEpisodesSection(
         ) {
             Text(
                 text = stringResource(R.string.feature_subject_player_episodes),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -1196,25 +1171,18 @@ internal fun BiliEpisodesSection(
                 modifier =
                     Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .clickable { isExpandedGrid = !isExpandedGrid }
-                        .padding(horizontal = 2.dp, vertical = 4.dp),
+                        .clickable(onClick = onOpenAllEpisodes)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text =
-                        stringResource(
-                            if (isExpandedGrid) {
-                                R.string.feature_subject_player_collapse
-                            } else {
-                                R.string.feature_subject_player_expand_all
-                            },
-                        ),
+                    text = stringResource(R.string.feature_subject_player_expand_all),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Icon(
-                    imageVector = if (isExpandedGrid) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                    imageVector = BgmIcons.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(14.dp),
@@ -1222,48 +1190,104 @@ internal fun BiliEpisodesSection(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        if (!isExpandedGrid) {
-            LazyRow(
-                state = lazyListState,
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(episodes, key = { "${it.type}_${it.id}_${it.sort}" }) { ep ->
-                    val isSelected =
-                        ep.sort == selectedEpisodeSort && (selectedEpisodeId == 0L || ep.id == 0L || ep.id == selectedEpisodeId)
-                    BiliEpisodeRowCard(
-                        episode = ep,
-                        isSelected = isSelected,
-                        onClick = { onSelectEpisode(ep) },
-                    )
-                }
-            }
-        } else {
-            val chunks =
-                remember(episodes) {
-                    if (episodes.size > BILI_EPISODE_CHUNK_SIZE) {
-                        episodes.chunked(BILI_EPISODE_CHUNK_SIZE)
-                    } else {
-                        emptyList()
-                    }
-                }
-            var selectedChunkIndex by remember(chunks) {
-                mutableIntStateOf(
-                    if (chunks.isNotEmpty() && selectedIndex in episodes.indices) {
-                        selectedIndex / BILI_EPISODE_CHUNK_SIZE
-                    } else {
-                        0
-                    },
+        LazyRow(
+            state = lazyListState,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(episodes, key = { "${it.type}_${it.id}_${it.sort}" }) { ep ->
+                val isSelected =
+                    ep.sort == selectedEpisodeSort && (selectedEpisodeId == 0L || ep.id == 0L || ep.id == selectedEpisodeId)
+                BiliEpisodeRowCard(
+                    episode = ep,
+                    isSelected = isSelected,
+                    onClick = { onSelectEpisode(ep) },
                 )
             }
-            val displayEpisodes =
-                if (chunks.isNotEmpty()) {
-                    chunks.getOrElse(selectedChunkIndex) { episodes }
-                } else {
-                    episodes
+        }
+    }
+}
+
+/**
+ * 竖屏分集完整选择底栏（Material 3 [BgmModalBottomSheet]）
+ *
+ * 点击选集栏右侧"全部 >"呼出，替代原先在常驻区原地撑大的网格，杜绝挤占主布局。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PlayerEpisodesBottomSheet(
+    episodes: List<PlayerEpisodeItem>,
+    selectedEpisodeSort: Float,
+    selectedEpisodeId: Long,
+    onSelectEpisode: (PlayerEpisodeItem) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
+    val chunks =
+        remember(episodes) {
+            if (episodes.size > BILI_EPISODE_CHUNK_SIZE) {
+                episodes.chunked(BILI_EPISODE_CHUNK_SIZE)
+            } else {
+                emptyList()
+            }
+        }
+    val selectedIndex =
+        remember(episodes, selectedEpisodeSort, selectedEpisodeId) {
+            val idx =
+                episodes.indexOfFirst {
+                    it.sort == selectedEpisodeSort && (selectedEpisodeId == 0L || it.id == 0L || it.id == selectedEpisodeId)
                 }
+            if (idx >= 0) idx else 0
+        }
+    var selectedChunkIndex by remember(chunks) {
+        mutableIntStateOf(
+            if (chunks.isNotEmpty() && selectedIndex in episodes.indices) {
+                selectedIndex / BILI_EPISODE_CHUNK_SIZE
+            } else {
+                0
+            },
+        )
+    }
+    val displayEpisodes =
+        if (chunks.isNotEmpty()) {
+            chunks.getOrElse(selectedChunkIndex) { episodes }
+        } else {
+            episodes
+        }
+
+    BgmModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = modifier,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_episodes),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.feature_subject_player_total_episodes_count, episodes.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             if (chunks.size > 1) {
                 val paginationLabels =
@@ -1271,7 +1295,7 @@ internal fun BiliEpisodesSection(
                         chunks.map { list -> "${list.first().sort.toInt()}-${list.last().sort.toInt()}" }
                     }
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     itemsIndexed(paginationLabels) { index, chunkLabel ->
@@ -1296,7 +1320,10 @@ internal fun BiliEpisodesSection(
                     EpisodeGridCard(
                         episode = ep,
                         isSelected = isSelected,
-                        onClick = { onSelectEpisode(ep) },
+                        onClick = {
+                            onSelectEpisode(ep)
+                            onDismiss()
+                        },
                         modifier = Modifier.width(60.dp),
                     )
                 }
@@ -1507,87 +1534,4 @@ private fun BiliFollowPill(
         textStyle = MaterialTheme.typography.labelMedium,
         contentPadding = PaddingValues(horizontal = 14.dp),
     )
-}
-
-/**
- * 播放页双 Tab 行：纯文字 + 主色短下划线。
- *
- * 替代 M3 的 PrimaryTabRow——后者自带容器底色与占满宽度的指示条，
- * 会在播放器正下方切出一条突兀的白色横带。
- */
-@Composable
-internal fun BiliPlayerTabRow(
-    selectedTabIndex: Int,
-    discussionCount: Int,
-    onTabSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(46.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(22.dp),
-        ) {
-            BiliTabItem(
-                label = stringResource(R.string.feature_subject_player_tab_intro),
-                selected = selectedTabIndex == 0,
-                onClick = { onTabSelected(0) },
-            )
-            BiliTabItem(
-                label =
-                    stringResource(R.string.feature_subject_player_tab_discussion) +
-                        if (discussionCount > 0) " $discussionCount" else "",
-                selected = selectedTabIndex == 1,
-                onClick = { onTabSelected(1) },
-            )
-        }
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant,
-        )
-    }
-}
-
-@Composable
-private fun BiliTabItem(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val tint =
-        if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-
-    Box(
-        modifier =
-            Modifier
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(4.dp))
-                .clickable(onClick = onClick)
-                .padding(horizontal = 2.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = tint,
-        )
-        Box(
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .width(18.dp)
-                    .height(2.dp)
-                    .clip(CircleShape)
-                    .background(if (selected) tint else Color.Transparent),
-        )
-    }
 }
