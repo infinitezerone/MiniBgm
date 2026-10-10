@@ -149,6 +149,7 @@ fun PlayerScreen(
     val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
     val playback by controller.state.collectAsStateWithLifecycle()
     val position = controller.positionMs
+    val bufferedPosition = controller.bufferedPositionMs
     val player = controller.player
 
     // 纯 UI 局部状态（与播放器无关）
@@ -522,6 +523,7 @@ fun PlayerScreen(
                     videoContent = videoSurface,
                     playback = playback,
                     position = position,
+                    bufferedPosition = bufferedPosition,
                     streamUrl = uiState.streamUrl,
                     isResolvingSource = uiState.isResolvingSource,
                     resolveAttempt = uiState.resolveAttempt,
@@ -706,6 +708,7 @@ fun PlayerScreen(
                         videoContent = videoSurface,
                         playback = playback,
                         position = position,
+                        bufferedPosition = bufferedPosition,
                         streamUrl = uiState.streamUrl,
                         isResolvingSource = uiState.isResolvingSource,
                         resolveAttempt = uiState.resolveAttempt,
@@ -930,6 +933,7 @@ private fun PlayerVideoStage(
     videoContent: @Composable () -> Unit,
     playback: PlaybackState,
     position: StateFlow<Long>,
+    bufferedPosition: StateFlow<Long>,
     streamUrl: String,
     isResolvingSource: Boolean,
     resolveAttempt: Int,
@@ -1041,13 +1045,23 @@ private fun PlayerVideoStage(
         ) {
             // 位置单独订阅：只有底边进度线随 500ms 位置跳重组
             val currentPosition by position.collectAsStateWithLifecycle()
+            val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
             val progressFraction =
                 if (playback.durationMs > 0L) {
                     (currentPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
                 } else {
                     0f
                 }
-            PlayerBottomEdgeProgressBar(progress = progressFraction)
+            val bufferedFraction =
+                if (playback.durationMs > 0L) {
+                    (currentBufferedPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            PlayerBottomEdgeProgressBar(
+                progress = progressFraction,
+                bufferedProgress = bufferedFraction,
+            )
         }
 
         AnimatedVisibility(
@@ -1069,6 +1083,7 @@ private fun PlayerVideoStage(
                 isBuffering = playback.isBuffering,
                 isEnded = playback.isEnded,
                 position = position,
+                bufferedPosition = bufferedPosition,
                 totalDuration = playback.durationMs,
                 isScrubbing = isScrubbing,
                 scrubProgress = scrubProgress,

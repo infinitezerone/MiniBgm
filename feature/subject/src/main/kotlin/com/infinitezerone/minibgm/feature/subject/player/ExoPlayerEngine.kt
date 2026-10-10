@@ -80,6 +80,8 @@ class ExoPlayerEngine(
 
     override val currentPositionMs: Long get() = exoPlayer.currentPosition.coerceAtLeast(0L)
 
+    override val bufferedPositionMs: Long get() = exoPlayer.bufferedPosition.coerceAtLeast(0L)
+
     override val durationMs: Long get() = exoPlayer.duration.coerceAtLeast(0L)
 
     override val isPlaying: Boolean get() = exoPlayer.isPlaying

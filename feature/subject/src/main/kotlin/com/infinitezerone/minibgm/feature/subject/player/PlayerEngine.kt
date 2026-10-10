@@ -28,6 +28,8 @@ interface PlayerEngine {
 
     val currentPositionMs: Long
 
+    val bufferedPositionMs: Long get() = currentPositionMs
+
     val durationMs: Long
 
     val isPlaying: Boolean

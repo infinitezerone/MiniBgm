@@ -62,6 +62,9 @@ class PlayerController(
     private val _positionMs = MutableStateFlow(0L)
     val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
 
+    private val _bufferedPositionMs = MutableStateFlow(0L)
+    val bufferedPositionMs: StateFlow<Long> = _bufferedPositionMs.asStateFlow()
+
     private val _events = Channel<PlayerEngineEvent>(Channel.BUFFERED)
 
     /** 就绪 / 播完 / 出错的一次性事件流。 */
@@ -136,11 +139,13 @@ class PlayerController(
             stopPositionPolling()
             engine.clear()
             _positionMs.value = 0L
+            _bufferedPositionMs.value = 0L
             _state.value = PlaybackState()
             return
         }
         if (url == _state.value.mediaUrl) return
         _positionMs.value = 0L
+        _bufferedPositionMs.value = 0L
         _state.value = PlaybackState(mediaUrl = url, isBuffering = true)
         engine.load(url, requestHeaders)
     }
@@ -210,8 +215,10 @@ class PlayerController(
 
     private fun syncPositionOnce() {
         val position = engine.currentPositionMs
+        val buffered = engine.bufferedPositionMs
         val duration = engine.durationMs
         _positionMs.value = position
+        _bufferedPositionMs.value = buffered
         _state.update {
             it.copy(durationMs = if (duration > 0L) duration else it.durationMs)
         }

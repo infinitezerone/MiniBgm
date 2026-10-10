@@ -176,7 +176,9 @@ internal fun PlayerProgressBar(
 internal fun PlayerBottomEdgeProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
+    bufferedProgress: Float = 0f,
     activeColor: Color = MaterialTheme.colorScheme.primary,
+    bufferedColor: Color = Color.White.copy(alpha = 0.35f),
     trackColor: Color = Color.White.copy(alpha = 0.25f),
 ) {
     Canvas(
@@ -187,8 +189,9 @@ internal fun PlayerBottomEdgeProgressBar(
     ) {
         val width = size.width
         val currentProgress = progress.coerceIn(0f, 1f)
+        val currentBuffered = bufferedProgress.coerceIn(0f, 1f)
 
-        // 底轨
+        // 1. 底轨
         drawLine(
             color = trackColor,
             start = Offset(0f, size.height / 2f),
@@ -197,7 +200,18 @@ internal fun PlayerBottomEdgeProgressBar(
             cap = StrokeCap.Butt,
         )
 
-        // 激活进度轨
+        // 2. 缓冲轨
+        if (currentBuffered > 0f) {
+            drawLine(
+                color = bufferedColor,
+                start = Offset(0f, size.height / 2f),
+                end = Offset(width * currentBuffered, size.height / 2f),
+                strokeWidth = size.height,
+                cap = StrokeCap.Butt,
+            )
+        }
+
+        // 3. 激活进度轨
         if (currentProgress > 0f) {
             drawLine(
                 color = activeColor,

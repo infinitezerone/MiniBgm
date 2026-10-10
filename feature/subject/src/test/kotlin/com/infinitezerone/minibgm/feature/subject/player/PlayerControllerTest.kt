@@ -30,6 +30,7 @@ class PlayerControllerTest {
         var releaseCalls = 0
         var playing = false
         var position = 0L
+        var bufferedPosition = 0L
         var duration = 0L
         var speed = 1f
         val seeks = mutableListOf<Long>()
@@ -38,6 +39,8 @@ class PlayerControllerTest {
             get() = error("FakePlayerEngine 不提供真实 Player（UI 层才需要）")
 
         override val currentPositionMs: Long get() = position
+
+        override val bufferedPositionMs: Long get() = bufferedPosition
 
         override val durationMs: Long get() = duration
 
@@ -241,17 +244,45 @@ class PlayerControllerTest {
             val controller = PlayerController(engine, backgroundScope)
             controller.setMedia("https://cdn/a.m3u8", emptyMap())
             engine.position = 1234L
+            engine.bufferedPosition = 5678L
             engine.duration = 10_000L
 
             engine.play()
             advanceTimeBy(600L)
 
             assertEquals(1234L, controller.positionMs.value)
+            assertEquals(5678L, controller.bufferedPositionMs.value)
             assertEquals(10_000L, controller.state.value.durationMs)
             assertTrue(controller.state.value.isPlaying)
 
             engine.pause()
             assertEquals(1234L, controller.positionMs.value)
+            assertEquals(5678L, controller.bufferedPositionMs.value)
+        }
+
+    @Test
+    fun setMedia_resetsPositionAndBufferedPosition() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            controller.setMedia("https://cdn/a.m3u8", emptyMap())
+            engine.position = 1000L
+            engine.bufferedPosition = 2000L
+            engine.play()
+            advanceTimeBy(600L)
+
+            assertEquals(1000L, controller.positionMs.value)
+            assertEquals(2000L, controller.bufferedPositionMs.value)
+
+            // 切换媒体应复位位置与缓冲
+            controller.setMedia("https://cdn/b.m3u8", emptyMap())
+            assertEquals(0L, controller.positionMs.value)
+            assertEquals(0L, controller.bufferedPositionMs.value)
+
+            // 清空媒体也应复位
+            controller.setMedia("", emptyMap())
+            assertEquals(0L, controller.positionMs.value)
+            assertEquals(0L, controller.bufferedPositionMs.value)
         }
 
     @Test

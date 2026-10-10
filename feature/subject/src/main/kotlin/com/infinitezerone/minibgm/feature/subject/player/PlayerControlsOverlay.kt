@@ -73,6 +73,7 @@ internal fun PlayerControlsOverlay(
     isBuffering: Boolean,
     isEnded: Boolean,
     position: StateFlow<Long>,
+    bufferedPosition: StateFlow<Long>,
     totalDuration: Long,
     isScrubbing: Boolean,
     scrubProgress: Float,
@@ -338,11 +339,18 @@ internal fun PlayerControlsOverlay(
         Column(modifier = bottomBarModifier) {
             // 位置单独订阅：只有底部栏（且仅在可见时才组合）随 500ms 位置跳重组
             val currentPosition by position.collectAsStateWithLifecycle()
+            val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
             val progress =
                 if (isScrubbing) {
                     scrubProgress
                 } else if (totalDuration > 0L) {
                     (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            val bufferedProgress =
+                if (totalDuration > 0L) {
+                    (currentBufferedPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
                 } else {
                     0f
                 }
@@ -522,6 +530,7 @@ internal fun PlayerControlsOverlay(
 
                 PlayerProgressBar(
                     progress = progress,
+                    bufferedProgress = bufferedProgress,
                     isScrubbing = isScrubbing,
                     onScrubStart = onScrubStart,
                     onScrubbing = onScrubbing,
