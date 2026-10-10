@@ -287,7 +287,16 @@ internal fun SubjectDetailContent(
                                 val tabLabel = getTabLabel(tab, subjectType)
                                 val badgeCount =
                                     when (tab) {
-                                        SubjectDetailTab.EPISODES -> currentEpisodes.size.takeIf { it > 0 }
+                                        SubjectDetailTab.EPISODES ->
+                                            (
+                                                if (totalEpisodes >
+                                                    0
+                                                ) {
+                                                    totalEpisodes
+                                                } else {
+                                                    currentEpisodes.size
+                                                }
+                                            ).takeIf { it > 0 }
                                         SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
                                         else -> null
                                     }

@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -130,6 +131,7 @@ data class SubjectDetailUiState(
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
     val customFilterTags: List<String> = emptyList(),
+    val totalEpisodes: Int = 0,
 )
 
 /** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
@@ -150,6 +152,7 @@ private data class SubjectPlaybackData(
 private data class RepoSnapshot(
     val core: SubjectCoreData,
     val hasMoreEpisodes: Boolean,
+    val totalEpisodes: Int,
     val isLoggedIn: Boolean,
     val playback: SubjectPlaybackData,
     val customFilterTags: List<String>,
@@ -271,7 +274,12 @@ class SubjectDetailViewModel(
                 ) { subject, episodes, localCollection ->
                     SubjectCoreData(subject, episodes, localCollection)
                 },
-                subjectRepository.hasMoreEpisodesStream(subjectId),
+                combine(
+                    subjectRepository.hasMoreEpisodesStream(subjectId),
+                    subjectRepository.getTotalEpisodesStream(subjectId),
+                ) { hasMore, totalEpisodes ->
+                    hasMore to totalEpisodes
+                },
                 isLoggedIn,
                 combine(
                     settingsRepository?.playbackRules ?: flowOf(emptyList()),
@@ -281,8 +289,8 @@ class SubjectDetailViewModel(
                     SubjectPlaybackData(rules, playlists, failures)
                 },
                 searchRepository?.getCustomFilterTags() ?: flowOf(emptyList()),
-            ) { core, hasMore, loggedIn, playback, customTags ->
-                RepoSnapshot(core, hasMore, loggedIn, playback, customTags)
+            ) { core, (hasMore, totalEpisodes), loggedIn, playback, customTags ->
+                RepoSnapshot(core, hasMore, totalEpisodes, loggedIn, playback, customTags)
             }.collect { snapshot ->
                 _uiState.update { state ->
                     val streamCollection = snapshot.core.collection
@@ -295,9 +303,17 @@ class SubjectDetailViewModel(
                                 epStatus = streamCollection.epStatus,
                             ) ?: streamCollection
                         }
+                    val effectiveTotalEpisodes =
+                        maxOf(
+                            snapshot.totalEpisodes,
+                            snapshot.core.subject?.eps ?: 0,
+                            snapshot.core.subject?.totalEpisodes ?: 0,
+                            snapshot.core.episodes.size,
+                        )
                     state.copy(
                         subject = snapshot.core.subject ?: state.subject,
                         episodes = snapshot.core.episodes,
+                        totalEpisodes = effectiveTotalEpisodes,
                         collection = mergedCollection,
                         isLoggedIn = snapshot.isLoggedIn,
                         hasMoreEpisodes = snapshot.hasMoreEpisodes,
@@ -400,6 +416,13 @@ class SubjectDetailViewModel(
                                     current.episodesError
                                 },
                         )
+                    }
+
+                    // 连载长篇番剧（如蜡笔小新、柯南等）：首屏 100 话秒开后，后台自动续拉剩余剧集补全
+                    if (subjectRepository.hasMoreEpisodesStream(subjectId).first()) {
+                        viewModelScope.launch {
+                            subjectRepository.loadAllEpisodes(subjectId)
+                        }
                     }
 
                     // 3. 收藏状态（本地优先，用户下拉时才强制向远端同步）

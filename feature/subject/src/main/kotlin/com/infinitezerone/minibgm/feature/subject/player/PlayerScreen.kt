@@ -654,6 +654,8 @@ fun PlayerScreen(
                         sourceFailureCounts = uiState.sourceFailureCounts,
                         selectedSourceIndex = uiState.selectedSourceIndex,
                         autoNextEnabled = uiState.autoNextEnabled,
+                        totalEpisodes = uiState.totalEpisodes,
+                        isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
                         onToggleAutoNext = viewModel::toggleAutoNext,
                         onSelectSource = viewModel::selectSource,
                         onSelectEpisode = { ep ->
@@ -909,6 +911,8 @@ fun PlayerScreen(
                 episodes = uiState.episodes,
                 selectedEpisodeSort = uiState.episodeSort,
                 selectedEpisodeId = uiState.episodeId,
+                totalEpisodes = uiState.totalEpisodes,
+                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
                 onSelectEpisode = viewModel::selectEpisode,
                 onDismiss = { isEpisodeBottomSheetOpen = false },
             )

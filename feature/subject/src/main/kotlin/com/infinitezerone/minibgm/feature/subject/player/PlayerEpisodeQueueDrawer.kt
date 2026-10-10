@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +55,8 @@ internal fun PlayerEpisodeQueueDrawer(
     sourceFailureCounts: Map<String, Int>,
     selectedSourceIndex: Int,
     autoNextEnabled: Boolean,
+    totalEpisodes: Int = 0,
+    isLoadingMoreEpisodes: Boolean = false,
     onToggleAutoNext: () -> Unit,
     onSelectSource: (Int) -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
@@ -94,13 +98,28 @@ internal fun PlayerEpisodeQueueDrawer(
                         .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val totalCount = if (episodes.isNotEmpty()) episodes.size else queue.size
+                val totalCount =
+                    if (totalEpisodes > 0) {
+                        totalEpisodes
+                    } else if (episodes.isNotEmpty()) {
+                        episodes.size
+                    } else {
+                        queue.size
+                    }
                 Text(
                     text = stringResource(R.string.feature_subject_player_episodes_with_count, totalCount),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
                 )
+                if (isLoadingMoreEpisodes) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = stringResource(R.string.feature_subject_player_auto_play_next),
                     style = MaterialTheme.typography.labelMedium,

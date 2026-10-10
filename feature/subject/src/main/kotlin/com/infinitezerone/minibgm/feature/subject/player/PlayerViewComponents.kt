@@ -1217,6 +1217,8 @@ internal fun BiliEpisodesSection(
     selectedEpisodeId: Long,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     modifier: Modifier = Modifier,
+    totalEpisodes: Int = 0,
+    isLoadingMoreEpisodes: Boolean = false,
     autoNextEnabled: Boolean = true,
     onToggleAutoNext: () -> Unit = {},
     onOpenAllEpisodes: () -> Unit = {},
@@ -1249,13 +1251,22 @@ internal fun BiliEpisodesSection(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            if (episodes.isNotEmpty()) {
+            val count = if (totalEpisodes > 0) totalEpisodes else episodes.size
+            if (count > 0) {
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = stringResource(R.string.feature_subject_player_total_episodes_count, episodes.size),
+                    text = stringResource(R.string.feature_subject_player_total_episodes_count, count),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (isLoadingMoreEpisodes) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
@@ -1317,6 +1328,8 @@ internal fun PlayerEpisodesBottomSheet(
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    totalEpisodes: Int = 0,
+    isLoadingMoreEpisodes: Boolean = false,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val chunks =
@@ -1374,12 +1387,23 @@ internal fun PlayerEpisodesBottomSheet(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.feature_subject_player_total_episodes_count, episodes.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                val count = if (totalEpisodes > 0) totalEpisodes else episodes.size
+                if (count > 0) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_total_episodes_count, count),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (isLoadingMoreEpisodes) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
 
             if (chunks.size > 1) {
@@ -1886,6 +1910,8 @@ internal fun PlayerIntroContent(
                     episodes = uiState.episodes,
                     selectedEpisodeSort = uiState.episodeSort,
                     selectedEpisodeId = uiState.episodeId,
+                    totalEpisodes = uiState.totalEpisodes,
+                    isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
                     onSelectEpisode = onSelectEpisode,
                     onOpenAllEpisodes = onOpenAllEpisodes,
                 )

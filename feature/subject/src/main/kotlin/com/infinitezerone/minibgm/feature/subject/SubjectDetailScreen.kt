@@ -549,7 +549,7 @@ fun SubjectDetailScreen(
 
                         displaySubject != null -> {
                             val totalEpisodes =
-                                if (displaySubject.eps > 0) displaySubject.eps else displaySubject.totalEpisodes
+                                maxOf(uiState.totalEpisodes, displaySubject.eps, displaySubject.totalEpisodes)
                             val fullSubject = if (isTransitionStabilizing) null else uiState.subject
 
                             val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->

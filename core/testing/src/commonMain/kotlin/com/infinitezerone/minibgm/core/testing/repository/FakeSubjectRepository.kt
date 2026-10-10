@@ -166,6 +166,18 @@ class FakeSubjectRepository : SubjectRepository {
         episodesHasMoreState.value = episodesHasMoreState.value + (subjectId to hasMore)
     }
 
+    private val totalEpisodesState = MutableStateFlow<Map<Long, Int>>(emptyMap())
+
+    fun setTotalEpisodes(
+        subjectId: Long,
+        total: Int,
+    ) {
+        totalEpisodesState.value = totalEpisodesState.value + (subjectId to total)
+    }
+
+    override fun getTotalEpisodesStream(subjectId: Long): Flow<Int> =
+        totalEpisodesState.map { it[subjectId] ?: episodesState.value[subjectId]?.size ?: 0 }
+
     override fun hasMoreEpisodesStream(subjectId: Long): Flow<Boolean> = episodesHasMoreState.map { it[subjectId] ?: false }
 
     override suspend fun loadEpisodes(
@@ -180,6 +192,8 @@ class FakeSubjectRepository : SubjectRepository {
         loadMoreEpisodesCallCount++
         return AppResult.Success(false)
     }
+
+    override suspend fun loadAllEpisodes(subjectId: Long): AppResult<List<Episode>> = fetchEpisodes(subjectId)
 
     override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> {
         fetchEpisodesCallCount++

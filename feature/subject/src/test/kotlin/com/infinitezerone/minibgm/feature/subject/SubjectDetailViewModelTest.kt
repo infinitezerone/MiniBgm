@@ -1725,4 +1725,23 @@ class SubjectDetailViewModelTest {
                     .contains("机战"),
             )
         }
+
+    @Test
+    fun longSeries_totalEpisodesReflectsRepositoryTotal() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject.copy(eps = 0))
+                    setTotalEpisodes(sampleSubject.id, 1490)
+                    sendEpisodes(sampleSubject.id, sampleEpisodeList)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+            assertEquals(1490, viewModel.uiState.value.totalEpisodes)
+        }
 }

@@ -141,6 +141,12 @@ data class PlayerUiState(
     val selectedSourceIndex: Int = 0,
     /** 全部分集列表（由条目详情持续同步） */
     val episodes: List<PlayerEpisodeItem> = emptyList(),
+    /** 条目总分集数（由条目或仓库总数探测得出） */
+    val totalEpisodes: Int = 0,
+    /** 是否还有未加载的分集 */
+    val hasMoreEpisodes: Boolean = false,
+    /** 是否正在后台续拉分集 */
+    val isLoadingMoreEpisodes: Boolean = false,
     /** 异步嗅探直链中 */
     val isResolvingSource: Boolean = false,
     /** 取源时已发起的第几次关键词尝试（1 起）；0 表示未在解析 */
@@ -200,6 +206,16 @@ private data class PlayerRepoSnapshot(
     val rawEpisodes: List<Episode> = emptyList(),
     val pipEnabled: Boolean = true,
     val collection: UserCollection? = null,
+    val totalEpisodes: Int = 0,
+    val hasMoreEpisodes: Boolean = false,
+)
+
+private data class RepoSubjectData(
+    val subject: Subject?,
+    val episodes: List<Episode>,
+    val collection: UserCollection?,
+    val totalEpisodes: Int,
+    val hasMoreEpisodes: Boolean,
 )
 
 /**
@@ -428,10 +444,26 @@ class PlayerViewModel(
             flowOf(true)
         }
 
+    /** 仓库总分集数流 */
+    private val totalEpisodesFlow: Flow<Int> =
+        if (route.subjectId > 0) {
+            subjectRepository?.getTotalEpisodesStream(route.subjectId) ?: flowOf(0)
+        } else {
+            flowOf(0)
+        }
+
+    /** 是否有未加载完分集流 */
+    private val hasMoreEpisodesFlow: Flow<Boolean> =
+        if (route.subjectId > 0) {
+            subjectRepository?.hasMoreEpisodesStream(route.subjectId) ?: flowOf(false)
+        } else {
+            flowOf(false)
+        }
+
     /**
      * 数据侧单点投影：全部仓库流 combine 成一个 [PlayerRepoSnapshot] 快照流。
      *
-     * 条目/分集/PiP/收藏 四路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
+     * 条目/分集/PiP/收藏/总数 六路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
      * 其余场景给空默认值，快照仍可即时产出）。
      */
     private val repoSnapshots: Flow<PlayerRepoSnapshot> =
@@ -452,18 +484,22 @@ class PlayerViewModel(
                 subjectFlow,
                 rawEpisodesFlow,
                 collectionFlow,
-            ) { subject, episodes, collection ->
-                Triple(subject, episodes, collection)
+                totalEpisodesFlow,
+                hasMoreEpisodesFlow,
+            ) { subject, episodes, collection, totalEpisodes, hasMoreEpisodes ->
+                RepoSubjectData(subject, episodes, collection, totalEpisodes, hasMoreEpisodes)
             },
-        ) { (positions, rules), (failureCounts, pipEnabled), (subject, episodes, collection) ->
+        ) { (positions, rules), (failureCounts, pipEnabled), subjectData ->
             PlayerRepoSnapshot(
                 positions = positions,
                 rules = rules,
                 failureCounts = failureCounts,
-                subject = subject,
-                rawEpisodes = episodes,
+                subject = subjectData.subject,
+                rawEpisodes = subjectData.episodes,
                 pipEnabled = pipEnabled,
-                collection = collection,
+                collection = subjectData.collection,
+                totalEpisodes = subjectData.totalEpisodes,
+                hasMoreEpisodes = subjectData.hasMoreEpisodes,
             )
         }
 
@@ -509,6 +545,12 @@ class PlayerViewModel(
                 subjectRepository?.fetchEpisodes(route.subjectId)
                 if (route.subjectName.isBlank()) {
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
+                }
+                // 长篇番剧（如蜡笔小新、柯南等）：首屏 100 话秒开后，后台自动续拉剩余全部剧集
+                if (subjectRepository?.hasMoreEpisodesStream(route.subjectId)?.first() == true) {
+                    _uiState.update { it.copy(isLoadingMoreEpisodes = true) }
+                    subjectRepository.loadAllEpisodes(route.subjectId)
+                    _uiState.update { it.copy(isLoadingMoreEpisodes = false) }
                 }
             }
         }
@@ -623,6 +665,14 @@ class PlayerViewModel(
                     next.isWatched
                 }
 
+            val effectiveTotalEpisodes =
+                maxOf(
+                    snapshot.totalEpisodes,
+                    snapshot.subject?.eps ?: 0,
+                    snapshot.subject?.totalEpisodes ?: 0,
+                    mappedEpisodes.size,
+                )
+
             next =
                 next.copy(
                     isWatched = currentWatched,
@@ -635,6 +685,8 @@ class PlayerViewModel(
                     subjectDate = snapshot.subject?.date?.ifBlank { snapshot.subject.airDate } ?: next.subjectDate,
                     subjectSummary = snapshot.subject?.summary ?: next.subjectSummary,
                     subjectCollectionType = snapshot.collection?.type ?: next.subjectCollectionType,
+                    totalEpisodes = effectiveTotalEpisodes,
+                    hasMoreEpisodes = snapshot.hasMoreEpisodes,
                 )
             // 源健康度：某个源连错几次后在选源界面上弱化它（只标记，不改排序——
             // selectedSourceIndex 有位置语义，重排会让选中项错位）
@@ -676,6 +728,18 @@ class PlayerViewModel(
         val position = session.latestPositionMs
         if (url.isBlank() || position <= 0L) return
         viewModelScope.launch { settingsRepository.savePlaybackPosition(url, position) }
+    }
+
+    /**
+     * 显式续拉更多分集（后台全量补齐）
+     */
+    fun loadMoreEpisodes() {
+        if (route.subjectId <= 0 || _uiState.value.isLoadingMoreEpisodes) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMoreEpisodes = true) }
+            subjectRepository?.loadAllEpisodes(route.subjectId)
+            _uiState.update { it.copy(isLoadingMoreEpisodes = false) }
+        }
     }
 
     /**

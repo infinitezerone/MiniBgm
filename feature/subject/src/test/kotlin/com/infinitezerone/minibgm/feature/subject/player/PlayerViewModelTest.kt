@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.player
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
+import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -15,6 +16,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -66,6 +68,7 @@ class PlayerViewModelTest {
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
         failureStore: PlaybackFailureStore? = null,
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
+        subjectRepository: SubjectRepository? = null,
         communityRepository: FakeCommunityRepository? = null,
     ): PlayerViewModel =
         PlayerViewModel(
@@ -74,6 +77,7 @@ class PlayerViewModelTest {
             authRepository = authRepository,
             settingsRepository = settingsRepository,
             failureStore = failureStore,
+            subjectRepository = subjectRepository,
             communityRepository = communityRepository,
         )
 
@@ -1185,5 +1189,33 @@ class PlayerViewModelTest {
             val reaction = updatedComment.reactions.firstOrNull { it.value == 48 }
             assertTrue(reaction != null)
             assertEquals(1, reaction?.count)
+        }
+
+    @Test
+    fun longSeries_updatesTotalEpisodesAndLoadsAllEpisodes() =
+        runTest {
+            val fakeSubjectRepo = FakeSubjectRepository()
+            val initialEpisodes =
+                (1..100).map { i ->
+                    com.infinitezerone.minibgm.core.model.Episode(
+                        id = i.toLong(),
+                        name = "第 $i 话",
+                        sort = i.toFloat(),
+                        ep = i.toFloat(),
+                        type = 0,
+                    )
+                }
+            fakeSubjectRepo.sendEpisodes(subjectId, initialEpisodes)
+            fakeSubjectRepo.setTotalEpisodes(subjectId, 1490)
+            fakeSubjectRepo.setHasMoreEpisodes(subjectId, true)
+
+            val vm = viewModel(subjectRepository = fakeSubjectRepo)
+            advanceUntilIdle()
+
+            assertEquals(1490, vm.uiState.value.totalEpisodes)
+            assertTrue(
+                vm.uiState.value.episodes
+                    .isNotEmpty(),
+            )
         }
 }
