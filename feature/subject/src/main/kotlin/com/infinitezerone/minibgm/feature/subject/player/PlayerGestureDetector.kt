@@ -8,6 +8,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,12 +61,18 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * 双击侧边（左退右进）
+ * 双击侧边（左退右进）及累积快进快退秒数（对齐现代 YouTube 视觉微动效）
  */
 internal enum class DoubleTapSide {
     LEFT,
     RIGHT,
 }
+
+internal data class DoubleTapIndicatorState(
+    val side: DoubleTapSide,
+    val seconds: Int,
+    val token: Long = System.currentTimeMillis(),
+)
 
 /**
  * 进度拖拽自适应计算算法：
@@ -130,7 +140,7 @@ internal fun Modifier.playerGestures(
     onHudStateChange: (GestureHudState) -> Unit,
     onTriggerHudDismiss: () -> Unit,
     isLocked: Boolean = false,
-    onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     onHaptic: (HapticFeedbackType) -> Unit = {},
     onScrubbing: (Boolean) -> Unit = {},
 ): Modifier =
@@ -149,7 +159,7 @@ internal fun Modifier.playerGestures(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
-            onDoubleTapRipple = onDoubleTapRipple,
+            onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
             onScrubbing = onScrubbing,
         )
@@ -168,7 +178,7 @@ private data class PlayerGesturesElement(
     val onHudStateChange: (GestureHudState) -> Unit,
     val onTriggerHudDismiss: () -> Unit,
     val isLocked: Boolean = false,
-    val onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    val onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     val onHaptic: (HapticFeedbackType) -> Unit = {},
     val onScrubbing: (Boolean) -> Unit = {},
 ) : ModifierNodeElement<PlayerGesturesNode>() {
@@ -187,7 +197,7 @@ private data class PlayerGesturesElement(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
-            onDoubleTapRipple = onDoubleTapRipple,
+            onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
             onScrubbing = onScrubbing,
         )
@@ -207,7 +217,7 @@ private data class PlayerGesturesElement(
             onHudStateChange = onHudStateChange,
             onTriggerHudDismiss = onTriggerHudDismiss,
             isLocked = isLocked,
-            onDoubleTapRipple = onDoubleTapRipple,
+            onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
             onScrubbing = onScrubbing,
         )
@@ -236,7 +246,7 @@ private class PlayerGesturesNode(
     var onHudStateChange: (GestureHudState) -> Unit,
     var onTriggerHudDismiss: () -> Unit,
     var isLocked: Boolean = false,
-    var onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+    var onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     var onHaptic: (HapticFeedbackType) -> Unit = {},
     var onScrubbing: (Boolean) -> Unit = {},
 ) : DelegatingNode() {
@@ -247,6 +257,12 @@ private class PlayerGesturesNode(
     private var seekTargetMs = 0L
     private var initialBrightness = 0.5f
     private var initialVolume = 0f
+
+    // 连续双击累加状态（对齐 YouTube 连续双击 +10s, +20s, +30s ... 累加）
+    private var lastDoubleTapSide: DoubleTapSide? = null
+    private var lastDoubleTapTime: Long = 0L
+    private var accumulatedSeconds: Int = 0
+    private var lastSeekBasePositionMs: Long = 0L
 
     fun update(
         context: Context,
@@ -262,7 +278,7 @@ private class PlayerGesturesNode(
         onHudStateChange: (GestureHudState) -> Unit,
         onTriggerHudDismiss: () -> Unit,
         isLocked: Boolean = false,
-        onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
+        onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
         onHaptic: (HapticFeedbackType) -> Unit = {},
         onScrubbing: (Boolean) -> Unit = {},
     ) {
@@ -279,7 +295,7 @@ private class PlayerGesturesNode(
         this.onHudStateChange = onHudStateChange
         this.onTriggerHudDismiss = onTriggerHudDismiss
         this.isLocked = isLocked
-        this.onDoubleTapRipple = onDoubleTapRipple
+        this.onDoubleTapAction = onDoubleTapAction
         this.onHaptic = onHaptic
         this.onScrubbing = onScrubbing
     }
@@ -294,24 +310,44 @@ private class PlayerGesturesNode(
                         if (isLocked) return@detectTapGestures
                         val width = size.width
                         val x = offset.x
-                        val cur = currentPositionMs()
+                        val now = System.currentTimeMillis()
                         val total = totalDurationMs()
                         when {
                             x < width * 0.35f -> {
-                                val target = (cur - 10000L).coerceAtLeast(0L)
+                                val isSameSideInWindow =
+                                    lastDoubleTapSide == DoubleTapSide.LEFT && (now - lastDoubleTapTime) <= 900L
+                                val basePos =
+                                    if (isSameSideInWindow) lastSeekBasePositionMs else currentPositionMs()
+                                accumulatedSeconds =
+                                    if (isSameSideInWindow) accumulatedSeconds + 10 else 10
+                                lastDoubleTapSide = DoubleTapSide.LEFT
+                                lastDoubleTapTime = now
+                                lastSeekBasePositionMs = basePos
+
+                                val target = (basePos - accumulatedSeconds * 1000L).coerceAtLeast(0L)
                                 onDoubleTapSeek(target)
-                                onDoubleTapRipple(DoubleTapSide.LEFT)
+                                onDoubleTapAction(DoubleTapSide.LEFT, accumulatedSeconds)
                                 onHaptic(HapticFeedbackType.LongPress)
-                                onHudStateChange(GestureHudState.Seek(target, total, -10000L))
+                                onHudStateChange(GestureHudState.Seek(target, total, -accumulatedSeconds * 1000L))
                                 onTriggerHudDismiss()
                             }
                             x > width * 0.65f -> {
+                                val isSameSideInWindow =
+                                    lastDoubleTapSide == DoubleTapSide.RIGHT && (now - lastDoubleTapTime) <= 900L
+                                val basePos =
+                                    if (isSameSideInWindow) lastSeekBasePositionMs else currentPositionMs()
+                                accumulatedSeconds =
+                                    if (isSameSideInWindow) accumulatedSeconds + 10 else 10
+                                lastDoubleTapSide = DoubleTapSide.RIGHT
+                                lastDoubleTapTime = now
+                                lastSeekBasePositionMs = basePos
+
                                 val maxPos = if (total > 0L) total else Long.MAX_VALUE
-                                val target = (cur + 10000L).coerceAtMost(maxPos)
+                                val target = (basePos + accumulatedSeconds * 1000L).coerceAtMost(maxPos)
                                 onDoubleTapSeek(target)
-                                onDoubleTapRipple(DoubleTapSide.RIGHT)
+                                onDoubleTapAction(DoubleTapSide.RIGHT, accumulatedSeconds)
                                 onHaptic(HapticFeedbackType.LongPress)
-                                onHudStateChange(GestureHudState.Seek(target, total, 10000L))
+                                onHudStateChange(GestureHudState.Seek(target, total, accumulatedSeconds * 1000L))
                                 onTriggerHudDismiss()
                             }
                             else -> {
@@ -482,8 +518,8 @@ internal fun PlayerGestureDetector(
     val haptic = LocalHapticFeedback.current
     var hudState by remember { mutableStateOf<GestureHudState>(GestureHudState.Idle) }
     var hideHudTrigger by remember { mutableIntStateOf(0) }
-    var activeRipple by remember { mutableStateOf<DoubleTapSide?>(null) }
-    var rippleTrigger by remember { mutableIntStateOf(0) }
+    var activeDoubleTap by remember { mutableStateOf<DoubleTapIndicatorState?>(null) }
+    var doubleTapTrigger by remember { mutableLongStateOf(0L) }
 
     // 手势结束后自动淡出 HUD
     LaunchedEffect(hideHudTrigger) {
@@ -495,11 +531,11 @@ internal fun PlayerGestureDetector(
         }
     }
 
-    // 双击半屏波纹 450ms 后自动淡出
-    LaunchedEffect(rippleTrigger) {
-        if (rippleTrigger > 0) {
-            delay(450)
-            activeRipple = null
+    // 双击微动效 650ms 后自动平滑淡出
+    LaunchedEffect(doubleTapTrigger) {
+        if (doubleTapTrigger > 0L) {
+            delay(650)
+            activeDoubleTap = null
         }
     }
 
@@ -521,9 +557,10 @@ internal fun PlayerGestureDetector(
                     onHudStateChange = { hudState = it },
                     onTriggerHudDismiss = { hideHudTrigger++ },
                     isLocked = isLocked,
-                    onDoubleTapRipple = { side ->
-                        activeRipple = side
-                        rippleTrigger++
+                    onDoubleTapAction = { side, seconds ->
+                        val token = System.currentTimeMillis()
+                        activeDoubleTap = DoubleTapIndicatorState(side = side, seconds = seconds, token = token)
+                        doubleTapTrigger = token
                     },
                     onHaptic = { type ->
                         haptic.performHapticFeedback(type)
@@ -533,15 +570,15 @@ internal fun PlayerGestureDetector(
     ) {
         content()
 
-        // 双击半屏弧形涟漪遮罩动画
+        // 现代 YouTube 风格双击微动效（无大面积涟漪遮挡，仅侧边灵动小胶囊 + 累加数字跳动）
         AnimatedVisibility(
-            visible = activeRipple != null,
-            enter = fadeIn(tween(100)),
-            exit = fadeOut(tween(250)),
+            visible = activeDoubleTap != null,
+            enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.85f),
+            exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.9f),
             modifier = Modifier.fillMaxSize(),
         ) {
-            activeRipple?.let { side ->
-                DoubleTapRippleOverlay(side = side)
+            activeDoubleTap?.let { state ->
+                YouTubeDoubleTapIndicator(state = state)
             }
         }
 
@@ -730,40 +767,29 @@ private fun FastForwardChip(
 }
 
 /**
- * 双击快进/快退半屏弧形涟漪遮罩
+ * 现代 YouTube 风格双击快进/快退指示器：
+ * 移除大面积老式弧形涟漪遮罩，采用极简灵动药丸（居中偏侧），
+ * 搭配微缩放、快进/快退双箭头与实时累加秒数（如 "10 秒" / "20 秒" / "30 秒"）。
  */
 @Composable
-private fun DoubleTapRippleOverlay(
-    side: DoubleTapSide,
+private fun YouTubeDoubleTapIndicator(
+    state: DoubleTapIndicatorState,
     modifier: Modifier = Modifier,
 ) {
-    val isLeft = side == DoubleTapSide.LEFT
+    val isLeft = state.side == DoubleTapSide.LEFT
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = if (isLeft) Alignment.CenterStart else Alignment.CenterEnd,
     ) {
         Surface(
-            shape =
-                if (isLeft) {
-                    RoundedCornerShape(
-                        topEndPercent = 100,
-                        bottomEndPercent = 100,
-                        topStartPercent = 0,
-                        bottomStartPercent = 0,
-                    )
-                } else {
-                    RoundedCornerShape(
-                        topStartPercent = 100,
-                        bottomStartPercent = 100,
-                        topEndPercent = 0,
-                        bottomEndPercent = 0,
-                    )
-                },
-            color = Color.White.copy(alpha = 0.16f),
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.72f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+            contentColor = Color.White,
             modifier =
                 Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.35f),
+                    .padding(horizontal = 48.dp)
+                    .size(width = 110.dp, height = 110.dp),
         ) {
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -774,12 +800,12 @@ private fun DoubleTapRippleOverlay(
                     imageVector = if (isLeft) BgmIcons.FastRewind else BgmIcons.FastForward,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(32.dp),
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = if (isLeft) "-10s" else "+10s",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = stringResource(R.string.feature_subject_player_seek_seconds_format, state.seconds),
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
