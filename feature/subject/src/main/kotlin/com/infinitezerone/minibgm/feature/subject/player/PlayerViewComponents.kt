@@ -1004,43 +1004,6 @@ internal fun BiliSubjectTitleBar(
 }
 
 /**
- * 剧集简介块（默认两行、点击展开）。留在「简介」Tab 内，不占常驻区高度。
- */
-@Composable
-internal fun BiliSubjectSummaryBlock(
-    summary: String,
-    modifier: Modifier = Modifier,
-) {
-    var isSummaryExpanded by remember { mutableStateOf(false) }
-
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(4.dp))
-                .clickable { isSummaryExpanded = !isSummaryExpanded }
-                .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = summary.trim(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (isSummaryExpanded) Int.MAX_VALUE else 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Icon(
-            imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-    }
-}
-
-/**
  * 当前分集信息行：左侧分集标题与首播日期，右侧吐槽与打卡两枚轻量胶囊。
  *
  * 刻意不再用 Surface 包一层底色卡片——浅色主题下 surfaceContainerLow 是纯白，
@@ -1051,10 +1014,8 @@ internal fun BiliCurrentEpisodeInfoBar(
     epLabel: String,
     episodeName: String,
     isWatched: Boolean,
-    commentCount: Int,
     airdate: String,
     onToggleWatched: () -> Unit,
-    onCommentClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -1083,20 +1044,6 @@ internal fun BiliCurrentEpisodeInfoBar(
         }
 
         Spacer(modifier = Modifier.width(10.dp))
-
-        BiliTogglePill(
-            label =
-                if (commentCount > 0) {
-                    commentCount.toString()
-                } else {
-                    stringResource(R.string.feature_subject_player_episode_comments)
-                },
-            selected = false,
-            onClick = onCommentClick,
-            leadingIcon = BgmIcons.ChatBubbleOutline,
-        )
-
-        Spacer(modifier = Modifier.width(6.dp))
 
         BiliTogglePill(
             label =
@@ -1244,15 +1191,6 @@ internal fun BiliEpisodesSection(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-
-            BiliTogglePill(
-                label = stringResource(R.string.feature_subject_player_auto_play_next),
-                selected = autoNextEnabled,
-                onClick = onToggleAutoNext,
-                leadingIcon = if (autoNextEnabled) BgmIcons.Check else null,
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
 
             Row(
                 modifier =

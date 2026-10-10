@@ -250,16 +250,18 @@ internal fun PlayerControlsOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
-                    IconButton(
-                        onClick = onRewind10,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Replay10,
-                            contentDescription = stringResource(R.string.feature_subject_player_rewind_10s),
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp),
-                        )
+                    if (isLandscape) {
+                        IconButton(
+                            onClick = onRewind10,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Replay10,
+                                contentDescription = stringResource(R.string.feature_subject_player_rewind_10s),
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
                     }
 
                     Surface(
@@ -291,16 +293,18 @@ internal fun PlayerControlsOverlay(
                         }
                     }
 
-                    IconButton(
-                        onClick = onForward10,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Forward10,
-                            contentDescription = stringResource(R.string.feature_subject_player_forward_10s),
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp),
-                        )
+                    if (isLandscape) {
+                        IconButton(
+                            onClick = onForward10,
+                            modifier = Modifier.size(44.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Forward10,
+                                contentDescription = stringResource(R.string.feature_subject_player_forward_10s),
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -386,21 +390,23 @@ internal fun PlayerControlsOverlay(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // 画面比例微标签
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.White.copy(alpha = 0.14f),
-                    modifier = Modifier.clickable(onClick = onCycleResizeMode),
-                ) {
-                    Text(
-                        text = stringResource(resizeMode.labelRes),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    )
-                }
+                // 画面比例微标签（仅全屏横屏保留，竖屏 16:9 视口无需切换比例）
+                if (isLandscape) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.14f),
+                        modifier = Modifier.clickable(onClick = onCycleResizeMode),
+                    ) {
+                        Text(
+                            text = stringResource(resizeMode.labelRes),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
 
                 // 倍速药丸（1.0x → 1.25x → 1.5x → 2.0x 循环）
                 Surface(

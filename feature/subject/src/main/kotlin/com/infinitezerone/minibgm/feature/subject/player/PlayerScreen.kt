@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -70,7 +69,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -839,10 +837,8 @@ fun PlayerScreen(
                                 epLabel = epLabel,
                                 episodeName = uiState.episodeName,
                                 isWatched = uiState.isWatched,
-                                commentCount = uiState.currentEpisodeCommentCount,
                                 airdate = uiState.currentEpisodeAirdate,
                                 onToggleWatched = viewModel::manualToggleWatched,
-                                onCommentClick = { currentTab = 1 },
                             )
                         }
 
@@ -857,42 +853,6 @@ fun PlayerScreen(
                                     onRequestOpenSources = onRequestOpenSources,
                                     onManageRules = onManageRules,
                                 )
-                            }
-                        }
-
-                        // 3. 本集剧情看点（若有）
-                        if (uiState.currentEpisodeDesc.isNotBlank()) {
-                            item {
-                                Column {
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_player_episode_desc_title),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = uiState.currentEpisodeDesc.trim(),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-
-                        // 4. 剧集简介（可折叠两行）
-                        if (uiState.subjectSummary.isNotBlank()) {
-                            item {
-                                Column {
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_player_subject_summary_title),
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    BiliSubjectSummaryBlock(summary = uiState.subjectSummary)
-                                }
                             }
                         }
                     } else {
