@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -229,14 +228,8 @@ fun LazyListScope.episodeCommentsSection(
                     currentUserId = currentUserId,
                     onReactionClick = { reaction -> onReactionClick(comment, reaction) },
                     onAddReaction = { reactionValue -> onAddReaction(comment, reactionValue) },
+                    showDivider = index < comments.lastIndex,
                 )
-                if (index < comments.lastIndex) {
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 6.dp),
-                    )
-                }
             }
         }
     }

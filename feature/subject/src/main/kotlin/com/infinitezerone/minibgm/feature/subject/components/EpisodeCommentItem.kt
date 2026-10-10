@@ -65,6 +65,7 @@ fun EpisodeCommentItem(
     currentUserId: Long? = null,
     onReactionClick: ((CommentReaction) -> Unit)? = null,
     onAddReaction: ((Int) -> Unit)? = null,
+    showDivider: Boolean = true,
 ) {
     val haptic = LocalHapticFeedback.current
     var isRepliesExpanded by rememberSaveable(comment.id) { mutableStateOf(false) }
@@ -353,10 +354,12 @@ fun EpisodeCommentItem(
             }
         }
 
-        // 分割线
-        HorizontalDivider(
-            modifier = Modifier.padding(top = 10.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-        )
+        if (showDivider) {
+            // 分割线
+            HorizontalDivider(
+                modifier = Modifier.padding(top = 10.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+            )
+        }
     }
 }
