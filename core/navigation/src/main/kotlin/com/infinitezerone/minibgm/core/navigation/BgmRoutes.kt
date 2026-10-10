@@ -178,6 +178,8 @@ data class PlayerQueueEntry(
 
 /**
  * 自定义播放规则管理交互界面路由。
+ * 声明为 [DetailChainRoute]：可从设置页进入，也可从条目详情、分集详情与播放器临时压栈，
+ * 返回时回到触发它的页面，避免将当前播放器或详情层清出栈。
  */
 @Serializable
-data object PlaybackRulesRoute : SubFeatureRoute
+data object PlaybackRulesRoute : DetailChainRoute

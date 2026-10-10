@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -781,25 +780,6 @@ fun PlayerScreen(
                     )
                 }
 
-                // 顶部常驻信息条：当前分集标题 + 追番/看过轻量操作 + 番剧简要信息
-                BiliSubjectTitleBar(
-                    subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                    epLabel = epLabel,
-                    episodeName = uiState.episodeName,
-                    score = uiState.subjectScore,
-                    airDate = uiState.subjectDate,
-                    collectionType = uiState.subjectCollectionType,
-                    isWatched = uiState.isWatched,
-                    onSubjectClick = {
-                        if (uiState.subjectId > 0 && onSubjectClick != null) {
-                            onSubjectClick(uiState.subjectId)
-                        }
-                    },
-                    onToggleFollow = viewModel::toggleFollowSubject,
-                    onToggleWatched = viewModel::manualToggleWatched,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
-                )
-
                 // B站风格双 Tab 分栏：[简介] 与 [讨论 (数量)]
                 PrimaryTabRow(
                     selectedTabIndex = selectedPortraitTab.ordinal,
@@ -880,6 +860,8 @@ fun PlayerScreen(
                             PlayerIntroContent(
                                 uiState = uiState,
                                 epLabel = epLabel,
+                                onToggleWatched = viewModel::manualToggleWatched,
+                                onToggleFollow = viewModel::toggleFollowSubject,
                                 onSelectEpisode = viewModel::selectEpisode,
                                 onOpenAllEpisodes = { isEpisodeBottomSheetOpen = true },
                                 onSelectSource = viewModel::selectSource,

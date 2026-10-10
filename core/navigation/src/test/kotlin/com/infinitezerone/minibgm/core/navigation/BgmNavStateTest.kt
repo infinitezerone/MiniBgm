@@ -264,6 +264,20 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToPlaybackRules_fromPlayer_preservesPlayerInBackStack() {
+        val state = newState()
+        val playerRoute = PlayerRoute(subjectId = 100L, episodeId = 1001L)
+        state.navigateTo(playerRoute)
+        assertEquals(playerRoute, state.currentKey)
+
+        state.navigateTo(PlaybackRulesRoute)
+        assertEquals(PlaybackRulesRoute, state.currentKey)
+
+        state.goBack()
+        assertEquals(playerRoute, state.currentKey)
+    }
+
+    @Test
     fun goBackAtStartBase_throws_startRouteIsTheAppExit() {
         val state = newState()
 
