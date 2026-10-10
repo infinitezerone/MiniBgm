@@ -83,7 +83,7 @@
 | 03 日程页主客倒置 | 首页倾泻全网开播，自己追的被淹没 | 默认视图未以用户为中心 | 【我的追番/全部开播】切换 + 空状态引导 + 偏好持久化 |
 | 04 卡片喧宾夺主 | 容器色比封面还抢眼 | 无视觉规范 | 全局降噪为 `surfaceContainerLow` + 2:3 海报比例（后续微光/AMOLED 是其延续） |
 
-- **状态**：✅ 全部完成（详见 [UX_REMEDIATION.md](../UX_REMEDIATION.md)）。
+- **状态**：✅ 全部完成（详见 [UX_REMEDIATION.md](UX_REMEDIATION.md)）。
 
 ### P-010 · UX 排雷战役 05：社区跳浏览器（v0.4.0，会话前完成主体）
 
@@ -165,7 +165,7 @@
 | 好友/全站动态时间线 | 无技术卡点，体量大（roadmap v0.6.0） | |
 | Bangumi 大陆可达性 | 2026-05 起部分地区直连受阻（Kazumi 也只做了应用内代理）；实测当前网络直连全部可达 | 备选：应用内代理设置（对齐 Kazumi）/ 复用自有 Worker 做 API 反代（可超越 Kazumi）；等实际受阻再动工 |
 | 播放历史 UI 入口 | 断点续播数据已在（按 URL 的位置表），缺浏览界面 | 小活 |
-| low 清理 | ExploreSpotlightCard `Color.White` 红线正则盲区；AMOLED 调色板缺对比度测试；`ScheduleTimelineComponents` PREDICTED 死分支 | 半小时量级 |
+| low 清理 | ExploreSpotlightCard 与 ScheduleTimelineComponents 历史死分支已清理；剩余 AMOLED 调色板对比度测试 | 日常维护 |
 | 全屏播放手势 | ROADMAP 押后（与 Compose 手势/双栏竞争） | 维持押后 |
 
 ---
