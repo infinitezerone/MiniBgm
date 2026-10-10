@@ -29,3 +29,6 @@ target/
 
 # Embedding PoC 实验目录（脚本 + 实测报告 + 模型缓存数据），暂不入库
 .test-embedding/
+
+# 允许项目级 Agent 技能与规范入库
+!.agents/

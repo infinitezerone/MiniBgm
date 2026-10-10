@@ -44,7 +44,16 @@ bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ sp
 
 ## 规范先例
 
-新模式的唯一入口，不适配就停下提决策，勿发明新模式：只读特性 → `:feature:schedule`；带参详情 → `:feature:subject`；用户触发写操作 → `CollectionRepository`；认证 → `AuthRepository` + `BgmPkce`；测试形态 → 对应 `*ViewModelTest`；新红线 → 先写 ArchitectureRulesTest。
+新模式的唯一入口，不适配就停下提决策，勿发明新模式：只读特性 → `:feature:schedule`；带参详情 → `:feature:subject`；用户触发写操作 → `CollectionRepository`；认证 → `AuthRepository` + `BgmPkce`；测试形态 → 对应 `*ViewModelTest`；新红线 → 先写 ArchitectureRulesTest。详细实现剧本参见 `.agents/skills/minibgm-playbooks/SKILL.md`。
+
+## Agent 协同流与工程飞轮
+
+机械执行：AI 处理非简单单点改动时必须遵守闭环流水线，严禁直接大改代码或甩锅排错：
+
+1. **前置反诘（Spec 对齐）**：编码前对照《硬红线》与《规范先例》反查依赖、真值来源、状态流向与 UI 浮层，输出 Mini-Spec 与改动栈，用户确认后开工。
+2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次改动严格遵守单一目的；中间态使用 `tools/quick-check.ps1` 秒级自查红线。
+3. **自愈验证（Autonomous Loop）**：编码完成自主运行 `tools/jgate.ps1`；若未通过，必须自行抓取日志修复直至完全绿灯，严禁“写完代码让用户试跑”。
+4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷（如 P-001~P-005 级问题）或确立新范式后，必须执行《MiniBgm 飞轮协议》（`docs/PROBLEM_LOG.md` 记因果 ➔ `AGENTS.md`/红线测试 记约束 ➔ `.agents/skills/minibgm-playbooks` 记剧本）。详细机制见 `.agents/skills/minibgm-flywheel/SKILL.md`。
 
 ## 发布
 
