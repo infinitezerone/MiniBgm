@@ -85,8 +85,8 @@ data class PlayerQualityOption(
     val height: Int,
     val bitrate: Int,
     val isSelected: Boolean,
-    val group: Tracks.Group,
-    val trackIndex: Int,
+    val group: Tracks.Group? = null,
+    val trackIndex: Int = 0,
 )
 
 /**
@@ -107,19 +107,27 @@ data class PlayerTracksSnapshot(
     val qualityTracks: List<PlayerQualityOption> = emptyList(),
     val qualityMode: QualityMode = QualityMode.AUTO,
     val currentAutoQualityName: String? = null,
+    val currentVideoSizeQualityName: String? = null,
     val subtitleTracks: List<PlayerTrackOption> = emptyList(),
     val audioTracks: List<PlayerTrackOption> = emptyList(),
     val subtitleMode: SubtitleMode = SubtitleMode.AUTO,
     val hasSelectableTracks: Boolean = false,
 ) {
     /**
-     * 控制栏清晰度小药丸显示的文案（如 "1080P" 或 "自动"）。
+     * 控制栏清晰度小药丸显示的文案（如 "1080P" 或 "自动 (1080P)"）。
      */
-    val currentQualityDisplayLabel: String
+    val currentQualityDisplayLabel: String?
         get() =
-            when (qualityMode) {
-                QualityMode.SPECIFIC -> qualityTracks.firstOrNull { it.isSelected }?.name ?: "画质"
-                QualityMode.AUTO -> currentAutoQualityName?.let { "自动 ($it)" } ?: "自动"
+            when {
+                qualityTracks.size > 1 -> {
+                    when (qualityMode) {
+                        QualityMode.SPECIFIC -> qualityTracks.firstOrNull { it.isSelected }?.name ?: "画质"
+                        QualityMode.AUTO -> currentAutoQualityName?.let { "自动 ($it)" } ?: "自动"
+                    }
+                }
+                qualityTracks.isNotEmpty() -> qualityTracks.first().name
+                currentVideoSizeQualityName != null -> currentVideoSizeQualityName
+                else -> null
             }
 }
 
@@ -357,12 +365,19 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
     )
 
     val currentAutoQualityName = qualityOptions.firstOrNull { it.isSelected }?.name
-    val hasSelectable = qualityOptions.size > 1 || subtitleOptions.isNotEmpty() || audioOptions.size > 1
+    val currentVideoSizeQualityName =
+        if (player.videoSize.height > 0) {
+            formatQualityLabel(player.videoSize.width, player.videoSize.height)
+        } else {
+            null
+        }
+    val hasSelectable = qualityOptions.isNotEmpty() || subtitleOptions.isNotEmpty() || audioOptions.size > 1
 
     return PlayerTracksSnapshot(
         qualityTracks = qualityOptions,
         qualityMode = qualityMode,
         currentAutoQualityName = currentAutoQualityName,
+        currentVideoSizeQualityName = currentVideoSizeQualityName,
         subtitleTracks = subtitleOptions,
         audioTracks = audioOptions,
         subtitleMode = subtitleMode,
@@ -377,10 +392,11 @@ fun selectVideoQuality(
     player: Player,
     quality: PlayerQualityOption,
 ) {
+    val group = quality.group ?: return
     player.trackSelectionParameters =
         player.trackSelectionParameters
             .buildUpon()
-            .setOverrideForType(TrackSelectionOverride(quality.group.mediaTrackGroup, quality.trackIndex))
+            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, quality.trackIndex))
             .build()
 }
 
@@ -671,6 +687,28 @@ private fun PlayerTrackSelectionContent(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onSelectQuality(quality)
                         },
+                    )
+                }
+            } else if (tracksSnapshot.qualityTracks.size == 1 || tracksSnapshot.currentVideoSizeQualityName != null) {
+                item {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_quality_group),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isDarkThemed) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                    )
+                }
+                item {
+                    val single = tracksSnapshot.qualityTracks.firstOrNull()
+                    val title = single?.name ?: tracksSnapshot.currentVideoSizeQualityName.orEmpty()
+                    val subtitle = single?.detail
+                    TrackItemRow(
+                        title = title,
+                        subtitle = subtitle,
+                        isSelected = true,
+                        isDarkThemed = isDarkThemed,
+                        onClick = {},
                     )
                 }
             }

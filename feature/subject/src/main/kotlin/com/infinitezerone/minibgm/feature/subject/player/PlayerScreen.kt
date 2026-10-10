@@ -600,7 +600,7 @@ fun PlayerScreen(
                     showPipButton = uiState.pipEnabled,
                     hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
                     isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
-                    currentQualityLabel = if (tracksSnapshot.qualityTracks.size > 1) tracksSnapshot.currentQualityDisplayLabel else null,
+                    currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
                     onOpenTrackSelection = { isTrackSheetOpen = true },
                     modifier =
                         Modifier
@@ -768,14 +768,7 @@ fun PlayerScreen(
                         showPipButton = uiState.pipEnabled,
                         hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
                         isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
-                        currentQualityLabel =
-                            if (tracksSnapshot.qualityTracks.size >
-                                1
-                            ) {
-                                tracksSnapshot.currentQualityDisplayLabel
-                            } else {
-                                null
-                            },
+                        currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
                         onOpenTrackSelection = { isTrackSheetOpen = true },
                         modifier =
                             Modifier

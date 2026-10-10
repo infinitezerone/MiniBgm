@@ -173,4 +173,53 @@ class PlayerViewComponentsTest {
         assertEquals("3.5 Mbps", formatQualityDetail(-1, -1, 3_500_000))
         assertEquals(null, formatQualityDetail(-1, -1, -1))
     }
+
+    @Test
+    fun playerTracksSnapshot_resolvesCurrentQualityDisplayLabel() {
+        // 多清晰度 - AUTO 档且有探测到的具体画质
+        val multiAuto =
+            PlayerTracksSnapshot(
+                qualityTracks =
+                    listOf(
+                        PlayerQualityOption("1", "1080P", "1920x1080", 1920, 1080, 3000, true),
+                        PlayerQualityOption("2", "720P", "1280x720", 1280, 720, 1500, false),
+                    ),
+                qualityMode = QualityMode.AUTO,
+                currentAutoQualityName = "1080P",
+            )
+        assertEquals("自动 (1080P)", multiAuto.currentQualityDisplayLabel)
+
+        // 多清晰度 - 手动选中 720P
+        val multiSpecific =
+            PlayerTracksSnapshot(
+                qualityTracks =
+                    listOf(
+                        PlayerQualityOption("1", "1080P", "1920x1080", 1920, 1080, 3000, false),
+                        PlayerQualityOption("2", "720P", "1280x720", 1280, 720, 1500, true),
+                    ),
+                qualityMode = QualityMode.SPECIFIC,
+            )
+        assertEquals("720P", multiSpecific.currentQualityDisplayLabel)
+
+        // 单清晰度片源 - 直接显示该清晰度
+        val singleTrack =
+            PlayerTracksSnapshot(
+                qualityTracks =
+                    listOf(
+                        PlayerQualityOption("1", "1080P", "1920x1080", 1920, 1080, 3000, true),
+                    ),
+            )
+        assertEquals("1080P", singleTrack.currentQualityDisplayLabel)
+
+        // 无 TrackGroup 但有解码器画面尺寸
+        val videoSizeOnly =
+            PlayerTracksSnapshot(
+                currentVideoSizeQualityName = "720P",
+            )
+        assertEquals("720P", videoSizeOnly.currentQualityDisplayLabel)
+
+        // 未解析出画面尺寸
+        val emptySnapshot = PlayerTracksSnapshot()
+        assertEquals(null, emptySnapshot.currentQualityDisplayLabel)
+    }
 }
