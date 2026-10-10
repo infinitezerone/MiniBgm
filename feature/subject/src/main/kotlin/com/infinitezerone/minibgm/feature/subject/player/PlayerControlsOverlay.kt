@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -186,7 +187,8 @@ internal fun PlayerControlsOverlay(
                         Brush.verticalGradient(
                             colors = listOf(Color.Black.copy(alpha = 0.75f), Color.Transparent),
                         ),
-                    ).padding(horizontal = 8.dp, vertical = 4.dp)
+                    ).statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             }
 
         Row(

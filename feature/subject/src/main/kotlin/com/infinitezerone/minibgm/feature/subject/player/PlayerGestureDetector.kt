@@ -132,6 +132,7 @@ internal fun Modifier.playerGestures(
     isLocked: Boolean = false,
     onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
     onHaptic: (HapticFeedbackType) -> Unit = {},
+    onScrubbing: (Boolean) -> Unit = {},
 ): Modifier =
     this then
         PlayerGesturesElement(
@@ -150,6 +151,7 @@ internal fun Modifier.playerGestures(
             isLocked = isLocked,
             onDoubleTapRipple = onDoubleTapRipple,
             onHaptic = onHaptic,
+            onScrubbing = onScrubbing,
         )
 
 private data class PlayerGesturesElement(
@@ -168,6 +170,7 @@ private data class PlayerGesturesElement(
     val isLocked: Boolean = false,
     val onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
     val onHaptic: (HapticFeedbackType) -> Unit = {},
+    val onScrubbing: (Boolean) -> Unit = {},
 ) : ModifierNodeElement<PlayerGesturesNode>() {
     override fun create(): PlayerGesturesNode =
         PlayerGesturesNode(
@@ -186,6 +189,7 @@ private data class PlayerGesturesElement(
             isLocked = isLocked,
             onDoubleTapRipple = onDoubleTapRipple,
             onHaptic = onHaptic,
+            onScrubbing = onScrubbing,
         )
 
     override fun update(node: PlayerGesturesNode) {
@@ -205,6 +209,7 @@ private data class PlayerGesturesElement(
             isLocked = isLocked,
             onDoubleTapRipple = onDoubleTapRipple,
             onHaptic = onHaptic,
+            onScrubbing = onScrubbing,
         )
     }
 
@@ -233,6 +238,7 @@ private class PlayerGesturesNode(
     var isLocked: Boolean = false,
     var onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
     var onHaptic: (HapticFeedbackType) -> Unit = {},
+    var onScrubbing: (Boolean) -> Unit = {},
 ) : DelegatingNode() {
     private var isFastForwarding = false
     private var dragMode = DragMode.NONE
@@ -258,6 +264,7 @@ private class PlayerGesturesNode(
         isLocked: Boolean = false,
         onDoubleTapRipple: (DoubleTapSide) -> Unit = {},
         onHaptic: (HapticFeedbackType) -> Unit = {},
+        onScrubbing: (Boolean) -> Unit = {},
     ) {
         this.context = context
         this.isPlaying = isPlaying
@@ -274,6 +281,7 @@ private class PlayerGesturesNode(
         this.isLocked = isLocked
         this.onDoubleTapRipple = onDoubleTapRipple
         this.onHaptic = onHaptic
+        this.onScrubbing = onScrubbing
     }
 
     @Suppress("unused")
@@ -339,6 +347,7 @@ private class PlayerGesturesNode(
             SuspendingPointerInputModifierNode {
                 var startOffset = Offset.Zero
                 val thresholdPx = 14.dp.toPx()
+                var initialPositionMs = 0L
 
                 detectDragGestures(
                     onDragStart = { offset ->
@@ -350,7 +359,8 @@ private class PlayerGesturesNode(
                         dragMode = DragMode.NONE
                         dragAccumulatedX = 0f
                         dragAccumulatedY = 0f
-                        seekTargetMs = currentPositionMs()
+                        initialPositionMs = currentPositionMs()
+                        seekTargetMs = initialPositionMs
 
                         // 记录起始亮度
                         val activity = context.findActivity()
@@ -370,12 +380,12 @@ private class PlayerGesturesNode(
 
                         val width = size.width
                         val height = size.height
-                        val cur = currentPositionMs()
                         val total = totalDurationMs()
 
                         if (dragMode == DragMode.NONE) {
                             if (abs(dragAccumulatedX) > abs(dragAccumulatedY) && abs(dragAccumulatedX) > thresholdPx) {
                                 dragMode = DragMode.HORIZONTAL_SEEK
+                                onScrubbing(true)
                             } else if (abs(dragAccumulatedY) > thresholdPx) {
                                 dragMode =
                                     if (startOffset.x < width * 0.5f) {
@@ -390,8 +400,8 @@ private class PlayerGesturesNode(
                             DragMode.HORIZONTAL_SEEK -> {
                                 if (total > 0L) {
                                     val deltaMs = calculateSeekDeltaMs(dragAccumulatedX, width.toFloat(), total)
-                                    seekTargetMs = (cur + deltaMs).coerceIn(0L, total)
-                                    onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - cur))
+                                    seekTargetMs = (initialPositionMs + deltaMs).coerceIn(0L, total)
+                                    onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - initialPositionMs))
                                 }
                             }
                             DragMode.VERTICAL_BRIGHTNESS -> {
@@ -418,15 +428,22 @@ private class PlayerGesturesNode(
                     },
                     onDragEnd = {
                         if (isLocked) return@detectDragGestures
+                        val wasSeeking = dragMode == DragMode.HORIZONTAL_SEEK
                         val total = totalDurationMs()
-                        if (dragMode == DragMode.HORIZONTAL_SEEK && total > 0L) {
+                        if (wasSeeking && total > 0L) {
                             onSeekConfirm(seekTargetMs)
+                        }
+                        if (wasSeeking) {
+                            onScrubbing(false)
                         }
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
                     },
                     onDragCancel = {
                         if (isLocked) return@detectDragGestures
+                        if (dragMode == DragMode.HORIZONTAL_SEEK) {
+                            onScrubbing(false)
+                        }
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
                     },
@@ -458,6 +475,7 @@ internal fun PlayerGestureDetector(
     onFastForwardEnd: () -> Unit,
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
+    onScrubbing: (Boolean) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -510,6 +528,7 @@ internal fun PlayerGestureDetector(
                     onHaptic = { type ->
                         haptic.performHapticFeedback(type)
                     },
+                    onScrubbing = onScrubbing,
                 ),
     ) {
         content()

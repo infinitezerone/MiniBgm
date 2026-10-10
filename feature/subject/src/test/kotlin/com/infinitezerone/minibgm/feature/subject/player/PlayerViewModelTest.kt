@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -260,6 +261,63 @@ class PlayerViewModelTest {
         assertFalse(advanced)
         assertEquals("https://example.com/ep1.m3u8", viewModel.uiState.value.streamUrl)
     }
+
+    @Test
+    fun onPlaybackEnded_doesNotAdvanceWhenNextEpisodeIsDifferentType() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = episodeId, sort = 1f, type = 0, name = "Ep 1", nameCn = ""),
+                    Episode(id = 2003L, sort = 1f, type = 1, name = "SP 1", nameCn = ""),
+                )
+            val subjectRepo = FakeSubjectRepository()
+            subjectRepo.sendEpisodes(subjectId, episodes)
+
+            val viewModel =
+                viewModel(
+                    route = route(queue = queueOf("https://example.com/ep1.m3u8")),
+                    subjectRepository = subjectRepo,
+                )
+            advanceUntilIdle()
+
+            val advanced = viewModel.onPlaybackEnded()
+            assertFalse(advanced)
+        }
+
+    @Test
+    fun onPlaybackEnded_loadsMoreEpisodesWhenReachingEndAndHasMore() =
+        runTest {
+            val initialEpisodes =
+                listOf(
+                    Episode(id = episodeId, sort = 1f, type = 0, name = "Ep 1", nameCn = ""),
+                )
+            val moreEpisodes =
+                listOf(
+                    Episode(id = episodeId, sort = 1f, type = 0, name = "Ep 1", nameCn = ""),
+                    Episode(id = 2003L, sort = 2f, type = 0, name = "Ep 2", nameCn = ""),
+                )
+            val subjectRepo = FakeSubjectRepository()
+            subjectRepo.sendEpisodes(subjectId, initialEpisodes)
+            subjectRepo.setHasMoreEpisodes(subjectId, true)
+            subjectRepo.loadMoreEpisodesResult = { _, _ ->
+                subjectRepo.sendEpisodes(subjectId, moreEpisodes)
+                subjectRepo.setHasMoreEpisodes(subjectId, false)
+                AppResult.Success(false)
+            }
+
+            val viewModel =
+                viewModel(
+                    route = route(queue = queueOf("https://example.com/ep1.m3u8")),
+                    subjectRepository = subjectRepo,
+                )
+            advanceUntilIdle()
+
+            val advanced = viewModel.onPlaybackEnded()
+            assertTrue(advanced)
+            advanceUntilIdle()
+
+            assertEquals(2f, viewModel.uiState.value.episodeSort)
+        }
 
     @Test
     fun queuePlayback_switchTo_jumpsToSelectedEpisode() {

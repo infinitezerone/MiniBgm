@@ -159,8 +159,11 @@ data class PlayerUiState(
     val hasNext: Boolean
         get() {
             if (episodes.size > 1) {
-                val idx = episodes.indexOfFirst { it.sort == episodeSort || (it.id > 0 && it.id == episodeId) }
-                return idx in 0 until episodes.lastIndex
+                val idx =
+                    episodes.indexOfFirst {
+                        (episodeId > 0 && it.id == episodeId) || (it.sort == episodeSort && it.type == episodeType)
+                    }
+                return idx in 0 until episodes.lastIndex || hasMoreEpisodes
             }
             return currentIndex < queue.lastIndex
         }
@@ -168,7 +171,10 @@ data class PlayerUiState(
     val hasPrevious: Boolean
         get() {
             if (episodes.size > 1) {
-                val idx = episodes.indexOfFirst { it.sort == episodeSort || (it.id > 0 && it.id == episodeId) }
+                val idx =
+                    episodes.indexOfFirst {
+                        (episodeId > 0 && it.id == episodeId) || (it.sort == episodeSort && it.type == episodeType)
+                    }
                 return idx > 0
             }
             return currentIndex > 0
@@ -256,6 +262,9 @@ private class PlaybackSession(
 
     /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore */
     var lastSavedSourceId: String = ""
+
+    /** 到达列表末尾且后端仍有更多分集时，等待续拉完成后自动连播下一集的意图标记 */
+    var pendingAutoNextOnMoreLoaded: Boolean = false
 }
 
 /**
@@ -697,6 +706,23 @@ class PlayerViewModel(
             }
             next
         }
+        if (session.pendingAutoNextOnMoreLoaded) {
+            val currentState = _uiState.value
+            val currentIdx =
+                currentState.episodes.indexOfFirst {
+                    (currentState.episodeId > 0 && it.id == currentState.episodeId) ||
+                        (it.sort == currentState.episodeSort && it.type == currentState.episodeType)
+                }
+            if (currentIdx in 0 until currentState.episodes.lastIndex) {
+                session.pendingAutoNextOnMoreLoaded = false
+                val nextEp = currentState.episodes[currentIdx + 1]
+                if (nextEp.type == currentState.episodeType) {
+                    selectEpisode(nextEp)
+                }
+            } else if (!currentState.isLoadingMoreEpisodes && !currentState.hasMoreEpisodes) {
+                session.pendingAutoNextOnMoreLoaded = false
+            }
+        }
         if (_uiState.value.episodeId > 0L && _uiState.value.comments.isEmpty() && !_uiState.value.isCommentsLoading) {
             loadComments()
         }
@@ -799,10 +825,23 @@ class PlayerViewModel(
         // 优先根据全部分集列表查找下一集
         val epIndex =
             state.episodes.indexOfFirst {
-                it.sort == state.episodeSort || (it.id > 0 && it.id == state.episodeId)
+                (state.episodeId > 0 && it.id == state.episodeId) ||
+                    (it.sort == state.episodeSort && it.type == state.episodeType)
             }
         if (epIndex in 0 until state.episodes.lastIndex) {
-            selectEpisode(state.episodes[epIndex + 1])
+            val nextEp = state.episodes[epIndex + 1]
+            // 同类型分集才自动连播（正篇完结不自动切入特别篇/特典）
+            if (nextEp.type == state.episodeType) {
+                selectEpisode(nextEp)
+                return true
+            }
+            return false
+        }
+
+        // 当前分集是列表末尾但后端仍有更多分集时，标记待连播并触发续拉
+        if (epIndex == state.episodes.lastIndex && state.hasMoreEpisodes && route.subjectId > 0) {
+            session.pendingAutoNextOnMoreLoaded = true
+            loadMoreEpisodes()
             return true
         }
 
@@ -820,6 +859,7 @@ class PlayerViewModel(
         session.latestPositionMs = 0L
         session.progressTicksSinceSave = 0
         session.hasTriggeredAutoMark = false
+        session.pendingAutoNextOnMoreLoaded = false
         session.currentIndex = index
         val entry = queue[index]
         val currentEp =
@@ -880,6 +920,7 @@ class PlayerViewModel(
         session.latestPositionMs = 0L
         session.progressTicksSinceSave = 0
         session.hasTriggeredAutoMark = false
+        session.pendingAutoNextOnMoreLoaded = false
 
         val queueIndex =
             queue.indexOfFirst {
@@ -1042,6 +1083,7 @@ class PlayerViewModel(
     fun resolveCurrentEpisodeStream() {
         val state = _uiState.value
         val currentTab = state.sources.getOrNull(state.selectedSourceIndex) ?: return
+        resolveJob?.cancel()
         if (currentTab.isDirect) {
             // 直链/自备片单：只按分集**精确匹配**。找不到就如实报无片源，
             // 绝不再回退 queue[currentIndex]——那会把 A 集串成 B 集的画面。

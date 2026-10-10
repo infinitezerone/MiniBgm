@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
@@ -554,6 +553,7 @@ fun PlayerScreen(
                     },
                     onScrubStart = { isScrubbing = true },
                     onScrubbing = { scrubProgress = it },
+                    onGestureScrubbing = { isScrubbing = it },
                     onScrubEnd = { progress ->
                         isScrubbing = false
                         if (playback.durationMs > 0L) {
@@ -693,7 +693,6 @@ fun PlayerScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
                         .navigationBarsPadding(),
             ) {
                 Box(
@@ -738,6 +737,7 @@ fun PlayerScreen(
                         },
                         onScrubStart = { isScrubbing = true },
                         onScrubbing = { scrubProgress = it },
+                        onGestureScrubbing = { isScrubbing = it },
                         onScrubEnd = { progress ->
                             isScrubbing = false
                             if (playback.durationMs > 0L) {
@@ -966,6 +966,7 @@ private fun PlayerVideoStage(
     onScrubStart: () -> Unit,
     onScrubbing: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
+    onGestureScrubbing: (Boolean) -> Unit = {},
     onBackClick: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onCycleResizeMode: () -> Unit,
@@ -995,6 +996,7 @@ private fun PlayerVideoStage(
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
             isLocked = isLocked,
+            onScrubbing = onGestureScrubbing,
         ) {
             when {
                 streamUrl.isNotBlank() -> videoContent()

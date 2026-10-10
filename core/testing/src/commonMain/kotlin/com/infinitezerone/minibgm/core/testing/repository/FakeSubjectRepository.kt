@@ -185,12 +185,16 @@ class FakeSubjectRepository : SubjectRepository {
         descending: Boolean,
     ): AppResult<List<Episode>> = fetchEpisodes(subjectId)
 
+    var loadMoreEpisodesResult: (Long, Boolean) -> AppResult<Boolean> = { _, _ ->
+        AppResult.Success(false)
+    }
+
     override suspend fun loadMoreEpisodes(
         subjectId: Long,
         descending: Boolean,
     ): AppResult<Boolean> {
         loadMoreEpisodesCallCount++
-        return AppResult.Success(false)
+        return loadMoreEpisodesResult(subjectId, descending)
     }
 
     override suspend fun fetchEpisodes(subjectId: Long): AppResult<List<Episode>> {
