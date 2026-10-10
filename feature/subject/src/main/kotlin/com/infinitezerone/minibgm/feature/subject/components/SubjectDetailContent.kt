@@ -235,6 +235,7 @@ internal fun SubjectDetailContent(
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onUpdateCollectionStatus = onUpdateCollectionStatus ?: {},
                 onPlayNext = onPlayNextEpisode,
+                onOpenSources = onOpenSources,
                 onIncrementWatched = onIncrementWatched,
                 onDecrementWatched = onDecrementWatched,
                 onPromptLogin = onPromptLogin,

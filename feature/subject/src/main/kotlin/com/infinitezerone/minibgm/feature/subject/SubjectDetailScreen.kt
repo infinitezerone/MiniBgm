@@ -423,6 +423,20 @@ fun SubjectDetailScreen(
                         }
                     },
                     actions = {
+                        val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
+                        if (isEpisodeLike) {
+                            IconButton(
+                                onClick = {
+                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
+                                    showSourcesBottomSheet = true
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Tv,
+                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                )
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 context.launchWebUrl("https://bgm.tv/subject/$subjectId")

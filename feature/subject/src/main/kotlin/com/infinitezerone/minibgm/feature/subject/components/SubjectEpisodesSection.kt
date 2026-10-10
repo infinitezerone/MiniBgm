@@ -139,6 +139,20 @@ fun EpisodesSectionHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                if (onOpenSources != null) {
+                    IconButton(
+                        onClick = onOpenSources,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Tv,
+                            contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+
                 if (onToggleSort != null) {
                     IconButton(
                         onClick = onToggleSort,

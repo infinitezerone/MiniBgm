@@ -66,6 +66,7 @@ fun SubjectCollectionCard(
     modifier: Modifier = Modifier,
     nextEpSort: Float? = null,
     onPlayNext: (() -> Unit)? = null,
+    onOpenSources: (() -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
     onDecrementWatched: (() -> Unit)? = null,
     onPromptLogin: (() -> Unit)? = null,
@@ -281,30 +282,53 @@ fun SubjectCollectionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        if (onPlayNext != null) {
-                            val playLabel =
-                                if (nextEpSort != null && nextEpSort > 0) {
-                                    stringResource(R.string.feature_subject_resume_watch, nextEpSort.toEpisodeLabel())
-                                } else {
-                                    stringResource(R.string.feature_subject_cd_play)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (onOpenSources != null) {
+                                Surface(
+                                    onClick = onOpenSources,
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    modifier = Modifier.size(28.dp),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = BgmIcons.Tv,
+                                            contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                    }
                                 }
-                            FilledTonalButton(
-                                onClick = onPlayNext,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.height(28.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Play,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = playLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                )
+                            }
+
+                            if (onPlayNext != null) {
+                                val playLabel =
+                                    if (nextEpSort != null && nextEpSort > 0) {
+                                        stringResource(R.string.feature_subject_resume_watch, nextEpSort.toEpisodeLabel())
+                                    } else {
+                                        stringResource(R.string.feature_subject_cd_play)
+                                    }
+                                FilledTonalButton(
+                                    onClick = onPlayNext,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(28.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.Play,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = playLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
                             }
                         }
                     }

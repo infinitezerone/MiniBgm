@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -305,23 +306,46 @@ fun EpisodeQuickActionBottomSheet(
                                 modifier = Modifier.size(18.dp),
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = stringResource(R.string.feature_subject_ep_play_current))
-                        }
-                    } else if (onOpenSources != null) {
-                        FilledTonalButton(
-                            onClick = {
-                                onDismiss()
-                                onOpenSources()
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Tv,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                            Text(
+                                text = stringResource(R.string.feature_subject_ep_play_current),
+                                maxLines = 1,
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = stringResource(R.string.feature_subject_ep_sources))
+                        }
+                    }
+
+                    if (onOpenSources != null) {
+                        if (onPlayClick != null) {
+                            FilledTonalIconButton(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenSources()
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Tv,
+                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = {
+                                    onDismiss()
+                                    onOpenSources()
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Tv,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.feature_subject_ep_sources),
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
