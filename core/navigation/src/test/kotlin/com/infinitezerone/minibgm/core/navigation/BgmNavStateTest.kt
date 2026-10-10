@@ -278,6 +278,62 @@ class BgmNavStateTest {
     }
 
     @Test
+    fun navigateToSubjectDetail_fromPlayer_preservesPlayerInBackStack() {
+        val state = newState()
+        val playerRoute = PlayerRoute(subjectId = 100L, episodeId = 1001L)
+        state.navigateTo(playerRoute)
+        assertEquals(playerRoute, state.currentKey)
+
+        state.navigateTo(SubjectDetailRoute(100L))
+        assertEquals(SubjectDetailRoute(100L), state.currentKey)
+
+        state.goBack()
+        assertEquals(playerRoute, state.currentKey)
+
+        state.goBack()
+        assertEquals(ScheduleRoute, state.currentKey)
+    }
+
+    @Test
+    fun navigateToSubjectDetail_fromPlayer_withPriorSubject_reordersForReturnToPlayer() {
+        val state = newState()
+        val priorDetail = SubjectDetailRoute(100L)
+        val playerRoute = PlayerRoute(subjectId = 100L, episodeId = 1001L)
+        state.navigateTo(priorDetail)
+        state.navigateTo(playerRoute)
+
+        state.navigateTo(SubjectDetailRoute(100L))
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, playerRoute, SubjectDetailRoute(100L)),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+        assertEquals(playerRoute, state.currentKey)
+
+        state.goBack()
+        assertEquals(ScheduleRoute, state.currentKey)
+    }
+
+    @Test
+    fun navigateToSubjectDetail_fromPlayer_withDetailChain_clearsIntermediateChainAbovePlayer() {
+        val state = newState()
+        val playerRoute = PlayerRoute(subjectId = 100L, episodeId = 1001L)
+        state.navigateTo(playerRoute)
+        state.navigateTo(SubjectDetailRoute(100L))
+        state.navigateTo(TagSubjectsRoute("搞笑"))
+
+        state.navigateTo(SubjectDetailRoute(200L))
+        assertEquals(
+            listOf<NavKey>(ScheduleRoute, playerRoute, SubjectDetailRoute(200L)),
+            state.currentSubStack.toList(),
+        )
+
+        state.goBack()
+        assertEquals(playerRoute, state.currentKey)
+    }
+
+    @Test
     fun goBackAtStartBase_throws_startRouteIsTheAppExit() {
         val state = newState()
 
