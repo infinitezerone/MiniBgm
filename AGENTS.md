@@ -53,7 +53,7 @@ bash tools/jgate    # 素材体积 → Rust 门禁（触及 crates/ 时）→ sp
 1. **前置反诘（Spec 对齐）**：编码前对照《硬红线》与《规范先例》反查依赖、真值来源、状态流向与 UI 浮层，输出 Mini-Spec 与改动栈，用户确认后开工。
 2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次改动严格遵守单一目的；中间态使用 `tools/quick-check.ps1` 秒级自查红线。
 3. **自愈验证（Autonomous Loop）**：编码完成自主运行 `tools/jgate.ps1`；若未通过，必须自行抓取日志修复直至完全绿灯，严禁“写完代码让用户试跑”。
-4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷（如 P-001~P-005 级问题）或确立新范式后，必须执行《MiniBgm 飞轮协议》（`docs/PROBLEM_LOG.md` 记因果 ➔ `AGENTS.md`/红线测试 记约束 ➔ `.agents/skills/minibgm-playbooks` 记剧本）。详细机制见 `.agents/skills/minibgm-flywheel/SKILL.md`。
+4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷或确立新范式后，必须执行《MiniBgm 飞轮协议》：Encode lessons into structure（教训直接固化入 `ArchitectureRulesTest` 机械断言、`AGENTS.md` 规则或 `.agents/skills/minibgm-playbooks` 剧本，绝不只留纯文本日记）。详细机制见 `.agents/skills/minibgm-flywheel/SKILL.md`。
 
 ## 发布
 
