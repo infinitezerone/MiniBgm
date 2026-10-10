@@ -326,21 +326,22 @@ internal fun PlayerControlsOverlay(
                         .height(42.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 1. 左下角播放/暂停键
+                // 1. 左下角播放/暂停键：缓冲中只要处于意图播放态即显示暂停，允许用户打断缓冲
                 IconButton(
                     onClick = onPlayPauseToggle,
                     modifier = Modifier.size(36.dp),
                 ) {
+                    val isPlaybackActive = isPlaying || isBuffering
                     val icon =
                         when {
                             isEnded -> BgmIcons.Replay
-                            isPlaying -> BgmIcons.Pause
+                            isPlaybackActive -> BgmIcons.Pause
                             else -> BgmIcons.Play
                         }
                     Icon(
                         imageVector = icon,
                         contentDescription =
-                            if (isPlaying) {
+                            if (isPlaybackActive) {
                                 stringResource(R.string.feature_subject_player_pause)
                             } else {
                                 stringResource(R.string.feature_subject_player_play)

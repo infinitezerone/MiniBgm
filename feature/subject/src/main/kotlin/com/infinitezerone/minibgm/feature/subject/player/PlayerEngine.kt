@@ -9,6 +9,8 @@ enum class EnginePlaybackState { IDLE, BUFFERING, READY, ENDED }
 interface PlayerEngineListener {
     fun onIsPlayingChanged(isPlaying: Boolean)
 
+    fun onPlayWhenReadyChanged(playWhenReady: Boolean) {}
+
     fun onPlaybackStateChanged(state: EnginePlaybackState)
 
     fun onDurationChanged(durationMs: Long)
@@ -33,6 +35,8 @@ interface PlayerEngine {
     val durationMs: Long
 
     val isPlaying: Boolean
+
+    val playWhenReady: Boolean get() = isPlaying
 
     fun setListener(listener: PlayerEngineListener?)
 

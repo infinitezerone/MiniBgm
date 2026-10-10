@@ -35,6 +35,7 @@ sealed interface PlayerEngineEvent {
 data class PlaybackState(
     val mediaUrl: String = "",
     val isPlaying: Boolean = false,
+    val playWhenReady: Boolean = false,
     val isBuffering: Boolean = false,
     val isEnded: Boolean = false,
     val durationMs: Long = 0L,
@@ -85,6 +86,10 @@ class PlayerController(
                     stopPositionPolling()
                     syncPositionOnce()
                 }
+            }
+
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean) {
+                _state.update { it.copy(playWhenReady = playWhenReady) }
             }
 
             override fun onPlaybackStateChanged(state: EnginePlaybackState) {
@@ -146,7 +151,7 @@ class PlayerController(
         if (url == _state.value.mediaUrl) return
         _positionMs.value = 0L
         _bufferedPositionMs.value = 0L
-        _state.value = PlaybackState(mediaUrl = url, isBuffering = true)
+        _state.value = PlaybackState(mediaUrl = url, isBuffering = true, playWhenReady = engine.playWhenReady)
         engine.load(url, requestHeaders)
     }
 
@@ -171,7 +176,7 @@ class PlayerController(
                 engine.play()
             }
 
-            engine.isPlaying -> engine.pause()
+            engine.isPlaying || engine.playWhenReady -> engine.pause()
             else -> engine.play()
         }
     }

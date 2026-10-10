@@ -62,6 +62,13 @@ class ExoPlayerEngine(
                 listener?.onIsPlayingChanged(isPlaying)
             }
 
+            override fun onPlayWhenReadyChanged(
+                playWhenReady: Boolean,
+                reason: Int,
+            ) {
+                listener?.onPlayWhenReadyChanged(playWhenReady)
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 listener?.onPlaybackStateChanged(playbackState.toEngineState())
                 listener?.onDurationChanged(durationMs)
@@ -85,6 +92,8 @@ class ExoPlayerEngine(
     override val durationMs: Long get() = exoPlayer.duration.coerceAtLeast(0L)
 
     override val isPlaying: Boolean get() = exoPlayer.isPlaying
+
+    override val playWhenReady: Boolean get() = exoPlayer.playWhenReady
 
     override fun setListener(listener: PlayerEngineListener?) {
         this.listener = listener

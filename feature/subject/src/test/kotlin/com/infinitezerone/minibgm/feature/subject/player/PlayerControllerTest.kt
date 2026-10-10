@@ -29,6 +29,7 @@ class PlayerControllerTest {
         var clearCalls = 0
         var releaseCalls = 0
         var playing = false
+        var playWhenReadyState = true
         var position = 0L
         var bufferedPosition = 0L
         var duration = 0L
@@ -45,6 +46,8 @@ class PlayerControllerTest {
         override val durationMs: Long get() = duration
 
         override val isPlaying: Boolean get() = playing
+
+        override val playWhenReady: Boolean get() = playWhenReadyState
 
         override fun setListener(listener: PlayerEngineListener?) {
             this.listener = listener
@@ -74,11 +77,15 @@ class PlayerControllerTest {
 
         override fun play() {
             playing = true
+            playWhenReadyState = true
+            listener?.onPlayWhenReadyChanged(true)
             listener?.onIsPlayingChanged(true)
         }
 
         override fun pause() {
             playing = false
+            playWhenReadyState = false
+            listener?.onPlayWhenReadyChanged(false)
             listener?.onIsPlayingChanged(false)
         }
 
@@ -235,6 +242,25 @@ class PlayerControllerTest {
             controller.togglePlayPause()
 
             assertFalse(engine.playing)
+        }
+
+    @Test
+    fun togglePlayPause_pausesWhenBufferingAndPlayWhenReady() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            controller.setMedia("https://cdn/a.m3u8", emptyMap())
+            engine.emitPlaybackState(EnginePlaybackState.BUFFERING)
+            engine.playing = false
+            engine.playWhenReadyState = true
+
+            assertTrue(controller.state.value.isBuffering)
+            assertFalse(engine.isPlaying)
+
+            // 缓冲中意图播放，点击应当触发暂停以打断缓冲
+            controller.togglePlayPause()
+
+            assertFalse(engine.playWhenReady)
         }
 
     @Test
