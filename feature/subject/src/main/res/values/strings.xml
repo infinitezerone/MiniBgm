@@ -264,6 +264,7 @@
     <string name="feature_subject_player_play">播放</string>
     <string name="feature_subject_player_forward_10s">快进 10 秒</string>
     <string name="feature_subject_player_seek_seconds_format">%1$d 秒</string>
+    <string name="feature_subject_player_settings">播放设置</string>
     <string name="feature_subject_player_episodes">选集</string>
     <string name="feature_subject_player_exit_fullscreen">退出全屏</string>
     <string name="feature_subject_player_enter_fullscreen">全屏播放</string>

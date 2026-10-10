@@ -71,7 +71,7 @@ internal fun PlayerProgressBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(22.dp)
+                .height(28.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onPress = { offset ->
@@ -110,8 +110,8 @@ internal fun PlayerProgressBar(
     ) {
         val width = size.width
         val height = size.height
-        // 进度线基准居中位于距离底部 7dp 处，拖拽展开时 thumb(半径 7dp) 恰好与视频底边完全齐平
-        val centerY = height - 7.dp.toPx()
+        // 进度线垂直居中于绘制区域，确保单行内嵌或双行布局均能完美居中对齐图标
+        val centerY = height / 2f
         val currentTrackHeight = trackHeight.toPx()
         val currentThumbRadius = thumbRadius.toPx()
 
@@ -121,7 +121,7 @@ internal fun PlayerProgressBar(
             start = Offset(0f, centerY),
             end = Offset(width, centerY),
             strokeWidth = currentTrackHeight,
-            cap = StrokeCap.Butt,
+            cap = StrokeCap.Round,
         )
 
         // 2. 缓冲轨 (Buffered Track)

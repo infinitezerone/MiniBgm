@@ -216,6 +216,17 @@ internal fun PlayerControlsOverlay(
                 }
             }
 
+            // 竖屏顶部操作栏右侧：画中画 + 设置入口（汇聚清晰度/音画字幕/倍速）
+            if (!isLandscape) {
+                IconButton(onClick = onOpenTrackSelection) {
+                    Icon(
+                        imageVector = BgmIcons.Settings,
+                        contentDescription = stringResource(R.string.feature_subject_player_settings),
+                        tint = Color.White,
+                    )
+                }
+            }
+
             // 画中画模式
             if (showPipButton) {
                 IconButton(onClick = onEnterPip) {
@@ -228,83 +239,21 @@ internal fun PlayerControlsOverlay(
             }
         }
 
-        // 中央播放控制与缓冲状态
-        Box(
-            modifier = Modifier.align(Alignment.Center),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (isBuffering) {
+        // 中央区域：仅保留缓冲状态加载指示器，完全移除遮挡画面的正中央大播放盘
+        if (isBuffering) {
+            Box(
+                modifier = Modifier.align(Alignment.Center),
+                contentAlignment = Alignment.Center,
+            ) {
                 CircularProgressIndicator(
                     color = MaterialTheme.colorScheme.primary,
                     strokeWidth = 3.dp,
                     modifier = Modifier.size(48.dp),
                 )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
-                ) {
-                    if (isLandscape) {
-                        IconButton(
-                            onClick = onRewind10,
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Replay10,
-                                contentDescription = stringResource(R.string.feature_subject_player_rewind_10s),
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.Black.copy(alpha = 0.55f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
-                    ) {
-                        IconButton(
-                            onClick = onPlayPauseToggle,
-                            modifier = Modifier.size(60.dp),
-                        ) {
-                            val icon =
-                                when {
-                                    isEnded -> BgmIcons.Replay
-                                    isPlaying -> BgmIcons.Pause
-                                    else -> BgmIcons.Play
-                                }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription =
-                                    if (isPlaying) {
-                                        stringResource(R.string.feature_subject_player_pause)
-                                    } else {
-                                        stringResource(R.string.feature_subject_player_play)
-                                    },
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp),
-                            )
-                        }
-                    }
-
-                    if (isLandscape) {
-                        IconButton(
-                            onClick = onForward10,
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Forward10,
-                                contentDescription = stringResource(R.string.feature_subject_player_forward_10s),
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
-                    }
-                }
             }
         }
 
-        // 底部控制栏（集成微交互自适应进度条与紧凑单行控件）
+        // 底部控制栏：对齐 B站/腾讯视频现代单行内嵌布局（播放键 + 时间 + 进度条 + 全屏/扩展按键）
         val bottomBarModifier =
             if (isLandscape) {
                 Modifier
@@ -312,22 +261,23 @@ internal fun PlayerControlsOverlay(
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f)),
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
                         ),
                     ).displayCutoutPadding()
                     .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             } else {
                 Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f)),
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
                         ),
-                    )
+                    ).padding(horizontal = 10.dp, vertical = 4.dp)
             }
 
-        Column(modifier = bottomBarModifier) {
+        Box(modifier = bottomBarModifier) {
             // 位置单独订阅：只有底部栏（且仅在可见时才组合）随 500ms 位置跳重组
             val currentPosition by position.collectAsStateWithLifecycle()
             val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
@@ -346,26 +296,49 @@ internal fun PlayerControlsOverlay(
                     0f
                 }
 
-            // 1. 控制行（位于进度条上方）
+            // 拖拽悬停浮动时间气泡（居中悬浮）
+            if (isScrubbing && totalDuration > 0L) {
+                val scrubMs = (scrubProgress * totalDuration).toLong()
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.Black.copy(alpha = 0.88f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = (-36).dp),
+                ) {
+                    Text(
+                        text = "${formatDuration(scrubMs)} / ${formatDuration(totalDuration)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
+            // 纯粹的单行控制栏（Single-Row Inline Controls）
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(
-                            start = if (isLandscape) 16.dp else 12.dp,
-                            end = if (isLandscape) 16.dp else 12.dp,
-                            top = if (isLandscape) 8.dp else 6.dp,
-                            bottom = 2.dp,
-                        ).height(36.dp),
+                        .height(42.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 播放/暂停
+                // 1. 左下角播放/暂停键
                 IconButton(
                     onClick = onPlayPauseToggle,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
+                    val icon =
+                        when {
+                            isEnded -> BgmIcons.Replay
+                            isPlaying -> BgmIcons.Pause
+                            else -> BgmIcons.Play
+                        }
                     Icon(
-                        imageVector = if (isPlaying) BgmIcons.Pause else BgmIcons.Play,
+                        imageVector = icon,
                         contentDescription =
                             if (isPlaying) {
                                 stringResource(R.string.feature_subject_player_pause)
@@ -379,23 +352,51 @@ internal fun PlayerControlsOverlay(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // 当前时间 / 总时间
+                // 2. 当前时间
                 val displayPosition =
                     if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
                 Text(
-                    text = "${formatDuration(displayPosition)} / ${formatDuration(totalDuration)}",
+                    text = formatDuration(displayPosition),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = Color.White.copy(alpha = 0.95f),
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // 画面比例微标签（仅全屏横屏保留，竖屏 16:9 视口无需切换比例）
+                // 3. 自适应撑满的单行进度条
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    PlayerProgressBar(
+                        progress = progress,
+                        bufferedProgress = bufferedProgress,
+                        isScrubbing = isScrubbing,
+                        onScrubStart = onScrubStart,
+                        onScrubbing = onScrubbing,
+                        onScrubEnd = onScrubEnd,
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // 4. 总时间
+                Text(
+                    text = formatDuration(totalDuration),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+
+                // 5. 横屏全屏扩展控件（竖屏收拢至右上角设置）
                 if (isLandscape) {
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // 画面比例微标签
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.14f),
+                        color = Color.White.copy(alpha = 0.16f),
                         modifier = Modifier.clickable(onClick = onCycleResizeMode),
                     ) {
                         Text(
@@ -407,72 +408,73 @@ internal fun PlayerControlsOverlay(
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
-                }
 
-                // 倍速药丸（1.0x → 1.25x → 1.5x → 2.0x 循环）
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.White.copy(alpha = 0.14f),
-                    modifier = Modifier.clickable(onClick = onCyclePlaybackSpeed),
-                ) {
-                    Text(
-                        text = "${playbackSpeed}x",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    )
-                }
-
-                if (currentQualityLabel != null) {
-                    Spacer(modifier = Modifier.width(6.dp))
+                    // 倍速微标签
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.14f),
-                        modifier = Modifier.clickable(onClick = onOpenTrackSelection),
+                        color = Color.White.copy(alpha = 0.16f),
+                        modifier = Modifier.clickable(onClick = onCyclePlaybackSpeed),
                     ) {
                         Text(
-                            text = currentQualityLabel,
+                            text = "${playbackSpeed}x",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White.copy(alpha = 0.9f),
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                         )
                     }
-                }
 
-                if (showEpisodeQueue) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = onOpenEpisodeQueue,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.List,
-                            contentDescription = stringResource(R.string.feature_subject_player_episodes),
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
+                    if (currentQualityLabel != null) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White.copy(alpha = 0.16f),
+                            modifier = Modifier.clickable(onClick = onOpenTrackSelection),
+                        ) {
+                            Text(
+                                text = currentQualityLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+
+                    if (showEpisodeQueue) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = onOpenEpisodeQueue,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.List,
+                                contentDescription = stringResource(R.string.feature_subject_player_episodes),
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
+                    if (hasSelectableTracks) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = onOpenTrackSelection,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Subtitles,
+                                contentDescription = stringResource(R.string.feature_subject_player_tracks_btn),
+                                tint = if (isSubtitlesActive) MaterialTheme.colorScheme.primary else Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
 
-                if (hasSelectableTracks) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = onOpenTrackSelection,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Subtitles,
-                            contentDescription = stringResource(R.string.feature_subject_player_tracks_btn),
-                            tint = if (isSubtitlesActive) MaterialTheme.colorScheme.primary else Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(6.dp))
 
-                Spacer(modifier = Modifier.width(4.dp))
-
+                // 6. 全屏切换键
                 IconButton(
                     onClick = onToggleFullscreen,
                     modifier = Modifier.size(32.dp),
@@ -494,39 +496,6 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(22.dp),
                     )
                 }
-            }
-
-            // 2. 最底部进度条（紧贴视频最底边）
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isScrubbing && totalDuration > 0L) {
-                    val scrubMs = (scrubProgress * totalDuration).toLong()
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.Black.copy(alpha = 0.88f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                        modifier = Modifier.offset(y = (-32).dp),
-                    ) {
-                        Text(
-                            text = "${formatDuration(scrubMs)} / ${formatDuration(totalDuration)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-
-                PlayerProgressBar(
-                    progress = progress,
-                    bufferedProgress = bufferedProgress,
-                    isScrubbing = isScrubbing,
-                    onScrubStart = onScrubStart,
-                    onScrubbing = onScrubbing,
-                    onScrubEnd = onScrubEnd,
-                )
             }
         }
     }
