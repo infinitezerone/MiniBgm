@@ -1334,11 +1334,12 @@ internal fun PlayerEpisodesBottomSheet(
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val chunks =
         remember(episodes) {
-            if (episodes.size > BILI_EPISODE_CHUNK_SIZE) {
-                episodes.chunked(BILI_EPISODE_CHUNK_SIZE)
-            } else {
-                emptyList()
+            val byType = episodes.groupBy { it.type }
+            val result = mutableListOf<List<PlayerEpisodeItem>>()
+            byType.toSortedMap().forEach { (_, list) ->
+                result.addAll(list.chunked(BILI_EPISODE_CHUNK_SIZE))
             }
+            if (result.size > 1) result else emptyList()
         }
     val selectedIndex =
         remember(episodes, selectedEpisodeSort, selectedEpisodeId) {
@@ -1349,13 +1350,17 @@ internal fun PlayerEpisodesBottomSheet(
             if (idx >= 0) idx else 0
         }
     var selectedChunkIndex by remember(chunks) {
-        mutableIntStateOf(
-            if (chunks.isNotEmpty() && selectedIndex in episodes.indices) {
-                selectedIndex / BILI_EPISODE_CHUNK_SIZE
+        val targetEp = episodes.getOrNull(selectedIndex)
+        val chunkIdx =
+            if (targetEp != null && chunks.isNotEmpty()) {
+                chunks
+                    .indexOfFirst { chunk ->
+                        chunk.any { (targetEp.id > 0 && it.id == targetEp.id) || (it.sort == targetEp.sort && it.type == targetEp.type) }
+                    }.takeIf { it >= 0 } ?: 0
             } else {
                 0
-            },
-        )
+            }
+        mutableIntStateOf(chunkIdx)
     }
     val displayEpisodes =
         if (chunks.isNotEmpty()) {
@@ -1409,7 +1414,10 @@ internal fun PlayerEpisodesBottomSheet(
             if (chunks.size > 1) {
                 val paginationLabels =
                     remember(chunks) {
-                        chunks.map { list -> "${list.first().sort.toInt()}-${list.last().sort.toInt()}" }
+                        chunks.map { list ->
+                            val prefix = if (list.first().type == 1) "SP " else ""
+                            "$prefix${list.first().sort.toInt()}-${list.last().sort.toInt()}"
+                        }
                     }
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),

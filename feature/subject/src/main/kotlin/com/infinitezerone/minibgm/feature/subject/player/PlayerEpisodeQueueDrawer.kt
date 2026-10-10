@@ -64,21 +64,27 @@ internal fun PlayerEpisodeQueueDrawer(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 剧集超过 30 话时分段展示（如 1-30, 31-60）
+    // 剧集超过 30 话时分段展示（如 1-30, 31-60；正篇与特别篇按类型隔离分段）
     val chunkSize = 30
     val chunks =
         remember(episodes) {
-            if (episodes.size > chunkSize) {
-                episodes.chunked(chunkSize)
-            } else {
-                emptyList()
+            val byType = episodes.groupBy { it.type }
+            val result = mutableListOf<List<PlayerEpisodeItem>>()
+            byType.toSortedMap().forEach { (_, list) ->
+                result.addAll(list.chunked(chunkSize))
             }
+            if (result.size > 1) result else emptyList()
         }
 
     val initialChunkIndex =
         remember(episodes, selectedEpisodeSort) {
-            val idx = episodes.indexOfFirst { it.sort == selectedEpisodeSort }
-            if (idx >= 0 && chunks.isNotEmpty()) idx / chunkSize else 0
+            if (chunks.isNotEmpty()) {
+                chunks
+                    .indexOfFirst { chunk -> chunk.any { it.sort == selectedEpisodeSort } }
+                    .takeIf { it >= 0 } ?: 0
+            } else {
+                0
+            }
         }
 
     var selectedChunkIndex by remember(chunks) { mutableIntStateOf(initialChunkIndex) }
@@ -179,8 +185,9 @@ internal fun PlayerEpisodeQueueDrawer(
                             selected = isSelected,
                             onClick = { selectedChunkIndex = index },
                             label = {
+                                val prefix = if (chunkList.first().type == 1) "SP " else ""
                                 Text(
-                                    text = "$startEp-$endEp",
+                                    text = "$prefix$startEp-$endEp",
                                     style = MaterialTheme.typography.labelSmall,
                                 )
                             },
