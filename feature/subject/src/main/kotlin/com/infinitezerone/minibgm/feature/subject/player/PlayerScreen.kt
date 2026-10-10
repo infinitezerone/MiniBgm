@@ -24,7 +24,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,15 +36,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Badge
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +55,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +68,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
@@ -89,7 +92,6 @@ import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
-import com.infinitezerone.minibgm.feature.subject.components.episodeCommentsSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -165,6 +167,7 @@ fun PlayerScreen(
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
     var isEpisodeBottomSheetOpen by remember { mutableStateOf(false) }
+    var selectedPortraitTab by rememberSaveable { mutableStateOf(PlayerPortraitTab.INTRO) }
 
     // 视频真实宽高比：监听播放器尺寸与音视频轨道事件
     var videoAspectRatio by remember { mutableStateOf<Rational?>(null) }
@@ -778,51 +781,85 @@ fun PlayerScreen(
                     )
                 }
 
-                // 常驻区：剧集主信息条 + 播放源 + 选集横滑
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                // 顶部常驻信息条：当前分集标题 + 追番/看过轻量操作 + 番剧简要信息
+                BiliSubjectTitleBar(
+                    subjectName = uiState.subjectName.ifBlank { route.subjectName },
+                    epLabel = epLabel,
+                    episodeName = uiState.episodeName,
+                    score = uiState.subjectScore,
+                    airDate = uiState.subjectDate,
+                    collectionType = uiState.subjectCollectionType,
+                    isWatched = uiState.isWatched,
+                    onSubjectClick = {
+                        if (uiState.subjectId > 0 && onSubjectClick != null) {
+                            onSubjectClick(uiState.subjectId)
+                        }
+                    },
+                    onToggleFollow = viewModel::toggleFollowSubject,
+                    onToggleWatched = viewModel::manualToggleWatched,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                )
+
+                // B站风格双 Tab 分栏：[简介] 与 [讨论 (数量)]
+                PrimaryTabRow(
+                    selectedTabIndex = selectedPortraitTab.ordinal,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    BiliSubjectTitleBar(
-                        subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                        epLabel = epLabel,
-                        episodeName = uiState.episodeName,
-                        score = uiState.subjectScore,
-                        airDate = uiState.subjectDate,
-                        collectionType = uiState.subjectCollectionType,
-                        isWatched = uiState.isWatched,
-                        onSubjectClick = {
-                            if (uiState.subjectId > 0 && onSubjectClick != null) {
-                                onSubjectClick(uiState.subjectId)
+                    Tab(
+                        selected = selectedPortraitTab == PlayerPortraitTab.INTRO,
+                        onClick = { selectedPortraitTab = PlayerPortraitTab.INTRO },
+                        text = {
+                            Text(
+                                text = stringResource(R.string.feature_subject_player_tab_intro),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = if (selectedPortraitTab == PlayerPortraitTab.INTRO) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        },
+                    )
+                    Tab(
+                        selected = selectedPortraitTab == PlayerPortraitTab.DISCUSSION,
+                        onClick = { selectedPortraitTab = PlayerPortraitTab.DISCUSSION },
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.feature_subject_player_tab_discussion),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight =
+                                        if (selectedPortraitTab ==
+                                            PlayerPortraitTab.DISCUSSION
+                                        ) {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.Normal
+                                        },
+                                )
+                                if (uiState.currentEpisodeCommentCount > 0) {
+                                    Badge(
+                                        containerColor =
+                                            if (selectedPortraitTab == PlayerPortraitTab.DISCUSSION) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainerHighest
+                                            },
+                                        contentColor =
+                                            if (selectedPortraitTab == PlayerPortraitTab.DISCUSSION) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                    ) {
+                                        Text(
+                                            text = "${uiState.currentEpisodeCommentCount}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
                             }
                         },
-                        onToggleFollow = viewModel::toggleFollowSubject,
-                        onToggleWatched = viewModel::manualToggleWatched,
                     )
-
-                    if (uiState.sources.isNotEmpty()) {
-                        BiliPlayerSourceBar(
-                            sources = uiState.sources,
-                            sourceFailureCounts = uiState.sourceFailureCounts,
-                            selectedIndex = uiState.selectedSourceIndex,
-                            onSelectSource = viewModel::selectSource,
-                            onRequestOpenSources = onRequestOpenSources,
-                            onManageRules = onManageRules,
-                        )
-                    }
-
-                    if (uiState.episodes.isNotEmpty()) {
-                        BiliEpisodesSection(
-                            episodes = uiState.episodes,
-                            selectedEpisodeSort = uiState.episodeSort,
-                            selectedEpisodeId = uiState.episodeId,
-                            onSelectEpisode = viewModel::selectEpisode,
-                            onOpenAllEpisodes = { isEpisodeBottomSheetOpen = true },
-                        )
-                    }
                 }
 
                 // 自动拉取当前分集的吐槽列表
@@ -832,39 +869,42 @@ fun PlayerScreen(
                     }
                 }
 
-                HorizontalDivider(
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-
-                val commentsListState = rememberLazyListState()
-
-                LazyColumn(
-                    state = commentsListState,
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                            .weight(1f),
                 ) {
-                    episodeCommentsSection(
-                        comments = uiState.comments,
-                        commentCount = uiState.currentEpisodeCommentCount,
-                        isLoading = uiState.isCommentsLoading,
-                        error = uiState.commentsError,
-                        sortOrder = uiState.commentSortOrder,
-                        currentUserId = uiState.currentUserId,
-                        onSortChange = viewModel::setCommentSortOrder,
-                        onRetry = { viewModel.loadComments(force = true) },
-                        onReactionClick = viewModel::toggleCommentReaction,
-                        onAddReaction = viewModel::toggleCommentReaction,
-                        onCopyComment = handleCopyComment,
-                        onUserClick = { username -> context.launchWebUrl("https://bgm.tv/user/$username") },
-                        onUrlClick = { url -> context.launchWebUrl(url) },
-                    )
+                    when (selectedPortraitTab) {
+                        PlayerPortraitTab.INTRO -> {
+                            PlayerIntroContent(
+                                uiState = uiState,
+                                epLabel = epLabel,
+                                onSelectEpisode = viewModel::selectEpisode,
+                                onOpenAllEpisodes = { isEpisodeBottomSheetOpen = true },
+                                onSelectSource = viewModel::selectSource,
+                                onRequestOpenSources = onRequestOpenSources,
+                                onManageRules = onManageRules,
+                                onSubjectClick = {
+                                    if (uiState.subjectId > 0 && onSubjectClick != null) {
+                                        onSubjectClick(uiState.subjectId)
+                                    }
+                                },
+                            )
+                        }
+                        PlayerPortraitTab.DISCUSSION -> {
+                            PlayerDiscussionContent(
+                                uiState = uiState,
+                                onSortChange = viewModel::setCommentSortOrder,
+                                onRetry = { viewModel.loadComments(force = true) },
+                                onReactionClick = viewModel::toggleCommentReaction,
+                                onAddReaction = viewModel::toggleCommentReaction,
+                                onCopyComment = handleCopyComment,
+                                onUserClick = { username -> context.launchWebUrl("https://bgm.tv/user/$username") },
+                                onUrlClick = { url -> context.launchWebUrl(url) },
+                            )
+                        }
+                    }
                 }
             }
         }

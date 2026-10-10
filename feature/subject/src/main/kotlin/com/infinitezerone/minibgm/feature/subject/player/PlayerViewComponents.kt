@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
@@ -65,8 +68,12 @@ import com.infinitezerone.minibgm.core.designsystem.component.formatScore
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
+import com.infinitezerone.minibgm.feature.subject.components.episodeCommentsSection
 import java.util.Locale
 
 /**
@@ -1534,4 +1541,331 @@ private fun BiliFollowPill(
         textStyle = MaterialTheme.typography.labelMedium,
         contentPadding = PaddingValues(horizontal = 14.dp),
     )
+}
+
+/**
+ * 竖屏播放页下半部分 Tab 分栏
+ */
+enum class PlayerPortraitTab {
+    INTRO,
+    DISCUSSION,
+}
+
+/**
+ * 竖屏播放页 - 当前分集剧情梗概与元信息卡片
+ */
+@Composable
+internal fun PlayerEpisodeOverviewCard(
+    epLabel: String,
+    episodeName: String,
+    airDate: String,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    var isDescExpanded by rememberSaveable { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Text(
+                        text = epLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+
+                if (episodeName.isNotBlank()) {
+                    Text(
+                        text = episodeName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (airDate.isNotBlank()) {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_airdate, airDate),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                )
+            }
+
+            if (description.isNotBlank()) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isDescExpanded = !isDescExpanded },
+                ) {
+                    Text(
+                        text = description.trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp,
+                        maxLines = if (isDescExpanded) Int.MAX_VALUE else 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text =
+                            if (isDescExpanded) {
+                                stringResource(R.string.feature_subject_player_collapse)
+                            } else {
+                                stringResource(R.string.feature_subject_expand)
+                            },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 竖屏播放页 - 条目信息关联卡片
+ */
+@Composable
+internal fun PlayerSubjectCard(
+    subjectName: String,
+    coverUrl: String,
+    score: Double,
+    airDate: String,
+    summary: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoverImage(
+                url = coverUrl,
+                contentDescription = subjectName,
+                modifier = Modifier.width(44.dp),
+                cornerRadius = 8.dp,
+                placeholder = CoverPlaceholder.Subject,
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = subjectName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (score > 0.0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Star,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp),
+                            )
+                            Text(
+                                text = score.formatScore(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    if (airDate.isNotBlank()) {
+                        Text(
+                            text = airDate.take(4) + "年",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                if (summary.isNotBlank()) {
+                    Text(
+                        text = summary.trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = BgmIcons.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 竖屏播放页 - 简介 Tab 内容（分集梗概、选集横滑、播放源切换、番剧卡片）
+ */
+@Composable
+internal fun PlayerIntroContent(
+    uiState: PlayerUiState,
+    epLabel: String,
+    onSelectEpisode: (PlayerEpisodeItem) -> Unit,
+    onOpenAllEpisodes: () -> Unit,
+    onSelectSource: (Int) -> Unit,
+    onRequestOpenSources: (() -> Unit)?,
+    onManageRules: (() -> Unit)?,
+    onSubjectClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // 1. 分集详细信息与剧情简介卡片
+        item(key = "episode_overview") {
+            PlayerEpisodeOverviewCard(
+                epLabel = epLabel,
+                episodeName = uiState.episodeName,
+                airDate = uiState.currentEpisodeAirdate,
+                description = uiState.currentEpisodeDesc,
+            )
+        }
+
+        // 2. 选集横滑
+        if (uiState.episodes.isNotEmpty()) {
+            item(key = "episodes_section") {
+                BiliEpisodesSection(
+                    episodes = uiState.episodes,
+                    selectedEpisodeSort = uiState.episodeSort,
+                    selectedEpisodeId = uiState.episodeId,
+                    onSelectEpisode = onSelectEpisode,
+                    onOpenAllEpisodes = onOpenAllEpisodes,
+                )
+            }
+        }
+
+        // 3. 播放源切换条
+        if (uiState.sources.isNotEmpty()) {
+            item(key = "player_sources") {
+                BiliPlayerSourceBar(
+                    sources = uiState.sources,
+                    sourceFailureCounts = uiState.sourceFailureCounts,
+                    selectedIndex = uiState.selectedSourceIndex,
+                    onSelectSource = onSelectSource,
+                    onRequestOpenSources = onRequestOpenSources,
+                    onManageRules = onManageRules,
+                )
+            }
+        }
+
+        // 4. 关联番剧卡片
+        if (uiState.subjectName.isNotBlank()) {
+            item(key = "subject_card") {
+                PlayerSubjectCard(
+                    subjectName = uiState.subjectName,
+                    coverUrl = uiState.subjectCoverUrl,
+                    score = uiState.subjectScore,
+                    airDate = uiState.subjectDate,
+                    summary = uiState.subjectSummary,
+                    onClick = onSubjectClick,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 竖屏播放页 - 讨论 Tab 内容（全高独立滚动视口、排序、Reaction）
+ */
+@Composable
+internal fun PlayerDiscussionContent(
+    uiState: PlayerUiState,
+    onSortChange: (CommentSortOrder) -> Unit,
+    onRetry: () -> Unit,
+    onReactionClick: (EpisodeComment, CommentReaction) -> Unit,
+    onAddReaction: (EpisodeComment, Int) -> Unit,
+    onCopyComment: (String) -> Unit,
+    onUserClick: (String) -> Unit,
+    onUrlClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val commentsListState = rememberLazyListState()
+
+    LazyColumn(
+        state = commentsListState,
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        episodeCommentsSection(
+            comments = uiState.comments,
+            commentCount = uiState.currentEpisodeCommentCount,
+            isLoading = uiState.isCommentsLoading,
+            error = uiState.commentsError,
+            sortOrder = uiState.commentSortOrder,
+            currentUserId = uiState.currentUserId,
+            onSortChange = onSortChange,
+            onRetry = onRetry,
+            onReactionClick = onReactionClick,
+            onAddReaction = onAddReaction,
+            onCopyComment = onCopyComment,
+            onUserClick = onUserClick,
+            onUrlClick = onUrlClick,
+            showHeader = true,
+        )
+    }
 }
