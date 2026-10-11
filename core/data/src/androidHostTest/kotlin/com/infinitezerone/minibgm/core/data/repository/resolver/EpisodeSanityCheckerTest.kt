@@ -53,6 +53,24 @@ class EpisodeSanityCheckerTest {
     }
 
     @Test
+    fun `isSeasonAndEditionCompatible 无季数标题不假定第一季`() {
+        // 目标未标季数（无季数标题不假定第一季），候选明确声明后续季 -> 放行（77457ad7 语义变更）
+        assertTrue(
+            EpisodeSanityChecker.isSeasonAndEditionCompatible(
+                targetTitle = "无职转生",
+                candidateVodName = "无职转生 第二季",
+            ),
+        )
+        // 目标明确第一季，候选明确第二季 -> 互斥
+        assertFalse(
+            EpisodeSanityChecker.isSeasonAndEditionCompatible(
+                targetTitle = "无职转生 第一季",
+                candidateVodName = "无职转生 第二季",
+            ),
+        )
+    }
+
+    @Test
     fun `isSeasonAndEditionCompatible 严格拦截 TV 误播剧场版或特别篇`() {
         // 目标为 TV 正片，候选为剧场版 -> 互斥
         assertFalse(
