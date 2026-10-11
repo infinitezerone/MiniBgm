@@ -18,8 +18,10 @@ import androidx.media3.common.Tracks
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
+import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
+import com.infinitezerone.minibgm.core.model.DanmakuMode
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
@@ -281,6 +283,162 @@ class PlayerPanelsScreenshotTest {
             }
         }
         composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_controls_portrait.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w640dp-h360dp")
+    fun danmaku_view_overlay() {
+        val items =
+            listOf(
+                DanmakuItem(timeMs = 10_000L, text = "前方高能预警！", color = 0xFFFFFF),
+                DanmakuItem(timeMs = 10_100L, text = "名场面打卡", color = 0xFF66CCFF.toInt()),
+                DanmakuItem(timeMs = 10_200L, text = "这里循环播放过三遍", color = 0xFFFF6666.toInt()),
+                DanmakuItem(timeMs = 10_300L, text = "顶部固定弹幕", color = 0xFFFFFF, mode = DanmakuMode.TOP),
+                DanmakuItem(timeMs = 10_400L, text = "底部固定弹幕", color = 0xFF66FF66.toInt(), mode = DanmakuMode.BOTTOM),
+                DanmakuItem(timeMs = 30_000L, text = "时间窗之外的弹幕不应出现", color = 0xFFFFFF),
+            )
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101014))) {
+                    DanmakuView(
+                        danmakus = items,
+                        currentPositionMs = 13_500L,
+                        isEnabled = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_danmaku_overlay.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w640dp-h360dp")
+    fun resolving_view() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                PlayerResolvingView(
+                    sourceName = "备用规则源",
+                    attempt = 2,
+                    attemptTotal = 4,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_resolving.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w420dp-h760dp")
+    fun empty_view_portrait() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                // 空态落在黑色视频舞台内（白字），浅色主题底会"隐形"
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                    PlayerEmptyView(
+                        subjectName = "葬送的芙莉莲",
+                        epLabel = "第 3 话",
+                        errorMessage = null,
+                        onBackClick = {},
+                        onRetry = {},
+                        onNextSource = {},
+                        onRequestOpenSources = {},
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_empty.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w640dp-h360dp")
+    fun controls_error_state_landscape() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFF202124))) {
+                    PlayerControlsOverlay(
+                        subjectName = "葬送的芙莉莲",
+                        epLabel = "第 3 话",
+                        episodeName = "杀人魔",
+                        isPlaying = false,
+                        isBuffering = false,
+                        isEnded = false,
+                        position = MutableStateFlow(0L),
+                        bufferedPosition = MutableStateFlow(0L),
+                        totalDuration = 0L,
+                        isScrubbing = false,
+                        scrubProgress = 0f,
+                        isLandscape = true,
+                        resizeMode = PlayerResizeMode.FIT,
+                        errorMessage = "视频流无法解析，可能已失效",
+                        onBackClick = {},
+                        onPlayPauseToggle = {},
+                        onRewind10 = {},
+                        onForward10 = {},
+                        onScrubStart = {},
+                        onScrubbing = {},
+                        onScrubEnd = {},
+                        onToggleFullscreen = {},
+                        onCycleResizeMode = {},
+                        onEnterPip = {},
+                        onRetry = {},
+                        onNextSource = {},
+                        onRequestOpenSources = {},
+                        playbackSpeed = 1f,
+                        onCyclePlaybackSpeed = {},
+                        showEpisodeQueue = false,
+                        onOpenEpisodeQueue = {},
+                        onOpenTrackSelection = {},
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_error_state.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w420dp-h1400dp")
+    fun intro_content_portrait() {
+        val uiState =
+            PlayerUiState(
+                subjectId = 404724L,
+                episodeId = 3L,
+                episodeSort = 3f,
+                episodeName = "杀人魔",
+                subjectName = "葬送的芙莉莲",
+                subjectCoverUrl = "",
+                subjectScore = 9.1,
+                subjectDate = "2023-09-29",
+                subjectSummary = "能干的精灵芙莉莲在勇者一行里活了五十年……",
+                subjectCollectionType = 2,
+                episodes =
+                    (1..12).map { ep ->
+                        PlayerEpisodeItem(id = ep.toLong(), sort = ep.toFloat(), name = "第${ep}话", nameCn = "第 $ep 话", isWatched = ep < 3)
+                    },
+                totalEpisodes = 12,
+                sources = listOf(PlayerSourceTab(id = "direct", name = "默认直链", isDirect = true)),
+                isWatched = false,
+            )
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                PlayerIntroContent(
+                    uiState = uiState,
+                    epLabel = "第 3 话",
+                    onToggleWatched = {},
+                    onToggleFollow = {},
+                    onSelectEpisode = {},
+                    onOpenAllEpisodes = {},
+                    onSelectSource = {},
+                    onRequestOpenSources = null,
+                    onManageRules = null,
+                    onSubjectClick = {},
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_intro.png")
     }
 
     private companion object {
