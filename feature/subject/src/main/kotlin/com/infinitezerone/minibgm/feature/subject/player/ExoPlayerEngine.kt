@@ -152,6 +152,10 @@ class ExoPlayerEngine(
         exoPlayer.playbackParameters = PlaybackParameters(speed)
     }
 
+    override fun setLooping(enabled: Boolean) {
+        exoPlayer.repeatMode = if (enabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    }
+
     override var trackSelectionParameters: TrackSelectionParameters
         get() = exoPlayer.trackSelectionParameters
         set(value) {

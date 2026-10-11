@@ -43,6 +43,8 @@ data class PlaybackState(
     val isEnded: Boolean = false,
     val durationMs: Long = 0L,
     val error: String? = null,
+    /** 单集循环播放（设置面板开关） */
+    val isLooping: Boolean = false,
 )
 
 /**
@@ -225,6 +227,12 @@ class PlayerController(
 
     fun setPlaybackSpeed(speed: Float) {
         engine.setPlaybackSpeed(speed)
+    }
+
+    /** 单集循环播放开关 */
+    fun setLooping(enabled: Boolean) {
+        engine.setLooping(enabled)
+        _state.update { it.copy(isLooping = enabled) }
     }
 
     /** 切换清晰度为指定档位（轨道覆盖）。 */

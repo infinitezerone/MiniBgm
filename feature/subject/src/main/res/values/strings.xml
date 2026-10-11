@@ -358,4 +358,10 @@
     <string name="feature_subject_reaction_failed">表态失败</string>
     <string name="feature_subject_player_followed_doing">已加入追番（在看）</string>
     <string name="feature_subject_player_follow_updated">已更新追番状态</string>
+    <string name="feature_subject_player_speed_group">播放速度</string>
+    <string name="feature_subject_player_resize_group">画面比例</string>
+    <string name="feature_subject_player_danmaku_group">弹幕</string>
+    <string name="feature_subject_player_danmaku_show">显示弹幕</string>
+    <string name="feature_subject_player_danmaku_pick_episode">选择弹幕分集</string>
+    <string name="feature_subject_player_loop">单集循环</string>
 </resources>

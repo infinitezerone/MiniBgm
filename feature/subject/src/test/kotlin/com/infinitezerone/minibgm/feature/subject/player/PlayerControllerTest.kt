@@ -102,6 +102,14 @@ class PlayerControllerTest {
 
         override var trackSelectionParameters: TrackSelectionParameters = TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT
 
+        var loopEnabled = false
+        var loopCalls = 0
+
+        override fun setLooping(enabled: Boolean) {
+            loopEnabled = enabled
+            loopCalls++
+        }
+
         override fun release() {
             releaseCalls++
         }
@@ -402,5 +410,21 @@ class PlayerControllerTest {
             // 依赖真机；这里验证自适应切换路径不炸且维持空覆盖
             controller.selectAutoVideoQuality()
             assertTrue(engine.trackSelectionParameters.overrides.isEmpty())
+        }
+
+    @Test
+    fun setLooping_updatesEngineAndState() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.setLooping(true)
+            assertTrue(engine.loopEnabled)
+            assertEquals(1, engine.loopCalls)
+            assertTrue(controller.state.value.isLooping)
+
+            controller.setLooping(false)
+            assertFalse(engine.loopEnabled)
+            assertFalse(controller.state.value.isLooping)
         }
 }

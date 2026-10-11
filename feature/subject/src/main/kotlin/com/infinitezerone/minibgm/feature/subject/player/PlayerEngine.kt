@@ -73,6 +73,9 @@ interface PlayerEngine {
 
     fun setPlaybackSpeed(speed: Float)
 
+    /** 单集循环播放开关（REPEAT_MODE_ONE / OFF） */
+    fun setLooping(enabled: Boolean) {}
+
     /**
      * 轨道选择参数（清晰度覆盖、字幕/音轨启停）。
      * 收在引擎接口后面，让 [PlayerController] 的轨道命令可以纯 JVM 单测——

@@ -702,6 +702,18 @@ fun PlayerScreen(
                     onDisableSubtitles = controller::disableSubtitles,
                     onAutoSubtitles = controller::autoSelectSubtitles,
                     onSelectAudio = controller::selectAudioTrack,
+                    playbackSpeed = playbackSpeed,
+                    onSelectSpeed = { playbackSpeed = it },
+                    resizeMode = resizeMode,
+                    onSelectResizeMode = { resizeMode = it },
+                    isDanmakuEnabled = uiState.isDanmakuEnabled,
+                    onToggleDanmaku = viewModel::toggleDanmaku,
+                    onOpenDanmakuPicker = {
+                        isTrackSheetOpen = false
+                        openDanmakuPicker()
+                    },
+                    isLooping = playback.isLooping,
+                    onToggleLoop = { controller.setLooping(!playback.isLooping) },
                     onClose = { isTrackSheetOpen = false },
                 )
             }
@@ -856,6 +868,18 @@ fun PlayerScreen(
             onDisableSubtitles = controller::disableSubtitles,
             onAutoSubtitles = controller::autoSelectSubtitles,
             onSelectAudio = controller::selectAudioTrack,
+            playbackSpeed = playbackSpeed,
+            onSelectSpeed = { playbackSpeed = it },
+            resizeMode = resizeMode,
+            onSelectResizeMode = { resizeMode = it },
+            isDanmakuEnabled = uiState.isDanmakuEnabled,
+            onToggleDanmaku = viewModel::toggleDanmaku,
+            onOpenDanmakuPicker = {
+                isTrackSheetOpen = false
+                openDanmakuPicker()
+            },
+            isLooping = playback.isLooping,
+            onToggleLoop = { controller.setLooping(!playback.isLooping) },
             onDismiss = { isTrackSheetOpen = false },
         )
 

@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -388,6 +389,11 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
  * 播放器画质、音轨与软字幕选择器。
  * 竖屏采用 Material 3 [BgmModalBottomSheet]，横屏采用右侧抽屉式滑入面板，避免横屏切入切出 Dialog 造成闪烁。
  */
+/**
+ * 播放器「播放设置」面板：对照成熟视频 App（B 站/YouTube）的设置抽屉，
+ * 在轨道三组（清晰度/字幕/音轨）之外收拢倍速、画面比例、弹幕与单集循环——
+ * 这些能力此前散落在控制栏单键循环或完全没有入口。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PlayerTrackSelectionSheet(
@@ -400,6 +406,15 @@ internal fun PlayerTrackSelectionSheet(
     onDisableSubtitles: () -> Unit,
     onAutoSubtitles: () -> Unit,
     onSelectAudio: (PlayerTrackOption) -> Unit,
+    playbackSpeed: Float = 1f,
+    onSelectSpeed: (Float) -> Unit = {},
+    resizeMode: PlayerResizeMode = PlayerResizeMode.FIT,
+    onSelectResizeMode: (PlayerResizeMode) -> Unit = {},
+    isDanmakuEnabled: Boolean = false,
+    onToggleDanmaku: () -> Unit = {},
+    onOpenDanmakuPicker: (() -> Unit)? = null,
+    isLooping: Boolean = false,
+    onToggleLoop: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     if (!isOpen) return
@@ -418,6 +433,15 @@ internal fun PlayerTrackSelectionSheet(
                 onDisableSubtitles = onDisableSubtitles,
                 onAutoSubtitles = onAutoSubtitles,
                 onSelectAudio = onSelectAudio,
+                playbackSpeed = playbackSpeed,
+                onSelectSpeed = onSelectSpeed,
+                resizeMode = resizeMode,
+                onSelectResizeMode = onSelectResizeMode,
+                isDanmakuEnabled = isDanmakuEnabled,
+                onToggleDanmaku = onToggleDanmaku,
+                onOpenDanmakuPicker = onOpenDanmakuPicker,
+                isLooping = isLooping,
+                onToggleLoop = onToggleLoop,
                 onClose = onDismiss,
                 modifier = Modifier.padding(bottom = 24.dp),
             )
@@ -438,6 +462,15 @@ internal fun BoxScope.PlayerTrackSelectionLandscapeDrawer(
     onDisableSubtitles: () -> Unit,
     onAutoSubtitles: () -> Unit,
     onSelectAudio: (PlayerTrackOption) -> Unit,
+    playbackSpeed: Float = 1f,
+    onSelectSpeed: (Float) -> Unit = {},
+    resizeMode: PlayerResizeMode = PlayerResizeMode.FIT,
+    onSelectResizeMode: (PlayerResizeMode) -> Unit = {},
+    isDanmakuEnabled: Boolean = false,
+    onToggleDanmaku: () -> Unit = {},
+    onOpenDanmakuPicker: (() -> Unit)? = null,
+    isLooping: Boolean = false,
+    onToggleLoop: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     AnimatedVisibility(
@@ -493,6 +526,15 @@ internal fun BoxScope.PlayerTrackSelectionLandscapeDrawer(
                 onDisableSubtitles = onDisableSubtitles,
                 onAutoSubtitles = onAutoSubtitles,
                 onSelectAudio = onSelectAudio,
+                playbackSpeed = playbackSpeed,
+                onSelectSpeed = onSelectSpeed,
+                resizeMode = resizeMode,
+                onSelectResizeMode = onSelectResizeMode,
+                isDanmakuEnabled = isDanmakuEnabled,
+                onToggleDanmaku = onToggleDanmaku,
+                onOpenDanmakuPicker = onOpenDanmakuPicker,
+                isLooping = isLooping,
+                onToggleLoop = onToggleLoop,
                 onClose = onClose,
                 isDarkThemed = true,
                 modifier =
@@ -517,6 +559,15 @@ private fun PlayerTrackSelectionContent(
     onDisableSubtitles: () -> Unit,
     onAutoSubtitles: () -> Unit,
     onSelectAudio: (PlayerTrackOption) -> Unit,
+    playbackSpeed: Float = 1f,
+    onSelectSpeed: (Float) -> Unit = {},
+    resizeMode: PlayerResizeMode = PlayerResizeMode.FIT,
+    onSelectResizeMode: (PlayerResizeMode) -> Unit = {},
+    isDanmakuEnabled: Boolean = false,
+    onToggleDanmaku: () -> Unit = {},
+    onOpenDanmakuPicker: (() -> Unit)? = null,
+    isLooping: Boolean = false,
+    onToggleLoop: () -> Unit = {},
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     isDarkThemed: Boolean = false,
@@ -633,6 +684,58 @@ private fun PlayerTrackSelectionContent(
                 }
             }
 
+            // 1.5 播放速度分组（原控制栏单键循环入口在此收拢为可选网格）
+            item {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_speed_group),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDarkThemed) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SPEED_OPTIONS.forEach { speed ->
+                        SpeedPill(
+                            label = formatSpeedLabel(speed),
+                            isSelected = playbackSpeed == speed,
+                            isDarkThemed = isDarkThemed,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSelectSpeed(speed)
+                            },
+                        )
+                    }
+                }
+            }
+
+            // 1.75 画面比例分组（原控制栏单键循环入口在此收拢为可选行）
+            item {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_resize_group),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDarkThemed) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PlayerResizeMode.entries.forEach { mode ->
+                        SpeedPill(
+                            label = stringResource(mode.labelRes),
+                            isSelected = resizeMode == mode,
+                            isDarkThemed = isDarkThemed,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onSelectResizeMode(mode)
+                            },
+                        )
+                    }
+                }
+            }
+
             // 2. 软字幕分组
             item {
                 Text(
@@ -703,10 +806,125 @@ private fun PlayerTrackSelectionContent(
                 )
             }
 
+            // 3. 弹幕分组（开关 + 分集纠正入口，入口即关闭本面板转而挂起候选浮层）
+            item {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_danmaku_group),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDarkThemed) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                )
+            }
+            item {
+                ToggleRow(
+                    title = stringResource(R.string.feature_subject_player_danmaku_show),
+                    isChecked = isDanmakuEnabled,
+                    isDarkThemed = isDarkThemed,
+                    onToggle = onToggleDanmaku,
+                )
+            }
+            if (onOpenDanmakuPicker != null) {
+                item {
+                    TrackItemRow(
+                        title = stringResource(R.string.feature_subject_player_danmaku_pick_episode),
+                        isSelected = false,
+                        isDarkThemed = isDarkThemed,
+                        onClick = onOpenDanmakuPicker,
+                    )
+                }
+            }
+
+            // 4. 单集循环
+            item {
+                ToggleRow(
+                    title = stringResource(R.string.feature_subject_player_loop),
+                    isChecked = isLooping,
+                    isDarkThemed = isDarkThemed,
+                    onToggle = onToggleLoop,
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+}
+
+/** 播放速度候选档位（与 B 站一致：0.5x–2.0x） */
+internal val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+
+/** 倍速展示：整档保留一位小数（1.0x），非整档去尾零（0.75x、1.25x） */
+internal fun formatSpeedLabel(speed: Float): String =
+    if (speed % 1f == 0f) {
+        String.format(Locale.US, "%.1fx", speed)
+    } else {
+        String.format(Locale.US, "%.2gx", speed)
+    }
+
+/**
+ * 药丸单选（倍速/画面比例共用）：选中态用主题色描边加粗，未选中弱化
+ */
+@Composable
+private fun SpeedPill(
+    label: String,
+    isSelected: Boolean,
+    isDarkThemed: Boolean,
+    onClick: () -> Unit,
+) {
+    val activeColor = MaterialTheme.colorScheme.primary
+    val activeBg = if (isDarkThemed) activeColor.copy(alpha = 0.22f) else activeColor.copy(alpha = 0.12f)
+    val inactiveBg = if (isDarkThemed) Color.White.copy(alpha = 0.05f) else Color.Transparent
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) activeBg else inactiveBg,
+        border = if (isSelected) BorderStroke(1.dp, activeColor.copy(alpha = 0.6f)) else null,
+        onClick = onClick,
+        modifier = Modifier.size(width = 52.dp, height = 36.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color =
+                    if (isSelected) {
+                        if (isDarkThemed) Color.White else MaterialTheme.colorScheme.primary
+                    } else if (isDarkThemed) {
+                        Color.White.copy(alpha = 0.75f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** 开关行（弹幕/单集循环共用） */
+@Composable
+private fun ToggleRow(
+    title: String,
+    isChecked: Boolean,
+    isDarkThemed: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() }
+                .padding(vertical = 6.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isDarkThemed) Color.White else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = isChecked, onCheckedChange = { onToggle() })
     }
 }
 
