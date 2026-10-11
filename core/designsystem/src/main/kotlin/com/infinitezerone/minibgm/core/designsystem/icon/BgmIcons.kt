@@ -68,6 +68,7 @@ import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -168,6 +169,7 @@ object BgmIcons {
     val UserBorder: ImageVector = Icons.Outlined.Person
     val AccountCircle: ImageVector = Icons.Outlined.AccountCircle
 
+    val MoreVert: ImageVector = Icons.Filled.MoreVert
     val Settings: ImageVector = Icons.Filled.Settings
     val SettingsBorder: ImageVector = Icons.Outlined.Settings
 

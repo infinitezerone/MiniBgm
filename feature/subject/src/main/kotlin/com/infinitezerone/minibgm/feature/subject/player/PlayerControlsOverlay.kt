@@ -225,7 +225,7 @@ internal fun PlayerControlsOverlay(
             if (!isLandscape) {
                 IconButton(onClick = onOpenTrackSelection) {
                     Icon(
-                        imageVector = BgmIcons.Settings,
+                        imageVector = BgmIcons.MoreVert,
                         contentDescription = stringResource(R.string.feature_subject_player_settings),
                         tint = Color.White,
                     )
@@ -470,7 +470,7 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(32.dp),
                     ) {
                         Icon(
-                            imageVector = BgmIcons.Settings,
+                            imageVector = BgmIcons.MoreVert,
                             contentDescription = stringResource(R.string.feature_subject_player_settings_entry),
                             tint = Color.White,
                             modifier = Modifier.size(20.dp),
