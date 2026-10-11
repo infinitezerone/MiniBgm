@@ -403,6 +403,22 @@ fun PlayerScreen(
         }
     }
 
+    // 暂停瞬间弹出控制栏（转变沿），此后尊重单击切换——用户可隐藏控制栏得到纯净暂停帧；
+    // 恢复播放时不强制，交给上方的自动隐藏计时器
+    LaunchedEffect(playback.isPlaying) {
+        if (!playback.isPlaying && !playback.isEnded) {
+            areControlsVisible = true
+        }
+    }
+
+    // 播放出错时收起任何活跃面板（设置/选集/弹幕候选），让错误态完整露出——
+    // 面板内操作对已死的流无反馈，且遮罩会挡住"重试/换源"按钮
+    LaunchedEffect(uiState.error) {
+        if (uiState.error != null) {
+            overlayHostState.cancelActive()
+        }
+    }
+
     // 保持屏幕常亮
     DisposableEffect(activity) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -984,7 +1000,6 @@ private fun PlayerVideoStage(
         AnimatedVisibility(
             visible =
                 controlsVisible ||
-                    !playback.isPlaying ||
                     playback.isBuffering ||
                     playback.isEnded ||
                     errorMessage != null,
