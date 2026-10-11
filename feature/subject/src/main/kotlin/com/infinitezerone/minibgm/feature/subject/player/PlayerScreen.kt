@@ -517,6 +517,93 @@ fun PlayerScreen(
             }
         }
 
+    // 横竖屏共用同一段 PlayerVideoStage 装配（约 50 参），仅 PlayerStageConfig 声明的 8 项随形态不同——
+    // 消灭两处 95 行调用点 85% 的重复，防止后续加参数时两处漂移
+    @Composable
+    fun PlayerStageSection(config: PlayerStageConfig) {
+        PlayerVideoStage(
+            videoContent = videoSurface,
+            playback = playback,
+            position = position,
+            bufferedPosition = bufferedPosition,
+            streamUrl = uiState.streamUrl,
+            isResolvingSource = uiState.isResolvingSource,
+            resolveAttempt = uiState.resolveAttempt,
+            resolveAttemptTotal = uiState.resolveAttemptTotal,
+            resolvingSourceName = uiState.currentSource?.name ?: stringResource(R.string.feature_subject_player_sources),
+            subjectName = uiState.subjectName.ifBlank { route.subjectName },
+            epLabel = epLabel,
+            episodeName = uiState.episodeName,
+            errorMessage = uiState.error,
+            isLandscape = config.isLandscape,
+            isLocked = config.isLocked,
+            controlsVisible = areControlsVisible,
+            isScrubbing = isScrubbing,
+            scrubProgress = scrubProgress,
+            playbackSpeed = playbackSpeed,
+            resizeMode = resizeMode,
+            showEpisodeQueue = config.showEpisodeQueue,
+            onSingleTap = { areControlsVisible = !areControlsVisible },
+            onDoubleTapSeek = controller::seekTo,
+            onDoubleTapPlayPause = controller::togglePlayPause,
+            onSeekConfirm = controller::seekTo,
+            onFastForwardStart = { controller.setPlaybackSpeed(2f) },
+            onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
+            onPlayPauseToggle = controller::togglePlayPause,
+            onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
+            onForward10 = {
+                val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
+                controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
+            },
+            onScrubStart = { isScrubbing = true },
+            onScrubbing = { scrubProgress = it },
+            onGestureScrubbing = { isScrubbing = it },
+            onScrubEnd = { progress ->
+                isScrubbing = false
+                if (playback.durationMs > 0L) {
+                    controller.seekTo((progress * playback.durationMs).toLong())
+                }
+            },
+            onBackClick = config.onBackClick,
+            onToggleFullscreen = config.onToggleFullscreen,
+            onCycleResizeMode = ::cycleResizeMode,
+            onEnterPip = ::enterPictureInPicture,
+            onRetry = {
+                viewModel.retry()
+                controller.retry()
+            },
+            onNextSource = viewModel::selectNextSource,
+            onCyclePlaybackSpeed = {
+                playbackSpeed =
+                    when (playbackSpeed) {
+                        1f -> 1.25f
+                        1.25f -> 1.5f
+                        1.5f -> 2f
+                        else -> 1f
+                    }
+            },
+            onOpenEpisodeQueue = config.onOpenEpisodeQueue,
+            onToggleLock = config.onToggleLock,
+            onRequestOpenSources = onRequestOpenSources,
+            showPipButton = uiState.pipEnabled,
+            hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
+            isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
+            currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
+            onOpenTrackSelection = { isTrackSheetOpen = true },
+            danmakus = uiState.danmakus,
+            isDanmakuEnabled = uiState.isDanmakuEnabled,
+            onToggleDanmaku = viewModel::toggleDanmaku,
+            danmakuMatch = uiState.danmakuMatch,
+            onOpenDanmakuPicker = openDanmakuPicker,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { coords ->
+                        rawStageBounds = coords.boundsInWindow().toAndroidRect()
+                    },
+        )
+    }
+
     // 画中画模式下只显示纯净视频视口
     if (isInPipMode) {
         Box(
@@ -543,102 +630,32 @@ fun PlayerScreen(
     ) { _ ->
         if (isLandscape) {
             Box(modifier = Modifier.fillMaxSize()) {
-                PlayerVideoStage(
-                    videoContent = videoSurface,
-                    playback = playback,
-                    position = position,
-                    bufferedPosition = bufferedPosition,
-                    streamUrl = uiState.streamUrl,
-                    isResolvingSource = uiState.isResolvingSource,
-                    resolveAttempt = uiState.resolveAttempt,
-                    resolveAttemptTotal = uiState.resolveAttemptTotal,
-                    resolvingSourceName = uiState.currentSource?.name ?: stringResource(R.string.feature_subject_player_sources),
-                    subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                    epLabel = epLabel,
-                    episodeName = uiState.episodeName,
-                    errorMessage = uiState.error,
-                    isLandscape = true,
-                    isLocked = isScreenLocked,
-                    controlsVisible = areControlsVisible,
-                    isScrubbing = isScrubbing,
-                    scrubProgress = scrubProgress,
-                    playbackSpeed = playbackSpeed,
-                    resizeMode = resizeMode,
-                    showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
-                    onSingleTap = { areControlsVisible = !areControlsVisible },
-                    onDoubleTapSeek = controller::seekTo,
-                    onDoubleTapPlayPause = controller::togglePlayPause,
-                    onSeekConfirm = controller::seekTo,
-                    onFastForwardStart = { controller.setPlaybackSpeed(2f) },
-                    onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
-                    onPlayPauseToggle = controller::togglePlayPause,
-                    onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
-                    onForward10 = {
-                        val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
-                        controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
-                    },
-                    onScrubStart = { isScrubbing = true },
-                    onScrubbing = { scrubProgress = it },
-                    onGestureScrubbing = { isScrubbing = it },
-                    onScrubEnd = { progress ->
-                        isScrubbing = false
-                        if (playback.durationMs > 0L) {
-                            controller.seekTo((progress * playback.durationMs).toLong())
-                        }
-                    },
-                    onBackClick = { toggleFullscreen(false) },
-                    onToggleFullscreen = { toggleFullscreen(false) },
-                    onCycleResizeMode = ::cycleResizeMode,
-                    onEnterPip = ::enterPictureInPicture,
-                    onRetry = {
-                        viewModel.retry()
-                        controller.retry()
-                    },
-                    onNextSource = viewModel::selectNextSource,
-                    onCyclePlaybackSpeed = {
-                        playbackSpeed =
-                            when (playbackSpeed) {
-                                1f -> 1.25f
-                                1.25f -> 1.5f
-                                1.5f -> 2f
-                                else -> 1f
+                PlayerStageSection(
+                    PlayerStageConfig(
+                        isLandscape = true,
+                        isLocked = isScreenLocked,
+                        showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
+                        onBackClick = { toggleFullscreen(false) },
+                        onToggleFullscreen = { toggleFullscreen(false) },
+                        onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
+                        onToggleLock = {
+                            isScreenLocked = !isScreenLocked
+                            coroutineScope.launch {
+                                snackbarHostState.currentSnackbarData?.dismiss()
+                                snackbarHostState.showSnackbar(
+                                    message =
+                                        context.getString(
+                                            if (isScreenLocked) {
+                                                R.string.feature_subject_player_screen_locked
+                                            } else {
+                                                R.string.feature_subject_player_screen_unlocked
+                                            },
+                                        ),
+                                    duration = SnackbarDuration.Short,
+                                )
                             }
-                    },
-                    onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
-                    onToggleLock = {
-                        isScreenLocked = !isScreenLocked
-                        coroutineScope.launch {
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                            snackbarHostState.showSnackbar(
-                                message =
-                                    context.getString(
-                                        if (isScreenLocked) {
-                                            R.string.feature_subject_player_screen_locked
-                                        } else {
-                                            R.string.feature_subject_player_screen_unlocked
-                                        },
-                                    ),
-                                duration = SnackbarDuration.Short,
-                            )
-                        }
-                    },
-                    onRequestOpenSources = onRequestOpenSources,
-                    showPipButton = uiState.pipEnabled,
-                    hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
-                    isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
-                    currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
-                    onOpenTrackSelection = { isTrackSheetOpen = true },
-                    danmakus = uiState.danmakus,
-                    isDanmakuEnabled = uiState.isDanmakuEnabled,
-                    onToggleDanmaku = viewModel::toggleDanmaku,
-                    danmakuMatch = uiState.danmakuMatch,
-                    onOpenDanmakuPicker = openDanmakuPicker,
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .onGloballyPositioned { coords ->
-                                rawStageBounds = coords.boundsInWindow().toAndroidRect()
-                            },
+                        },
+                    ),
                 )
 
                 // 全屏内右侧选集抽屉背景遮罩
@@ -734,86 +751,16 @@ fun PlayerScreen(
                             .aspectRatio(16f / 9f)
                             .background(Color.Black),
                 ) {
-                    PlayerVideoStage(
-                        videoContent = videoSurface,
-                        playback = playback,
-                        position = position,
-                        bufferedPosition = bufferedPosition,
-                        streamUrl = uiState.streamUrl,
-                        isResolvingSource = uiState.isResolvingSource,
-                        resolveAttempt = uiState.resolveAttempt,
-                        resolveAttemptTotal = uiState.resolveAttemptTotal,
-                        resolvingSourceName = uiState.currentSource?.name ?: stringResource(R.string.feature_subject_player_sources),
-                        subjectName = uiState.subjectName.ifBlank { route.subjectName },
-                        epLabel = epLabel,
-                        episodeName = uiState.episodeName,
-                        errorMessage = uiState.error,
-                        isLandscape = false,
-                        isLocked = false,
-                        controlsVisible = areControlsVisible,
-                        isScrubbing = isScrubbing,
-                        scrubProgress = scrubProgress,
-                        playbackSpeed = playbackSpeed,
-                        resizeMode = resizeMode,
-                        showEpisodeQueue = false,
-                        onSingleTap = { areControlsVisible = !areControlsVisible },
-                        onDoubleTapSeek = controller::seekTo,
-                        onDoubleTapPlayPause = controller::togglePlayPause,
-                        onSeekConfirm = controller::seekTo,
-                        onFastForwardStart = { controller.setPlaybackSpeed(2f) },
-                        onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
-                        onPlayPauseToggle = controller::togglePlayPause,
-                        onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
-                        onForward10 = {
-                            val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
-                            controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
-                        },
-                        onScrubStart = { isScrubbing = true },
-                        onScrubbing = { scrubProgress = it },
-                        onGestureScrubbing = { isScrubbing = it },
-                        onScrubEnd = { progress ->
-                            isScrubbing = false
-                            if (playback.durationMs > 0L) {
-                                controller.seekTo((progress * playback.durationMs).toLong())
-                            }
-                        },
-                        onBackClick = onBackClick,
-                        onToggleFullscreen = { toggleFullscreen(true) },
-                        onCycleResizeMode = ::cycleResizeMode,
-                        onEnterPip = ::enterPictureInPicture,
-                        onRetry = {
-                            viewModel.retry()
-                            controller.retry()
-                        },
-                        onNextSource = viewModel::selectNextSource,
-                        onCyclePlaybackSpeed = {
-                            playbackSpeed =
-                                when (playbackSpeed) {
-                                    1f -> 1.25f
-                                    1.25f -> 1.5f
-                                    1.5f -> 2f
-                                    else -> 1f
-                                }
-                        },
-                        onOpenEpisodeQueue = {},
-                        onToggleLock = {},
-                        onRequestOpenSources = onRequestOpenSources,
-                        showPipButton = uiState.pipEnabled,
-                        hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
-                        isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
-                        currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
-                        onOpenTrackSelection = { isTrackSheetOpen = true },
-                        danmakus = uiState.danmakus,
-                        isDanmakuEnabled = uiState.isDanmakuEnabled,
-                        onToggleDanmaku = viewModel::toggleDanmaku,
-                        danmakuMatch = uiState.danmakuMatch,
-                        onOpenDanmakuPicker = openDanmakuPicker,
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .onGloballyPositioned { coords ->
-                                    rawStageBounds = coords.boundsInWindow().toAndroidRect()
-                                },
+                    PlayerStageSection(
+                        PlayerStageConfig(
+                            isLandscape = false,
+                            isLocked = false,
+                            showEpisodeQueue = false,
+                            onBackClick = onBackClick,
+                            onToggleFullscreen = { toggleFullscreen(true) },
+                            onOpenEpisodeQueue = {},
+                            onToggleLock = {},
+                        ),
                     )
                 }
 
@@ -1287,3 +1234,18 @@ private fun rememberIsInPipMode(): Boolean {
 
     return isInPipMode
 }
+
+/**
+ * 横竖屏共用同一段 [PlayerVideoStage] 装配时，仅随形态不同的差异项。
+ * 其余约 45 个参数（播放状态、手势回调、弹幕、轨道入口等）在 PlayerStageSection 中固定，
+ * 新增能力只改一处，不再出现两份调用点各自漂移。
+ */
+private data class PlayerStageConfig(
+    val isLandscape: Boolean,
+    val isLocked: Boolean,
+    val showEpisodeQueue: Boolean,
+    val onBackClick: () -> Unit,
+    val onToggleFullscreen: () -> Unit,
+    val onOpenEpisodeQueue: () -> Unit,
+    val onToggleLock: () -> Unit,
+)
