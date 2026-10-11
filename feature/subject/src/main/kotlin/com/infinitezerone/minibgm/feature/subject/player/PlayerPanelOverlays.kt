@@ -62,7 +62,6 @@ fun OverlayProviderScope.playerSettingsPanel(
     overlay<PlayerSettingsRequest, Unit> { _, onRespond ->
         PlayerTrackSelectionSheet(
             isOpen = true,
-            isLandscape = false,
             tracksSnapshot = tracksSnapshot,
             onSelectQuality = onSelectQuality,
             onAutoQuality = onAutoQuality,
@@ -166,11 +165,11 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
                     onSelectSource = onSelectSource,
                     onSelectEpisode = {
                         onSelectEpisode(it)
-                        onRespond(Unit)
+                        visibleState.targetState = false
                     },
                     onSelectQueueIndex = {
                         onSelectQueueIndex(it)
-                        onRespond(Unit)
+                        visibleState.targetState = false
                     },
                     onClose = { visibleState.targetState = false },
                 )

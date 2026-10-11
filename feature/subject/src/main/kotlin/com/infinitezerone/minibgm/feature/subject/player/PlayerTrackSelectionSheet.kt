@@ -380,7 +380,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
 @Composable
 internal fun PlayerTrackSelectionSheet(
     isOpen: Boolean,
-    isLandscape: Boolean,
     tracksSnapshot: PlayerTracksSnapshot,
     onSelectQuality: (PlayerQualityOption) -> Unit,
     onAutoQuality: () -> Unit,
