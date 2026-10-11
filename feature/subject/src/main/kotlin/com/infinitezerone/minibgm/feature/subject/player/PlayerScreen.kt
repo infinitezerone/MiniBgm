@@ -809,7 +809,7 @@ fun PlayerScreen(
                 onSelectResizeMode = { resizeMode = it },
                 isDanmakuEnabled = uiState.isDanmakuEnabled,
                 onToggleDanmaku = viewModel::toggleDanmaku,
-                onOpenDanmakuPicker = openDanmakuPicker,
+                onOpenDanmakuPicker = openDanmakuPicker.takeIf { !uiState.danmakuMatch?.candidates.isNullOrEmpty() },
                 isLooping = playback.isLooping,
                 onToggleLoop = { controller.setLooping(!playback.isLooping) },
                 onSelectQuality = {

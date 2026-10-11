@@ -263,6 +263,9 @@ private class PlaybackSession(
     /** 分集队列中的当前集下标 */
     var currentIndex: Int = startIndex
 
+    /** 弹幕 FALLBACK 提示一次性守卫：一部番仅提示一次，避免每集开播都吵 */
+    var hasHintedDanmakuFallback: Boolean = false
+
     /** 自动打卡一次性守卫：一次播放会话仅触发一次，换集后复位 */
     var hasTriggeredAutoMark: Boolean = false
 
@@ -1107,7 +1110,11 @@ class PlayerViewModel(
                 it.copy(danmakus = result.items, danmakuMatch = result.match, isDanmakuLoading = false)
             }
             val match = result.match
-            if (match?.state == DanmakuMatchState.FALLBACK && match.candidates.isNotEmpty()) {
+            if (match?.state == DanmakuMatchState.FALLBACK &&
+                match.candidates.isNotEmpty() &&
+                !session.hasHintedDanmakuFallback
+            ) {
+                session.hasHintedDanmakuFallback = true
                 _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_match_fallback_hint))
             }
         }

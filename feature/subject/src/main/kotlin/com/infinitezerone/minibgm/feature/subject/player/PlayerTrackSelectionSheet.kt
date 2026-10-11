@@ -401,33 +401,30 @@ internal fun PlayerTrackSelectionSheet(
 ) {
     if (!isOpen) return
 
-    if (isLandscape) {
-        // 横屏：在舞台右侧使用无缝抽屉
-    } else {
-        BgmModalBottomSheet(
-            onDismissRequest = onDismiss,
-        ) {
-            PlayerTrackSelectionContent(
-                tracksSnapshot = tracksSnapshot,
-                onSelectQuality = onSelectQuality,
-                onAutoQuality = onAutoQuality,
-                onSelectSubtitle = onSelectSubtitle,
-                onDisableSubtitles = onDisableSubtitles,
-                onAutoSubtitles = onAutoSubtitles,
-                onSelectAudio = onSelectAudio,
-                playbackSpeed = playbackSpeed,
-                onSelectSpeed = onSelectSpeed,
-                resizeMode = resizeMode,
-                onSelectResizeMode = onSelectResizeMode,
-                isDanmakuEnabled = isDanmakuEnabled,
-                onToggleDanmaku = onToggleDanmaku,
-                onOpenDanmakuPicker = onOpenDanmakuPicker,
-                isLooping = isLooping,
-                onToggleLoop = onToggleLoop,
-                onClose = onDismiss,
-                modifier = Modifier.padding(bottom = 24.dp),
-            )
-        }
+    // 横竖屏统一走底部弹层（面板经 BgmOverlayHost 承接，不依赖舞台层级）
+    BgmModalBottomSheet(
+        onDismissRequest = onDismiss,
+    ) {
+        PlayerTrackSelectionContent(
+            tracksSnapshot = tracksSnapshot,
+            onSelectQuality = onSelectQuality,
+            onAutoQuality = onAutoQuality,
+            onSelectSubtitle = onSelectSubtitle,
+            onDisableSubtitles = onDisableSubtitles,
+            onAutoSubtitles = onAutoSubtitles,
+            onSelectAudio = onSelectAudio,
+            playbackSpeed = playbackSpeed,
+            onSelectSpeed = onSelectSpeed,
+            resizeMode = resizeMode,
+            onSelectResizeMode = onSelectResizeMode,
+            isDanmakuEnabled = isDanmakuEnabled,
+            onToggleDanmaku = onToggleDanmaku,
+            onOpenDanmakuPicker = onOpenDanmakuPicker,
+            isLooping = isLooping,
+            onToggleLoop = onToggleLoop,
+            onClose = onDismiss,
+            modifier = Modifier.padding(bottom = 24.dp),
+        )
     }
 }
 

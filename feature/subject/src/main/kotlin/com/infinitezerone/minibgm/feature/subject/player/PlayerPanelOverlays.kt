@@ -14,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,9 +108,11 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
                 MutableTransitionState(initialState = false).apply { targetState = true }
             }
         BackHandler { visibleState.targetState = false }
-        // 退出动画播完后再响应（关闭挂起协程并卸载浮层内容）
-        if (visibleState.isIdle && !visibleState.currentState) {
-            onRespond(Unit)
+        // 退出动画播完后再响应（关闭挂起协程并卸载浮层内容）——SideEffect 保证不在组合期产生副作用
+        SideEffect {
+            if (visibleState.isIdle && !visibleState.currentState) {
+                onRespond(Unit)
+            }
         }
         Box(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(
