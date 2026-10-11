@@ -76,17 +76,21 @@ object EpisodeSanityChecker {
     ): Boolean {
         if (targetTitle.isBlank() || candidateVodName.isBlank()) return true
 
-        val targetSeason = parseSeasonNumber(targetTitle) ?: 1
-        val candidateSeason = parseSeasonNumber(candidateVodName)
+        val targetExplicitSeason = parseSeasonNumber(targetTitle)
+        val candidateExplicitSeason = parseSeasonNumber(candidateVodName)
 
-        // 1. 季数严格互斥
-        if (candidateSeason != null && candidateSeason != targetSeason) {
+        // 1. 季数严格互斥：若双方都明确声明了季数且不相等，一票否决
+        if (targetExplicitSeason != null && candidateExplicitSeason != null && targetExplicitSeason != candidateExplicitSeason) {
             return false
         }
-        // 若目标明确是第二季以上，而候选没有标任何季数但包含了"第一季"或"第1期"
-        if (targetSeason > 1 &&
+        // 若目标明确为第 2 季及以上，而候选明确声明了第一季/第1期
+        if (targetExplicitSeason != null && targetExplicitSeason > 1 &&
             (candidateVodName.contains("第一季") || candidateVodName.contains("第1季") || candidateVodName.contains("第1期"))
         ) {
+            return false
+        }
+        // 若目标明确声明了第一季/第1期，而候选明确声明了后续季
+        if (targetExplicitSeason == 1 && candidateExplicitSeason != null && candidateExplicitSeason > 1) {
             return false
         }
 

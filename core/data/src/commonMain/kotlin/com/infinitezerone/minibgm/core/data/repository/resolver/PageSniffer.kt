@@ -155,7 +155,7 @@ internal fun pageBelongsToTitle(
 ): Boolean {
     if (title.isBlank()) return true
     val pageTitle = pageTitleOf(html) ?: return true
-    return titleMatches(pageTitle, title)
+    return titleMatches(pageTitle, title) && EpisodeSanityChecker.isSeasonAndEditionCompatible(title, pageTitle)
 }
 
 /**
