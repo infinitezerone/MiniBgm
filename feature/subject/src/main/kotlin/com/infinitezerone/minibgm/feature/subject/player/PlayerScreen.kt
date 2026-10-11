@@ -16,18 +16,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -165,6 +160,16 @@ fun PlayerScreen(
         }
     }
 
+    val openSettingsPanel: () -> Unit = {
+        coroutineScope.launch { overlayHostState.await(PlayerSettingsRequest) }
+    }
+    val openEpisodeQueuePanel: () -> Unit = {
+        coroutineScope.launch { overlayHostState.await(PlayerEpisodeQueueRequest) }
+    }
+    val openEpisodesPanel: () -> Unit = {
+        coroutineScope.launch { overlayHostState.await(PlayerEpisodesRequest) }
+    }
+
     // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
     val engine = remember(context) { ExoPlayerEngine(context) }
     val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
@@ -178,8 +183,6 @@ fun PlayerScreen(
     var isLandscape by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
-    var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
-    var isTrackSheetOpen by remember { mutableStateOf(false) }
     // 轨道快照与视频宽高比由 PlayerController 从引擎事件播报（含轨道选择参数变化），UI 不再直挂 Player.Listener
     val tracksSnapshot by controller.tracksSnapshot.collectAsStateWithLifecycle()
     val videoAspectRatio by controller.videoAspectRatio.collectAsStateWithLifecycle()
@@ -188,7 +191,6 @@ fun PlayerScreen(
     var scrubProgress by remember { mutableFloatStateOf(0f) }
     var resumedForUrl by remember { mutableStateOf("") }
     var playerReady by remember { mutableStateOf(false) }
-    var isEpisodeBottomSheetOpen by remember { mutableStateOf(false) }
     var selectedPortraitTab by rememberSaveable { mutableStateOf(PlayerPortraitTab.INTRO) }
 
     val targetAspectRatio = videoAspectRatio ?: Rational(16, 9)
@@ -242,10 +244,8 @@ fun PlayerScreen(
     }
 
     fun toggleFullscreen(landscape: Boolean) {
-        if (!landscape) {
-            isEpisodeDrawerOpen = false
-            isTrackSheetOpen = false
-        }
+        // 面板类浮层随形态切换收起（横竖两套布局不同，保留面板意义不大）
+        overlayHostState.cancelActive()
         isLandscape = landscape
         val act = activity ?: return
         act.requestedOrientation =
@@ -309,7 +309,7 @@ fun PlayerScreen(
                         WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 } else {
                     insetsController.show(WindowInsetsCompat.Type.systemBars())
-                    isEpisodeDrawerOpen = false
+                    overlayHostState.cancelActive()
                     isScreenLocked = false
                 }
             }
@@ -319,7 +319,7 @@ fun PlayerScreen(
     // 进入 PiP 后释放方向锁定并关闭抽屉，使得后续点击小窗恢复时根据用户当前手机物理朝向自适应展开且不遮挡画面
     LaunchedEffect(isInPipMode) {
         if (isInPipMode) {
-            isEpisodeDrawerOpen = false
+            overlayHostState.cancelActive()
             val act = activity
             if (act != null && act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -430,14 +430,10 @@ fun PlayerScreen(
         }
     }
 
+    // 面板类浮层各自注册 BackHandler（OverlayHost 单槽，同一时刻只有最上层面板拦截返回键）；
+    // 这里只剩页面级回退：横屏先退全屏，竖屏交给导航返回
     BackHandler {
-        if (isEpisodeBottomSheetOpen) {
-            isEpisodeBottomSheetOpen = false
-        } else if (isTrackSheetOpen) {
-            isTrackSheetOpen = false
-        } else if (isEpisodeDrawerOpen) {
-            isEpisodeDrawerOpen = false
-        } else if (isLandscape) {
+        if (isLandscape) {
             toggleFullscreen(false)
         } else {
             onBackClick()
@@ -559,7 +555,7 @@ fun PlayerScreen(
             hasSelectableTracks = tracksSnapshot.hasSelectableTracks,
             isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
             currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
-            onOpenTrackSelection = { isTrackSheetOpen = true },
+            onOpenTrackSelection = openSettingsPanel,
             danmakus = uiState.danmakus,
             isDanmakuEnabled = uiState.isDanmakuEnabled,
             onToggleDanmaku = viewModel::toggleDanmaku,
@@ -607,7 +603,7 @@ fun PlayerScreen(
                         showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
                         onBackClick = { toggleFullscreen(false) },
                         onToggleFullscreen = { toggleFullscreen(false) },
-                        onOpenEpisodeQueue = { isEpisodeDrawerOpen = true },
+                        onOpenEpisodeQueue = openEpisodeQueuePanel,
                         onToggleLock = {
                             isScreenLocked = !isScreenLocked
                             coroutineScope.launch {
@@ -626,95 +622,6 @@ fun PlayerScreen(
                             }
                         },
                     ),
-                )
-
-                // 全屏内右侧选集抽屉背景遮罩
-                AnimatedVisibility(
-                    visible = isEpisodeDrawerOpen,
-                    enter = fadeIn(tween(durationMillis = 200)),
-                    exit = fadeOut(tween(durationMillis = 200)),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.5f))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { isEpisodeDrawerOpen = false },
-                                ),
-                    )
-                }
-
-                // 全屏内右侧选集抽屉面板（自右向左滑入）
-                AnimatedVisibility(
-                    visible = isEpisodeDrawerOpen,
-                    enter =
-                        slideInHorizontally(
-                            initialOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 250),
-                        ),
-                    exit =
-                        slideOutHorizontally(
-                            targetOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 200),
-                        ),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                ) {
-                    PlayerEpisodeQueueDrawer(
-                        queue = uiState.queue,
-                        currentIndex = uiState.currentIndex,
-                        episodes = uiState.episodes,
-                        selectedEpisodeSort = uiState.episodeSort,
-                        selectedEpisodeId = uiState.episodeId,
-                        selectedEpisodeType = uiState.episodeType,
-                        sources = uiState.sources,
-                        sourceFailureCounts = uiState.sourceFailureCounts,
-                        selectedSourceIndex = uiState.selectedSourceIndex,
-                        autoNextEnabled = uiState.autoNextEnabled,
-                        totalEpisodes = uiState.totalEpisodes,
-                        hasMoreEpisodes = uiState.hasMoreEpisodes,
-                        isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
-                        onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
-                        onToggleAutoNext = viewModel::toggleAutoNext,
-                        onSelectSource = viewModel::selectSource,
-                        onSelectEpisode = { ep ->
-                            viewModel.selectEpisode(ep)
-                            isEpisodeDrawerOpen = false
-                        },
-                        onSelectQueueIndex = { index ->
-                            viewModel.switchTo(index)
-                            isEpisodeDrawerOpen = false
-                        },
-                        onClose = { isEpisodeDrawerOpen = false },
-                    )
-                }
-
-                // 全屏内右侧音轨与字幕选择抽屉
-                PlayerTrackSelectionLandscapeDrawer(
-                    isOpen = isTrackSheetOpen,
-                    tracksSnapshot = tracksSnapshot,
-                    onSelectQuality = controller::selectVideoQuality,
-                    onAutoQuality = controller::selectAutoVideoQuality,
-                    onSelectSubtitle = controller::selectSubtitleTrack,
-                    onDisableSubtitles = controller::disableSubtitles,
-                    onAutoSubtitles = controller::autoSelectSubtitles,
-                    onSelectAudio = controller::selectAudioTrack,
-                    playbackSpeed = playbackSpeed,
-                    onSelectSpeed = { playbackSpeed = it },
-                    resizeMode = resizeMode,
-                    onSelectResizeMode = { resizeMode = it },
-                    isDanmakuEnabled = uiState.isDanmakuEnabled,
-                    onToggleDanmaku = viewModel::toggleDanmaku,
-                    onOpenDanmakuPicker = {
-                        isTrackSheetOpen = false
-                        openDanmakuPicker()
-                    },
-                    isLooping = playback.isLooping,
-                    onToggleLoop = { controller.setLooping(!playback.isLooping) },
-                    onClose = { isTrackSheetOpen = false },
                 )
             }
         } else {
@@ -829,7 +736,7 @@ fun PlayerScreen(
                                 onToggleWatched = viewModel::manualToggleWatched,
                                 onToggleFollow = viewModel::toggleFollowSubject,
                                 onSelectEpisode = viewModel::selectEpisode,
-                                onOpenAllEpisodes = { isEpisodeBottomSheetOpen = true },
+                                onOpenAllEpisodes = openEpisodesPanel,
                                 onSelectSource = viewModel::selectSource,
                                 onRequestOpenSources = onRequestOpenSources,
                                 onManageRules = onManageRules,
@@ -858,48 +765,41 @@ fun PlayerScreen(
             }
         }
 
-        PlayerTrackSelectionSheet(
-            isOpen = isTrackSheetOpen && !isLandscape,
-            isLandscape = false,
-            tracksSnapshot = tracksSnapshot,
-            onSelectQuality = controller::selectVideoQuality,
-            onAutoQuality = controller::selectAutoVideoQuality,
-            onSelectSubtitle = controller::selectSubtitleTrack,
-            onDisableSubtitles = controller::disableSubtitles,
-            onAutoSubtitles = controller::autoSelectSubtitles,
-            onSelectAudio = controller::selectAudioTrack,
-            playbackSpeed = playbackSpeed,
-            onSelectSpeed = { playbackSpeed = it },
-            resizeMode = resizeMode,
-            onSelectResizeMode = { resizeMode = it },
-            isDanmakuEnabled = uiState.isDanmakuEnabled,
-            onToggleDanmaku = viewModel::toggleDanmaku,
-            onOpenDanmakuPicker = {
-                isTrackSheetOpen = false
-                openDanmakuPicker()
-            },
-            isLooping = playback.isLooping,
-            onToggleLoop = { controller.setLooping(!playback.isLooping) },
-            onDismiss = { isTrackSheetOpen = false },
-        )
-
-        if (isEpisodeBottomSheetOpen && !isLandscape) {
-            PlayerEpisodesBottomSheet(
-                episodes = uiState.episodes,
-                selectedEpisodeSort = uiState.episodeSort,
-                selectedEpisodeId = uiState.episodeId,
-                totalEpisodes = uiState.totalEpisodes,
-                hasMoreEpisodes = uiState.hasMoreEpisodes,
-                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
-                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
-                onSelectEpisode = viewModel::selectEpisode,
-                onDismiss = { isEpisodeBottomSheetOpen = false },
-            )
-        }
-
-        // 弹幕分集候选挑选浮层（BgmOverlayHost 承接，无请求时不渲染任何内容）
+        // 面板类浮层统一经 BgmOverlayHost 承接（单槽互斥 + 各自的返回键拦截）；
+        // 无请求时不渲染任何内容
         BgmOverlayHost(hostState = overlayHostState) {
             danmakuCandidatePicker()
+            playerSettingsPanel(
+                tracksSnapshot = tracksSnapshot,
+                playbackSpeed = playbackSpeed,
+                onSelectSpeed = { playbackSpeed = it },
+                resizeMode = resizeMode,
+                onSelectResizeMode = { resizeMode = it },
+                isDanmakuEnabled = uiState.isDanmakuEnabled,
+                onToggleDanmaku = viewModel::toggleDanmaku,
+                onOpenDanmakuPicker = openDanmakuPicker,
+                isLooping = playback.isLooping,
+                onToggleLoop = { controller.setLooping(!playback.isLooping) },
+                onSelectQuality = controller::selectVideoQuality,
+                onAutoQuality = controller::selectAutoVideoQuality,
+                onSelectSubtitle = controller::selectSubtitleTrack,
+                onDisableSubtitles = controller::disableSubtitles,
+                onAutoSubtitles = controller::autoSelectSubtitles,
+                onSelectAudio = controller::selectAudioTrack,
+            )
+            playerEpisodeQueuePanel(
+                uiState = uiState,
+                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
+                onToggleAutoNext = viewModel::toggleAutoNext,
+                onSelectSource = viewModel::selectSource,
+                onSelectEpisode = viewModel::selectEpisode,
+                onSelectQueueIndex = viewModel::switchTo,
+            )
+            playerEpisodesPanel(
+                uiState = uiState,
+                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
+                onSelectEpisode = viewModel::selectEpisode,
+            )
         }
     }
 }

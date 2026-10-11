@@ -126,6 +126,14 @@ class OverlayHostState {
             null
         }
 
+    /**
+     * 取消当前活跃请求（等待方收到取消并返回 null）。
+     * 供宿主在页面级状态切换（全屏切换、进入 PiP）时收起面板类浮层。
+     */
+    fun cancelActive() {
+        currentEntry?.cancel()
+    }
+
     /** 别名兼容，等价于 [request] */
     suspend fun <R> await(request: OverlayRequest<R>): R = request(request)
 

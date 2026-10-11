@@ -1,30 +1,17 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.displayCutoutPadding
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -386,10 +372,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
 }
 
 /**
- * 播放器画质、音轨与软字幕选择器。
- * 竖屏采用 Material 3 [BgmModalBottomSheet]，横屏采用右侧抽屉式滑入面板，避免横屏切入切出 Dialog 造成闪烁。
- */
-/**
  * 播放器「播放设置」面板：对照成熟视频 App（B 站/YouTube）的设置抽屉，
  * 在轨道三组（清晰度/字幕/音轨）之外收拢倍速、画面比例、弹幕与单集循环——
  * 这些能力此前散落在控制栏单键循环或完全没有入口。
@@ -444,104 +426,6 @@ internal fun PlayerTrackSelectionSheet(
                 onToggleLoop = onToggleLoop,
                 onClose = onDismiss,
                 modifier = Modifier.padding(bottom = 24.dp),
-            )
-        }
-    }
-}
-
-/**
- * 横屏专用的右侧抽屉滑入组件（需置于播放器 Stage 的根 Box 中）。
- */
-@Composable
-internal fun BoxScope.PlayerTrackSelectionLandscapeDrawer(
-    isOpen: Boolean,
-    tracksSnapshot: PlayerTracksSnapshot,
-    onSelectQuality: (PlayerQualityOption) -> Unit,
-    onAutoQuality: () -> Unit,
-    onSelectSubtitle: (PlayerTrackOption) -> Unit,
-    onDisableSubtitles: () -> Unit,
-    onAutoSubtitles: () -> Unit,
-    onSelectAudio: (PlayerTrackOption) -> Unit,
-    playbackSpeed: Float = 1f,
-    onSelectSpeed: (Float) -> Unit = {},
-    resizeMode: PlayerResizeMode = PlayerResizeMode.FIT,
-    onSelectResizeMode: (PlayerResizeMode) -> Unit = {},
-    isDanmakuEnabled: Boolean = false,
-    onToggleDanmaku: () -> Unit = {},
-    onOpenDanmakuPicker: (() -> Unit)? = null,
-    isLooping: Boolean = false,
-    onToggleLoop: () -> Unit = {},
-    onClose: () -> Unit,
-) {
-    AnimatedVisibility(
-        visible = isOpen,
-        enter = fadeIn(tween(durationMillis = 200)),
-        exit = fadeOut(tween(durationMillis = 200)),
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClose,
-                    ),
-        )
-    }
-
-    AnimatedVisibility(
-        visible = isOpen,
-        enter =
-            slideInHorizontally(
-                initialOffsetX = { fullWidth -> fullWidth },
-                animationSpec = tween(durationMillis = 250),
-            ),
-        exit =
-            slideOutHorizontally(
-                targetOffsetX = { fullWidth -> fullWidth },
-                animationSpec = tween(durationMillis = 200),
-            ),
-        modifier =
-            Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .width(320.dp),
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
-            contentColor = Color.White,
-            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            PlayerTrackSelectionContent(
-                tracksSnapshot = tracksSnapshot,
-                onSelectQuality = onSelectQuality,
-                onAutoQuality = onAutoQuality,
-                onSelectSubtitle = onSelectSubtitle,
-                onDisableSubtitles = onDisableSubtitles,
-                onAutoSubtitles = onAutoSubtitles,
-                onSelectAudio = onSelectAudio,
-                playbackSpeed = playbackSpeed,
-                onSelectSpeed = onSelectSpeed,
-                resizeMode = resizeMode,
-                onSelectResizeMode = onSelectResizeMode,
-                isDanmakuEnabled = isDanmakuEnabled,
-                onToggleDanmaku = onToggleDanmaku,
-                onOpenDanmakuPicker = onOpenDanmakuPicker,
-                isLooping = isLooping,
-                onToggleLoop = onToggleLoop,
-                onClose = onClose,
-                isDarkThemed = true,
-                modifier =
-                    Modifier
-                        .displayCutoutPadding()
-                        .navigationBarsPadding()
-                        .statusBarsPadding(),
             )
         }
     }
