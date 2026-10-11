@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
@@ -21,6 +22,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CoroutineDispatcher
@@ -73,7 +75,10 @@ data class EpisodeDetailUiState(
 /** 单集详情页一次性单发事件 */
 sealed interface EpisodeDetailUiEvent {
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
     ) : EpisodeDetailUiEvent
 
     /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问） */
@@ -516,7 +521,7 @@ class EpisodeDetailViewModel(
     ) {
         val userId = uiState.value.currentUserId
         if (userId == null) {
-            _events.trySend(EpisodeDetailUiEvent.ShowSnackbar("请先登录后再表态"))
+            _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_reaction_login_required))
             return
         }
         val reacted = reaction.users.any { it.id == userId }
@@ -544,11 +549,21 @@ class EpisodeDetailViewModel(
                 }
             when (result) {
                 is AppResult.Success -> {
-                    _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(if (reacted) "已取消表态" else "已表态"))
+                    _events.trySend(
+                        EpisodeDetailUiEvent.ShowSnackbar(
+                            messageRes =
+                                if (reacted) R.string.feature_subject_reaction_cancelled else R.string.feature_subject_reaction_done,
+                        ),
+                    )
                 }
                 is AppResult.Error -> {
                     commentsUi.update { it.copy(comments = previousComments) }
-                    _events.trySend(EpisodeDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                    _events.trySend(
+                        EpisodeDetailUiEvent.ShowSnackbar(
+                            message = result.message.ifBlank { null },
+                            messageRes = R.string.feature_subject_reaction_failed,
+                        ),
+                    )
                 }
                 is AppResult.Loading -> Unit
             }

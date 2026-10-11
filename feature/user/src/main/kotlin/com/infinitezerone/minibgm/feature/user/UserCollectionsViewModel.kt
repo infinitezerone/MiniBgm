@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.feature.user.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -112,7 +113,10 @@ sealed interface UserCollectionsEvent {
     ) : UserCollectionsEvent
 
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
     ) : UserCollectionsEvent
 }
 
@@ -604,7 +608,12 @@ class UserCollectionsViewModel(
                     applyOptimisticEpStatus(type, subjectId, collection.epStatus)
                     progress.update { it.copy(error = message) }
                     // 列表非空时 error 不可见（不打断内容），必须以事件形式显式反馈
-                    _events.trySend(UserCollectionsEvent.ShowSnackbar("打卡失败：" + message.ifBlank { "网络异常" }))
+                    _events.trySend(
+                        UserCollectionsEvent.ShowSnackbar(
+                            message = message.ifBlank { null },
+                            messageRes = R.string.feature_user_checkin_failed,
+                        ),
+                    )
                 }
 
             progress.update { state ->
@@ -639,7 +648,12 @@ class UserCollectionsViewModel(
                     )
                 }
             result.onError { _, message ->
-                _events.trySend(UserCollectionsEvent.ShowSnackbar("撤销失败：" + message.ifBlank { "网络异常" }))
+                _events.trySend(
+                    UserCollectionsEvent.ShowSnackbar(
+                        message = message.ifBlank { null },
+                        messageRes = R.string.feature_user_undo_failed,
+                    ),
+                )
             }
         }
     }
@@ -669,7 +683,12 @@ class UserCollectionsViewModel(
         if (key == null) {
             // 理论不可达（UI 必然已 setInitialType）；兜底只走网络写
             submitCollectionUpdate(collection, type, rate, comment, private, epStatus, tags) { message ->
-                _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+                _events.trySend(
+                    UserCollectionsEvent.ShowSnackbar(
+                        message = message.ifBlank { null },
+                        messageRes = R.string.feature_user_update_failed,
+                    ),
+                )
             }
             return
         }
@@ -700,7 +719,12 @@ class UserCollectionsViewModel(
                 restored
             }
             progress.update { it.copy(error = message) }
-            _events.trySend(UserCollectionsEvent.ShowSnackbar("更新失败：" + message.ifBlank { "网络异常" }))
+            _events.trySend(
+                UserCollectionsEvent.ShowSnackbar(
+                    message = message.ifBlank { null },
+                    messageRes = R.string.feature_user_update_failed,
+                ),
+            )
         }
     }
 
@@ -726,7 +750,7 @@ class UserCollectionsViewModel(
                     subjectType = collection.subjectType,
                     tags = tags,
                 ).onSuccess {
-                    _events.trySend(UserCollectionsEvent.ShowSnackbar("收藏已更新"))
+                    _events.trySend(UserCollectionsEvent.ShowSnackbar(messageRes = R.string.feature_user_collection_updated))
                 }.onError { _, message ->
                     onError(message)
                 }

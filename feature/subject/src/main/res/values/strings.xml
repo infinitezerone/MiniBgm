@@ -345,4 +345,17 @@
     <string name="feature_subject_player_danmaku_pick_state_fallback">未准确匹配 · 建议手动选择</string>
     <string name="feature_subject_player_danmaku_pick_state_auto">已自动匹配</string>
     <string name="feature_subject_player_danmaku_pick_state_override">已手动指定</string>
+    <string name="feature_subject_player_auto_marked_watched">已自动标记为看过（第 %1$s 话）</string>
+    <string name="feature_subject_player_manual_marked_watched">已标记为看过（第 %1$s 话）</string>
+    <string name="feature_subject_player_manual_unmarked_watched">已撤回看过标记（第 %1$s 话）</string>
+    <string name="feature_subject_player_login_required">请先登录 Bangumi</string>
+    <string name="feature_subject_player_danmaku_empty_hint">当前未加载到弹幕，可在「设置 -> 弹幕设置」中配置端点或凭据</string>
+    <string name="feature_subject_player_danmaku_match_fallback_hint">弹幕分集未能准确匹配，可在播放设置中手动选择</string>
+    <string name="feature_subject_player_danmaku_switched">弹幕已切换：%1$s · %2$s</string>
+    <string name="feature_subject_reaction_login_required">请先登录后再表态</string>
+    <string name="feature_subject_reaction_done">已表态</string>
+    <string name="feature_subject_reaction_cancelled">已取消表态</string>
+    <string name="feature_subject_reaction_failed">表态失败</string>
+    <string name="feature_subject_player_followed_doing">已加入追番（在看）</string>
+    <string name="feature_subject_player_follow_updated">已更新追番状态</string>
 </resources>

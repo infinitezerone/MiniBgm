@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -468,7 +469,7 @@ class EpisodeDetailViewModelTest {
 
             assertTrue(communityRepository.setLikeCalls.isEmpty())
             val event = viewModel.events.first()
-            assertTrue(event is EpisodeDetailUiEvent.ShowSnackbar && event.message.contains("登录"))
+            assertTrue(event is EpisodeDetailUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_reaction_login_required)
         }
 
     @Test

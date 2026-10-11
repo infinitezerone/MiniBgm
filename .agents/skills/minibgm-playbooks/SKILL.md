@@ -49,7 +49,19 @@ description: >-
   * 通用登录提示严格收口于 `BgmLoginPromptDialog`。
 * **一次性事件**：
   * ViewModel 一次性事件使用 `Channel(BUFFERED)`；
-  * UI 侧严禁裸调用 `.collect`，必须经 `:core:designsystem` 的 `ObserveAsEvents` 绑定生命周期（`Lifecycle.State.STARTED`）。
+  * UI 侧严禁裸调用 `.collect`，必须经 `:core:designsystem` 的 `ObserveAsEvents` 绑定生命周期（`Lifecycle.State.STARTED`）；
+  * **事件文案资源化**：`ShowSnackbar` 类事件严禁内联用户可见文案（ArchitectureRulesTest #18 物理拦截）。正向模版：
+    ```kotlin
+    // 事件携带 @StringRes + 格式化参数；服务端运行时消息走 message 字段（非空白优先展示）
+    data class ShowSnackbar(
+        val message: String? = null,
+        @StringRes val messageRes: Int = 0,
+        val formatArgs: List<String> = emptyList(),
+    ) : XxxUiEvent
+    // UI 收集侧解析
+    val text = event.message?.takeIf { it.isNotBlank() }
+        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+    ```
 
 ---
 

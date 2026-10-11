@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -85,6 +86,7 @@ fun AssistantScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(prefillPrompt) {
         viewModel.sendPrefilledPrompt(prefillPrompt)
@@ -93,7 +95,10 @@ fun AssistantScreen(
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             is AssistantUiEvent.ShowSnackbar -> {
-                snackbarHostState.showSnackbar(event.message)
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                snackbarHostState.showSnackbar(text)
             }
             is AssistantUiEvent.NavigateToSubject -> {
                 onSubjectClick(SubjectDetailRoute(event.subjectId))

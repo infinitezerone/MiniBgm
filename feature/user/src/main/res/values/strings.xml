@@ -334,4 +334,8 @@
     <string name="feature_user_danmaku_appsecret_hide">隐藏密钥</string>
     <string name="feature_user_danmaku_appsecret_show">显示密钥</string>
     <string name="feature_user_danmaku_reset_default">恢复默认端点</string>
+    <string name="feature_user_checkin_failed">打卡失败，请检查网络连接</string>
+    <string name="feature_user_undo_failed">撤销失败，请检查网络连接</string>
+    <string name="feature_user_update_failed">更新失败，请检查网络连接</string>
+    <string name="feature_user_collection_updated">收藏已更新</string>
 </resources>

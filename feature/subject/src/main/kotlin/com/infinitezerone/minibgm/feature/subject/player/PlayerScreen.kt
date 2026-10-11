@@ -340,7 +340,12 @@ fun PlayerScreen(
     // ViewModel 一次性事件 → 提示
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
-            is PlayerUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            is PlayerUiEvent.ShowSnackbar -> {
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                snackbarHostState.showSnackbar(text)
+            }
             is PlayerUiEvent.MarkedWatched -> Unit
         }
     }

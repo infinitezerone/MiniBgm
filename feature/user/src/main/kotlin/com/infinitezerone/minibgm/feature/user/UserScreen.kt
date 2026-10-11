@@ -109,7 +109,12 @@ fun UserScreen(
                     collectionsViewModel.undoIncrement(event.previous)
                 }
             }
-            is UserCollectionsEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            is UserCollectionsEvent.ShowSnackbar -> {
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes)
+                snackbarHostState.showSnackbar(text)
+            }
         }
     }
 

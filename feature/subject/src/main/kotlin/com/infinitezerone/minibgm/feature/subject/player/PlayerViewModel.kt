@@ -205,7 +205,12 @@ data class PlayerUiState(
  */
 sealed interface PlayerUiEvent {
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
+        /** [messageRes] 的格式化参数 */
+        val formatArgs: List<String> = emptyList(),
     ) : PlayerUiEvent
 
     data class MarkedWatched(
@@ -813,7 +818,12 @@ class PlayerViewModel(
                 .onSuccess {
                     _uiState.update { it.copy(isWatched = true, autoMarked = true) }
                     _events.send(PlayerUiEvent.MarkedWatched(epNumber))
-                    _events.send(PlayerUiEvent.ShowSnackbar("已自动标记为看过（第 $epNumber 话）"))
+                    _events.send(
+                        PlayerUiEvent.ShowSnackbar(
+                            messageRes = R.string.feature_subject_player_auto_marked_watched,
+                            formatArgs = listOf(epNumber.toString()),
+                        ),
+                    )
                 }.onError { _, message ->
                     session.hasTriggeredAutoMark = false
                     _events.send(PlayerUiEvent.ShowSnackbar(message))
@@ -1000,7 +1010,7 @@ class PlayerViewModel(
     fun manualToggleWatched() {
         if (!isLoggedIn.value) {
             viewModelScope.launch {
-                _events.send(PlayerUiEvent.ShowSnackbar("请先登录 Bangumi"))
+                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_login_required))
             }
             return
         }
@@ -1019,7 +1029,13 @@ class PlayerViewModel(
                     _uiState.update { it.copy(isWatched = targetWatched) }
                     _events.send(
                         PlayerUiEvent.ShowSnackbar(
-                            if (targetWatched) "已标记为看过（第 $epNumber 话）" else "已撤回看过标记（第 $epNumber 话）",
+                            messageRes =
+                                if (targetWatched) {
+                                    R.string.feature_subject_player_manual_marked_watched
+                                } else {
+                                    R.string.feature_subject_player_manual_unmarked_watched
+                                },
+                            formatArgs = listOf(epNumber.toString()),
                         ),
                     )
                 }.onError { _, message ->
@@ -1043,7 +1059,7 @@ class PlayerViewModel(
         _uiState.update { it.copy(isDanmakuEnabled = targetEnabled) }
         if (targetEnabled && _uiState.value.danmakus.isEmpty() && !_uiState.value.isDanmakuLoading) {
             viewModelScope.launch {
-                _events.send(PlayerUiEvent.ShowSnackbar("当前未加载到弹幕，可在「设置 -> 弹幕设置」中配置端点或凭据"))
+                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_empty_hint))
             }
         }
     }
@@ -1076,7 +1092,7 @@ class PlayerViewModel(
             }
             val match = result.match
             if (match?.state == DanmakuMatchState.FALLBACK && match.candidates.isNotEmpty()) {
-                _events.send(PlayerUiEvent.ShowSnackbar("弹幕分集未能准确匹配，可在播放设置中手动选择"))
+                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_match_fallback_hint))
             }
         }
     }
@@ -1095,7 +1111,12 @@ class PlayerViewModel(
                 subjectId = current.subjectId,
                 candidate = candidate,
             )
-            _events.send(PlayerUiEvent.ShowSnackbar("弹幕已切换：${candidate.animeTitle} · ${candidate.episodeTitle}"))
+            _events.send(
+                PlayerUiEvent.ShowSnackbar(
+                    messageRes = R.string.feature_subject_player_danmaku_switched,
+                    formatArgs = listOf(candidate.animeTitle, candidate.episodeTitle),
+                ),
+            )
             loadDanmaku()
         }
     }
@@ -1128,7 +1149,7 @@ class PlayerViewModel(
     fun toggleFollowSubject() {
         if (!isLoggedIn.value) {
             viewModelScope.launch {
-                _events.send(PlayerUiEvent.ShowSnackbar("请先登录 Bangumi"))
+                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_login_required))
             }
             return
         }
@@ -1150,7 +1171,12 @@ class PlayerViewModel(
                     _uiState.update { it.copy(subjectCollectionType = targetType.value) }
                     _events.send(
                         PlayerUiEvent.ShowSnackbar(
-                            if (targetType == CollectionType.DOING) "已加入追番（在看）" else "已更新追番状态",
+                            messageRes =
+                                if (targetType == CollectionType.DOING) {
+                                    R.string.feature_subject_player_followed_doing
+                                } else {
+                                    R.string.feature_subject_player_follow_updated
+                                },
                         ),
                     )
                 }.onError { _, message ->

@@ -436,7 +436,7 @@ class UserCollectionsViewModelTest {
             assertEquals(8, moved.rate)
             assertEquals("补完了", moved.comment)
             val event = viewModel.events.first()
-            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message == "收藏已更新")
+            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.messageRes == R.string.feature_user_collection_updated)
         }
 
     @Test
@@ -466,7 +466,11 @@ class UserCollectionsViewModelTest {
             val restored = state.collectionsByType[CollectionType.DOING].orEmpty().single()
             assertEquals(sampleUserCollection, restored)
             val event = viewModel.events.first()
-            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message == "更新失败：网络异常")
+            assertTrue(
+                event is UserCollectionsEvent.ShowSnackbar &&
+                    event.messageRes == R.string.feature_user_update_failed &&
+                    event.message == "网络异常",
+            )
         }
 
     @Test
@@ -521,6 +525,6 @@ class UserCollectionsViewModelTest {
             )
             // 且失败必须以事件显式提示，不能只写 state.error（列表非空时不可见）
             val event = viewModel.events.first()
-            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.message.contains("打卡失败"))
+            assertTrue(event is UserCollectionsEvent.ShowSnackbar && event.messageRes == R.string.feature_user_checkin_failed)
         }
 }

@@ -32,6 +32,8 @@ import kotlin.test.fail
  * 15. 结构化并发规范：生产代码严禁使用 GlobalScope 裸协程，所有协程必须受控于明确生命周期作用域
  * 16. 面向接口契约：UI 源码（:feature:* 与 :app）严禁直接 import 底层实现类（*Impl），必须面向 Interface 编程
  * 17. 一次性事件生命周期感知：feature UI 源码严禁直接对 ViewModel 一次性事件流调用裸 .collect，必须使用 :core:designsystem 的 ObserveAsEvents 绑定生命周期（STARTED）
+ * 18. 事件文案资源化：ViewModel 的一次性事件（ShowSnackbar）严禁内联用户可见文案（CJK 字面量），
+ *     必须以 @StringRes + formatArgs 下发、UI 侧解析；服务端运行时消息经 message 字段透传（源自播放器文案硬编码复盘）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -662,6 +664,135 @@ class ArchitectureRulesTest {
                     violations.joinToString("\n"),
             )
         }
+    }
+
+    @Test
+    fun viewModels_never_inline_user_facing_snackbar_text() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+        featureDir
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.name.endsWith("ViewModel.kt") }
+            .forEach { sourceFile ->
+                val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                findCjkLiteralsInSnackbarArgs(sourceFile.readText()).forEach { (lineNumber, literal) ->
+                    violations.add(
+                        "$relPath:$lineNumber ShowSnackbar 内联用户文案 -> \"$literal\"。" +
+                            "文案必须以 @StringRes + formatArgs 下发、UI 侧解析（服务端运行时消息经 message 字段透传），" +
+                            "严禁在 ViewModel 直写用户可见文案绕开资源体系",
+                    )
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反一次性事件文案资源化规范（ShowSnackbar 严禁内联中文字面量，多语言与文案审查都在资源体系内收口）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    /**
+     * 定位 [content] 中所有 ShowSnackbar(...) 实参跨度内的中文字符串字面量。
+     *
+     * 借助 [KotlinSourceScanner.sanitize] 的"长度与索引不变"特性：先用脱敏文本（注释与字符串已抹平）
+     * 做 ShowSnackbar( 的括号配对得到跨度，再回原文提取跨度内的字符串字面量检查 CJK——
+     * 注释里提到 ShowSnackbar("示例") 不会误伤，跨行调用也不会漏判。
+     */
+    private fun findCjkLiteralsInSnackbarArgs(content: String): List<Pair<Int, String>> {
+        val sanitized = KotlinSourceScanner.fromContent(content).sanitizedContent
+        val spans = mutableListOf<IntRange>()
+        var index = sanitized.indexOf("ShowSnackbar(")
+        while (index >= 0) {
+            var depth = 1
+            var cursor = index + "ShowSnackbar(".length
+            while (cursor < sanitized.length && depth > 0) {
+                when (sanitized[cursor]) {
+                    '(' -> depth++
+                    ')' -> depth--
+                }
+                cursor++
+            }
+            spans += index until cursor
+            index = sanitized.indexOf("ShowSnackbar(", cursor)
+        }
+        if (spans.isEmpty()) return emptyList()
+
+        val violations = mutableListOf<Pair<Int, String>>()
+        val cjkRegex = Regex("""[\p{InCJKUnifiedIdeographs}\u3000-\u303F\uFF01-\uFF5E]""")
+        for ((start, _, literal) in extractStringLiterals(content)) {
+            if (spans.any { it.contains(start) } && cjkRegex.containsMatchIn(literal)) {
+                val line = content.take(start).count { it == '\n' } + 1
+                violations += line to literal
+            }
+        }
+        return violations
+    }
+
+    /** 提取原文中所有字符串字面量（含普通与三引号原生串，跳过注释），返回 (起始索引, 结束索引, 内容) */
+    private fun extractStringLiterals(content: String): List<Triple<Int, Int, String>> {
+        val literals = mutableListOf<Triple<Int, Int, String>>()
+        var i = 0
+        val len = content.length
+        while (i < len) {
+            when {
+                // 注释整体跳过（与 KotlinSourceScanner.sanitize 同口径）
+                i + 1 < len && content[i] == '/' && content[i + 1] == '/' -> {
+                    while (i < len && content[i] != '\n') i++
+                }
+
+                i + 1 < len && content[i] == '/' && content[i + 1] == '*' -> {
+                    var depth = 1
+                    i += 2
+                    while (i < len && depth > 0) {
+                        if (i + 1 < len && content[i] == '/' && content[i + 1] == '*') {
+                            depth++
+                            i += 2
+                        } else if (i + 1 < len && content[i] == '*' && content[i + 1] == '/') {
+                            depth--
+                            i += 2
+                        } else {
+                            i++
+                        }
+                    }
+                }
+
+                i + 2 < len && content[i] == '"' && content[i + 1] == '"' && content[i + 2] == '"' -> {
+                    val start = i
+                    i += 3
+                    val sb = StringBuilder()
+                    while (i + 2 < len && !(content[i] == '"' && content[i + 1] == '"' && content[i + 2] == '"')) {
+                        sb.append(content[i])
+                        i++
+                    }
+                    i = (i + 3).coerceAtMost(len)
+                    literals += Triple(start, i, sb.toString())
+                }
+
+                content[i] == '"' -> {
+                    val start = i
+                    i++
+                    val sb = StringBuilder()
+                    while (i < len && content[i] != '"' && content[i] != '\n') {
+                        if (content[i] == '\\' && i + 1 < len) {
+                            sb.append(content[i]).append(content[i + 1])
+                            i += 2
+                        } else {
+                            sb.append(content[i])
+                            i++
+                        }
+                    }
+                    i = (i + 1).coerceAtMost(len)
+                    literals += Triple(start, i, sb.toString())
+                }
+
+                else -> i++
+            }
+        }
+        return literals
     }
 
     private companion object {

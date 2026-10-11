@@ -23,6 +23,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepositor
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -1401,6 +1402,6 @@ class PlayerViewModelTest {
             vm.toggleDanmaku() // 关 -> 开
 
             val event = vm.events.first()
-            assertTrue(event is PlayerUiEvent.ShowSnackbar && event.message.contains("设置"))
+            assertTrue(event is PlayerUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_player_danmaku_empty_hint)
         }
 }

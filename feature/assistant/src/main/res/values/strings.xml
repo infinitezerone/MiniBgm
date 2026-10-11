@@ -197,4 +197,12 @@
     <string name="feature_assistant_mismatch_gemini">当前端点为 Google Gemini，模型疑似错配，建议切换为 %1$s</string>
     <string name="feature_assistant_mismatch_openai">当前端点为 OpenAI 官方，模型疑似错配，建议切换为 %1$s</string>
     <string name="feature_assistant_mismatch_zhipu">当前端点为智谱 GLM，模型疑似错配，建议切换为 %1$s</string>
+    <string name="feature_assistant_executor_missing">执行器未配置</string>
+    <string name="feature_assistant_action_synced">操作已成功执行并同步至 Bangumi！</string>
+    <string name="feature_assistant_action_failed">执行失败：%1$s</string>
+    <string name="feature_assistant_action_cancelled">已取消操作提案</string>
+    <string name="feature_assistant_config_updated">AI 配置已更新</string>
+    <string name="feature_assistant_profile_saved">方案「%1$s」已保存并启用</string>
+    <string name="feature_assistant_profile_activated">已启用方案「%1$s」</string>
+    <string name="feature_assistant_profile_deleted">方案已删除</string>
 </resources>

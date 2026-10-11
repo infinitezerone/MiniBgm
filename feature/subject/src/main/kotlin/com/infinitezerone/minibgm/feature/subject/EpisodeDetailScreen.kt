@@ -131,7 +131,12 @@ fun EpisodeDetailScreen(
     // 吐槽表态结果与登录提示
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
-            is EpisodeDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            is EpisodeDetailUiEvent.ShowSnackbar -> {
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes)
+                snackbarHostState.showSnackbar(text)
+            }
             is EpisodeDetailUiEvent.OpenSourceSearch -> onSourceSearch?.invoke(event.prefillPrompt)
         }
     }

@@ -29,7 +29,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 机械执行：源语义由 `:core:testing` 的 ArchitectureRulesTest，依赖图由 build-logic 的 ModuleBoundaryConventionPlugin（配置期断言）。此处只留索引，细节看测试：
 
 1. feature 互不依赖；UI 只经 `:core:data` 仓库；`:core:model` 纯 Kotlin；feature 无原始 IO、无颜色字面量、不外露可变状态（MutableStateFlow 一律禁止；对外只暴露只读 StateFlow，或 Compose State 持有者的只读类型——多字段原子更新用 `Snapshot.withMutableSnapshot`，不用 `update { it.copy(…) }`）；路由密封于 `BgmRoute` 并声明堆叠层。
-2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁在 feature 中写散落的 `var showDialog` 状态机；通用登录提示收口于 `BgmLoginPromptDialog`；ViewModel 一次性事件（Channel(BUFFERED)）严禁裸 `collect`，必须经 `ObserveAsEvents` 绑定生命周期（STARTED）。
+2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁在 feature 中写散落的 `var showDialog` 状态机；通用登录提示收口于 `BgmLoginPromptDialog`；ViewModel 一次性事件（Channel(BUFFERED)）严禁裸 `collect`，必须经 `ObserveAsEvents` 绑定生命周期（STARTED）。一次性事件的用户可见文案必须以 `@StringRes` + 格式化参数下发、UI 侧解析（服务端运行时消息经 message 字段透传），严禁 VM 内联文案绕开资源体系。
 3. 可播地址只来自 `findPlayableSources`；一切写操作止于 PENDING_CONFIRMATION 提案卡，用户确认才落库。
 4. 凭据只存在于 `AuthTokensDataSource`；不绕过/削弱 `BgmPkce`；不剥离或覆盖 `User-Agent`；关键写操作包 `withContext(NonCancellable)`。
 

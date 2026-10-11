@@ -111,7 +111,12 @@ fun TopicDetailScreen(
     // 表态结果与登录提示
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
-            is TopicDetailUiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            is TopicDetailUiEvent.ShowSnackbar -> {
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes)
+                snackbarHostState.showSnackbar(text)
+            }
         }
     }
 

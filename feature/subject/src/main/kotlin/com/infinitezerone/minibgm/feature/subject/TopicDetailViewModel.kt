@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
@@ -9,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicReply
+import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -34,7 +36,10 @@ import kotlinx.coroutines.launch
  */
 sealed interface TopicDetailUiEvent {
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
     ) : TopicDetailUiEvent
 }
 
@@ -158,7 +163,7 @@ class TopicDetailViewModel(
     ) {
         val userId = uiState.value.currentUserId
         if (userId == null) {
-            _events.trySend(TopicDetailUiEvent.ShowSnackbar("请先登录后再表态"))
+            _events.trySend(TopicDetailUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_reaction_login_required))
             return
         }
         val target = if (type == "group") CommunityLikeTarget.GROUP_POST else CommunityLikeTarget.SUBJECT_POST
@@ -178,11 +183,21 @@ class TopicDetailViewModel(
                 }
             when (result) {
                 is AppResult.Success -> {
-                    _events.trySend(TopicDetailUiEvent.ShowSnackbar(if (reacted) "已取消表态" else "已表态"))
+                    _events.trySend(
+                        TopicDetailUiEvent.ShowSnackbar(
+                            messageRes =
+                                if (reacted) R.string.feature_subject_reaction_cancelled else R.string.feature_subject_reaction_done,
+                        ),
+                    )
                 }
                 is AppResult.Error -> {
                     loadedDetail.value = previousDetail
-                    _events.trySend(TopicDetailUiEvent.ShowSnackbar(result.message.ifBlank { "表态失败" }))
+                    _events.trySend(
+                        TopicDetailUiEvent.ShowSnackbar(
+                            message = result.message.ifBlank { null },
+                            messageRes = R.string.feature_subject_reaction_failed,
+                        ),
+                    )
                 }
                 is AppResult.Loading -> Unit
             }

@@ -20,6 +20,7 @@ import com.infinitezerone.minibgm.core.model.AssistantSession
 import com.infinitezerone.minibgm.core.model.ChatMessageRole
 import com.infinitezerone.minibgm.core.model.PendingActionCard
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
+import com.infinitezerone.minibgm.feature.assistant.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -513,7 +514,7 @@ class AssistantViewModel(
         val executor = agentService.pendingActionExecutor
         if (executor == null) {
             viewModelScope.launch {
-                _events.send(AssistantUiEvent.ShowSnackbar("执行器未配置"))
+                _events.send(AssistantUiEvent.ShowSnackbar(messageRes = R.string.feature_assistant_executor_missing))
             }
             return
         }
@@ -555,7 +556,7 @@ class AssistantViewModel(
                         state.copy(messages = updatedMessages)
                     }
                     agentService.pendingActionStore?.remove(actionId)
-                    _events.send(AssistantUiEvent.ShowSnackbar("操作已成功执行并同步至 Bangumi！"))
+                    _events.send(AssistantUiEvent.ShowSnackbar(messageRes = R.string.feature_assistant_action_synced))
                     _uiState.value.messages
                         .firstOrNull { msg -> msg.pendingActions.any { it.action.actionId == actionId } }
                         ?.let { msg ->
@@ -582,7 +583,12 @@ class AssistantViewModel(
                             }
                         state.copy(messages = updatedMessages)
                     }
-                    _events.send(AssistantUiEvent.ShowSnackbar("执行失败: $err"))
+                    _events.send(
+                        AssistantUiEvent.ShowSnackbar(
+                            messageRes = R.string.feature_assistant_action_failed,
+                            formatArgs = listOf(err),
+                        ),
+                    )
                     _uiState.value.messages
                         .firstOrNull { msg -> msg.pendingActions.any { it.action.actionId == actionId } }
                         ?.let { msg ->
@@ -632,7 +638,7 @@ class AssistantViewModel(
                 }
             }
         viewModelScope.launch {
-            _events.send(AssistantUiEvent.ShowSnackbar("已取消操作提案"))
+            _events.send(AssistantUiEvent.ShowSnackbar(messageRes = R.string.feature_assistant_action_cancelled))
         }
     }
 
@@ -656,7 +662,7 @@ class AssistantViewModel(
         viewModelScope.launch {
             settingsRepository.setAiConfig(config)
             _uiState.update { it.copy(showConfigDialog = false) }
-            _events.send(AssistantUiEvent.ShowSnackbar("AI 配置已更新"))
+            _events.send(AssistantUiEvent.ShowSnackbar(messageRes = R.string.feature_assistant_config_updated))
         }
     }
 
@@ -678,7 +684,12 @@ class AssistantViewModel(
                 ),
             )
             settingsRepository.activateAiConfigProfile(id)
-            _events.send(AssistantUiEvent.ShowSnackbar("方案「$trimmedName」已保存并启用"))
+            _events.send(
+                AssistantUiEvent.ShowSnackbar(
+                    messageRes = R.string.feature_assistant_profile_saved,
+                    formatArgs = listOf(trimmedName),
+                ),
+            )
         }
     }
 
@@ -691,14 +702,19 @@ class AssistantViewModel(
                     .firstOrNull { it.id == profileId }
                     ?.name
                     ?: return@launch
-            _events.send(AssistantUiEvent.ShowSnackbar("已启用方案「$name」"))
+            _events.send(
+                AssistantUiEvent.ShowSnackbar(
+                    messageRes = R.string.feature_assistant_profile_activated,
+                    formatArgs = listOf(name),
+                ),
+            )
         }
     }
 
     fun deleteAiProfile(profileId: String) {
         viewModelScope.launch {
             settingsRepository.deleteAiConfigProfile(profileId)
-            _events.send(AssistantUiEvent.ShowSnackbar("方案已删除"))
+            _events.send(AssistantUiEvent.ShowSnackbar(messageRes = R.string.feature_assistant_profile_deleted))
         }
     }
 

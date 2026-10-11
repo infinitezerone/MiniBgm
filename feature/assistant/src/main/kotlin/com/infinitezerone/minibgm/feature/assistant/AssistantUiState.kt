@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.assistant
 
+import androidx.annotation.StringRes
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.AssistantSession
@@ -71,7 +72,12 @@ data class AssistantUiState(
 
 sealed interface AssistantUiEvent {
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
+        /** [messageRes] 的格式化参数 */
+        val formatArgs: List<String> = emptyList(),
     ) : AssistantUiEvent
 
     data class NavigateToSubject(
