@@ -97,8 +97,6 @@ internal fun PlayerControlsOverlay(
     showEpisodeQueue: Boolean,
     onOpenEpisodeQueue: () -> Unit,
     showPipButton: Boolean = true,
-    hasSelectableTracks: Boolean = false,
-    isSubtitlesActive: Boolean = false,
     currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
     isDanmakuEnabled: Boolean = true,
@@ -464,19 +462,19 @@ internal fun PlayerControlsOverlay(
                         }
                     }
 
-                    if (hasSelectableTracks) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        IconButton(
-                            onClick = onOpenTrackSelection,
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Subtitles,
-                                contentDescription = stringResource(R.string.feature_subject_player_tracks_btn),
-                                tint = if (isSubtitlesActive) MaterialTheme.colorScheme.primary else Color.White,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                    // 播放设置入口（常驻齿轮，对齐 B 站/YouTube）：
+                    // 面板内容已含倍速/比例/弹幕/循环，不再依赖"有可选轨道"才出现
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onOpenTrackSelection,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Settings,
+                            contentDescription = stringResource(R.string.feature_subject_player_settings_entry),
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
 
