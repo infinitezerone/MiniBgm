@@ -221,18 +221,8 @@ internal fun PlayerControlsOverlay(
                 }
             }
 
-            // 竖屏顶部操作栏右侧：画中画 + 设置入口（汇聚清晰度/音画字幕/倍速）
-            if (!isLandscape) {
-                IconButton(onClick = onOpenTrackSelection) {
-                    Icon(
-                        imageVector = BgmIcons.MoreVert,
-                        contentDescription = stringResource(R.string.feature_subject_player_settings),
-                        tint = Color.White,
-                    )
-                }
-            }
-
-            // 画中画模式
+            // 顶部操作栏右侧（横竖屏一致）：画中画在左、"更多"固定右上角最右——
+            // 汇聚清晰度/音画字幕/倍速/比例/弹幕/循环（对齐 B 站/YouTube 的右上角"更多"位）
             if (showPipButton) {
                 IconButton(onClick = onEnterPip) {
                     Icon(
@@ -241,6 +231,14 @@ internal fun PlayerControlsOverlay(
                         tint = Color.White,
                     )
                 }
+            }
+
+            IconButton(onClick = onOpenTrackSelection) {
+                Icon(
+                    imageVector = BgmIcons.MoreVert,
+                    contentDescription = stringResource(R.string.feature_subject_player_settings),
+                    tint = Color.White,
+                )
             }
         }
 
@@ -460,21 +458,6 @@ internal fun PlayerControlsOverlay(
                                 modifier = Modifier.size(20.dp),
                             )
                         }
-                    }
-
-                    // 播放设置入口（常驻齿轮，对齐 B 站/YouTube）：
-                    // 面板内容已含倍速/比例/弹幕/循环，不再依赖"有可选轨道"才出现
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = onOpenTrackSelection,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.MoreVert,
-                            contentDescription = stringResource(R.string.feature_subject_player_settings_entry),
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp),
-                        )
                     }
                 }
 
