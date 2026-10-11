@@ -5,7 +5,9 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
 import com.infinitezerone.minibgm.core.model.DanmakuItem
+import com.infinitezerone.minibgm.core.model.DanmakuResult
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
@@ -1298,15 +1300,26 @@ class PlayerViewModelTest {
                     var queryCount = 0
 
                     override suspend fun getDanmaku(
+                        bangumiEpisodeId: Long,
+                        subjectId: Long,
                         title: String,
                         episodeSort: Float,
+                        episodeName: String?,
                         appId: String?,
                         appSecret: String?,
                         apiEndpoint: String?,
-                    ): List<DanmakuItem> {
+                    ): DanmakuResult {
                         queryCount++
-                        return sampleDanmakus
+                        return DanmakuResult(sampleDanmakus, null)
                     }
+
+                    override suspend fun saveDanmakuOverride(
+                        bangumiEpisodeId: Long,
+                        subjectId: Long,
+                        candidate: DanmakuEpisodeCandidate,
+                    ) = Unit
+
+                    override suspend fun clearDanmakuOverride(bangumiEpisodeId: Long) = Unit
                 }
 
             val vm =
@@ -1347,12 +1360,23 @@ class PlayerViewModelTest {
             val emptyDanmakuRepo =
                 object : DanmakuRepository {
                     override suspend fun getDanmaku(
+                        bangumiEpisodeId: Long,
+                        subjectId: Long,
                         title: String,
                         episodeSort: Float,
+                        episodeName: String?,
                         appId: String?,
                         appSecret: String?,
                         apiEndpoint: String?,
-                    ): List<DanmakuItem> = emptyList()
+                    ): DanmakuResult = DanmakuResult(emptyList(), null)
+
+                    override suspend fun saveDanmakuOverride(
+                        bangumiEpisodeId: Long,
+                        subjectId: Long,
+                        candidate: DanmakuEpisodeCandidate,
+                    ) = Unit
+
+                    override suspend fun clearDanmakuOverride(bangumiEpisodeId: Long) = Unit
                 }
 
             val vm =

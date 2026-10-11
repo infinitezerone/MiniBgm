@@ -23,4 +23,5 @@ val databaseModule =
         single { get<BgmDatabase>().assistantMessageDao() }
         single { get<BgmDatabase>().assistantSessionDao() }
         single { get<BgmDatabase>().anilistMappingDao() }
+        single { get<BgmDatabase>().danmakuOverrideDao() }
     }

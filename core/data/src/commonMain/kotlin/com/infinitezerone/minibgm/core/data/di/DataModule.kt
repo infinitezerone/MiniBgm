@@ -99,6 +99,7 @@ val dataModule =
         single<DanmakuRepository> {
             DanmakuRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
+                danmakuOverrideDao = getOrNull<com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao>(),
                 settingsRepository = getOrNull<SettingsRepository>(),
             )
         }

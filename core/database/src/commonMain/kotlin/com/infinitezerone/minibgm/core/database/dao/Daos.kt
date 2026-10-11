@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantSessionEntity
 import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
+import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -276,4 +277,19 @@ interface AssistantSessionDao {
 
     @Query("DELETE FROM assistant_sessions WHERE id = :sessionId")
     suspend fun deleteSession(sessionId: String)
+}
+
+/**
+ * 弹幕分集用户纠正覆盖：取弹幕前先查这里，命中即按用户挑选的分集取数。
+ */
+@Dao
+interface DanmakuOverrideDao {
+    @Query("SELECT * FROM danmaku_episode_override WHERE episodeId = :episodeId")
+    suspend fun getOverride(episodeId: Long): DanmakuEpisodeOverrideEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertOverride(override: DanmakuEpisodeOverrideEntity)
+
+    @Query("DELETE FROM danmaku_episode_override WHERE episodeId = :episodeId")
+    suspend fun deleteOverride(episodeId: Long)
 }

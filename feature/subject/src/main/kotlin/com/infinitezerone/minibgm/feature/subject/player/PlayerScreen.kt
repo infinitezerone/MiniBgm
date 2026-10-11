@@ -85,8 +85,11 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.compose.ContentFrame
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.model.DanmakuItem
+import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -130,6 +133,7 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val overlayHostState = rememberOverlayHostState()
     val configuration = LocalConfiguration.current
     val clipboardManager = LocalClipboard.current
 
@@ -145,6 +149,24 @@ fun PlayerScreen(
     }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // 弹幕分集纠正：挂起承接候选挑选浮层，选中即落库覆盖并重载弹幕
+    val openDanmakuPicker: () -> Unit = {
+        coroutineScope.launch {
+            val match = uiState.danmakuMatch ?: return@launch
+            val chosen =
+                overlayHostState.awaitOrNull(
+                    DanmakuCandidateRequest(
+                        candidates = match.candidates,
+                        current = match.chosen,
+                        currentState = match.state,
+                    ),
+                )
+            if (chosen != null) {
+                viewModel.selectDanmakuCandidate(chosen)
+            }
+        }
+    }
 
     // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
     val engine = remember(context) { ExoPlayerEngine(context) }
@@ -609,6 +631,8 @@ fun PlayerScreen(
                     danmakus = uiState.danmakus,
                     isDanmakuEnabled = uiState.isDanmakuEnabled,
                     onToggleDanmaku = viewModel::toggleDanmaku,
+                    danmakuMatch = uiState.danmakuMatch,
+                    onOpenDanmakuPicker = openDanmakuPicker,
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -782,6 +806,8 @@ fun PlayerScreen(
                         danmakus = uiState.danmakus,
                         isDanmakuEnabled = uiState.isDanmakuEnabled,
                         onToggleDanmaku = viewModel::toggleDanmaku,
+                        danmakuMatch = uiState.danmakuMatch,
+                        onOpenDanmakuPicker = openDanmakuPicker,
                         modifier =
                             Modifier
                                 .fillMaxSize()
@@ -929,6 +955,11 @@ fun PlayerScreen(
                 onDismiss = { isEpisodeBottomSheetOpen = false },
             )
         }
+
+        // 弹幕分集候选挑选浮层（BgmOverlayHost 承接，无请求时不渲染任何内容）
+        BgmOverlayHost(hostState = overlayHostState) {
+            danmakuCandidatePicker()
+        }
     }
 }
 
@@ -991,6 +1022,8 @@ private fun PlayerVideoStage(
     danmakus: List<DanmakuItem> = emptyList(),
     isDanmakuEnabled: Boolean = true,
     onToggleDanmaku: () -> Unit = {},
+    danmakuMatch: DanmakuMatch? = null,
+    onOpenDanmakuPicker: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -1137,6 +1170,8 @@ private fun PlayerVideoStage(
                 onOpenTrackSelection = onOpenTrackSelection,
                 isDanmakuEnabled = isDanmakuEnabled,
                 onToggleDanmaku = onToggleDanmaku,
+                danmakuMatch = danmakuMatch,
+                onOpenDanmakuPicker = onOpenDanmakuPicker,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
                 onSingleTap = onSingleTap,

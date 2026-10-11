@@ -163,3 +163,25 @@ data class AssistantSessionEntity(
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+/**
+ * 弹幕分集的用户纠正覆盖表。
+ *
+ * dandanplay 标题搜索匹配存在同名番/剧场版/季度混排的残余错误率，
+ * 用户在播放器里手动挑选正确分集后在此落库——覆盖是真值最高来源，
+ * 后续取弹幕时优先命中，避免同一分集反复纠错。
+ * 主键为 bangumi 分集 id（bgm.tv 分集全局唯一），天然锚定 subject+episode 语义。
+ */
+@Entity(tableName = "danmaku_episode_override")
+data class DanmakuEpisodeOverrideEntity(
+    /** bangumi.tv 分集 id */
+    @PrimaryKey val episodeId: Long,
+    val subjectId: Long,
+    /** dandanplay 的番剧条目 id */
+    val dandanAnimeId: Long,
+    /** dandanplay 的分集 id（/api/v2/comment/{episodeId} 的取数键） */
+    val dandanEpisodeId: Long,
+    val dandanAnimeTitle: String,
+    val dandanEpisodeTitle: String,
+    val updatedAt: Long,
+)

@@ -19,7 +19,10 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
 import com.infinitezerone.minibgm.core.model.DanmakuItem
+import com.infinitezerone.minibgm.core.model.DanmakuMatch
+import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -166,6 +169,8 @@ data class PlayerUiState(
     val danmakus: List<DanmakuItem> = emptyList(),
     /** 弹幕加载中状态 */
     val isDanmakuLoading: Boolean = false,
+    /** 弹幕分集匹配元信息（用户覆盖 / 自动命中 / 回退兜底 + 全部候选） */
+    val danmakuMatch: DanmakuMatch? = null,
 ) {
     val hasNext: Boolean
         get() {
@@ -1057,9 +1062,41 @@ class PlayerViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isDanmakuLoading = true) }
             logger.i { "开始拉取分集弹幕: title='$title', epSort=$epSort" }
-            val items = repo.getDanmaku(title, epSort)
-            logger.i { "分集弹幕拉取完成: ${items.size} 条 (title='$title', epSort=$epSort)" }
-            _uiState.update { it.copy(danmakus = items, isDanmakuLoading = false) }
+            val result =
+                repo.getDanmaku(
+                    bangumiEpisodeId = current.episodeId,
+                    subjectId = current.subjectId,
+                    title = title,
+                    episodeSort = epSort,
+                    episodeName = current.episodeName,
+                )
+            logger.i { "分集弹幕拉取完成: ${result.items.size} 条 (title='$title', epSort=$epSort, state=${result.match?.state})" }
+            _uiState.update {
+                it.copy(danmakus = result.items, danmakuMatch = result.match, isDanmakuLoading = false)
+            }
+            val match = result.match
+            if (match?.state == DanmakuMatchState.FALLBACK && match.candidates.isNotEmpty()) {
+                _events.send(PlayerUiEvent.ShowSnackbar("弹幕分集未能准确匹配，可在播放设置中手动选择"))
+            }
+        }
+    }
+
+    /**
+     * 用户手动纠正弹幕分集：落库覆盖后立即按新分集重载弹幕。
+     * 覆盖是该 bangumi 分集的持久真值，之后的加载与重进播放都直接命中。
+     */
+    fun selectDanmakuCandidate(candidate: DanmakuEpisodeCandidate) {
+        val repo = danmakuRepository ?: return
+        val current = _uiState.value
+        if (current.episodeId <= 0L) return
+        viewModelScope.launch {
+            repo.saveDanmakuOverride(
+                bangumiEpisodeId = current.episodeId,
+                subjectId = current.subjectId,
+                candidate = candidate,
+            )
+            _events.send(PlayerUiEvent.ShowSnackbar("弹幕已切换：${candidate.animeTitle} · ${candidate.episodeTitle}"))
+            loadDanmaku()
         }
     }
 

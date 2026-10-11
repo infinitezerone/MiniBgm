@@ -339,4 +339,10 @@
     <string name="feature_subject_player_danmaku_on">关闭弹幕</string>
     <string name="feature_subject_player_danmaku_off">开启弹幕</string>
     <string name="feature_subject_player_danmaku_loading">弹幕加载中…</string>
+    <string name="feature_subject_player_danmaku_pick_entry">选择弹幕分集</string>
+    <string name="feature_subject_player_danmaku_pick_title">选择弹幕分集</string>
+    <string name="feature_subject_player_danmaku_pick_subtitle">匹配不准时手动指定正确的分集来源</string>
+    <string name="feature_subject_player_danmaku_pick_state_fallback">未准确匹配 · 建议手动选择</string>
+    <string name="feature_subject_player_danmaku_pick_state_auto">已自动匹配</string>
+    <string name="feature_subject_player_danmaku_pick_state_override">已手动指定</string>
 </resources>

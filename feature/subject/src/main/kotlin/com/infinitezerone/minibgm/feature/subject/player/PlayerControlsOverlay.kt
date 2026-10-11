@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.model.DanmakuMatch
+import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.flow.StateFlow
 
@@ -101,6 +103,9 @@ internal fun PlayerControlsOverlay(
     onOpenTrackSelection: () -> Unit = {},
     isDanmakuEnabled: Boolean = true,
     onToggleDanmaku: () -> Unit = {},
+    /** 弹幕分集匹配元信息；有候选时透出纠正入口 */
+    danmakuMatch: DanmakuMatch? = null,
+    onOpenDanmakuPicker: () -> Unit = {},
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
@@ -495,6 +500,13 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.size(20.dp),
                     )
                 }
+
+                // 弹幕分集纠正入口（有候选才出现；匹配处于回退兜底态时挂警示徽标）
+                DanmakuMatchEntryButton(
+                    hasCandidates = !danmakuMatch?.candidates.isNullOrEmpty(),
+                    isFallback = danmakuMatch?.state == DanmakuMatchState.FALLBACK,
+                    onClick = onOpenDanmakuPicker,
+                )
 
                 Spacer(modifier = Modifier.width(6.dp))
 
