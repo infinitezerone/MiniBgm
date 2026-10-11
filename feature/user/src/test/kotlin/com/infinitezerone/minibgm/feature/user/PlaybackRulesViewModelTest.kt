@@ -616,4 +616,53 @@ class PlaybackRulesViewModelTest {
             val prompt = (event as PlaybackRulesUiEvent.OpenAiSourceSearch).prompt
             assertTrue(prompt.contains("站点地址"))
         }
+
+    @Test
+    fun confirmSubscriptionImport_persistsSubscriptionUrl_andAllowsRefreshAndClear() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 1,
+                        aliveRules = 1,
+                        sources =
+                            listOf(
+                                DiscoveredSource(
+                                    name = "在线源",
+                                    urlTemplate = "https://cdn.example.com/{title}",
+                                    isAlive = true,
+                                ),
+                            ),
+                    ),
+                )
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("https://example.com/tvbox.json")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+
+            // 校验订阅 URL 是否已持久化到仓库
+            assertEquals("https://example.com/tvbox.json", fakeRepo.playbackSubscriptionUrl.first())
+
+            // 刷新订阅
+            viewModel.refreshSubscription()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.first { it.subscriptionUrl.isNotBlank() }
+            assertEquals("https://example.com/tvbox.json", state.subscriptionUrl)
+            assertFalse(state.isRefreshingSubscription)
+
+            // 清除订阅链接
+            viewModel.clearSubscriptionUrl()
+            advanceUntilIdle()
+            assertEquals("", fakeRepo.playbackSubscriptionUrl.first())
+        }
 }

@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Badge
@@ -41,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
@@ -351,6 +355,94 @@ fun PlaybackRulesScreen(
                         AnimatedVisibility(visible = showVarsHint) {
                             Column(modifier = Modifier.padding(bottom = 6.dp)) {
                                 RuleVariablesHintCard()
+                            }
+                        }
+                    }
+
+                    if (uiState.subscriptionUrl.isNotBlank()) {
+                        item(key = "subscription_status") {
+                            Surface(
+                                shape = BgmShapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.CloudQueue,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(R.string.feature_user_subscription_active_title),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        Text(
+                                            text = uiState.subscriptionUrl,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { viewModel.refreshSubscription() },
+                                        enabled = !uiState.isRefreshingSubscription,
+                                    ) {
+                                        if (uiState.isRefreshingSubscription) {
+                                            CircularProgressIndicator(
+                                                strokeWidth = 2.dp,
+                                                modifier = Modifier.size(14.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                stringResource(R.string.feature_user_subscription_syncing),
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        } else {
+                                            Text(
+                                                stringResource(R.string.feature_user_subscription_sync_action),
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val confirmed =
+                                                    overlayHostState.await(
+                                                        ConfirmDialogAction(
+                                                            title = context.getString(R.string.feature_user_subscription_clear_action),
+                                                            message = "确定要移除当前订阅源链接吗？已导入的本地规则将被保留。",
+                                                            confirmText =
+                                                                context.getString(
+                                                                    R.string.feature_user_subscription_clear_action,
+                                                                ),
+                                                            isDestructive = true,
+                                                        ),
+                                                    )
+                                                if (confirmed) {
+                                                    viewModel.clearSubscriptionUrl()
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = BgmIcons.Close,
+                                            contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

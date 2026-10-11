@@ -35,6 +35,10 @@ data class PlaybackRulesUiState(
     val isLoading: Boolean = false,
     /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
     val playbackPositions: Map<String, Long> = emptyMap(),
+    /** 社区/外部规则订阅地址 */
+    val subscriptionUrl: String = "",
+    /** 是否正在一键刷新订阅规则 */
+    val isRefreshingSubscription: Boolean = false,
 )
 
 /**
@@ -118,16 +122,22 @@ class PlaybackRulesViewModel(
     private val _events = Channel<PlaybackRulesUiEvent>(Channel.BUFFERED)
     val events: Flow<PlaybackRulesUiEvent> = _events.receiveAsFlow()
 
+    private val isRefreshingSubscriptionFlow = MutableStateFlow(false)
+
     val uiState: StateFlow<PlaybackRulesUiState> =
         combine(
             settingsRepository.playbackRules,
             settingsRepository.playlists,
             settingsRepository.playbackPositions,
-        ) { rules, playlists, positions ->
+            settingsRepository.playbackSubscriptionUrl,
+            isRefreshingSubscriptionFlow,
+        ) { rules, playlists, positions, subUrl, isRefreshing ->
             PlaybackRulesUiState(
                 rules = rules,
                 playlists = playlists,
                 playbackPositions = positions,
+                subscriptionUrl = subUrl,
+                isRefreshingSubscription = isRefreshing,
                 isLoading = false,
             )
         }.stateIn(
@@ -337,8 +347,41 @@ class PlaybackRulesViewModel(
         if (rules.isEmpty()) return
         viewModelScope.launch {
             settingsRepository.importPlaybackRules(rules)
+            if (report.subscriptionUrl.startsWith("http://", ignoreCase = true) ||
+                report.subscriptionUrl.startsWith("https://", ignoreCase = true)
+            ) {
+                settingsRepository.setPlaybackSubscriptionUrl(report.subscriptionUrl)
+            }
             _subscriptionImport.value = SubscriptionImportUiState()
             sendSnackbar("已导入 ${rules.size} 条订阅播放源规则")
+        }
+    }
+
+    /** 一键刷新已保存的外部订阅源并合并/更新本地规则 */
+    fun refreshSubscription() {
+        viewModelScope.launch {
+            isRefreshingSubscriptionFlow.value = true
+            try {
+                when (val result = settingsRepository.refreshPlaybackSubscription()) {
+                    is AppResult.Success -> {
+                        sendSnackbar("已同步订阅规则（共 ${result.data.acceptedCount} 条）")
+                    }
+                    is AppResult.Error -> {
+                        sendSnackbar(result.message)
+                    }
+                    is AppResult.Loading -> Unit
+                }
+            } finally {
+                isRefreshingSubscriptionFlow.value = false
+            }
+        }
+    }
+
+    /** 清除已保存的订阅链接 */
+    fun clearSubscriptionUrl() {
+        viewModelScope.launch {
+            settingsRepository.setPlaybackSubscriptionUrl("")
+            sendSnackbar("已移除订阅链接")
         }
     }
 

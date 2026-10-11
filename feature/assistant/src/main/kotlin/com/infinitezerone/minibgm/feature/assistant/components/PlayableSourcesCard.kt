@@ -159,10 +159,18 @@ private fun PlayableSourceRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            val siteAndVod =
+                buildString {
+                    append(episode.siteName.ifBlank { hostOf(episode.url) })
+                    if (!episode.matchedVodName.isNullOrBlank()) {
+                        append(" · ")
+                        append(episode.matchedVodName)
+                    }
+                }
             Text(
                 text =
                     playbackSourceSubtitle(
-                        episode.siteName.ifBlank { hostOf(episode.url) },
+                        siteAndVod,
                         failureReason,
                         stringResource(R.string.feature_assistant_source_last_failed_format),
                     ),

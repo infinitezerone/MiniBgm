@@ -261,6 +261,14 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新社区/外部播放规则订阅地址 */
+    suspend fun setPlaybackSubscriptionUrl(url: String) {
+        val trimmed = url.trim()
+        dataStore.updateData { current ->
+            current.copy(playbackSubscriptionUrl = trimmed)
+        }
+    }
+
     /** 更新用户自备播放列表信封 JSON */
     suspend fun setPlaylistsJson(json: String) {
         dataStore.updateData { current ->

@@ -155,6 +155,8 @@ data class PlayerUiState(
     val resolveAttemptTotal: Int = 0,
     /** 画中画（PiP）开关 */
     val pipEnabled: Boolean = true,
+    /** 源站返回的真实匹配条目名（用于在播放器与选源栏向用户展示） */
+    val matchedVodName: String? = null,
 ) {
     val hasNext: Boolean
         get() {
@@ -894,7 +896,7 @@ class PlayerViewModel(
         val state = _uiState.value
         if (index !in state.sources.indices || index == state.selectedSourceIndex) return
         flushPlaybackPosition()
-        _uiState.update { it.copy(selectedSourceIndex = index) }
+        _uiState.update { it.copy(selectedSourceIndex = index, matchedVodName = null) }
         resolveCurrentEpisodeStream()
     }
 
@@ -1174,6 +1176,7 @@ class PlayerViewModel(
                             it.copy(
                                 streamUrl = playable.url,
                                 requestHeaders = playable.headers,
+                                matchedVodName = playable.matchedVodName,
                                 isResolvingSource = false,
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
@@ -1195,6 +1198,7 @@ class PlayerViewModel(
                             }
                         _uiState.update {
                             it.copy(
+                                matchedVodName = null,
                                 isResolvingSource = false,
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
@@ -1207,6 +1211,7 @@ class PlayerViewModel(
                 } catch (e: Exception) {
                     _uiState.update {
                         it.copy(
+                            matchedVodName = null,
                             isResolvingSource = false,
                             resolveAttempt = 0,
                             resolveAttemptTotal = 0,

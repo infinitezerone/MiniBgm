@@ -454,6 +454,7 @@ class PlayerViewModelTest {
                                 kind = PlaylistEntryKind.DIRECT,
                                 label = "第 ${epNumber.toInt()} 话",
                                 headers = mapOf("Referer" to "https://example.com"),
+                                matchedVodName = "测试番剧 第一季",
                             ),
                         )
 
@@ -483,6 +484,7 @@ class PlayerViewModelTest {
             val state = vm.uiState.value
             assertEquals("https://cdn.example.com/resolved_ep1.m3u8", state.streamUrl)
             assertEquals("https://example.com", state.requestHeaders["Referer"])
+            assertEquals("测试番剧 第一季", state.matchedVodName)
             assertFalse(state.isResolvingSource)
             assertEquals(null, state.error)
         }

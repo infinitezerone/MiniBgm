@@ -1094,6 +1094,7 @@ internal fun BiliPlayerSourceBar(
     onSelectSource: (Int) -> Unit,
     onRequestOpenSources: (() -> Unit)?,
     onManageRules: (() -> Unit)?,
+    matchedVodName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1113,6 +1114,17 @@ internal fun BiliPlayerSourceBar(
                     text = stringResource(R.string.feature_subject_player_sources_count_format, sources.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!matchedVodName.isNullOrBlank()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "· $matchedVodName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
 
@@ -1997,6 +2009,7 @@ internal fun PlayerIntroContent(
                     onSelectSource = onSelectSource,
                     onRequestOpenSources = onRequestOpenSources,
                     onManageRules = onManageRules,
+                    matchedVodName = uiState.matchedVodName,
                 )
             }
         }

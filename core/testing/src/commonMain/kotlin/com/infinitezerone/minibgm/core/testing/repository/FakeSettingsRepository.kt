@@ -290,4 +290,26 @@ class FakeSettingsRepository(
         url: String,
     ): com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport> =
         validationReportResult
+
+    private val playbackSubscriptionUrlState = MutableStateFlow("")
+    override val playbackSubscriptionUrl: Flow<String> = playbackSubscriptionUrlState
+
+    override suspend fun setPlaybackSubscriptionUrl(url: String) {
+        playbackSubscriptionUrlState.value = url.trim()
+    }
+
+    override suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary> {
+        val url = playbackSubscriptionUrlState.value
+        if (url.isBlank()) return AppResult.Error(IllegalStateException("尚未配置订阅地址"))
+        return when (val report = validateAndTestSubscription(url)) {
+            is AppResult.Success -> {
+                val sources = report.data.sources.filter { it.isAlive }
+                val rules = sources.map { it.toPlaybackSourceRule("fake_${it.name.hashCode()}") }
+                importPlaybackRules(rules)
+                AppResult.Success(RuleImportSummary(acceptedCount = rules.size, rejectedCount = 0))
+            }
+            is AppResult.Error -> AppResult.Error(report.throwable, report.message)
+            is AppResult.Loading -> AppResult.Error(IllegalStateException("校验未完成"))
+        }
+    }
 }

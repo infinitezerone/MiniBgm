@@ -197,6 +197,17 @@ interface SettingsRepository {
     suspend fun validateAndTestSubscription(
         url: String,
     ): com.infinitezerone.minibgm.core.common.AppResult<com.infinitezerone.minibgm.core.model.SubscriptionValidationReport>
+
+    /** 社区/外部播放规则订阅地址（空串表示未配置） */
+    val playbackSubscriptionUrl: Flow<String>
+
+    suspend fun setPlaybackSubscriptionUrl(url: String)
+
+    /**
+     * 按已保存的 [playbackSubscriptionUrl] 刷新订阅：
+     * 重新拉取、探活测速，并将可用规则更新/并入本地规则库。
+     */
+    suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary>
 }
 
 internal class SettingsRepositoryImpl(
@@ -597,6 +608,68 @@ internal class SettingsRepositoryImpl(
         } catch (e: Exception) {
             com.infinitezerone.minibgm.core.common.AppResult
                 .Error(e)
+        }
+
+    override val playbackSubscriptionUrl: Flow<String> =
+        userPreferences.userPreferences.map { it.playbackSubscriptionUrl }
+
+    override suspend fun setPlaybackSubscriptionUrl(url: String) {
+        userPreferences.setPlaybackSubscriptionUrl(url)
+    }
+
+    override suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary> =
+        try {
+            val url = playbackSubscriptionUrl.first().trim()
+            if (url.isBlank()) {
+                AppResult.Error(IllegalStateException("尚未配置订阅地址"))
+            } else {
+                when (val reportResult = validateAndTestSubscription(url)) {
+                    is AppResult.Success -> {
+                        val report = reportResult.data
+                        val aliveSources = report.sources.filter { it.isAlive }
+                        if (aliveSources.isEmpty()) {
+                            AppResult.Error(IllegalStateException("订阅源中没有探活可用的播放源"))
+                        } else {
+                            val newRules =
+                                aliveSources.map { source ->
+                                    source.toPlaybackSourceRule(
+                                        id = "sub_${source.name.hashCode().toUInt().toString(16)}",
+                                    )
+                                }
+                            val current = playbackRules.first()
+                            val mutableRules = current.toMutableList()
+                            var accepted = 0
+                            for (rule in newRules) {
+                                val existingIndex =
+                                    mutableRules.indexOfFirst {
+                                        it.name.equals(rule.name, ignoreCase = true) || it.urlTemplate == rule.urlTemplate
+                                    }
+                                if (existingIndex >= 0) {
+                                    val existing = mutableRules[existingIndex]
+                                    mutableRules[existingIndex] =
+                                        rule.copy(
+                                            id = existing.id,
+                                            isEnabled = existing.isEnabled,
+                                        )
+                                } else {
+                                    mutableRules.add(rule)
+                                }
+                                accepted++
+                            }
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                                userPreferences.setPlaybackRulesJson(json.encodeToString(mutableRules))
+                            }
+                            AppResult.Success(RuleImportSummary(acceptedCount = accepted, rejectedCount = 0))
+                        }
+                    }
+                    is AppResult.Error -> AppResult.Error(reportResult.throwable, reportResult.message)
+                    is AppResult.Loading -> AppResult.Error(IllegalStateException("校验未完成"))
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppResult.Error(e, "刷新订阅失败：${e.message}")
         }
 
     companion object {
