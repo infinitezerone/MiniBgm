@@ -8,6 +8,12 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
@@ -26,6 +32,14 @@ object EchCapabilityDetector {
     private val logger = bgmLogger("Bgm/EchDetector")
 
     private const val ALIDNS_DOH_URL = "https://223.5.5.5/resolve"
+
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 内置的 DoH 探测客户端：纯直连（默认引擎），不经 ECH 引擎，避免自递归 */
+    private val embeddedProbeClient: HttpClient by lazy { HttpClient() }
+
+    /** 探测进行中的 host 集合：请求路径每次调用都会触发本探测器，防止并发重复 DoH 查询 */
+    private val probingInFlight = ConcurrentHashMap.newKeySet<String>()
 
     private enum class SupportStatus {
         SUPPORTED,
@@ -91,6 +105,33 @@ object EchCapabilityDetector {
         }
         return supported
     }
+
+    /**
+     * 对"不在种子名单且尚未探测过"的域名发起一次 fire-and-forget 的 ECH 能力探测。
+     *
+     * 供请求引擎在直连路径上调用：当前请求不受影响（fail-open 直连），探测命中即注册，
+     * 后续请求自动升级走 ECH 路由。种子域名 / IP 字面量 / 已有结论 / 探测进行中一律跳过。
+     *
+     * @return 本次真正发起的探测 Job；跳过时返回 null
+     */
+    fun probeAsyncIfUnknown(
+        host: String,
+        scope: CoroutineScope = backgroundScope,
+        client: HttpClient? = null,
+    ): Job? {
+        val normalized = host.trim().lowercase()
+        if (normalized.isBlank() || isSeedHost(normalized) || isIpLiteral(normalized)) return null
+        if (cache.containsKey(normalized) || !probingInFlight.add(normalized)) return null
+        return scope.launch {
+            try {
+                isEchSupported(normalized, client ?: embeddedProbeClient)
+            } finally {
+                probingInFlight.remove(normalized)
+            }
+        }
+    }
+
+    private fun isIpLiteral(host: String): Boolean = host.matches(Regex("""\d{1,3}(?:\.\d{1,3}){3}""")) || host.contains(':')
 
     /**
      * 向 AliDNS DoH 查询指定域名的 Type 65 (HTTPS) 记录并解析 ECH 字段。

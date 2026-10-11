@@ -120,6 +120,11 @@ class EchHttpClientEngine(
             val port = data.url.port
             val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val enableEch = AdaptiveDnsResolver.isEchEligible(host)
+            if (!enableEch) {
+                // 非种子域名：后台 DoH 探测 ECH 能力（Type 65），命中即注册动态路由——
+                // 当前请求 fail-open 直连不受影响，后续请求自动升级走 ECH
+                EchCapabilityDetector.probeAsyncIfUnknown(host)
+            }
             val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null
 
             val nativeCall =

@@ -11,6 +11,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EchCapabilityDetectorTest {
@@ -39,6 +41,50 @@ class EchCapabilityDetectorTest {
         assertFalse(EchCapabilityDetector.isSeedHost("i0.hdslb.com"))
         assertFalse(EchCapabilityDetector.isSeedHost("sinaimg.cn"))
     }
+
+    @Test
+    fun probeAsyncIfUnknown_registers_unknown_host_and_skips_seeds_ips_and_cached() =
+        runTest {
+            val dohJson =
+                """
+                {
+                  "Status": 0,
+                  "Answer": [
+                    {
+                      "name": "custom-ech-api.org.",
+                      "TTL": 1,
+                      "type": 65,
+                      "data": "1 . alpn=\"h3,h2\" ech=\"AEX+DQBBVgAgACDGzeHda0pFVlXOa8RxU1peLnfQk0KiY+dzz2ytUPRoAwAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=\""
+                    }
+                  ]
+                }
+                """.trimIndent()
+            val fakeClient =
+                HttpClient(MockEngine) {
+                    engine {
+                        addHandler {
+                            respond(
+                                content = dohJson,
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType, "application/dns-json"),
+                            )
+                        }
+                    }
+                }
+
+            // 未知域名：真正发起探测并注册动态路由
+            val job = EchCapabilityDetector.probeAsyncIfUnknown("custom-ech-api.org", scope = backgroundScope, client = fakeClient)
+            assertNotNull(job)
+            job?.join()
+            assertTrue(AdaptiveDnsResolver.isEchEligible("custom-ech-api.org"))
+
+            // 种子域名：跳过
+            assertNull(EchCapabilityDetector.probeAsyncIfUnknown("bgm.tv", scope = backgroundScope, client = fakeClient))
+            // IP 字面量：跳过
+            assertNull(EchCapabilityDetector.probeAsyncIfUnknown("1.2.3.4", scope = backgroundScope, client = fakeClient))
+            // 已有结论（含不支持结论）：跳过
+            assertNull(EchCapabilityDetector.probeAsyncIfUnknown("custom-ech-api.org", scope = backgroundScope, client = fakeClient))
+        }
 
     @Test
     fun parseDohResponseHasEch_correctly_detects_ech_attribute() {
