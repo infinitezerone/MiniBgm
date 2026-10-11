@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
+import com.infinitezerone.minibgm.core.model.extractSubscriptionCandidate
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,6 +81,11 @@ sealed interface PlaybackRulesUiEvent {
     /** 请求打开助手会话并带上找源意图；导航由上层完成（feature 之间不互相依赖） */
     data class OpenAiSourceSearch(
         val prompt: String,
+    ) : PlaybackRulesUiEvent
+
+    /** 剪贴板中检测到有效订阅链接，请求用户确认 */
+    data class PromptClipboardSubscription(
+        val url: String,
     ) : PlaybackRulesUiEvent
 }
 
@@ -219,9 +225,32 @@ class PlaybackRulesViewModel(
         }
     }
 
+    /** 最近一次已提示或已处理的剪贴板候选 URL，防止重复打扰用户 */
+    private var lastHandledClipboardCandidate: String? = null
+
+    /**
+     * 检查剪贴板文本是否包含播放源订阅候选。
+     * 提取出有效链接且未曾提示过时，发射单发事件提示用户。
+     */
+    fun checkClipboardForSubscription(clipboardText: String?) {
+        if (clipboardText.isNullOrBlank()) return
+        val candidate = extractSubscriptionCandidate(clipboardText) ?: return
+        if (candidate == lastHandledClipboardCandidate) return
+        lastHandledClipboardCandidate = candidate
+        viewModelScope.launch {
+            _events.send(PlaybackRulesUiEvent.PromptClipboardSubscription(candidate))
+        }
+    }
+
     /** 打开「订阅导入」对话框（清掉上一次的输入与报告，避免误当成这次的） */
-    fun openSubscriptionImport() {
-        _subscriptionImport.value = SubscriptionImportUiState(isVisible = true)
+    fun openSubscriptionImport(
+        prefilledUrl: String = "",
+        autoValidate: Boolean = false,
+    ) {
+        _subscriptionImport.value = SubscriptionImportUiState(isVisible = true, input = prefilledUrl)
+        if (autoValidate && prefilledUrl.isNotBlank()) {
+            validateSubscription()
+        }
     }
 
     fun closeSubscriptionImport() {

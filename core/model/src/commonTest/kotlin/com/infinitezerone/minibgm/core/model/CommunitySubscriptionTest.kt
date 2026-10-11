@@ -147,4 +147,37 @@ class CommunitySubscriptionTest {
         assertEquals(PlaybackRuleKind.PAGE, rule.kind)
         assertEquals(RuleParserType.AUTO, rule.parserType)
     }
+
+    @Test
+    fun extractSubscriptionCandidate_extractsJsonAndTvBoxUrlsFromMixedText() {
+        val mixed1 = "分享一个新规则订阅：https://example.com/tvbox/rules.json，大家快试试"
+        assertEquals("https://example.com/tvbox/rules.json", extractSubscriptionCandidate(mixed1))
+
+        val mixed2 = "采集接口在此: http://vod.example.org/api.php/provide/vod/。"
+        assertEquals("http://vod.example.org/api.php/provide/vod/", extractSubscriptionCandidate(mixed2))
+
+        val plainUrl = "https://raw.githubusercontent.com/user/repo/main/sub.json"
+        assertEquals(plainUrl, extractSubscriptionCandidate(plainUrl))
+    }
+
+    @Test
+    fun extractSubscriptionCandidate_ignoresBangumiAndBilibiliDomains() {
+        val bgmUrl = "【Bangumi条目】https://bgm.tv/subject/364450 推荐观看"
+        kotlin.test.assertNull(extractSubscriptionCandidate(bgmUrl))
+
+        val biliUrl = "https://www.bilibili.com/video/BV1xx411c7mD"
+        kotlin.test.assertNull(extractSubscriptionCandidate(biliUrl))
+    }
+
+    @Test
+    fun extractSubscriptionCandidate_ignoresPlainTextWithoutUrl() {
+        kotlin.test.assertNull(extractSubscriptionCandidate("这是一段完全不含网络链接的纯文本"))
+        kotlin.test.assertNull(extractSubscriptionCandidate("   "))
+    }
+
+    @Test
+    fun extractSubscriptionCandidate_acceptsSingleStandaloneUrl() {
+        val standalone = "https://api.my-custom-parser.org/anime/search"
+        assertEquals(standalone, extractSubscriptionCandidate(standalone))
+    }
 }

@@ -33,11 +33,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
@@ -87,10 +90,28 @@ fun PlaybackRulesScreen(
     val subscriptionImportState by viewModel.subscriptionImport.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
 
     var isImportingRuleJson by remember { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        scope.launch {
+            runCatching {
+                val clipEntry = clipboard.getClipEntry()
+                val text =
+                    clipEntry
+                        ?.clipData
+                        ?.getItemAt(0)
+                        ?.text
+                        ?.toString()
+                        .orEmpty()
+                        .trim()
+                viewModel.checkClipboardForSubscription(text)
+            }
+        }
+    }
 
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
@@ -99,6 +120,24 @@ fun PlaybackRulesScreen(
             }
             is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
                 onAiSourceSearch(event.prompt)
+            }
+            is PlaybackRulesUiEvent.PromptClipboardSubscription -> {
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = context.getString(R.string.feature_user_clipboard_sub_detected_title),
+                            message = context.getString(R.string.feature_user_clipboard_sub_detected_desc, event.url),
+                            confirmText = context.getString(R.string.feature_user_clipboard_sub_action_import),
+                            dismissText = context.getString(R.string.feature_user_clipboard_sub_action_ignore),
+                            icon = BgmIcons.ContentPaste,
+                        ),
+                    )
+                if (confirmed) {
+                    viewModel.openSubscriptionImport(
+                        prefilledUrl = event.url,
+                        autoValidate = true,
+                    )
+                }
             }
         }
     }

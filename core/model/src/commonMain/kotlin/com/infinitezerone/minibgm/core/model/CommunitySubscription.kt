@@ -172,3 +172,75 @@ data class TvBoxSite(
         private val SCRIPT_SUFFIXES = listOf(".js", ".jar", ".css")
     }
 }
+
+private val CANDIDATE_HTTP_URL_REGEX = Regex("""https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&*+,;%=]+""", RegexOption.IGNORE_CASE)
+
+/**
+ * 识别并提取剪贴板文本中的播放源订阅候选链接。
+ *
+ * 提取准则：
+ * 1. 文本中包含以 http:// 或 https:// 开头的网络地址；
+ * 2. 剥离末尾常见的附带标点（如句号、括号、引号等）；
+ * 3. 排除 Bangumi / B站 等本应用业务域名，避免将分享的番剧链接误判为播放源；
+ * 4. 判定是否符合订阅特征：
+ *    - 扩展名包含 .json、.txt、.conf；
+ *    - 路径或参数包含 tvbox、maccms、provide/vod、api.php、subscribe、sub、rules 等；
+ *    - 或整段文本经清理后本身就是一个单一的合法 URL（用户明确复制的单个地址）。
+ */
+fun extractSubscriptionCandidate(rawText: String): String? {
+    val trimmed = rawText.trim()
+    if (trimmed.isBlank()) return null
+
+    val match = CANDIDATE_HTTP_URL_REGEX.find(trimmed) ?: return null
+    var url = match.value.trim()
+    while (url.isNotEmpty() &&
+        (
+            url.endsWith(".") ||
+                url.endsWith(",") ||
+                url.endsWith(";") ||
+                url.endsWith(")") ||
+                url.endsWith("]") ||
+                url.endsWith("}") ||
+                url.endsWith("。") ||
+                url.endsWith("，") ||
+                url.endsWith("；")
+        )
+    ) {
+        url = url.dropLast(1)
+    }
+
+    if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+        return null
+    }
+
+    val lower = url.lowercase()
+
+    // 排除已知非播放源订阅的常见业务域名与端点
+    val ignoredHosts = listOf("bgm.tv", "bangumi.tv", "chii.in", "bilibili.com", "b23.tv")
+    if (ignoredHosts.any { lower.contains("://$it") || lower.contains(".$it") }) {
+        return null
+    }
+
+    val hasSubscriptionFeature =
+        lower.contains(".json") ||
+            lower.contains(".txt") ||
+            lower.contains(".conf") ||
+            lower.contains("tvbox") ||
+            lower.contains("maccms") ||
+            lower.contains("api.php") ||
+            lower.contains("provide/vod") ||
+            lower.contains("subscribe") ||
+            lower.contains("sub") ||
+            lower.contains("rules")
+
+    if (hasSubscriptionFeature) {
+        return url
+    }
+
+    // 若整段文本就是纯粹的单个 URL，且长度在合理范围内，同样作为候选
+    if (trimmed == url && url.length in 12..512) {
+        return url
+    }
+
+    return null
+}

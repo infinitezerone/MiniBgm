@@ -210,6 +210,10 @@
     <string name="feature_user_subscription_sync_action">同步规则</string>
     <string name="feature_user_subscription_syncing">正在同步…</string>
     <string name="feature_user_subscription_clear_action">取消订阅</string>
+    <string name="feature_user_clipboard_sub_detected_title">发现播放源订阅</string>
+    <string name="feature_user_clipboard_sub_detected_desc">检测到剪贴板中包含播放源订阅链接：\n%1$s\n\n是否立即开始端侧探活并导入？</string>
+    <string name="feature_user_clipboard_sub_action_import">探活并导入</string>
+    <string name="feature_user_clipboard_sub_action_ignore">忽略</string>
     <string name="feature_user_position_seen">看到 %1$s</string>
     <string name="feature_user_position_cd_clear">清除该续播记录</string>
     <string name="feature_user_parser_auto">自动</string>

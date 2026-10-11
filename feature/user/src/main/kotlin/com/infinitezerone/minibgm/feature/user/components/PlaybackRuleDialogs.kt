@@ -26,9 +26,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +43,7 @@ import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.feature.user.R
 import com.infinitezerone.minibgm.feature.user.SiteProbeUiState
 import com.infinitezerone.minibgm.feature.user.SubscriptionImportUiState
+import kotlinx.coroutines.launch
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
@@ -335,6 +338,8 @@ internal fun SubscriptionImportDialog(
     onDismiss: () -> Unit,
 ) {
     val report = state.report
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.feature_user_subscription_title)) },
@@ -355,6 +360,48 @@ internal fun SubscriptionImportDialog(
                     enabled = !state.isValidating,
                     placeholder = {
                         Text("https://example.com/tvbox.json", style = MaterialTheme.typography.bodySmall)
+                    },
+                    trailingIcon = {
+                        if (state.input.isNotBlank()) {
+                            IconButton(
+                                onClick = { onInputChanged("") },
+                                enabled = !state.isValidating,
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Close,
+                                    contentDescription = stringResource(R.string.feature_user_action_clear),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        runCatching {
+                                            val clipEntry = clipboard.getClipEntry()
+                                            val clipText =
+                                                clipEntry
+                                                    ?.clipData
+                                                    ?.getItemAt(0)
+                                                    ?.text
+                                                    ?.toString()
+                                                    .orEmpty()
+                                                    .trim()
+                                            if (clipText.isNotBlank()) {
+                                                onInputChanged(clipText)
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = !state.isValidating,
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.ContentPaste,
+                                    contentDescription = stringResource(R.string.feature_user_action_paste),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )

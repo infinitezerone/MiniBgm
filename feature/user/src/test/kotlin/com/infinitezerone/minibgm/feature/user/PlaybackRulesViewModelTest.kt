@@ -19,6 +19,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertIs
 
 /** 只用于站点探测的替身：其余解析入口保持空实现 */
 private class FakeProbeResolver(
@@ -447,5 +448,72 @@ class PlaybackRulesViewModelTest {
             viewModel.clearSubscriptionUrl()
             advanceUntilIdle()
             assertEquals("", fakeRepo.playbackSubscriptionUrl.first())
+        }
+
+    @Test
+    fun checkClipboardForSubscription_emitsPromptEventForValidCandidate() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.checkClipboardForSubscription("推荐 TVBox 规则：https://example.com/rules.json，快来试试")
+            advanceUntilIdle()
+
+            val event = viewModel.events.first()
+            assertIs<PlaybackRulesUiEvent.PromptClipboardSubscription>(event)
+            assertEquals("https://example.com/rules.json", event.url)
+        }
+
+    @Test
+    fun checkClipboardForSubscription_ignoresRepeatedOrInvalidCandidate() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            // 1. 无效或空文本不触发
+            viewModel.checkClipboardForSubscription("")
+            viewModel.checkClipboardForSubscription("纯文本没有任何网络地址")
+            viewModel.checkClipboardForSubscription("https://bgm.tv/subject/12345")
+            advanceUntilIdle()
+
+            // 2. 有效链接首次触发
+            viewModel.checkClipboardForSubscription("https://example.com/sub.json")
+            advanceUntilIdle()
+            val event = viewModel.events.first()
+            assertEquals("https://example.com/sub.json", (event as PlaybackRulesUiEvent.PromptClipboardSubscription).url)
+
+            // 3. 相同链接重复检查应去重忽略，不二次发射
+            viewModel.checkClipboardForSubscription("https://example.com/sub.json")
+            advanceUntilIdle()
+            // 无新事件发射
+        }
+
+    @Test
+    fun openSubscriptionImport_withAutoValidate_startsValidationAutomatically() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 1,
+                        aliveRules = 1,
+                        sources = listOf(DiscoveredSource(name = "源1", urlTemplate = "https://a.com/{title}")),
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport(
+                prefilledUrl = "https://example.com/tvbox.json",
+                autoValidate = true,
+            )
+            advanceUntilIdle()
+
+            val state = viewModel.subscriptionImport.value
+            assertTrue(state.isVisible)
+            assertEquals("https://example.com/tvbox.json", state.input)
+            assertTrue(state.report != null)
+            assertEquals(setOf(0), state.selected)
         }
 }
