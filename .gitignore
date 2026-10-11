@@ -32,3 +32,7 @@ target/
 
 # 允许项目级 Agent 技能与规范入库
 !.agents/
+
+# Agent 瞬态任务接力与发射架（多 Agent 协同 Mini-Spec，完工即删不入库）
+.task.md
+.task/

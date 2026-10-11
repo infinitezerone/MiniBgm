@@ -46,7 +46,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 AI 协同流水线（机械执行，严禁甩锅排错）：
 
-1. **前置反诘（Spec 对齐）**：编码前反查硬红线与先例，输出 Mini-Spec 与改动栈，用户确认后开工。
+1. **前置反诘（Spec 对齐与发射架）**：编码前反查硬红线与先例，输出 Mini-Spec 与改动栈；多 Agent 接力或跨切面任务统一暂存至根目录 `.task.md`（发射架机制：受 .gitignore 保护不入库，完工且门禁通过后即删），用户确认后开工。
 2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次提交单一目的；中间态用 `.\tools\quick-check.ps1` 秒级自查红线。
 3. **自愈验证（Autonomous Loop）**：编码完成自主运行 `.\tools\jgate.ps1`，若未通过必须自行抓取日志修复直至全绿，严禁让用户试跑。
 4. **经验固化（Flywheel 飞轮）**：攻克非直观隐蔽缺陷后执行《MiniBgm 飞轮协议》（Encode lessons into structure，直接固化入 `ArchitectureRulesTest`、`AGENTS.md` 或 `.agents/skills/minibgm-playbooks`，不留纯文本日记，详见 `.agents/skills/minibgm-flywheel/SKILL.md`）。
