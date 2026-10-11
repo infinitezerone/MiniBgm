@@ -9,6 +9,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.StepAction
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.Dispatchers
@@ -137,7 +138,8 @@ class PlaybackRuleEngineImpl(
 
                     StepAction.EXTRACT_STREAM -> {
                         if (step.regex.isBlank()) return@withContext emptyList()
-                        val regex = Regex(step.regex, RegexOption.IGNORE_CASE)
+                        val resolvedPattern = replacePlaceholders(step.regex, variables)
+                        val regex = Regex(resolvedPattern, RegexOption.IGNORE_CASE)
 
                         val finalHeaders = mutableMapOf<String, String>()
                         finalHeaders.putAll(rule.headers)
@@ -146,29 +148,34 @@ class PlaybackRuleEngineImpl(
 
                         // 列表语义：正则第 1 组（无组时整个匹配）是直链，可选第 2 组是集名/集号文本。
                         // findAll 收集全部候选，"按话数选条目"是引擎固定行为——规则不必把 {ep} 锚死在正则里。
+                        // 若 resolvedPattern 本身已经是一个完整的直接媒体 URL（如通过变量透传），直接作为单条候选
                         val candidates =
-                            regex
-                                .findAll(lastHtml)
-                                .mapNotNull { match ->
-                                    val rawStream =
-                                        (
-                                            if (match.groupValues.size > 1) {
-                                                match.groupValues[1]
+                            if (isPlayableStreamCandidate(resolvedPattern)) {
+                                listOf(StreamCandidate(resolvedPattern, null))
+                            } else {
+                                regex
+                                    .findAll(lastHtml)
+                                    .mapNotNull { match ->
+                                        val rawStream =
+                                            (
+                                                if (match.groupValues.size > 1) {
+                                                    match.groupValues[1]
+                                                } else {
+                                                    match.value
+                                                }
+                                            ).replace("\\/", "/")
+                                        val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return@mapNotNull null
+                                        val annotation =
+                                            if (match.groupValues.size > 2) {
+                                                match.groupValues[2].trim().takeIf { it.isNotEmpty() }
                                             } else {
-                                                match.value
+                                                null
                                             }
-                                        ).replace("\\/", "/")
-                                    val streamUrl = normalizeStreamUrl(rawStream, lastUrl) ?: return@mapNotNull null
-                                    val annotation =
-                                        if (match.groupValues.size > 2) {
-                                            match.groupValues[2].trim().takeIf { it.isNotEmpty() }
-                                        } else {
-                                            null
-                                        }
-                                    StreamCandidate(streamUrl, annotation)
-                                }.distinctBy { it.url }
-                                .take(MAX_STREAM_CANDIDATES)
-                                .toList()
+                                        StreamCandidate(streamUrl, annotation)
+                                    }.distinctBy { it.url }
+                                    .take(MAX_STREAM_CANDIDATES)
+                                    .toList()
+                            }
                         if (candidates.isEmpty()) return@withContext emptyList()
 
                         fun episodeOf(candidate: StreamCandidate): Float? =
@@ -203,6 +210,24 @@ class PlaybackRuleEngineImpl(
                                 headers = finalHeaders,
                             )
                         }
+                    }
+
+                    StepAction.EXTRACT_JSON -> {
+                        if (step.jsonPath.isBlank() || step.variableName.isBlank()) continue
+                        val extracted = extractJsonPath(lastHtml, step.jsonPath) ?: return@withContext emptyList()
+                        variables[step.variableName] = extracted
+                    }
+
+                    StepAction.TRANSFORM -> {
+                        if (step.variableName.isBlank()) continue
+                        val input = variables[step.variableName] ?: continue
+                        val transformed =
+                            when (step.transformType.uppercase()) {
+                                "BASE64_DECODE" -> decodeBase64String(input)
+                                "URL_DECODE" -> decodeUrlComponent(input)
+                                else -> input
+                            }
+                        variables[step.variableName] = transformed
                     }
                 }
             }
@@ -285,6 +310,16 @@ class PlaybackRuleEngineImpl(
         }
         return null
     }
+
+    private fun isPlayableStreamCandidate(candidate: String): Boolean {
+        val trimmed = candidate.trim()
+        return (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) &&
+            (
+                trimmed.contains(".m3u8", ignoreCase = true) ||
+                    trimmed.contains(".mp4", ignoreCase = true) ||
+                    trimmed.contains(".flv", ignoreCase = true)
+            )
+    }
 }
 
 /**
@@ -304,3 +339,51 @@ internal fun cookiePairsOf(rawSetCookie: String): String? =
         }.distinct()
         .takeIf { it.isNotEmpty() }
         ?.joinToString("; ")
+
+/**
+ * 遍历并提取点分 JSON 路径（如 `data.play_url` 或 `items.0.url`）。
+ * 若解析失败或路径不存在则返回 null。
+ */
+internal fun extractJsonPath(
+    jsonStr: String,
+    path: String,
+): String? {
+    if (jsonStr.isBlank() || path.isBlank()) return null
+    val trimmed = jsonStr.trim()
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null
+
+    val element = runCatching { BgmHttpClient.jsonConfig.parseToJsonElement(trimmed) }.getOrNull() ?: return null
+    val segments = path.split('.').filter { it.isNotBlank() }
+    var current: kotlinx.serialization.json.JsonElement = element
+
+    for (segment in segments) {
+        when (current) {
+            is kotlinx.serialization.json.JsonObject -> {
+                current = current[segment] ?: return null
+            }
+            is kotlinx.serialization.json.JsonArray -> {
+                val index = segment.toIntOrNull() ?: return null
+                if (index !in 0 until current.size) return null
+                current = current[index]
+            }
+            else -> return null
+        }
+    }
+
+    return when (current) {
+        is kotlinx.serialization.json.JsonPrimitive -> current.content
+        else -> current.toString()
+    }
+}
+
+/**
+ * 跨平台 Base64 解码为 UTF-8 字符串，失败返回原字符串。
+ */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+internal fun decodeBase64String(input: String): String =
+    runCatching {
+        val bytes =
+            kotlin.io.encoding.Base64
+                .decode(input.trim())
+        bytes.decodeToString()
+    }.getOrDefault(input)

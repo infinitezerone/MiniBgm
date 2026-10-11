@@ -79,12 +79,10 @@ private fun segmentVodName(segment: String): String? = MACCMS_VOD_NAME_REGEX.fin
 /**
  * 抽取 MacCMS 剧集直链。
  *
- * - 多条目响应优先取 [title] 对得上的那一段（同名续作、剧场版混在搜索结果里时避免播错番）；
- *   **一段都对不上时退回原来"取第一段"的行为**——源站 `vod_name` 可能是日文原名而 App 侧是中文译名，
- *   硬拦会把本来能用的源判死，这里只做"能认出来就用对的"，不做"认不出就拒绝"；
- * - 分隔符：`$$$` 分线路、`#` 分集、`集名$地址`；集名为空时用地址里的集号定位
- *   （从地址真实抽取，不按话数猜号）；
- * - 判定扩展名前先剥 query 与 fragment，否则 `x.m3u8?sign=…` 这类带签名直链会被整条丢掉。
+ * - 多条目响应优先取 [title] 对得上且通过季数/版本断言的那一段（同名续作、剧场版混在搜索结果里时避免播错番）；
+ * - 当指定了 [title] 时，只有满足标题与季数兼容的条目才会被采用；杜绝无条件回退第一段导致的盲目串季；
+ * - 季数拓扑纠偏：若分集连续编号（如第二季标为 13..24），自动纠偏为对应集；
+ * - 分隔符：`$$$` 分线路、`#` 分集、`集名$地址`；支持多线路标注与展开，避免首线异常全盘判死。
  */
 internal fun extractMacCmsSources(
     html: String,
@@ -96,35 +94,89 @@ internal fun extractMacCmsSources(
     // HTML 内嵌 JSON 会把 & 转义成 &amp;，不还原则直链带着 &amp; 去播放必然取不到流
     val normalized = html.replace("\\/", "/").replace("&amp;", "&")
     val segments = splitMacCmsEntries(normalized)
-    val segment =
-        segments.firstOrNull { entry -> segmentVodName(entry)?.let { titleMatches(it, title) } ?: true }
-            ?: segments.firstOrNull()
-            ?: return emptyList()
+    val matchedSegment =
+        if (title.isNotBlank()) {
+            segments.firstOrNull { entry ->
+                val vodName = segmentVodName(entry)
+                if (vodName != null) {
+                    titleMatches(vodName, title) && EpisodeSanityChecker.isSeasonAndEditionCompatible(title, vodName)
+                } else {
+                    false
+                }
+            } ?: if (segments.size == 1) {
+                // 单条目响应（单番详情接口或只有一个结果）：
+                // 仅当 vodName 为空，或通过季数/版本断言时采纳
+                val singleVodName = segmentVodName(segments.first())
+                if (singleVodName == null || EpisodeSanityChecker.isSeasonAndEditionCompatible(title, singleVodName)) {
+                    segments.first()
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } else {
+            segments.firstOrNull()
+        } ?: return emptyList()
 
-    val targetEpInt = epNumber.toInt()
-    val paddedEp = targetEpInt.toString().padStart(2, '0')
+    val vodTitle = segmentVodName(matchedSegment).orEmpty()
     val referer = pageOrigin(pageUrl)?.let { mapOf("Referer" to it) }.orEmpty()
     val results = mutableListOf<PlayableSource>()
-    MACCMS_PLAY_URL_REGEX.find(segment)?.let { match ->
+
+    MACCMS_PLAY_URL_REGEX.find(matchedSegment)?.let { match ->
         val playListStr = match.groupValues[1].replace("\\/", "/")
-        for (entry in playListStr.split("$$$").flatMap { it.split('#') }) {
-            val parts = entry.split('$', limit = 2)
-            if (parts.size < 2) continue
-            val entryLabel = parts[0].trim()
-            val mediaUrl = parts[1].trim()
-            if (!isPlayableMediaUrl(mediaUrl)) continue
-            if (epNumber > 0f && !entryMatchesEpisode(entryLabel, mediaUrl, targetEpInt, paddedEp)) continue
-            results.add(
-                PlayableSource(
-                    url = mediaUrl,
-                    kind = PlaylistEntryKind.DIRECT,
-                    label = entryLabel,
-                    episodeSort = epNumber,
-                    siteName = siteName,
-                    pageUrl = pageUrl,
-                    headers = referer,
-                ),
-            )
+        val routes = playListStr.split("$$$")
+
+        routes.forEachIndexed { routeIndex, routeContent ->
+            val routeEntries =
+                routeContent.split('#').mapNotNull { raw ->
+                    val parts = raw.split('$', limit = 2)
+                    if (parts.size >= 2) {
+                        val entryLabel = parts[0].trim()
+                        val mediaUrl = parts[1].trim()
+                        if (isPlayableMediaUrl(mediaUrl)) {
+                            entryLabel to mediaUrl
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                }
+            if (routeEntries.isEmpty()) return@forEachIndexed
+
+            // 收集当前线路的所有可用集号以进行拓扑判定
+            val availableSorts =
+                routeEntries.mapNotNull { (label, url) ->
+                    episodeNumberFromLabel(label) ?: episodeNumberFromUrl(url, allowWeak = true)
+                }
+            val targetEp =
+                if (epNumber > 0f) {
+                    EpisodeSanityChecker.normalizeEpisodeIndex(epNumber, availableSorts) ?: epNumber
+                } else {
+                    epNumber
+                }
+            val targetEpInt = targetEp.toInt()
+            val paddedEp = targetEpInt.toString().padStart(2, '0')
+
+            val routeLabel = if (routes.size > 1) " · 线路${routeIndex + 1}" else ""
+            val finalSiteName = if (siteName.isNotBlank()) "$siteName$routeLabel" else siteName
+
+            for ((entryLabel, mediaUrl) in routeEntries) {
+                if (epNumber > 0f && !entryMatchesEpisode(entryLabel, mediaUrl, targetEpInt, paddedEp)) continue
+                results.add(
+                    PlayableSource(
+                        url = mediaUrl,
+                        kind = PlaylistEntryKind.DIRECT,
+                        label = entryLabel,
+                        episodeSort = epNumber,
+                        siteName = finalSiteName,
+                        pageUrl = pageUrl,
+                        headers = referer,
+                        matchedVodName = vodTitle,
+                    ),
+                )
+            }
         }
     }
     return results.distinctBy { it.url }.take(MAX_MANIFEST_ENTRIES)

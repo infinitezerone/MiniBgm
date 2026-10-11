@@ -87,6 +87,19 @@ class PlaybackSourceVerifierTest {
             assertEquals(StreamVerification.Unverified, verifier.verify(source()))
         }
 
+    @Test
+    fun `视频时长异常且过短时判定不可播并指出疑似预告片`() =
+        runTest {
+            val verifier = PlaybackSourceVerifierImpl(ProbeFetch(StreamProbe.Responded(200, "video/mp4")))
+            // 90 秒过短（疑似 PV）
+            val shortSource = PlayableSource(url = "https://cdn.example.tv/pv.mp4", durationSeconds = 90L)
+
+            val result = verifier.verify(shortSource)
+
+            assertTrue(result is StreamVerification.NotPlayable)
+            assertTrue(result.reason.contains("时长异常"))
+        }
+
     private fun source() = PlayableSource(url = "https://cdn.example.tv/hls/1.m3u8")
 
     /** 只回固定探测结论；页面抓取路径不参与本测试 */

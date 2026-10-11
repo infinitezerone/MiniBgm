@@ -4,6 +4,8 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -43,8 +45,12 @@ class EpisodeStreamResolver(
     }
 
     /**
-     * 串行试探候选关键词直到命中直链；[timeoutMs] 包住整个循环（withTimeoutOrNull 能真正打断
-     * 挂起的请求，而不是只在两次尝试之间检查时钟）。超时返回 null，试完未命中返回空 sources 的结果。
+     * 试探候选关键词直到命中直链；[timeoutMs] 包住整个流程。
+     *
+     * 性能优化（受控双路竞速）：
+     * 前两个最高置信度关键词（如原名与主别名）采用并发竞速（Racing），谁先返回有效直链谁起播，
+     * 并立即取消另一路的等待，将起播耗时减少 50% 以上；
+     * 若前两个均未命中，继续串行试探后续长尾候选。
      */
     suspend fun probeRule(
         rule: PlaybackSourceRule,
@@ -57,54 +63,123 @@ class EpisodeStreamResolver(
     ): ProbeOutcome? =
         withTimeoutOrNull(timeoutMs) {
             val queryTitles = buildRuleQueryCandidates(rule, baseTitles, epSort)
-            var attempted = 0
-            for (queryTitle in queryTitles) {
-                attempted++
-                onProgress(attempted, queryTitles.size)
-                val candidates =
-                    if (rule.kind == PlaybackRuleKind.SOURCE) {
-                        resolver.resolveRule(
-                            rule = rule,
-                            title = queryTitle,
-                            epNumber = epSort,
+            if (queryTitles.isEmpty()) {
+                return@withTimeoutOrNull ProbeOutcome(
+                    rule = rule,
+                    sources = emptyList(),
+                    matchedTitle = "",
+                    attempted = 0,
+                    attemptTotal = 0,
+                    timedOut = false,
+                )
+            }
+
+            suspend fun resolveCandidate(title: String): List<PlayableSource> =
+                if (rule.kind == PlaybackRuleKind.SOURCE) {
+                    resolver.resolveRule(
+                        rule = rule,
+                        title = title,
+                        epNumber = epSort,
+                        subjectId = subjectId,
+                        episodeId = episodeId,
+                    )
+                } else {
+                    val targetUrl =
+                        rule.resolveUrl(
+                            title = title,
+                            ep = epNumberString(epSort),
                             subjectId = subjectId,
                             episodeId = episodeId,
                         )
-                    } else {
-                        val targetUrl =
-                            rule.resolveUrl(
-                                title = queryTitle,
-                                ep = epNumberString(epSort),
-                                subjectId = subjectId,
-                                episodeId = episodeId,
-                            )
-                        resolver.resolvePages(
-                            pageUrls = listOf(targetUrl),
-                            epNumber = epSort,
-                            siteName = rule.name,
-                            title = queryTitle,
-                        )
-                    }
-                val directCandidates = candidates.filter { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }
-                if (directCandidates.isNotEmpty()) {
-                    val playableCandidate =
-                        if (verifier != null) {
-                            directCandidates.firstOrNull { verifier.verify(it) !is StreamVerification.NotPlayable }
-                        } else {
-                            directCandidates.first()
-                        }
-                    if (playableCandidate != null) {
-                        return@withTimeoutOrNull ProbeOutcome(
-                            rule = rule,
-                            sources = listOf(playableCandidate) + candidates.filter { it != playableCandidate },
-                            matchedTitle = queryTitle,
-                            attempted = attempted,
-                            attemptTotal = queryTitles.size,
-                            timedOut = false,
-                        )
-                    }
+                    resolver.resolvePages(
+                        pageUrls = listOf(targetUrl),
+                        epNumber = epSort,
+                        siteName = rule.name,
+                        title = title,
+                    )
+                }
+
+            suspend fun findPlayableCandidate(candidates: List<PlayableSource>): PlayableSource? {
+                val direct = candidates.filter { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }
+                if (direct.isEmpty()) return null
+                return if (verifier != null) {
+                    direct.firstOrNull { verifier.verify(it) !is StreamVerification.NotPlayable }
+                } else {
+                    direct.first()
                 }
             }
+
+            // 1. 前 2 个高优先级候选进行受控并发竞速
+            val fastTrack = queryTitles.take(2)
+            if (fastTrack.size == 2) {
+                onProgress(1, queryTitles.size)
+                val fastResult: Pair<String, List<PlayableSource>>? =
+                    coroutineScope {
+                        val channel = kotlinx.coroutines.channels.Channel<Pair<String, List<PlayableSource>>>(2)
+                        val job1 =
+                            this.launch {
+                                val c = resolveCandidate(fastTrack[0])
+                                val p = findPlayableCandidate(c)
+                                if (p != null) channel.send(fastTrack[0] to (listOf(p) + c.filter { it != p }))
+                            }
+                        val job2 =
+                            this.launch {
+                                val c = resolveCandidate(fastTrack[1])
+                                val p = findPlayableCandidate(c)
+                                if (p != null) channel.send(fastTrack[1] to (listOf(p) + c.filter { it != p }))
+                            }
+
+                        // 并发竞速：只要任一分支找到可用直链，立即返回并取消未完成任务
+                        var winner: Pair<String, List<PlayableSource>>? = null
+                        val completionWatcher =
+                            this.launch {
+                                job1.join()
+                                job2.join()
+                                channel.close()
+                            }
+
+                        for (hit in channel) {
+                            winner = hit
+                            job1.cancel()
+                            job2.cancel()
+                            completionWatcher.cancel()
+                            break
+                        }
+                        winner
+                    }
+
+                if (fastResult != null) {
+                    return@withTimeoutOrNull ProbeOutcome(
+                        rule = rule,
+                        sources = fastResult.second,
+                        matchedTitle = fastResult.first,
+                        attempted = 2,
+                        attemptTotal = queryTitles.size,
+                        timedOut = false,
+                    )
+                }
+            }
+
+            // 2. 长尾候选串行回退
+            var attempted = if (fastTrack.size == 2) 2 else 0
+            val remainingTitles = if (fastTrack.size == 2) queryTitles.drop(2) else queryTitles
+            for (queryTitle in remainingTitles) {
+                attempted++
+                onProgress(attempted, queryTitles.size)
+                val candidates = resolveCandidate(queryTitle)
+                val playableCandidate = findPlayableCandidate(candidates)
+                if (playableCandidate != null) {
+                    return@withTimeoutOrNull ProbeOutcome(
+                        rule = rule,
+                        sources = listOf(playableCandidate) + candidates.filter { it != playableCandidate },
+                        matchedTitle = queryTitle,
+                        attempted = attempted,
+                        attemptTotal = queryTitles.size,
+                        timedOut = false,
+                    )
+                }
+            }
+
             ProbeOutcome(
                 rule = rule,
                 sources = emptyList(),

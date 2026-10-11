@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.data.repository.resolver.EpisodeSanityChecker
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.StreamProbe
@@ -32,12 +33,17 @@ interface PlaybackSourceVerifier {
 class PlaybackSourceVerifierImpl(
     private val pageFetchService: PageFetchService,
 ) : PlaybackSourceVerifier {
-    override suspend fun verify(source: PlayableSource): StreamVerification =
-        when (val probe = pageFetchService.probeStream(source.url, source.headers)) {
+    override suspend fun verify(source: PlayableSource): StreamVerification {
+        if (source.durationSeconds > 0L && !EpisodeSanityChecker.isDurationPlausibleForTvEpisode(source.durationSeconds)) {
+            val minutes = source.durationSeconds / 60
+            return StreamVerification.NotPlayable("媒体时长异常（约 $minutes 分钟），疑似预告片/PV 或剧场版")
+        }
+        return when (val probe = pageFetchService.probeStream(source.url, source.headers)) {
             StreamProbe.Unsupported -> StreamVerification.Unverified
             is StreamProbe.Failed -> StreamVerification.NotPlayable("首包请求失败：${probe.reason}")
             is StreamProbe.Responded -> judge(probe)
         }
+    }
 
     private fun judge(probe: StreamProbe.Responded): StreamVerification {
         if (probe.status !in 200..299) {

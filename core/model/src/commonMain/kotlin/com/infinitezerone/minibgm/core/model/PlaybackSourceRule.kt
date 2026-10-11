@@ -23,6 +23,8 @@ enum class StepAction {
     FETCH,
     EXTRACT_VARIABLE,
     EXTRACT_STREAM,
+    EXTRACT_JSON,
+    TRANSFORM,
 }
 
 /**
@@ -42,7 +44,7 @@ object PlaybackRuleApi {
 /**
  * 声明式流水线单步定义。
  *
- * - [action]: 操作类型（发起请求、提取变量、提取媒体直链）
+ * - [action]: 操作类型（发起请求、提取变量、提取媒体直链、JSON字段提取、文本变换）
  * - [urlTemplate]: 目标地址模板，支持占位符与上下文变量（如 `{title}`, `{ep}`, `{varName}`）
  * - [method]: HTTP 方法，"GET" 或 "POST"
  * - [bodyTemplate]: POST 请求体模板（如 `d={apireq}`）
@@ -50,7 +52,9 @@ object PlaybackRuleApi {
  * - [regex]: 用于从响应文本中抓取变量或直链的正则表达式。EXTRACT_VARIABLE 取第一个捕获组；
  *   EXTRACT_STREAM 为列表语义——第 1 组是直链（无组时整个匹配），可选第 2 组是集名/集号文本，
  *   引擎收集全部候选并按请求话数自动选条目，规则无需把 {ep} 锚死在正则里
- * - [variableName]: 提取到的变量存入上下文的键名（支持以 `{variableName}` 引用）
+ * - [jsonPath]: EXTRACT_JSON 时用于点分遍历的路径（如 `data.play_url` 或 `items.0.url`）
+ * - [transformType]: TRANSFORM 时支持的操作类型，如 "BASE64_DECODE"、"URL_DECODE"
+ * - [variableName]: 提取/变换得到的变量存入上下文的键名（支持以 `{variableName}` 引用）
  * - [captureHeaders]: 需要从 HTTP 响应头中捕获并透传给播放器的 Header 名称列表（如 "Set-Cookie" 或 "Cookie"）
  */
 @Serializable
@@ -61,6 +65,8 @@ data class PipelineStep(
     val bodyTemplate: String = "",
     val headers: Map<String, String> = emptyMap(),
     val regex: String = "",
+    val jsonPath: String = "",
+    val transformType: String = "",
     val variableName: String = "",
     val captureHeaders: List<String> = emptyList(),
 )

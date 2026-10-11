@@ -18,6 +18,8 @@ data class PlayableSource(
     val siteName: String = "",
     val pageUrl: String = "",
     val headers: Map<String, String> = emptyMap(),
+    val matchedVodName: String = "",
+    val durationSeconds: Long = 0L,
 )
 
 /** 一个条目的可播放清单：助手与播放器之间传递的唯一形态，集数列表按 [episodes] 顺序展示 */

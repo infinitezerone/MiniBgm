@@ -281,4 +281,48 @@ class EpisodeStreamResolverTest {
             assertEquals(2, outcome.attempted)
             assertNull(outcome.directSource)
         }
+
+    @Test
+    fun probeRule_racesTopTwoCandidatesAndCancelsSlowBranch() =
+        runTest {
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        if (title == "慢速命中") {
+                            delay(500)
+                            listOf(direct("https://cdn.example.tv/slow.m3u8"))
+                        } else if (title == "快速命中") {
+                            delay(10)
+                            listOf(direct("https://cdn.example.tv/fast.m3u8"))
+                        } else {
+                            emptyList()
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("慢速命中", "快速命中"),
+                    epSort = 0f,
+                    subjectId = 1001L,
+                )
+
+            assertNotNull(outcome)
+            // 快速命中应该率先返回
+            assertEquals("快速命中", outcome.matchedTitle)
+            assertEquals("https://cdn.example.tv/fast.m3u8", outcome.directSource?.url)
+        }
 }

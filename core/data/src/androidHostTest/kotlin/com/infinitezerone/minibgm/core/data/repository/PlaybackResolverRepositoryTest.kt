@@ -848,6 +848,56 @@ class PlaybackResolverRepositoryTest {
         }
 
     @Test
+    fun `PIPELINE 支持 EXTRACT_JSON 与 TRANSFORM 解码直链`() =
+        runTest {
+            // 模拟包含 base64 编码的私有 JSON 接口响应
+            // aHR0cHM6Ly9jZG4uZXhhbXBsZS5jb20vc3RyZWFtLm0zdTg= 是 https://cdn.example.com/stream.m3u8 的 base64 编码
+            val jsonResponse =
+                """
+                {
+                    "code": 200,
+                    "result": {
+                        "stream_data": "aHR0cHM6Ly9jZG4uZXhhbXBsZS5jb20vc3RyZWFtLm0zdTg="
+                    }
+                }
+                """.trimIndent()
+            val fake = FakePageFetchService(mapOf("https://api.example.com/anime" to jsonResponse))
+            val repo = PlaybackResolverRepositoryImpl(fake)
+
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_json",
+                    name = "JSON变换规则",
+                    urlTemplate = "https://api.example.com/anime",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.PIPELINE,
+                    pipeline =
+                        listOf(
+                            PipelineStep(action = StepAction.FETCH, urlTemplate = "https://api.example.com/anime"),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_JSON,
+                                jsonPath = "result.stream_data",
+                                variableName = "b64stream",
+                            ),
+                            PipelineStep(
+                                action = StepAction.TRANSFORM,
+                                variableName = "b64stream",
+                                transformType = "BASE64_DECODE",
+                            ),
+                            PipelineStep(
+                                action = StepAction.EXTRACT_STREAM,
+                                regex = "{b64stream}",
+                            ),
+                        ),
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "test", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/stream.m3u8", sources.single().url)
+        }
+
+    @Test
     fun `EXTRACT_STREAM 整季请求返回全部候选并带真实集号`() =
         runTest {
             val html =
