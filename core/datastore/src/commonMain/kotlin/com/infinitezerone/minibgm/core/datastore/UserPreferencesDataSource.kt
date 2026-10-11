@@ -316,4 +316,17 @@ class UserPreferencesDataSource(
             current.copy(customFilterTags = current.customFilterTags - trimmed)
         }
     }
+
+    /** 更新弹幕服务配置（端点与应用 ID） */
+    suspend fun setDanmakuSettings(
+        endpoint: String,
+        appId: String,
+    ) {
+        dataStore.updateData { current ->
+            current.copy(
+                danmakuEndpoint = endpoint.trim(),
+                danmakuAppId = appId.trim(),
+            )
+        }
+    }
 }

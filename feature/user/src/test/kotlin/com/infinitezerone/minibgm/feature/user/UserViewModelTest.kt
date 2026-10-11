@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.data.crash.CrashLog
 import com.infinitezerone.minibgm.core.data.repository.TrackingFootprint
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AppUpdateInfo
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleUserProfile
@@ -470,6 +471,34 @@ class UserViewModelTest {
             val state = viewModel.uiState.first { it.aiConfig == customConfig }
             assertEquals(customConfig, state.aiConfig)
             assertEquals(1, settingsRepo.setAiConfigCallCount)
+        }
+
+    @Test
+    fun initialState_emitsDefaultDanmakuConfig() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first()
+            assertEquals(DanmakuConfig(), state.danmakuConfig)
+        }
+
+    @Test
+    fun setDanmakuConfig_updatesSettingsRepositoryAndState() =
+        runTest {
+            val (viewModel, _, settingsRepo) = createViewModel()
+
+            val customConfig =
+                DanmakuConfig(
+                    endpoint = "https://custom.danmaku.example.com",
+                    appId = "test_app_id",
+                    appSecret = "test_app_secret",
+                )
+
+            viewModel.setDanmakuConfig(customConfig)
+
+            val state = viewModel.uiState.first { it.danmakuConfig == customConfig }
+            assertEquals(customConfig, state.danmakuConfig)
+            assertEquals(1, settingsRepo.setDanmakuConfigCallCount)
         }
 
     @Test

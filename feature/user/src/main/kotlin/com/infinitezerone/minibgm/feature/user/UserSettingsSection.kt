@@ -42,6 +42,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -84,6 +85,8 @@ internal fun SettingsSection(
     onLogoutCurrentClick: () -> Unit,
     onLogoutAllClick: () -> Unit,
     onOpenPlaybackRules: (() -> Unit)? = null,
+    danmakuConfig: DanmakuConfig = DanmakuConfig(),
+    onOpenDanmakuSettings: (() -> Unit)? = null,
     amoledDarkMode: Boolean = false,
     onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -120,11 +123,20 @@ internal fun SettingsSection(
             onToggleAmoledDarkMode = onToggleAmoledDarkMode,
         )
 
-        if (onOpenPlaybackRules != null) {
+        if (onOpenPlaybackRules != null || onOpenDanmakuSettings != null) {
             PlaybackSettingsCard(
                 pipEnabled = pipEnabled,
                 onTogglePipEnabled = onTogglePipEnabled,
                 onOpenPlaybackRules = onOpenPlaybackRules,
+                onOpenDanmakuSettings = onOpenDanmakuSettings,
+                danmakuSummary =
+                    if (danmakuConfig.endpoint.isNotBlank()) {
+                        stringResource(R.string.feature_user_settings_danmaku_desc_custom, danmakuConfig.endpoint)
+                    } else if (danmakuConfig.appId.isNotBlank()) {
+                        stringResource(R.string.feature_user_settings_danmaku_desc_configured, danmakuConfig.appId)
+                    } else {
+                        stringResource(R.string.feature_user_settings_danmaku_desc_default)
+                    },
             )
         }
 
@@ -255,6 +267,8 @@ internal fun PlaybackSettingsCard(
     pipEnabled: Boolean,
     onTogglePipEnabled: (Boolean) -> Unit,
     onOpenPlaybackRules: (() -> Unit)? = null,
+    onOpenDanmakuSettings: (() -> Unit)? = null,
+    danmakuSummary: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -281,6 +295,26 @@ internal fun PlaybackSettingsCard(
                     title = stringResource(R.string.feature_user_title_playback_rules),
                     subtitle = stringResource(R.string.feature_user_settings_playback_manage_desc),
                     onClick = onOpenPlaybackRules,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+            }
+
+            if (onOpenDanmakuSettings != null) {
+                SettingsItemRow(
+                    icon = BgmIcons.ChatBubble,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    title = stringResource(R.string.feature_user_settings_danmaku_title),
+                    subtitle = danmakuSummary ?: stringResource(R.string.feature_user_settings_danmaku_desc_default),
+                    onClick = onOpenDanmakuSettings,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
             }
 

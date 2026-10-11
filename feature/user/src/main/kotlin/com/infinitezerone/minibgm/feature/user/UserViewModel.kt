@@ -16,6 +16,7 @@ import com.infinitezerone.minibgm.core.data.util.SyncManager
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -54,6 +55,7 @@ data class UserUiState(
     val notifyBeforeAirMinutes: Int = 15,
     val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
+    val danmakuConfig: DanmakuConfig = DanmakuConfig(),
     val airDelayOffsetMinutes: Int = 0,
     val amoledDarkMode: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -224,6 +226,7 @@ class UserViewModel(
                 notifyBeforeAirMinutes = sync.settings.notifyBeforeAirMinutes,
                 airingNotificationOffsetMinutes = sync.settings.airingNotificationOffsetMinutes,
                 aiConfig = sync.settings.aiConfig,
+                danmakuConfig = sync.settings.danmakuConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 amoledDarkMode = sync.settings.amoledDarkMode,
                 themeMode = sync.settings.themeMode,
@@ -233,6 +236,12 @@ class UserViewModel(
                 isCheckingUpdate = local.isCheckingUpdate,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserUiState(isLoading = true))
+
+    fun setDanmakuConfig(config: DanmakuConfig) {
+        viewModelScope.launch {
+            settingsRepository.setDanmakuConfig(config)
+        }
+    }
 
     /** 检查客户端新版本 */
     suspend fun checkForUpdate(currentVersion: String): AppResult<AppUpdateInfo> {

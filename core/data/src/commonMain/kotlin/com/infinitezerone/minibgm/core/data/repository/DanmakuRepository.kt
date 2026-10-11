@@ -1,11 +1,14 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParser
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.sha256
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -46,7 +49,9 @@ internal data class DandanSearchEpisodesResponse(
 
 class DanmakuRepositoryImpl(
     private val pageFetchService: PageFetchService,
+    private val settingsRepository: SettingsRepository? = null,
 ) : DanmakuRepository {
+    private val logger = bgmLogger("Bgm/Danmaku")
     private val memoryCache = mutableMapOf<String, List<DanmakuItem>>()
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -58,37 +63,80 @@ class DanmakuRepositoryImpl(
         apiEndpoint: String?,
     ): List<DanmakuItem> {
         val cleanTitle = title.trim()
-        if (cleanTitle.isBlank() || episodeSort <= 0f) return emptyList()
+        if (cleanTitle.isBlank() || episodeSort <= 0f) {
+            logger.w { "忽略无效弹幕请求: title='$title', episodeSort=$episodeSort" }
+            return emptyList()
+        }
 
-        val endpoint = (apiEndpoint?.trim()?.ifBlank { null } ?: "https://api.dandanplay.net").removeSuffix("/")
+        val config = runCatching { settingsRepository?.danmakuConfig?.first() }.getOrNull()
+        val effectiveAppId = appId?.trim()?.ifBlank { null } ?: config?.appId?.trim()?.ifBlank { null }
+        val effectiveAppSecret = appSecret?.trim()?.ifBlank { null } ?: config?.appSecret?.trim()?.ifBlank { null }
+        val rawEndpoint =
+            apiEndpoint?.trim()?.ifBlank { null }
+                ?: config?.effectiveEndpoint
+                ?: DanmakuConfig.DEFAULT_ENDPOINT
+        val endpoint = rawEndpoint.removeSuffix("/")
+
         val epInt = episodeSort.toInt()
         val cacheKey = "${endpoint}_${cleanTitle.lowercase()}_$epInt"
-        memoryCache[cacheKey]?.let { return it }
+        memoryCache[cacheKey]?.let {
+            logger.d { "命中内存缓存弹幕: key=$cacheKey, count=${it.size}" }
+            return it
+        }
+
+        val hasAuth = !effectiveAppId.isNullOrBlank() && !effectiveAppSecret.isNullOrBlank()
+        logger.i {
+            "开始拉取弹幕: anime='$cleanTitle', ep=$epInt, endpoint=$endpoint, " +
+                "鉴权状态=${if (hasAuth) "已配置签名(AppId=$effectiveAppId)" else "免签模式/未配置"}"
+        }
 
         val searchPath = "/api/v2/search/episodes"
         val encodedTitle = PlaybackSourceRule.encodeParam(cleanTitle)
         val searchUrl = "$endpoint$searchPath?anime=$encodedTitle&episode=$epInt"
 
-        val searchHeaders = buildAuthHeaders(appId, appSecret, searchPath)
-        val searchPage = pageFetchService.fetchHtml(searchUrl, searchHeaders) ?: return emptyList()
+        val searchHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, searchPath)
+        val searchPage = pageFetchService.fetchHtml(searchUrl, searchHeaders)
+        if (searchPage == null) {
+            logger.w { "搜索分集接口失败或不可达: url=$searchUrl" }
+            return emptyList()
+        }
+
+        if (searchPage.html.contains("Missing Authentication Headers", ignoreCase = true) ||
+            searchPage.html.contains("403 Forbidden", ignoreCase = true)
+        ) {
+            logger.w {
+                "弹弹play官方拦截 (403 Forbidden): 缺少认证请求头。如需直连官方请在「设置 -> 弹幕设置」配置 AppId/AppSecret，" +
+                    "或使用免签自建/代理端点。"
+            }
+            return emptyList()
+        }
 
         val searchResponse =
             runCatching {
                 BgmHttpClient.jsonConfig.decodeFromString<DandanSearchEpisodesResponse>(searchPage.html)
+            }.onFailure {
+                logger.w { "解析分集搜索响应失败: ${it.message}, body=${searchPage.html.take(200)}" }
             }.getOrNull() ?: return emptyList()
 
-        val episodeId =
-            searchResponse.animes
-                .flatMap { it.episodes }
-                .firstOrNull()
-                ?.episodeId ?: return emptyList()
+        val matchingAnime = searchResponse.animes.firstOrNull { it.episodes.isNotEmpty() }
+        val episodeId = matchingAnime?.episodes?.firstOrNull()?.episodeId
+        if (episodeId == null || episodeId <= 0L) {
+            logger.w { "未在弹幕库中找到匹配剧集: anime='$cleanTitle', ep=$epInt (返回 animeCount=${searchResponse.animes.size})" }
+            return emptyList()
+        }
+        logger.i { "成功匹配弹弹play剧集: animeId=${matchingAnime.animeId} (${matchingAnime.animeTitle}), episodeId=$episodeId" }
 
         val commentPath = "/api/v2/comment/$episodeId"
         val commentUrl = "$endpoint$commentPath?withRelated=true"
-        val commentHeaders = buildAuthHeaders(appId, appSecret, commentPath)
-        val commentPage = pageFetchService.fetchHtml(commentUrl, commentHeaders) ?: return emptyList()
+        val commentHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, commentPath)
+        val commentPage = pageFetchService.fetchHtml(commentUrl, commentHeaders)
+        if (commentPage == null) {
+            logger.w { "拉取弹幕详情网络失败: url=$commentUrl" }
+            return emptyList()
+        }
 
         val items = DanmakuParser.parseDandanJson(commentPage.html)
+        logger.i { "成功获取并解析弹幕: ${items.size} 条 (anime='$cleanTitle', ep=$epInt, episodeId=$episodeId)" }
         if (items.isNotEmpty()) {
             memoryCache[cacheKey] = items
         }

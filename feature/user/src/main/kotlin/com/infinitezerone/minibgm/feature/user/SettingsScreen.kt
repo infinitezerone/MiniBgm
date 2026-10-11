@@ -64,12 +64,14 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.user.components.AiSettingsDialog
 import com.infinitezerone.minibgm.feature.user.components.AiringTimingBottomSheet
+import com.infinitezerone.minibgm.feature.user.components.DanmakuSettingsDialog
 import com.infinitezerone.minibgm.feature.user.util.BackgroundKeepAliveHelper
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -244,6 +246,7 @@ fun SettingsScreen(
         showRestrictedContent = uiState.showRestrictedContent,
         onToggleShowRestrictedContent = viewModel::setShowRestrictedContent,
         onSaveAiConfig = viewModel::setAiConfig,
+        onSaveDanmakuConfig = viewModel::setDanmakuConfig,
         onOpenWebUrl = openWebUrl,
         onClearCache = {
             if (!isClearingCache) {
@@ -489,6 +492,7 @@ fun SettingsScreenContent(
     showRestrictedContent: Boolean = false,
     onToggleShowRestrictedContent: (Boolean) -> Unit = {},
     onSaveAiConfig: (AiConfig) -> Unit,
+    onSaveDanmakuConfig: (DanmakuConfig) -> Unit = {},
     onOpenWebUrl: (String) -> Unit,
     onClearCache: () -> Unit,
     isClearingCache: Boolean = false,
@@ -506,6 +510,7 @@ fun SettingsScreenContent(
     val coroutineScope = rememberCoroutineScope()
     var showTimingBottomSheet by remember { mutableStateOf(false) }
     var showAiSettingsDialog by remember { mutableStateOf(false) }
+    var showDanmakuSettingsDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -550,6 +555,15 @@ fun SettingsScreenContent(
                         pipEnabled = pipEnabled,
                         onTogglePipEnabled = onTogglePipEnabled,
                         onOpenPlaybackRules = onPlaybackRulesClick,
+                        onOpenDanmakuSettings = { showDanmakuSettingsDialog = true },
+                        danmakuSummary =
+                            if (uiState.danmakuConfig.endpoint.isNotBlank()) {
+                                stringResource(R.string.feature_user_settings_danmaku_desc_custom, uiState.danmakuConfig.endpoint)
+                            } else if (uiState.danmakuConfig.appId.isNotBlank()) {
+                                stringResource(R.string.feature_user_settings_danmaku_desc_configured, uiState.danmakuConfig.appId)
+                            } else {
+                                stringResource(R.string.feature_user_settings_danmaku_desc_default)
+                            },
                     )
                 }
             }
@@ -699,6 +713,14 @@ fun SettingsScreenContent(
         )
     }
 
+    if (showDanmakuSettingsDialog) {
+        DanmakuSettingsDialog(
+            currentConfig = uiState.danmakuConfig,
+            onSaveConfig = onSaveDanmakuConfig,
+            onDismiss = { showDanmakuSettingsDialog = false },
+        )
+    }
+
     if (showTimingBottomSheet) {
         AiringTimingBottomSheet(
             initialOffsetMinutes = airingNotificationOffsetMinutes,
@@ -740,7 +762,9 @@ private fun SettingsScreenPreview() {
             onToggleAmoledDarkMode = {},
             pipEnabled = true,
             onTogglePipEnabled = {},
+            onPlaybackRulesClick = {},
             onSaveAiConfig = {},
+            onSaveDanmakuConfig = {},
             onOpenWebUrl = {},
             onClearCache = {},
             onLogoutCurrent = {},

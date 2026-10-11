@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -27,6 +28,8 @@ class FakeSettingsRepository(
         private set
     var setAiConfigCallCount: Int = 0
         private set
+    var setDanmakuConfigCallCount: Int = 0
+        private set
     var setAmoledDarkModeCallCount: Int = 0
         private set
     var setThemeModeCallCount: Int = 0
@@ -45,6 +48,13 @@ class FakeSettingsRepository(
     override val settings: Flow<UserSettings> = settingsState
 
     override val aiConfig: Flow<AiConfig> = settingsState.map { it.aiConfig }
+
+    override val danmakuConfig: Flow<DanmakuConfig> = settingsState.map { it.danmakuConfig }
+
+    override suspend fun setDanmakuConfig(config: DanmakuConfig) {
+        setDanmakuConfigCallCount++
+        settingsState.value = settingsState.value.copy(danmakuConfig = config)
+    }
 
     override suspend fun setSyncInterval(interval: SyncInterval) {
         setSyncIntervalCallCount++

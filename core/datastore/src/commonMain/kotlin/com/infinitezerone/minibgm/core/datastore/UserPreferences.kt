@@ -82,6 +82,10 @@ data class UserPreferences(
     val playbackSubscriptionUrl: String = "",
     /** 用户保存的季度导视与探索发现自定义常用筛选标签列表（有序） */
     val customFilterTags: List<String> = emptyList(),
+    /** 弹幕服务端点（空串表示使用默认官方端点） */
+    val danmakuEndpoint: String = "",
+    /** 弹弹play 开放平台应用 ID */
+    val danmakuAppId: String = "",
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

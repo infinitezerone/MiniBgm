@@ -316,4 +316,22 @@
     <string name="feature_user_login_success">登录成功</string>
     <string name="feature_user_login_failed">登录失败，请重试</string>
     <string name="feature_user_login_unavailable">当前网络环境无法在应用内完成登录</string>
+
+    <!-- 17. 弹幕服务设置 -->
+    <string name="feature_user_settings_danmaku_title">弹幕服务配置</string>
+    <string name="feature_user_settings_danmaku_desc_default">弹弹play 官方端点（需填写 AppId/Secret 或自建代理）</string>
+    <string name="feature_user_settings_danmaku_desc_custom">自建代理端点：%1$s</string>
+    <string name="feature_user_settings_danmaku_desc_configured">已配置官方凭据（AppId: %1$s）</string>
+    <string name="feature_user_danmaku_dialog_title">弹幕服务配置</string>
+    <string name="feature_user_danmaku_dialog_hint">MiniBgm 弹幕支持直连弹弹play 官方开放平台或自建 Cloudflare Worker 反向代理。</string>
+    <string name="feature_user_danmaku_endpoint_label">API 服务端点</string>
+    <string name="feature_user_danmaku_endpoint_placeholder">https://api.dandanplay.net</string>
+    <string name="feature_user_danmaku_endpoint_hint">默认为官方端点。若部署了 Cloudflare Worker 代理，填入 Worker 地址即可免填下方的 AppId/Secret。</string>
+    <string name="feature_user_danmaku_appid_label">弹弹play AppId</string>
+    <string name="feature_user_danmaku_appid_placeholder">在 dev.dandanplay.com 申请</string>
+    <string name="feature_user_danmaku_appsecret_label">弹弹play AppSecret</string>
+    <string name="feature_user_danmaku_appsecret_placeholder">官方开发者应用密钥</string>
+    <string name="feature_user_danmaku_appsecret_hide">隐藏密钥</string>
+    <string name="feature_user_danmaku_appsecret_show">显示密钥</string>
+    <string name="feature_user_danmaku_reset_default">恢复默认端点</string>
 </resources>

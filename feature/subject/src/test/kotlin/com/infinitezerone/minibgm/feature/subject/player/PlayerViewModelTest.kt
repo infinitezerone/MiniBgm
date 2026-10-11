@@ -1340,4 +1340,43 @@ class PlayerViewModelTest {
             assertEquals(sampleDanmakus, vm.uiState.value.danmakus)
             assertTrue(fakeDanmaku.queryCount >= 1)
         }
+
+    @Test
+    fun danmaku_whenEmpty_toggleEmitsSnackbarEvent() =
+        runTest {
+            val emptyDanmakuRepo =
+                object : DanmakuRepository {
+                    override suspend fun getDanmaku(
+                        title: String,
+                        episodeSort: Float,
+                        appId: String?,
+                        appSecret: String?,
+                        apiEndpoint: String?,
+                    ): List<DanmakuItem> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            streamUrl = initialStreamUrl,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                    danmakuRepository = emptyDanmakuRepo,
+                )
+            advanceUntilIdle()
+
+            // 当前弹幕为空，关 -> 开 时触发轻量提示
+            vm.toggleDanmaku() // 默认开 -> 关
+            vm.toggleDanmaku() // 关 -> 开
+
+            val event = vm.events.first()
+            assertTrue(event is PlayerUiEvent.ShowSnackbar && event.message.contains("设置"))
+        }
 }

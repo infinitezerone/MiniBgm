@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.ChineseConverter
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
@@ -402,6 +403,8 @@ class PlayerViewModel(
         )
     }
 
+    private val logger = bgmLogger("Bgm/Player")
+
     private val _uiState = MutableStateFlow(createInitialState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
@@ -733,6 +736,9 @@ class PlayerViewModel(
         if (_uiState.value.episodeId > 0L && _uiState.value.comments.isEmpty() && !_uiState.value.isCommentsLoading) {
             loadComments()
         }
+        if (_uiState.value.subjectName.isNotBlank() && _uiState.value.danmakus.isEmpty() && !_uiState.value.isDanmakuLoading) {
+            loadDanmaku()
+        }
         return sourcesChanged
     }
 
@@ -1028,7 +1034,13 @@ class PlayerViewModel(
 
     /** 切换弹幕开关 */
     fun toggleDanmaku() {
-        _uiState.update { it.copy(isDanmakuEnabled = !it.isDanmakuEnabled) }
+        val targetEnabled = !_uiState.value.isDanmakuEnabled
+        _uiState.update { it.copy(isDanmakuEnabled = targetEnabled) }
+        if (targetEnabled && _uiState.value.danmakus.isEmpty() && !_uiState.value.isDanmakuLoading) {
+            viewModelScope.launch {
+                _events.send(PlayerUiEvent.ShowSnackbar("当前未加载到弹幕，可在「设置 -> 弹幕设置」中配置端点或凭据"))
+            }
+        }
     }
 
     /** 异步拉取当前分集的弹弹play全网聚合弹幕 */
@@ -1037,11 +1049,16 @@ class PlayerViewModel(
         val current = _uiState.value
         val title = current.subjectName.ifBlank { session.subjectOriginalName }
         val epSort = current.episodeSort
-        if (title.isBlank() || epSort <= 0f) return
+        if (title.isBlank() || epSort <= 0f) {
+            logger.d { "跳过弹幕拉取 (标题为空或分集编号非法): title='$title', epSort=$epSort" }
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isDanmakuLoading = true) }
+            logger.i { "开始拉取分集弹幕: title='$title', epSort=$epSort" }
             val items = repo.getDanmaku(title, epSort)
+            logger.i { "分集弹幕拉取完成: ${items.size} 条 (title='$title', epSort=$epSort)" }
             _uiState.update { it.copy(danmakus = items, isDanmakuLoading = false) }
         }
     }

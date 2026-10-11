@@ -99,6 +99,7 @@ val dataModule =
         single<DanmakuRepository> {
             DanmakuRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
+                settingsRepository = getOrNull<SettingsRepository>(),
             )
         }
         single<PlaybackSourceVerifier> {

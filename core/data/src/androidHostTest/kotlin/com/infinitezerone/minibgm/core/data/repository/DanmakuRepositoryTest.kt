@@ -188,4 +188,53 @@ class DanmakuRepositoryTest {
             val items = repo.getDanmaku("未知番剧", 1f)
             assertTrue(items.isEmpty())
         }
+
+    @Test
+    fun `DanmakuRepository 优先读取 SettingsRepository 配置的端点与凭据`() =
+        runTest {
+            val searchEpisodesJson =
+                """{"animes":[{"episodes":[{"episodeId":9876}]}]}"""
+            val fakeFetcher =
+                FakeDanmakuPageFetchService(
+                    mapOf(
+                        "/api/v2/search/episodes" to searchEpisodesJson,
+                        "/api/v2/comment/9876" to sampleDandanJson,
+                    ),
+                )
+            val fakeSettings =
+                com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository(
+                    initialSettings =
+                        UserSettings(
+                            danmakuConfig =
+                                com.infinitezerone.minibgm.core.model.DanmakuConfig(
+                                    endpoint = "https://custom.danmaku.net",
+                                    appId = "cfg_app",
+                                    appSecret = "cfg_sec",
+                                ),
+                        ),
+                )
+            val repo = DanmakuRepositoryImpl(fakeFetcher, fakeSettings)
+
+            val items = repo.getDanmaku("葬送的芙莉莲", 1f)
+
+            assertEquals(3, items.size)
+            assertTrue(fakeFetcher.requestedUrls.first().startsWith("https://custom.danmaku.net"))
+            assertEquals("cfg_app", fakeFetcher.lastHeaders["X-AppId"])
+            assertTrue(fakeFetcher.lastHeaders.containsKey("X-Signature"))
+        }
+
+    @Test
+    fun `DanmakuRepository 遇到 403 拦截时优雅降级并返回空列表`() =
+        runTest {
+            val fake =
+                FakeDanmakuPageFetchService(
+                    mapOf(
+                        "/api/v2/search/episodes" to "HTTP/1.1 403 Forbidden: Missing Authentication Headers",
+                    ),
+                )
+            val repo = DanmakuRepositoryImpl(fake)
+
+            val items = repo.getDanmaku("进击的巨人", 1f)
+            assertTrue(items.isEmpty())
+        }
 }

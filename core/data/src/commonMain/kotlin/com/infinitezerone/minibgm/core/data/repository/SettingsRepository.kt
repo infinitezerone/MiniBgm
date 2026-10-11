@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
+import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -19,6 +20,9 @@ import kotlinx.serialization.encodeToString
 
 /** 当前生效的 AI 密钥在加密库中的键；方案池密钥用 `ai.profile.<id>.apiKey` */
 private const val AI_ACTIVE_KEY = "ai.active.apiKey"
+
+/** 弹弹play 开放平台应用密钥在加密库中的键 */
+private const val DANDANPLAY_SECRET_KEY = "danmaku.appSecret"
 
 /**
  * 面向 UI 的用户设置投影：仅包含展示与行为偏好，不含登录态与账号数据
@@ -37,6 +41,7 @@ data class UserSettings(
     val airDelayOffsetMinutes: Int = 0,
     val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
+    val danmakuConfig: DanmakuConfig = DanmakuConfig(),
     /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
     val amoledDarkMode: Boolean = false,
     /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
@@ -190,6 +195,11 @@ interface SettingsRepository {
      * 重新拉取、探活测速，并将可用规则更新/并入本地规则库。
      */
     suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary>
+
+    /** 弹弹play 聚合弹幕配置流 */
+    val danmakuConfig: Flow<DanmakuConfig>
+
+    suspend fun setDanmakuConfig(config: DanmakuConfig)
 }
 
 internal class SettingsRepositoryImpl(
@@ -219,6 +229,12 @@ internal class SettingsRepositoryImpl(
                         model = prefs.aiModel,
                         provider = prefs.aiProvider,
                     ),
+                danmakuConfig =
+                    DanmakuConfig(
+                        endpoint = prefs.danmakuEndpoint,
+                        appId = prefs.danmakuAppId,
+                        appSecret = secrets[DANDANPLAY_SECRET_KEY].orEmpty(),
+                    ),
                 amoledDarkMode = prefs.amoledDarkMode,
                 themeMode = prefs.themeMode,
                 dynamicColor = prefs.dynamicColor,
@@ -236,6 +252,25 @@ internal class SettingsRepositoryImpl(
                 provider = prefs.aiProvider,
             )
         }
+
+    override val danmakuConfig: Flow<DanmakuConfig> =
+        combine(userPreferences.userPreferences, secureSecretStore.observeSecrets()) { prefs, secrets ->
+            DanmakuConfig(
+                endpoint = prefs.danmakuEndpoint,
+                appId = prefs.danmakuAppId,
+                appSecret = secrets[DANDANPLAY_SECRET_KEY].orEmpty(),
+            )
+        }
+
+    override suspend fun setDanmakuConfig(config: DanmakuConfig) {
+        userPreferences.setDanmakuSettings(config.endpoint, config.appId)
+        val secret = config.appSecret.trim()
+        if (secret.isNotBlank()) {
+            secureSecretStore.setSecret(DANDANPLAY_SECRET_KEY, secret)
+        } else {
+            secureSecretStore.removeSecret(DANDANPLAY_SECRET_KEY)
+        }
+    }
 
     override val airDelayOffsetMinutes: Flow<Int> =
         userPreferences.userPreferences.map { it.airDelayOffsetMinutes }
