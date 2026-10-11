@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.feature.schedule
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
@@ -33,6 +32,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -495,16 +495,22 @@ class ScheduleViewModel(
         }
     }
 
-    /** 来源 sheet 的「应用内播放」：按追番进度定位下一集；无分集数据时回退一体化路由（由播放器自主嗅探） */
+    /** 来源 sheet 的「应用内播放」：非阻塞式组装路由（读取本地缓存快照，不阻塞等网络接口；网络补齐由 PlayerViewModel 在后台异步进行） */
     suspend fun resolvePlayRoute(schedule: AirSchedule): PlayerRoute {
         val subjectId = schedule.bgmId
         val episodes =
-            when (val result = subjectRepository.fetchEpisodes(subjectId)) {
-                is AppResult.Success -> result.data
-                else -> subjectRepository.getEpisodesStream(subjectId).first()
-            }
+            runCatching {
+                withTimeoutOrNull(100L) {
+                    subjectRepository.getEpisodesStream(subjectId).first()
+                }
+            }.getOrNull() ?: emptyList()
         val playlists = settingsRepository.playlists.first()
-        val collection = collectionRepository.getCollectionStream(subjectId).first()
+        val collection =
+            runCatching {
+                withTimeoutOrNull(100L) {
+                    collectionRepository.getCollectionStream(subjectId).first()
+                }
+            }.getOrNull()
         val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0)
         if (target == null) {
             return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.displayName)
