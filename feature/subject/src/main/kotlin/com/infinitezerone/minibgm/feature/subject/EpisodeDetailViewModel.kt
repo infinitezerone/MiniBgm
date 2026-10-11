@@ -373,8 +373,16 @@ class EpisodeDetailViewModel(
     /** 检索蜜柑原画字幕组 BT 种子与磁力链接资源 */
     fun loadMikanResources(episode: Episode? = null) {
         val targetEpisode = episode ?: uiState.value.episode
-        val title = uiState.value.subject?.displayName ?: return
+        val subject = uiState.value.subject ?: return
+        val title = subject.displayName
         val epSort = targetEpisode?.episodeNumber
+        val altTitles =
+            (
+                listOfNotNull(
+                    subject.name.takeIf { it.isNotBlank() && it != title },
+                    subject.nameCn.takeIf { it.isNotBlank() && it != title },
+                ) + subject.titleAliases
+            ).distinct()
         mikanState.value = mikanState.value.copy(second = true)
         viewModelScope.launch {
             val resources =
@@ -383,6 +391,7 @@ class EpisodeDetailViewModel(
                         title = title,
                         mikanId = null,
                         episodeSort = epSort,
+                        alternativeTitles = altTitles,
                     ).orEmpty()
             mikanState.value = Pair(resources, false)
         }

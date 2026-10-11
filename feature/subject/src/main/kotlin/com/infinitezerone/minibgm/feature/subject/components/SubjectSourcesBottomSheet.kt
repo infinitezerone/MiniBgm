@@ -100,10 +100,6 @@ fun SubjectSourcesBottomSheet(
             remember(displayName) {
                 StreamingIntentResolver.buildBilibiliSearchTarget(displayName)
             }
-        val mikanUrl =
-            remember(mikanId, displayName) {
-                StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = displayName)
-            }
 
         BgmModalBottomSheet(
             onDismissRequest = onDismissRequest,
@@ -203,17 +199,6 @@ fun SubjectSourcesBottomSheet(
                         },
                     )
 
-                    EpisodeSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_mikan),
-                        subtitle = stringResource(R.string.feature_subject_source_mikan_desc),
-                        iconVector = BgmIcons.Download,
-                        onClick = {
-                            runAfterDismiss {
-                                onOpenUrl(mikanUrl)
-                            }
-                        },
-                    )
-
                     MikanResourcesSection(
                         isMikanLoading = isMikanLoading,
                         mikanResources = mikanResources,
@@ -231,16 +216,6 @@ fun SubjectSourcesBottomSheet(
         val bilibiliTarget =
             remember(displayName, epLabel) {
                 StreamingIntentResolver.buildBilibiliSearchTarget("$displayName $epLabel")
-            }
-        val mikanUrl =
-            remember(mikanId, displayName, epLabel, episode) {
-                val keyword =
-                    if (episode.isMain) {
-                        "$displayName ${episode.formattedNumber}".trim()
-                    } else {
-                        "$displayName $epLabel".trim()
-                    }
-                StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = keyword)
             }
 
         // 外部播放器直链候选：解析为媒体直链的播放规则
@@ -472,17 +447,6 @@ fun SubjectSourcesBottomSheet(
                         onClick = {
                             runAfterDismiss {
                                 onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
-                            }
-                        },
-                    )
-
-                    EpisodeSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_mikan),
-                        subtitle = stringResource(R.string.feature_subject_source_mikan_desc),
-                        iconVector = BgmIcons.Download,
-                        onClick = {
-                            runAfterDismiss {
-                                onOpenUrl(mikanUrl)
                             }
                         },
                     )
@@ -728,8 +692,6 @@ private fun MikanResourcesSection(
     context: Context,
     onDismissAndRun: (() -> Unit) -> Unit,
 ) {
-    if (!isMikanLoading && mikanResources.isEmpty()) return
-
     Spacer(modifier = Modifier.height(4.dp))
     SourcesSectionLabel(stringResource(R.string.feature_subject_source_mikan_fansub_section))
     if (isMikanLoading) {
@@ -737,6 +699,13 @@ private fun MikanResourcesSection(
             text = stringResource(R.string.feature_subject_source_mikan_loading),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        )
+    } else if (mikanResources.isEmpty()) {
+        Text(
+            text = stringResource(R.string.feature_subject_source_mikan_empty),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         )
     } else {

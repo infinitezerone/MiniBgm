@@ -71,6 +71,9 @@ internal object AdaptiveDnsResolver {
             isDomainOrSubdomain(host, "bangumi.tv") ||
             isDomainOrSubdomain(host, "chii.in") ||
             isDomainOrSubdomain(host, "sda1.dev") ||
+            isDomainOrSubdomain(host, "mikanani.me") ||
+            isDomainOrSubdomain(host, "mikanime.tv") ||
+            isDomainOrSubdomain(host, "kitsu.io") ||
             dynamicEchHosts.any { isDomainOrSubdomain(host, it) }
 
     /** 判断域名是否由 Cloudflare 提供服务。这些 host 才会拿到候选地址列表。 */
