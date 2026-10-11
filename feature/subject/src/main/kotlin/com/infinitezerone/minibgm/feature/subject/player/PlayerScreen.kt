@@ -79,9 +79,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionParameters
-import androidx.media3.common.Tracks
-import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.compose.ContentFrame
@@ -183,7 +180,9 @@ fun PlayerScreen(
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
     var isEpisodeDrawerOpen by remember { mutableStateOf(false) }
     var isTrackSheetOpen by remember { mutableStateOf(false) }
-    var tracksSnapshot by remember { mutableStateOf(PlayerTracksSnapshot()) }
+    // 轨道快照与视频宽高比由 PlayerController 从引擎事件播报（含轨道选择参数变化），UI 不再直挂 Player.Listener
+    val tracksSnapshot by controller.tracksSnapshot.collectAsStateWithLifecycle()
+    val videoAspectRatio by controller.videoAspectRatio.collectAsStateWithLifecycle()
     var isScreenLocked by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubProgress by remember { mutableFloatStateOf(0f) }
@@ -191,40 +190,6 @@ fun PlayerScreen(
     var playerReady by remember { mutableStateOf(false) }
     var isEpisodeBottomSheetOpen by remember { mutableStateOf(false) }
     var selectedPortraitTab by rememberSaveable { mutableStateOf(PlayerPortraitTab.INTRO) }
-
-    // 视频真实宽高比：监听播放器尺寸与音视频轨道事件
-    var videoAspectRatio by remember { mutableStateOf<Rational?>(null) }
-    DisposableEffect(player) {
-        val listener =
-            object : Player.Listener {
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    if (videoSize.width > 0 && videoSize.height > 0) {
-                        val ratio = videoSize.width.toFloat() / videoSize.height.toFloat()
-                        if (ratio in 0.41841f..2.39f) {
-                            videoAspectRatio = Rational(videoSize.width, videoSize.height)
-                        }
-                    }
-                }
-
-                override fun onTracksChanged(tracks: Tracks) {
-                    tracksSnapshot = extractPlayerTracksSnapshot(player)
-                }
-
-                override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
-                    tracksSnapshot = extractPlayerTracksSnapshot(player)
-                }
-            }
-        val initialSize = player.videoSize
-        if (initialSize.width > 0 && initialSize.height > 0) {
-            val ratio = initialSize.width.toFloat() / initialSize.height.toFloat()
-            if (ratio in 0.41841f..2.39f) {
-                videoAspectRatio = Rational(initialSize.width, initialSize.height)
-            }
-        }
-        player.addListener(listener)
-        tracksSnapshot = extractPlayerTracksSnapshot(player)
-        onDispose { player.removeListener(listener) }
-    }
 
     val targetAspectRatio = videoAspectRatio ?: Rational(16, 9)
 
@@ -726,12 +691,12 @@ fun PlayerScreen(
                 PlayerTrackSelectionLandscapeDrawer(
                     isOpen = isTrackSheetOpen,
                     tracksSnapshot = tracksSnapshot,
-                    onSelectQuality = { selectVideoQuality(player, it) },
-                    onAutoQuality = { selectAutoVideoQuality(player) },
-                    onSelectSubtitle = { selectSubtitleTrack(player, it) },
-                    onDisableSubtitles = { disableSubtitles(player) },
-                    onAutoSubtitles = { autoSelectSubtitles(player) },
-                    onSelectAudio = { selectAudioTrack(player, it) },
+                    onSelectQuality = controller::selectVideoQuality,
+                    onAutoQuality = controller::selectAutoVideoQuality,
+                    onSelectSubtitle = controller::selectSubtitleTrack,
+                    onDisableSubtitles = controller::disableSubtitles,
+                    onAutoSubtitles = controller::autoSelectSubtitles,
+                    onSelectAudio = controller::selectAudioTrack,
                     onClose = { isTrackSheetOpen = false },
                 )
             }
@@ -880,12 +845,12 @@ fun PlayerScreen(
             isOpen = isTrackSheetOpen && !isLandscape,
             isLandscape = false,
             tracksSnapshot = tracksSnapshot,
-            onSelectQuality = { selectVideoQuality(player, it) },
-            onAutoQuality = { selectAutoVideoQuality(player) },
-            onSelectSubtitle = { selectSubtitleTrack(player, it) },
-            onDisableSubtitles = { disableSubtitles(player) },
-            onAutoSubtitles = { autoSelectSubtitles(player) },
-            onSelectAudio = { selectAudioTrack(player, it) },
+            onSelectQuality = controller::selectVideoQuality,
+            onAutoQuality = controller::selectAutoVideoQuality,
+            onSelectSubtitle = controller::selectSubtitleTrack,
+            onDisableSubtitles = controller::disableSubtitles,
+            onAutoSubtitles = controller::autoSelectSubtitles,
+            onSelectAudio = controller::selectAudioTrack,
             onDismiss = { isTrackSheetOpen = false },
         )
 

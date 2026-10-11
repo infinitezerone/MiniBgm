@@ -1,6 +1,9 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import android.util.Rational
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -66,6 +69,14 @@ class PlayerController(
     private val _bufferedPositionMs = MutableStateFlow(0L)
     val bufferedPositionMs: StateFlow<Long> = _bufferedPositionMs.asStateFlow()
 
+    /** 轨道快照（清晰度/字幕/音轨），由引擎轨道事件驱动重建，UI 只读不直挂 Player.Listener */
+    private val _tracksSnapshot = MutableStateFlow(PlayerTracksSnapshot())
+    val tracksSnapshot: StateFlow<PlayerTracksSnapshot> = _tracksSnapshot.asStateFlow()
+
+    /** 视频真实宽高比（黑边剔除与 PiP sourceRectHint 用），null 表示尚未拿到真实尺寸 */
+    private val _videoAspectRatio = MutableStateFlow<Rational?>(null)
+    val videoAspectRatio: StateFlow<Rational?> = _videoAspectRatio.asStateFlow()
+
     private val _events = Channel<PlayerEngineEvent>(Channel.BUFFERED)
 
     /** 就绪 / 播完 / 出错的一次性事件流。 */
@@ -125,10 +136,34 @@ class PlayerController(
                 _state.update { it.copy(isBuffering = false, error = message) }
                 _events.trySend(PlayerEngineEvent.Error(message))
             }
+
+            override fun onTracksChanged() {
+                _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+            }
+
+            override fun onTrackSelectionParametersChanged() {
+                _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+            }
+
+            override fun onVideoSizeChanged(
+                width: Int,
+                height: Int,
+            ) {
+                // 异常比例（黑边/加载中间态）不覆盖上一个有效值
+                videoAspectRatioOf(width, height)?.let { _videoAspectRatio.value = it }
+            }
         }
 
     init {
         engine.setListener(engineListener)
+        // 播放器复用（换源不重建）时轨道/尺寸可能已就绪，进入页面即补一次初值。
+        // FakePlayerEngine（纯 JVM 单测）不提供真实 Player，按 Fail-Open 跳过
+        runCatching {
+            _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+            engine.player.videoSize.let { vs ->
+                _videoAspectRatio.value = videoAspectRatioOf(vs.width, vs.height)
+            }
+        }
     }
 
     /**
@@ -192,6 +227,64 @@ class PlayerController(
         engine.setPlaybackSpeed(speed)
     }
 
+    /** 切换清晰度为指定档位（轨道覆盖）。 */
+    fun selectVideoQuality(quality: PlayerQualityOption) {
+        val group = quality.group ?: return
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, quality.trackIndex))
+                .build()
+    }
+
+    /** 切换清晰度为自适应模式（ABR）：清除视频覆盖，交给自适应选择。 */
+    fun selectAutoVideoQuality() {
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                .build()
+    }
+
+    /** 切换字幕为指定轨道。 */
+    fun selectSubtitleTrack(track: PlayerTrackOption) {
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
+                .build()
+    }
+
+    /** 关闭字幕。 */
+    fun disableSubtitles() {
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+    }
+
+    /** 自动选择字幕（遵循 ExoPlayer 与系统首选语言配置）。 */
+    fun autoSelectSubtitles() {
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .build()
+    }
+
+    /** 切换音轨为指定轨道。 */
+    fun selectAudioTrack(track: PlayerTrackOption) {
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
+                .build()
+    }
+
     /** 界面离开时调用：停止轮询并释放引擎。 */
     fun release() {
         stopPositionPolling()
@@ -233,4 +326,14 @@ class PlayerController(
         /** 位置轮询间隔：与旧实现一致，约 500ms 一跳。 */
         const val DEFAULT_POSITION_POLL_INTERVAL_MS = 500L
     }
+}
+
+/** 视频真实宽高比：比例在常见动画长宽范围内才采用，避免 0 宽高或异常比例污染布局 */
+internal fun videoAspectRatioOf(
+    width: Int,
+    height: Int,
+): Rational? {
+    if (width <= 0 || height <= 0) return null
+    val ratio = width.toFloat() / height.toFloat()
+    return if (ratio in 0.41841f..2.39f) Rational(width, height) else null
 }

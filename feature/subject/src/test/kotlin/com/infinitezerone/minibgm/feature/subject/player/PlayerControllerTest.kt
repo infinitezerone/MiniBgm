@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -98,6 +100,8 @@ class PlayerControllerTest {
             this.speed = speed
         }
 
+        override var trackSelectionParameters: TrackSelectionParameters = TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT
+
         override fun release() {
             releaseCalls++
         }
@@ -105,6 +109,8 @@ class PlayerControllerTest {
         fun emitPlaybackState(state: EnginePlaybackState) = listener?.onPlaybackStateChanged(state)
 
         fun emitError(message: String) = listener?.onError(message)
+
+        fun emitTracksChanged() = listener?.onTracksChanged()
     }
 
     @Test
@@ -370,5 +376,31 @@ class PlayerControllerTest {
                 listOf<PlayerEngineEvent>(PlayerEngineEvent.Error("视频流格式无法解析")),
                 events.filterIsInstance<PlayerEngineEvent.Error>(),
             )
+        }
+
+    @Test
+    fun disableSubtitles_thenAutoSelect_restoresAutoMode() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.disableSubtitles()
+            assertTrue(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+
+            controller.autoSelectSubtitles()
+            assertFalse(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+            assertTrue(engine.trackSelectionParameters.overrides.isEmpty())
+        }
+
+    @Test
+    fun selectAutoVideoQuality_clearsVideoOverridesWithoutAndroidTypes() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            // 纯 JVM 环境构造不了 TrackGroup（android.text 未 mock），覆盖类命令的真实验证
+            // 依赖真机；这里验证自适应切换路径不炸且维持空覆盖
+            controller.selectAutoVideoQuality()
+            assertTrue(engine.trackSelectionParameters.overrides.isEmpty())
         }
 }

@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -383,85 +382,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
         subtitleMode = subtitleMode,
         hasSelectableTracks = hasSelectable,
     )
-}
-
-/**
- * 切换清晰度为指定档位。
- */
-fun selectVideoQuality(
-    player: Player,
-    quality: PlayerQualityOption,
-) {
-    val group = quality.group ?: return
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, quality.trackIndex))
-            .build()
-}
-
-/**
- * 切换清晰度为自适应模式（ABR）。
- */
-fun selectAutoVideoQuality(player: Player) {
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-            .build()
-}
-
-/**
- * 切换字幕为指定轨道。
- */
-fun selectSubtitleTrack(
-    player: Player,
-    track: PlayerTrackOption,
-) {
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
-            .build()
-}
-
-/**
- * 关闭字幕。
- */
-fun disableSubtitles(player: Player) {
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            .build()
-}
-
-/**
- * 自动选择字幕（遵循 ExoPlayer 与系统首选语言配置）。
- */
-fun autoSelectSubtitles(player: Player) {
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-            .build()
-}
-
-/**
- * 切换音轨为指定轨道。
- */
-fun selectAudioTrack(
-    player: Player,
-    track: PlayerTrackOption,
-) {
-    player.trackSelectionParameters =
-        player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-            .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
-            .build()
 }
 
 /**

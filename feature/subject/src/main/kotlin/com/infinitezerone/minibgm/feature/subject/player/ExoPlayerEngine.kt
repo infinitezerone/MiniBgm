@@ -7,6 +7,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -74,6 +77,18 @@ class ExoPlayerEngine(
                 listener?.onDurationChanged(durationMs)
             }
 
+            override fun onTracksChanged(tracks: Tracks) {
+                listener?.onTracksChanged()
+            }
+
+            override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
+                listener?.onTrackSelectionParametersChanged()
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                listener?.onVideoSizeChanged(videoSize.width, videoSize.height)
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 listener?.onError(classifyPlaybackError(context, error))
             }
@@ -136,6 +151,12 @@ class ExoPlayerEngine(
     override fun setPlaybackSpeed(speed: Float) {
         exoPlayer.playbackParameters = PlaybackParameters(speed)
     }
+
+    override var trackSelectionParameters: TrackSelectionParameters
+        get() = exoPlayer.trackSelectionParameters
+        set(value) {
+            exoPlayer.trackSelectionParameters = value
+        }
 
     override fun release() {
         exoPlayer.removeListener(playerListener)
