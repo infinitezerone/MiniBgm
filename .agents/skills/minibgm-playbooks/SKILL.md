@@ -84,6 +84,7 @@ description: >-
   ```powershell
   .\tools\jgate.ps1                # 完整门禁（素材体积、Spotless、红线、模块测试、XML校验、assembleDebug）
   ```
+- **UI 自查无需设备（Roborazzi + Robolectric）**：改 Compose 面板/控制层后写截图测试自查，输出到 `src/test/snapshots/images/` 再读图检查。要点：模块需接 roborazzi 四件套 + `testOptions.unitTests.isIncludeAndroidResources` + Test 任务 `roborazzi.test.record=true` 与 JDK 21 launcher（参照 `core/designsystem/build.gradle.kts` 与 `feature/subject/PlayerPanelsScreenshotTest.kt`）；`@Config(qualifiers = "w420dp-h1600dp")` 控制视口尺寸（默认窗口仅 320dp 宽，横排按钮会溢出"消失"）；深色背景模拟视频底，否则白色控制图标"隐形"；LazyColumn 跨分组 items key 必须唯一。
 
 ---
 

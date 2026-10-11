@@ -435,7 +435,7 @@ internal fun PlayerTrackSelectionSheet(
  * 画质、音轨与字幕选择内容面板。
  */
 @Composable
-private fun PlayerTrackSelectionContent(
+internal fun PlayerTrackSelectionContent(
     tracksSnapshot: PlayerTracksSnapshot,
     onSelectQuality: (PlayerQualityOption) -> Unit,
     onAutoQuality: () -> Unit,
@@ -744,7 +744,8 @@ internal fun formatSpeedLabel(speed: Float): String =
     if (speed % 1f == 0f) {
         String.format(Locale.US, "%.1fx", speed)
     } else {
-        String.format(Locale.US, "%.2gx", speed)
+        // %.2f 去尾零再拼 x：0.5x / 0.75x / 1.25x（%.2g 的两位有效数字会把 1.25 变 1.3）
+        String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.') + "x"
     }
 
 /**
