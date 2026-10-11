@@ -84,7 +84,7 @@
     <string name="feature_user_section_sync_reminder">数据同步与提醒</string>
     <string name="feature_user_settings_auto_sync_title">播放源自动同步</string>
     <string name="feature_user_settings_sync_period">周期：%1$s</string>
-    <string name="feature_user_settings_playback_manage_desc">导入自备片单、维护第三方解析规则</string>
+    <string name="feature_user_settings_playback_manage_desc">订阅播放规则、智能探测第三方源</string>
     <string name="feature_user_settings_reminder_perm_subtitle">系统通知未开启，点击开启权限与每日推送</string>
     <string name="feature_user_settings_reminder_active_subtitle">支持每日汇总清单与单集开播即时通知</string>
     <string name="feature_user_settings_airing_reminder_title">追番更新提醒</string>
@@ -154,40 +154,23 @@
 
     <!-- 8. 播放源管理页 -->
     <string name="feature_user_cd_ai_source_search">让 AI 助手找源</string>
-    <string name="feature_user_playlist_cd_import_file">从文件导入片单</string>
-    <string name="feature_user_playlist_file_too_large">文件过大（上限 %1$d MB）</string>
-    <string name="feature_user_playlist_file_unreadable">无法读取所选文件</string>
-    <string name="feature_user_playlist_read_failed">片单读取失败：%1$s</string>
-    <string name="feature_user_playlist_section_title">自备片单</string>
-    <string name="feature_user_playlist_section_desc">导入 JSON 片源后，分集播放向导会直接给出对应地址</string>
-    <string name="feature_user_playlist_clear_all_title">清空全部片单</string>
-    <string name="feature_user_playlist_clear_all_message">将删除所有已导入的自备片单，解析规则不受影响。此操作不可撤销。</string>
-    <string name="feature_user_playlist_delete_title">确认删除片单</string>
-    <string name="feature_user_playlist_delete_message">确定要删除片单「%1$s」及其 %2$d 条分集吗？</string>
     <string name="feature_user_positions_section_title">续播记录</string>
     <string name="feature_user_positions_section_desc">内置播放器自动记录各播放地址的观看位置，用于下次断点续播</string>
     <string name="feature_user_positions_clear_all_title">清空全部续播记录</string>
     <string name="feature_user_positions_clear_all_message">将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。</string>
     <string name="feature_user_positions_empty">暂无续播记录。播放器会在你观看时自动记录进度（保留最近 50 条）。</string>
-    <string name="feature_user_rules_section_title">解析规则（高级）</string>
+    <string name="feature_user_rules_section_title">解析规则与订阅</string>
     <string name="feature_user_rules_section_desc_expanded">按占位符模板拼出解析地址，适合自定义第三方源</string>
     <string name="feature_user_rules_section_desc_count">已配置 %1$d 条规则</string>
     <string name="feature_user_rules_empty">暂无自定义播放规则，可点击「添加」或「导入」配置。</string>
     <string name="feature_user_rules_delete_title">确认删除规则</string>
     <string name="feature_user_rules_delete_message">确定要删除播放规则「%1$s」吗？</string>
     <string name="feature_user_tab_rules">解析规则</string>
-    <string name="feature_user_tab_playlists">自备片单</string>
-    <string name="feature_user_action_add_rule">添加规则</string>
-    <string name="feature_user_action_add_playlist">导入片单</string>
-    <string name="feature_user_rule_add_choice_title">添加解析规则</string>
+    <string name="feature_user_action_add_rule">添加规则 / 订阅</string>
+    <string name="feature_user_rule_add_choice_title">添加播放源</string>
     <string name="feature_user_rule_choice_site_probe">站点探测（自动识别 MacCMS）</string>
     <string name="feature_user_rule_choice_subscription">订阅导入（TVBox 规则集）</string>
     <string name="feature_user_rule_choice_import_json">批量导入 JSON 规则</string>
-    <string name="feature_user_rule_choice_manual">手动创建自定义规则</string>
-    <string name="feature_user_playlist_add_choice_title">导入自备片单</string>
-    <string name="feature_user_playlist_choice_file">从文件选择 JSON</string>
-    <string name="feature_user_playlist_choice_paste">粘贴 JSON 文本</string>
-    <string name="feature_user_menu_rule_vars">占位符变量说明</string>
     <string name="feature_user_positions_toggle_title">断点续播进度记录</string>
     <string name="feature_user_positions_toggle_subtitle">共 %1$d 条记录 · 播放器自动保留最近 50 条</string>
 
@@ -231,20 +214,6 @@
     <string name="feature_user_position_cd_clear">清除该续播记录</string>
     <string name="feature_user_parser_auto">自动</string>
     <string name="feature_user_parser_pipeline">流水线</string>
-
-    <!-- 10. 片单组件 -->
-    <string name="feature_user_playlist_empty_title">还没有自备片单</string>
-    <string name="feature_user_playlist_empty_desc">自备片单是你自己提供的 JSON 文件：为每个条目声明分集地址（DIRECT 直链在应用内播放，PAGE 页面链接外部打开），可附带 Referer 等请求头。</string>
-    <string name="feature_user_playlist_pick_file">选择 JSON 文件</string>
-    <string name="feature_user_playlist_paste_import">粘贴 JSON 导入</string>
-    <string name="feature_user_playlist_bound_subtitle">绑定条目 %1$d · 直链 %2$d / 页面 %3$d</string>
-    <string name="feature_user_playlist_unbound_subtitle">未绑定条目（不会出现在分集入口）· 直链 %1$d / 页面 %2$d</string>
-    <string name="feature_user_playlist_template_title">片单 JSON 格式（schemaVersion %1$d）</string>
-    <string name="feature_user_playlist_template_collapse">收起示例</string>
-    <string name="feature_user_playlist_template_expand">查看示例</string>
-    <string name="feature_user_playlist_limit_desc">上限：%1$d 份片单、每份 %2$d 条、每条 %3$d 个请求头；同 id 的片单会被新导入的覆盖。</string>
-    <string name="feature_user_playlist_paste_title">粘贴片单 JSON</string>
-    <string name="feature_user_playlist_paste_desc">顶层需为 schemaVersion %1$d 的片单文档；校验通过的片单会合并进现有列表（同 id 覆盖）。</string>
 
     <!-- 11. 开播提醒时间 -->
     <string name="feature_user_timing_sheet_title">开播提醒时间</string>

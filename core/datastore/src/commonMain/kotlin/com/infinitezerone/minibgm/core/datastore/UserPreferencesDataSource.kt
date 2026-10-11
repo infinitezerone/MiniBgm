@@ -269,13 +269,6 @@ class UserPreferencesDataSource(
         }
     }
 
-    /** 更新用户自备播放列表信封 JSON */
-    suspend fun setPlaylistsJson(json: String) {
-        dataStore.updateData { current ->
-            current.copy(playlistsJson = json)
-        }
-    }
-
     /** 更新断点续播位置表 JSON（Map<播放地址, 毫秒>，上限与淘汰策略由写入方维护） */
     suspend fun setPlaybackPositionsJson(json: String) {
         dataStore.updateData { current ->

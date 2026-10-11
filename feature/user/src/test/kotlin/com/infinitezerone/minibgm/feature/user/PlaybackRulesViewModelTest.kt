@@ -5,10 +5,8 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositor
 import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
@@ -50,26 +48,6 @@ private class FakeProbeResolver(
 }
 
 class PlaybackRulesViewModelTest {
-    @Test
-    fun addRule_withExplicitParserType_persistsItRatherThanDefaulting() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.addRule(
-                name = "MacCMS 站",
-                urlTemplate = "https://cms.example.tv/api.php/provide/vod/?ac=detail&wd={title}",
-                kind = PlaybackRuleKind.SOURCE,
-                parserType = RuleParserType.MACCMS,
-            )
-            advanceUntilIdle()
-
-            // 表单默认 AUTO 也能跑（靠兜底识别），但手填接口地址的人应该能直接声明 MACCMS
-            val added = fakeRepo.playbackRules.first().single()
-            assertEquals(PlaybackRuleKind.SOURCE, added.kind)
-            assertEquals(RuleParserType.MACCMS, added.parserType)
-        }
-
     @Test
     fun siteProbe_success_previewsEndpointThenAddsSourceRule() =
         runTest {
@@ -327,91 +305,6 @@ class PlaybackRulesViewModelTest {
         }
 
     @Test
-    fun addRule_withValidInput_addsRuleAndEmitsSnackbar() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.addRule(
-                name = "自定义规则A",
-                urlTemplate = "https://example.com/?s={title}",
-                description = "测试搜索源",
-            )
-
-            val rules = fakeRepo.playbackRules.first()
-            assertEquals(1, rules.size)
-            assertEquals("自定义规则A", rules.first().name)
-            assertEquals("https://example.com/?s={title}", rules.first().urlTemplate)
-            assertTrue(rules.first().isEnabled)
-
-            val event = viewModel.events.first()
-            assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
-            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("自定义规则A"))
-        }
-
-    @Test
-    fun addRule_asSourceKind_parsesHeaderLines() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.addRule(
-                name = "我的接口",
-                urlTemplate = "https://api.example.com/play?id={subjectId}&ep={ep}",
-                kind = PlaybackRuleKind.SOURCE,
-                headersText = "Referer: https://api.example.com/\n\nBrokenLine\nX-Key: abc",
-            )
-
-            val rule = fakeRepo.playbackRules.first().single()
-            assertEquals(PlaybackRuleKind.SOURCE, rule.kind)
-            assertEquals(
-                mapOf("Referer" to "https://api.example.com/", "X-Key" to "abc"),
-                rule.headers,
-            )
-        }
-
-    @Test
-    fun addRule_withBlankInput_emitsWarningSnackbar() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.addRule(name = "   ", urlTemplate = "")
-
-            val rules = fakeRepo.playbackRules.first()
-            assertTrue(rules.isEmpty())
-
-            val event = viewModel.events.first()
-            assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
-            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("不能为空"))
-        }
-
-    @Test
-    fun updateRule_updatesExistingRule() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val rule =
-                PlaybackSourceRule(
-                    id = "rule-1",
-                    name = "AGE",
-                    urlTemplate = "https://age.tv/{title}",
-                    isEnabled = true,
-                )
-            fakeRepo.addPlaybackRule(rule)
-
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-            viewModel.updateRule(
-                id = "rule-1",
-                name = "示例采集站 (新版)",
-                urlTemplate = "https://agefans.vip/{title}",
-            )
-
-            val updated = fakeRepo.playbackRules.first().first()
-            assertEquals("示例采集站 (新版)", updated.name)
-            assertEquals("https://agefans.vip/{title}", updated.urlTemplate)
-        }
-
-    @Test
     fun deleteRule_removesRule() =
         runTest {
             val fakeRepo = FakeSettingsRepository()
@@ -490,116 +383,6 @@ class PlaybackRulesViewModelTest {
             val event = viewModel.events.first()
             assertTrue(event is PlaybackRulesUiEvent.ShowSnackbar)
             assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("解析失败"))
-        }
-
-    private fun playlistDocJson(
-        id: String,
-        name: String = "片单-$id",
-        subjectId: Long = 123L,
-    ) =
-        """{"schemaVersion":1,"playlists":[{"id":"$id","name":"$name","bgmSubjectId":$subjectId,"entries":[{"label":"01","url":"https://cdn.example.com/$id.m3u8","kind":"DIRECT"}]}]}"""
-
-    @Test
-    fun initialState_loadsPlaylistsAlongsideRules() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            fakeRepo.addPlaybackRule(PlaybackSourceRule(id = "rule-1", name = "AGE", urlTemplate = "https://age.tv/{title}"))
-            fakeRepo.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl-1",
-                        name = "我的片源",
-                        bgmSubjectId = 123L,
-                        entries = listOf(PlaylistEntry(label = "01", url = "https://cdn.example.com/a.m3u8")),
-                    ),
-                ),
-            )
-
-            val state = PlaybackRulesViewModel(fakeRepo).uiState.first { !it.isLoading }
-
-            assertEquals(1, state.rules.size)
-            assertEquals(listOf("pl-1"), state.playlists.map { it.id })
-        }
-
-    @Test
-    fun importPlaylistsFromJson_validDocument_mergesAndReportsSummary() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.importPlaylistsFromJson(playlistDocJson("pl-1"))
-
-            val playlists = fakeRepo.playlists.first()
-            assertEquals(1, playlists.size)
-            assertEquals(123L, playlists.single().bgmSubjectId)
-
-            val event = viewModel.events.first()
-            assertTrue((event as PlaybackRulesUiEvent.ShowSnackbar).message.contains("新增 1 份片单"))
-
-            viewModel.importPlaylistsFromJson(playlistDocJson("pl-1", name = "改名后的片源"))
-            assertEquals(
-                "改名后的片源",
-                fakeRepo.playlists
-                    .first()
-                    .single()
-                    .name,
-            )
-            val second = viewModel.events.first() as PlaybackRulesUiEvent.ShowSnackbar
-            assertTrue(second.message.contains("覆盖 1 份"))
-        }
-
-    @Test
-    fun importPlaylistsFromJson_blankText_reportsErrorWithoutTouchingRepository() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            fakeRepo.setPlaylists(
-                listOf(PlaybackPlaylist(id = "keep", name = "保留", entries = listOf(PlaylistEntry(label = "01", url = "https://x/1")))),
-            )
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.importPlaylistsFromJson("   ")
-
-            assertEquals(listOf("keep"), fakeRepo.playlists.first().map { it.id })
-            assertTrue(
-                (viewModel.events.first() as PlaybackRulesUiEvent.ShowSnackbar).message.contains("不能为空"),
-            )
-        }
-
-    @Test
-    fun importPlaylistsFromJson_undecodableText_surfacesRepositoryError() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-
-            viewModel.importPlaylistsFromJson("{ not json }")
-
-            assertTrue(fakeRepo.playlists.first().isEmpty())
-            val event = viewModel.events.first() as PlaybackRulesUiEvent.ShowSnackbar
-            assertTrue(event.message.contains("JSON 格式不合法"))
-        }
-
-    @Test
-    fun deletePlaylist_andClearPlaylists_updateRepository() =
-        runTest {
-            val fakeRepo = FakeSettingsRepository()
-            fakeRepo.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(id = "a", name = "A", entries = listOf(PlaylistEntry(label = "01", url = "https://x/1"))),
-                    PlaybackPlaylist(id = "b", name = "B", entries = listOf(PlaylistEntry(label = "01", url = "https://x/2"))),
-                ),
-            )
-            val viewModel = PlaybackRulesViewModel(fakeRepo)
-            // 与界面一致：先有订阅者，StateFlow 才会取到上游快照
-            viewModel.uiState.first { it.playlists.size == 2 }
-
-            viewModel.deletePlaylist("a")
-            assertEquals(listOf("b"), fakeRepo.playlists.first().map { it.id })
-            assertTrue(
-                ((viewModel.events.first()) as PlaybackRulesUiEvent.ShowSnackbar).message.contains("A"),
-            )
-
-            viewModel.clearPlaylists()
-            assertTrue(fakeRepo.playlists.first().isEmpty())
         }
 
     @Test

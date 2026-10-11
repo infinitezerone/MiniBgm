@@ -621,7 +621,7 @@ class PlayerViewModelTest {
                 )
             advanceUntilIdle()
 
-            // 选中不在自备片单中的第 5 话
+            // 选中不在直链列表中的第 5 话
             vm.selectEpisode(PlayerEpisodeItem(id = 9005L, sort = 5f, name = "第五话"))
             advanceUntilIdle()
 

@@ -759,7 +759,6 @@ fun SubjectDetailScreen(
         onRequestSourceSearch = { ep -> viewModel.requestSourceSearch(ep) },
         onManageRules = onManageRules,
         playbackRules = uiState.playbackRules,
-        playlists = uiState.playlists,
         failedSourceReasons = uiState.failedSourceReasons,
     )
 

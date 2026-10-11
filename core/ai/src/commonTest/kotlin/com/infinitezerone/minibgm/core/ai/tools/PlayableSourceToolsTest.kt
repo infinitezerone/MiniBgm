@@ -6,10 +6,8 @@ import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.Infobox
 import com.infinitezerone.minibgm.core.model.PlayableEpisodeList
 import com.infinitezerone.minibgm.core.model.PlayableSource
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistEntry
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.SiteLink
 import com.infinitezerone.minibgm.core.model.Subject
@@ -91,41 +89,7 @@ class PlayableSourceToolsTest {
     }
 
     @Test
-    fun `自备片单命中时直接返回可播地址与请求头且不再解析第三方页面`() =
-        runTest {
-            sendScheduleWithLinks()
-            settingsRepository.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl1",
-                        name = "我的片单",
-                        bgmSubjectId = 1001L,
-                        entries =
-                            listOf(
-                                PlaylistEntry(
-                                    label = "12",
-                                    url = "https://cdn.example.com/ep12.m3u8",
-                                    headers = mapOf("Referer" to "https://example.com/"),
-                                ),
-                            ),
-                    ),
-                ),
-            )
-            val resolver = FakePlaybackResolverRepository()
-
-            val result = decode(tools(resolver).findPlayableSources(subjectId = 1001L, epNumber = 12))
-
-            assertEquals("自备片单", result.source)
-            assertEquals("葬送的芙莉莲", result.title)
-            val episode = result.episodes.single()
-            assertEquals("https://cdn.example.com/ep12.m3u8", episode.url)
-            assertEquals(PlaylistEntryKind.DIRECT, episode.kind)
-            assertEquals(mapOf("Referer" to "https://example.com/"), episode.headers)
-            assertTrue(resolver.requestedPages.isEmpty())
-        }
-
-    @Test
-    fun `片单未命中时解析排期记录的来源页取直链`() =
+    fun `无规则命中时解析排期记录的来源页取直链`() =
         runTest {
             sendScheduleWithLinks()
             val resolver =
@@ -270,30 +234,6 @@ class PlayableSourceToolsTest {
         }
 
     @Test
-    fun `整表请求返回片单全部集数`() =
-        runTest {
-            settingsRepository.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl1",
-                        name = "我的片单",
-                        bgmSubjectId = 1001L,
-                        entries =
-                            listOf(
-                                PlaylistEntry(label = "1", url = "https://cdn.example.com/ep1.mp4"),
-                                PlaylistEntry(label = "2", url = "https://cdn.example.com/ep2.mp4"),
-                            ),
-                    ),
-                ),
-            )
-
-            val result = decode(tools(FakePlaybackResolverRepository()).findPlayableSources(subjectId = 1001L))
-
-            assertEquals(listOf("1", "2"), result.episodes.map { it.label })
-            assertEquals(listOf(1f, 2f), result.episodes.map { it.episodeSort })
-        }
-
-    @Test
     fun `取源候选接入 Bangumi 别名且中文字形排在英文名前`() =
         runTest {
             sendScheduleWithLinks()
@@ -338,25 +278,6 @@ class PlayableSourceToolsTest {
                 ),
                 resolver.requestedTitles.take(5),
             )
-        }
-
-    @Test
-    fun `自备片单命中时不再为片名取条目详情`() =
-        runTest {
-            settingsRepository.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl1",
-                        name = "我的片单",
-                        bgmSubjectId = 1001L,
-                        entries = listOf(PlaylistEntry(label = "1", url = "https://cdn.example.com/ep1.mp4")),
-                    ),
-                ),
-            )
-
-            decode(tools(FakePlaybackResolverRepository()).findPlayableSources(subjectId = 1001L))
-
-            assertEquals(0, subjectRepository.fetchSubjectDetailCallCount)
         }
 
     @Test

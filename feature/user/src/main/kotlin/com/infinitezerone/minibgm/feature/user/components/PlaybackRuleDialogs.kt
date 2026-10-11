@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -15,7 +14,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,57 +44,16 @@ import com.infinitezerone.minibgm.feature.user.SubscriptionImportUiState
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
- * 变量支持提示卡片
- */
-@Composable
-internal fun RuleVariablesHintCard() {
-    Surface(
-        shape = BgmShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Icon(
-                imageVector = BgmIcons.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = stringResource(R.string.feature_user_rule_vars_title),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = stringResource(R.string.feature_user_rule_vars_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-/**
  * 单条播放规则卡片
  */
 @Composable
 internal fun PlaybackRuleCard(
     rule: PlaybackSourceRule,
     onToggle: (Boolean) -> Unit,
-    onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        onClick = onEdit,
         shape = BgmShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier.fillMaxWidth(),
@@ -195,203 +152,20 @@ internal fun PlaybackRuleCard(
                     Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp),
                 ) {
-                    IconButton(
-                        onClick = onEdit,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Edit,
-                            contentDescription = stringResource(R.string.feature_user_action_edit),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Delete,
-                            contentDescription = stringResource(R.string.feature_user_action_delete),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
+                    Icon(
+                        imageVector = BgmIcons.Delete,
+                        contentDescription = stringResource(R.string.feature_user_action_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
         }
     }
-}
-
-/**
- * 规则添加/编辑对话框
- */
-@Composable
-internal fun RuleEditDialog(
-    initialRule: PlaybackSourceRule?,
-    onDismiss: () -> Unit,
-    onConfirm: (
-        name: String,
-        url: String,
-        desc: String,
-        kind: PlaybackRuleKind,
-        parserType: RuleParserType,
-        headersText: String,
-    ) -> Unit,
-) {
-    var name by remember(initialRule) { mutableStateOf(initialRule?.name ?: "") }
-    var urlTemplate by remember(initialRule) { mutableStateOf(initialRule?.urlTemplate ?: "") }
-    var description by remember(initialRule) { mutableStateOf(initialRule?.description ?: "") }
-    var kind by remember(initialRule) { mutableStateOf(initialRule?.kind ?: PlaybackRuleKind.PAGE) }
-    var parserType by remember(initialRule) { mutableStateOf(initialRule?.parserType ?: RuleParserType.AUTO) }
-    var headersText by remember(initialRule) {
-        mutableStateOf(
-            initialRule
-                ?.headers
-                .orEmpty()
-                .entries
-                .joinToString("\n") { "${it.key}: ${it.value}" },
-        )
-    }
-
-    val isEditing = initialRule != null
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                if (isEditing) {
-                    stringResource(R.string.feature_user_rule_edit_title)
-                } else {
-                    stringResource(R.string.feature_user_rule_add_title)
-                },
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.feature_user_rule_name_label)) },
-                    placeholder = { Text(stringResource(R.string.feature_user_rule_name_placeholder)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                OutlinedTextField(
-                    value = urlTemplate,
-                    onValueChange = { urlTemplate = it },
-                    label = { Text(stringResource(R.string.feature_user_rule_url_label)) },
-                    placeholder = { Text("https://example.com/search?q={title}") },
-                    minLines = 2,
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                // 快捷插入变量 Chip
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    listOf("{title}", "{ep}", "{subjectId}", "{episodeId}").forEach { placeholder ->
-                        FilterChip(
-                            selected = false,
-                            onClick = { urlTemplate += placeholder },
-                            label = { Text(placeholder, style = MaterialTheme.typography.labelSmall) },
-                        )
-                    }
-                }
-
-                // 规则用途：跳转页面只是给用户一个入口；取源接口会真的发请求并抽取可播放地址
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    PlaybackRuleKind.entries.forEach { option ->
-                        FilterChip(
-                            selected = kind == option,
-                            onClick = { kind = option },
-                            label = {
-                                Text(
-                                    text =
-                                        if (option == PlaybackRuleKind.SOURCE) {
-                                            stringResource(R.string.feature_user_rule_kind_source)
-                                        } else {
-                                            stringResource(R.string.feature_user_rule_kind_page_title)
-                                        },
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                if (kind == PlaybackRuleKind.SOURCE) {
-                    // 解析器决定播放时走哪条抽取路径。选错不会报错，只会静默降级成页面嗅探，
-                    // 所以这里让人显式选，而不是一律 AUTO（「探测」入口不走这条，它永落 MACCMS）。
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = stringResource(R.string.feature_user_rule_parser_label),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            RuleParserType.entries.forEach { option ->
-                                FilterChip(
-                                    selected = parserType == option,
-                                    onClick = { parserType = option },
-                                    label = {
-                                        Text(
-                                            text = parserTypeLabel(option),
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
-                                    },
-                                )
-                            }
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = headersText,
-                        onValueChange = { headersText = it },
-                        label = { Text(stringResource(R.string.feature_user_rule_headers_label)) },
-                        placeholder = { Text("Referer: https://example.com/") },
-                        minLines = 2,
-                        maxLines = 4,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(stringResource(R.string.feature_user_rule_desc_label)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(name, urlTemplate, description, kind, parserType, headersText) },
-                enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
-            ) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
-        },
-    )
 }
 
 /**

@@ -134,7 +134,7 @@ data class PlayerUiState(
     val autoNextEnabled: Boolean = true,
     /** 当前分集的断点续播位置（毫秒，0 表示没有可恢复的记录；与打卡是两套独立进度） */
     val resumePositionMs: Long = 0L,
-    /** 播放源标签列表（包含自备片单与外部规则源） */
+    /** 播放源标签列表（包含默认直链与外部规则源） */
     val sources: List<PlayerSourceTab> = emptyList(),
     /** 源标识 → 本次会话内的连续失败次数；用于在选源界面弱化屡试屡败的源 */
     val sourceFailureCounts: Map<String, Int> = emptyMap(),
@@ -351,14 +351,9 @@ class PlayerViewModel(
             list.add(
                 PlayerSourceTab(
                     id = "direct",
-                    name = if (route.queue.size > 1) "自备片单" else "默认直链",
+                    name = "默认直链",
                     isDirect = true,
-                    nameRes =
-                        if (route.queue.size > 1) {
-                            R.string.feature_subject_source_user_playlist
-                        } else {
-                            R.string.feature_subject_player_source_default_direct
-                        },
+                    nameRes = R.string.feature_subject_player_source_default_direct,
                 ),
             )
         }
@@ -597,8 +592,8 @@ class PlayerViewModel(
                     } else {
                         null
                     }
-                // 仅在首次构建源列表且入口未携带直链/片单时应用上次可用源：
-                // 直链是用户显式给进来的（自备片单/助手），直链始终优先，记忆源只对无直链入口兜底；
+                // 仅在首次构建源列表且入口未携带直链时应用上次可用源：
+                // 直链是显式给进来的（默认直链/助手），直链始终优先，记忆源只对无直链入口兜底；
                 // 同时避免之后覆盖用户的手动选择
                 val preferredIndex =
                     if (route.initialRuleId.isBlank() &&
@@ -970,7 +965,7 @@ class PlayerViewModel(
                         directMissing -> emptyMap()
                         else -> it.requestHeaders
                     },
-                error = if (directMissing) "自备片单中没有该分集，请切换到其他播放源" else null,
+                error = if (directMissing) "直链列表中没有该分集，请切换到其他播放源" else null,
             )
         }
         resolveCurrentEpisodeStream()
@@ -1087,7 +1082,7 @@ class PlayerViewModel(
         val currentTab = state.sources.getOrNull(state.selectedSourceIndex) ?: return
         resolveJob?.cancel()
         if (currentTab.isDirect) {
-            // 直链/自备片单：只按分集**精确匹配**。找不到就如实报无片源，
+            // 默认直链：只按分集**精确匹配**。找不到就如实报无片源，
             // 绝不再回退 queue[currentIndex]——那会把 A 集串成 B 集的画面。
             val matchingEntry =
                 state.queue.find {
@@ -1109,7 +1104,7 @@ class PlayerViewModel(
                         streamUrl = "",
                         requestHeaders = emptyMap(),
                         isResolvingSource = false,
-                        error = "自备片单中没有该分集，请切换到其他播放源",
+                        error = "直链列表中没有该分集，请切换到其他播放源",
                     )
                 }
             }

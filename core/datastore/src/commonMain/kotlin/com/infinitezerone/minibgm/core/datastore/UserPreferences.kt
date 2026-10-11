@@ -74,8 +74,6 @@ data class UserPreferences(
     val aiActiveProfileId: String = "",
     /** 自定义播放规则列表 JSON 序列化字符串 */
     val playbackRulesJson: String = "",
-    /** 用户自备播放列表信封 JSON（PlaybackPlaylistDocument 序列化串；空串表示从未导入） */
-    val playlistsJson: String = "",
     /** 断点续播位置表 JSON（Map<播放地址, 毫秒>，最多 50 条最近记录；与打卡进度是两套独立数据） */
     val playbackPositionsJson: String = "",
     /** 上次成功起播的播放源标识（PlayerSourceTab.id / 规则 id；空串表示尚无记录），用于进页时优先选中 */

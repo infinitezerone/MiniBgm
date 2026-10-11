@@ -15,7 +15,6 @@ import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -63,7 +62,6 @@ data class EpisodeDetailUiState(
     val currentUserId: Long? = null,
     val subject: Subject? = null,
     val playbackRules: List<PlaybackSourceRule> = emptyList(),
-    val playlists: List<PlaybackPlaylist> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
 )
@@ -94,10 +92,9 @@ private data class IdentityData(
     val currentUserId: Long?,
 )
 
-/** 播放规则/片单/失败归因投影的中间态（私有于 [EpisodeDetailViewModel]） */
+/** 播放规则/失败归因投影的中间态（私有于 [EpisodeDetailViewModel]） */
 private data class PlaybackData(
     val playbackRules: List<PlaybackSourceRule>,
-    val playlists: List<PlaybackPlaylist>,
     val failedSourceReasons: Map<String, String>,
 )
 
@@ -216,10 +213,9 @@ class EpisodeDetailViewModel(
             },
             combine(
                 settingsRepository?.playbackRules ?: flowOf(emptyList()),
-                settingsRepository?.playlists ?: flowOf(emptyList()),
                 failureStore?.recentFailures ?: flowOf(emptyMap()),
-            ) { rules, playlists, failures ->
-                PlaybackData(playbackRules = rules, playlists = playlists, failedSourceReasons = failures)
+            ) { rules, failures ->
+                PlaybackData(playbackRules = rules, failedSourceReasons = failures)
             },
             combine(commentsUi, commentSortOrder, loginPromptVisible, actionError) { comments, sortOrder, prompt, error ->
                 SessionData(comments = comments, sortOrder = sortOrder, showLoginPromptDialog = prompt, actionError = error)
@@ -242,7 +238,6 @@ class EpisodeDetailViewModel(
                 currentUserId = identity.currentUserId,
                 subject = identity.subject,
                 playbackRules = playback.playbackRules,
-                playlists = playback.playlists,
                 failedSourceReasons = playback.failedSourceReasons,
             )
         }.stateIn(
@@ -359,7 +354,6 @@ class EpisodeDetailViewModel(
                     ?.displayName
                     .orEmpty(),
             episode = episode,
-            playlists = uiState.value.playlists,
         )
 
     /**

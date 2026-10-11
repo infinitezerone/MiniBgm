@@ -41,15 +41,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
-import com.infinitezerone.minibgm.core.model.PlaylistEntryMatch
 import com.infinitezerone.minibgm.core.model.Subject
-import com.infinitezerone.minibgm.core.model.forSubject
-import com.infinitezerone.minibgm.core.model.matchesForEpisode
-import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
@@ -58,8 +52,8 @@ import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
- * - 条目级：自备片单概览、一体化播放器、AI 找源、播放源管理、条目级外部跳转；
- * - 分集级：按话数命中的自备片单、逐条渲染规则源（应用内嗅探或外开）、
+ * - 条目级：一体化播放器、AI 找源、播放源管理、条目级外部跳转；
+ * - 分集级：逐条渲染规则源（应用内嗅探或外开）、
  *   分集化搜索关键词、外部播放器（mpv / VLC）与失败归因提示。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,7 +69,6 @@ fun SubjectSourcesBottomSheet(
     onAiSourceSearch: (() -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
-    playlists: List<PlaybackPlaylist> = emptyList(),
     failedSourceReasons: Map<String, String> = emptyMap(),
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
@@ -93,7 +86,6 @@ fun SubjectSourcesBottomSheet(
 
     if (episode == null) {
         // ==================== 条目级 ====================
-        val boundPlaylists = remember(playlists, subject.id) { playlists.forSubject(subject.id) }
         val bilibiliTarget =
             remember(displayName) {
                 StreamingIntentResolver.buildBilibiliSearchTarget(displayName)
@@ -135,32 +127,6 @@ fun SubjectSourcesBottomSheet(
                             .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 分组 0：自备片单概览（条目级只看总量，逐话选择在分集入口完成）
-                    if (onManageRules != null && boundPlaylists.isNotEmpty()) {
-                        SourcesSectionLabel(stringResource(R.string.feature_subject_source_user_playlist))
-                        for (playlist in boundPlaylists) {
-                            val hasFailure = playlist.entries.any { it.url in failedSourceReasons }
-                            EpisodeSourceActionCard(
-                                title = playlist.name,
-                                subtitle =
-                                    playbackSourceSubtitle(
-                                        stringResource(R.string.feature_subject_source_user_playlist_hint, playlist.entries.size),
-                                        if (hasFailure) stringResource(R.string.feature_subject_source_has_failed_entries) else null,
-                                    ),
-                                iconVector = BgmIcons.PlayCircle,
-                                iconTint =
-                                    if (hasFailure) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
-                                    },
-                                onClick = { onManageRules() },
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-
                     if (onInternalPlayClick != null) {
                         SourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_player))
                         EpisodeSourceActionCard(
@@ -243,10 +209,6 @@ fun SubjectSourcesBottomSheet(
     } else {
         // ==================== 分集级 ====================
         val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
-        val playlistMatches =
-            remember(playlists, subject.id, episode) {
-                playlists.matchesForEpisode(subject.id, episode.episodeNumber)
-            }
         val epLabel = remember(episode) { episode.guideLabel }
 
         val bilibiliTarget =
@@ -266,33 +228,25 @@ fun SubjectSourcesBottomSheet(
 
         val context = LocalContext.current
 
-        // 外部播放器直链候选：仅对流媒体直链（http/https 的 DIRECT 地址）提供，
-        // 片单 DIRECT 直链优先，其次为解析为媒体直链的播放规则
+        // 外部播放器直链候选：解析为媒体直链的播放规则
         val externalPlayerStreamUrl =
-            remember(playlistMatches, enabledRules, displayName, episode, subject.id) {
+            remember(enabledRules, displayName, episode, subject.id) {
                 // 外部播放器无法携带 Referer/Cookie 等自定义请求头，带请求头的直链不提供；
                 // kind = SOURCE 的规则地址是取源接口而非流地址，同样排除
-                playlistMatches
-                    .map { it.entry }
-                    .firstOrNull {
-                        it.kind == PlaylistEntryKind.DIRECT &&
-                            it.headers.isEmpty() &&
-                            StreamingIntentResolver.isHttpStreamUrl(it.url)
-                    }?.url
-                    ?: enabledRules.firstNotNullOfOrNull { rule ->
-                        if (rule.kind == PlaybackRuleKind.SOURCE) return@firstNotNullOfOrNull null
-                        val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
-                        val resolvedUrl =
-                            rule.resolveUrl(
-                                title = displayName,
-                                ep = epStr,
-                                subjectId = subject.id,
-                                episodeId = episode.id,
-                            )
-                        resolvedUrl.takeIf {
-                            StreamingIntentResolver.isHttpStreamUrl(it) && isLikelyMediaStream(resolvedUrl, rule.description)
-                        }
+                enabledRules.firstNotNullOfOrNull { rule ->
+                    if (rule.kind == PlaybackRuleKind.SOURCE) return@firstNotNullOfOrNull null
+                    val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
+                    val resolvedUrl =
+                        rule.resolveUrl(
+                            title = displayName,
+                            ep = epStr,
+                            subjectId = subject.id,
+                            episodeId = episode.id,
+                        )
+                    resolvedUrl.takeIf {
+                        StreamingIntentResolver.isHttpStreamUrl(it) && isLikelyMediaStream(resolvedUrl, rule.description)
                     }
+                }
             }
         val externalPlayerTargets =
             remember(externalPlayerStreamUrl) {
@@ -337,19 +291,7 @@ fun SubjectSourcesBottomSheet(
                             .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 分组 0：用户自备片单（JSON 导入），按话数命中后排在本集最前面
-                    PlaylistSourceSection(
-                        matches = playlistMatches,
-                        subject = subject,
-                        episode = episode,
-                        displayName = displayName,
-                        failedSourceReasons = failedSourceReasons,
-                        onOpenUrl = onOpenUrl,
-                        onInternalPlayClick = onInternalPlayClick,
-                        runAfterDismiss = runAfterDismiss,
-                    )
-
-                    // 分组 1：内部播放
+                    // 内部播放
                     SourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_playback))
 
                     if (enabledRules.isNotEmpty()) {
@@ -628,118 +570,6 @@ private fun SourcesSheetHeader(
             )
         }
     }
-}
-
-/**
- * 自备片单分组：按话数命中的条目优先；条目 kind 决定应用内播放还是外部打开页面。
- */
-@Composable
-internal fun PlaylistSourceSection(
-    matches: List<PlaylistEntryMatch>,
-    subject: Subject,
-    episode: Episode,
-    displayName: String,
-    failedSourceReasons: Map<String, String>,
-    onOpenUrl: (String) -> Unit,
-    onInternalPlayClick: ((PlayerRoute) -> Unit)?,
-    runAfterDismiss: (() -> Unit) -> Unit,
-) {
-    if (matches.isEmpty()) return
-    val grouped = remember(matches) { matches.groupBy { it.playlist } }
-
-    SourcesSectionLabel(stringResource(R.string.feature_subject_source_user_playlist))
-
-    for ((playlist, items) in grouped) {
-        val header =
-            if (items.all { it.matched }) {
-                playlist.name
-            } else {
-                stringResource(R.string.feature_subject_source_playlist_unmatched_hint, playlist.name, items.size)
-            }
-        Text(
-            text = header,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
-        for (item in items) {
-            val entry = item.entry
-            val failure = failedSourceReasons[entry.url]
-            val playableInApp = entry.kind == PlaylistEntryKind.DIRECT && onInternalPlayClick != null
-            EpisodeSourceActionCard(
-                title =
-                    if (entry.title.isBlank()) {
-                        entry.label
-                    } else {
-                        "${entry.label} · ${entry.title}"
-                    },
-                subtitle =
-                    playbackSourceSubtitle(
-                        entry.siteName.ifBlank {
-                            if (entry.kind == PlaylistEntryKind.DIRECT) {
-                                stringResource(R.string.feature_subject_source_play_playlist_direct)
-                            } else {
-                                stringResource(R.string.feature_subject_source_open_playlist_page)
-                            }
-                        },
-                        failure,
-                    ),
-                iconVector =
-                    if (entry.kind == PlaylistEntryKind.DIRECT) {
-                        BgmIcons.PlayCircle
-                    } else {
-                        BgmIcons.OpenInNew
-                    },
-                iconTint =
-                    when {
-                        failure != null -> MaterialTheme.colorScheme.error
-                        playableInApp -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                onClick = {
-                    runAfterDismiss {
-                        if (playableInApp) {
-                            // 同片单的可播条目按用户书写顺序入队：播放器内支持连播与选集抽屉
-                            val queueEntries = item.playlist.entries.filter { it.kind == PlaylistEntryKind.DIRECT }
-                            onInternalPlayClick(
-                                PlayerRoute(
-                                    subjectId = subject.id,
-                                    episodeId = episode.id,
-                                    streamUrl = entry.url,
-                                    episodeName = episode.nameCn.ifBlank { episode.name },
-                                    subjectName = displayName,
-                                    episodeSort = episode.episodeNumber,
-                                    episodeType = episode.type,
-                                    requestHeaders = entry.headers,
-                                    queue =
-                                        queueEntries.map { matched ->
-                                            PlayerQueueEntry(
-                                                streamUrl = matched.url,
-                                                label = matched.label,
-                                                episodeName = matched.title,
-                                                episodeSort =
-                                                    matched.label.toFloatOrNull()
-                                                        ?: episode.episodeNumber,
-                                                episodeType = episode.type,
-                                                episodeId = episode.id,
-                                                requestHeaders = matched.headers,
-                                            )
-                                        },
-                                    startIndex = queueEntries.indexOf(entry).coerceAtLeast(0),
-                                ),
-                            )
-                        } else {
-                            onOpenUrl(entry.url)
-                        }
-                    }
-                },
-            )
-        }
-    }
-
-    Spacer(modifier = Modifier.height(4.dp))
 }
 
 /** 来源副标题：叠加最近一次播放失败归因 */

@@ -2,6 +2,13 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
 
+/** 播放来源条目类型：DIRECT = 可直连播放的媒体地址；PAGE = 需外部打开的页面链接 */
+@Serializable
+enum class PlaylistEntryKind {
+    DIRECT,
+    PAGE,
+}
+
 /**
  * 一条可播放来源。
  *
@@ -27,7 +34,7 @@ data class PlayableSource(
 data class PlayableEpisodeList(
     val subjectId: Long = 0L,
     val title: String = "",
-    /** 这批来源从哪来：自备片单 / 来源站解析，供 UI 标注可信度 */
+    /** 这批来源从哪来：规则解析 / 外部页面，供 UI 标注可信度 */
     val source: String = "",
     val episodes: List<PlayableSource> = emptyList(),
 )

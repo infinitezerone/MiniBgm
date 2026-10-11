@@ -155,9 +155,6 @@
     <string name="feature_subject_expand_more_works">展开更多作品 (剩余 %1$d 部)</string>
 
     <!-- 8. 播放来源 BottomSheet -->
-    <string name="feature_subject_source_user_playlist">自备片单</string>
-    <string name="feature_subject_source_user_playlist_hint">%1$d 条 · 在具体分集的播放入口中选择</string>
-    <string name="feature_subject_source_has_failed_entries">存在上次播放失败的条目</string>
     <string name="feature_subject_source_internal_player">应用内播放</string>
     <string name="feature_subject_source_integrated_player">一体化视频播放器</string>
     <string name="feature_subject_source_player_features">多源嗅探 · 分集选集 · 自动连播</string>
@@ -165,7 +162,7 @@
     <string name="feature_subject_source_ai_search_desc">让 AI 助手找源</string>
     <string name="feature_subject_source_ai_search_hint">解析可播放地址与集数，结果在助手会话中展示</string>
     <string name="feature_subject_source_manage">播放源管理</string>
-    <string name="feature_subject_source_manage_desc">导入自备片单 / 维护解析规则</string>
+    <string name="feature_subject_source_manage_desc">订阅或维护解析规则</string>
     <string name="feature_subject_source_manage_rules">管理规则</string>
     <string name="feature_subject_source_external_nav">外部跳转</string>
     <string name="feature_subject_source_bilibili">哔哩哔哩</string>
@@ -186,9 +183,6 @@
     <string name="feature_subject_source_action_play">播放</string>
     <string name="feature_subject_source_action_open">打开</string>
     <string name="feature_subject_source_bilibili_ep_desc">在 B 站中搜索当前分集</string>
-    <string name="feature_subject_source_playlist_unmatched_hint">%1$s · 未按话数匹配，展示前 %2$d 条</string>
-    <string name="feature_subject_source_play_playlist_direct">应用内播放片单直链</string>
-    <string name="feature_subject_source_open_playlist_page">外部打开片单页面</string>
     <string name="feature_subject_source_last_failed_format">%1$s · 上次播放失败：%2$s</string>
     <string name="feature_subject_source_ep_num_format">第%1$s集</string>
     <string name="feature_subject_source_ep_hua_format">第%1$s话</string>

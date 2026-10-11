@@ -796,7 +796,6 @@ fun EpisodeDetailScreen(
                     }
                 },
             playbackRules = uiState.playbackRules,
-            playlists = uiState.playlists,
             failedSourceReasons = uiState.failedSourceReasons,
         )
     }

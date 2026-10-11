@@ -12,7 +12,6 @@ import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PersonDetail
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.Subject
@@ -75,7 +74,6 @@ internal fun SubjectDetailOverlays(
     onRequestSourceSearch: (Episode?) -> Unit,
     onManageRules: (() -> Unit)?,
     playbackRules: List<PlaybackSourceRule>,
-    playlists: List<PlaybackPlaylist>,
     failedSourceReasons: Map<String, String>,
 ) {
     if (showLoginPromptDialog) {
@@ -200,7 +198,6 @@ internal fun SubjectDetailOverlays(
                     }
                 },
             playbackRules = playbackRules,
-            playlists = playlists,
             failedSourceReasons = failedSourceReasons,
         )
     }

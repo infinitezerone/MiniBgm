@@ -6,11 +6,7 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylistDocument
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -184,6 +180,11 @@ class FakeSettingsRepository(
         playbackRulesState.value = playbackRulesState.value + rules.filterNot { it.id in existingIds }
     }
 
+    /** 直接注入播放规则（供 ViewModel 测试构造场景） */
+    fun setPlaybackRules(rules: List<PlaybackSourceRule>) {
+        playbackRulesState.value = rules
+    }
+
     override suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary> {
         // 与 SettingsRepository 真实实现同样的解析/校验语义（含拒收文案）：
         // 替身一旦和真实实现漂移，钉住替身行为的 ViewModel 测试就成了假绿。
@@ -201,53 +202,6 @@ class FakeSettingsRepository(
         val (accepted, rejected) = importedList.partition { it.isImportable }
         if (accepted.isNotEmpty()) importPlaybackRules(accepted)
         return AppResult.Success(RuleImportSummary(acceptedCount = accepted.size, rejectedCount = rejected.size))
-    }
-
-    private val playlistsState = MutableStateFlow<List<PlaybackPlaylist>>(emptyList())
-    override val playlists: Flow<List<PlaybackPlaylist>> = playlistsState
-
-    /** 直接注入播放列表（跳过 JSON 校验，供 UI/ViewModel 测试使用） */
-    fun setPlaylists(playlists: List<PlaybackPlaylist>) {
-        playlistsState.value = playlists
-    }
-
-    override suspend fun importPlaylistsFromJson(jsonText: String): AppResult<PlaylistImportSummary> {
-        val document =
-            runCatching { Json.Default.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
-                .getOrElse {
-                    // 与 SettingsRepository 的真实文案保持一致：不带原始异常原文，只留格式提示。
-                    // 替身一旦和真实实现漂移，钉住替身文案的测试就成了假绿。
-                    return AppResult.Error(
-                        IllegalStateException("JSON 格式不合法，需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式"),
-                    )
-                }
-        val validation = PlaybackPlaylistSchema.validate(document)
-        if (validation.validPlaylists.isEmpty()) {
-            return AppResult.Error(IllegalStateException(validation.issues.joinToString("；")))
-        }
-        var added = 0
-        var replaced = 0
-        val merged = playlistsState.value.toMutableList()
-        validation.validPlaylists.forEach { incoming ->
-            val index = merged.indexOfFirst { it.id == incoming.id }
-            if (index >= 0) {
-                merged[index] = incoming
-                replaced++
-            } else {
-                merged += incoming
-                added++
-            }
-        }
-        playlistsState.value = merged
-        return AppResult.Success(PlaylistImportSummary(added, replaced, validation.issues))
-    }
-
-    override suspend fun deletePlaylist(playlistId: String) {
-        playlistsState.value = playlistsState.value.filterNot { it.id == playlistId }
-    }
-
-    override suspend fun clearPlaylists() {
-        playlistsState.value = emptyList()
     }
 
     private val playbackPositionsState = MutableStateFlow<Map<String, Long>>(emptyMap())

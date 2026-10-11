@@ -146,7 +146,7 @@ data class InAppWebRoute(
 /**
  * 应用内视频播放交互界面路由（基于 Media3 ExoPlayer 渲染）。
  * [requestHeaders] 为用户自备列表条目的必要请求头（如 Referer/Cookie），随媒体请求发送。
- * [queue] 为本次播放的分集队列（自备片单/找源清单按序给出）：非空时播放器支持
+ * [queue] 为本次播放的分集队列（找源清单/外部直链按序给出）：非空时播放器支持
  * 播完自动连播与全屏内选集抽屉，[startIndex] 指定起始分集；为空时退化为单集播放。
  */
 @Serializable

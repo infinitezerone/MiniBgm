@@ -1,9 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
 import android.content.Context
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,27 +14,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,57 +48,31 @@ import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialog
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
-import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.feature.user.components.MAX_IMPORT_BYTES
-import com.infinitezerone.minibgm.feature.user.components.PLAYLIST_MIME_TYPES
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
-import com.infinitezerone.minibgm.feature.user.components.PlaylistCard
-import com.infinitezerone.minibgm.feature.user.components.PlaylistEmptyCard
-import com.infinitezerone.minibgm.feature.user.components.PlaylistImportDialog
-import com.infinitezerone.minibgm.feature.user.components.PlaylistTemplateCard
-import com.infinitezerone.minibgm.feature.user.components.RuleEditDialog
 import com.infinitezerone.minibgm.feature.user.components.RuleImportDialog
-import com.infinitezerone.minibgm.feature.user.components.RuleVariablesHintCard
-import com.infinitezerone.minibgm.feature.user.components.SectionHeader
 import com.infinitezerone.minibgm.feature.user.components.SiteProbeDialog
 import com.infinitezerone.minibgm.feature.user.components.SubscriptionImportDialog
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 private enum class RuleAddOption {
-    SITE_PROBE,
     SUBSCRIPTION,
+    SITE_PROBE,
     IMPORT_JSON,
-    MANUAL,
     ;
 
     fun label(context: Context): String =
         when (this) {
-            SITE_PROBE -> context.getString(R.string.feature_user_rule_choice_site_probe)
             SUBSCRIPTION -> context.getString(R.string.feature_user_rule_choice_subscription)
+            SITE_PROBE -> context.getString(R.string.feature_user_rule_choice_site_probe)
             IMPORT_JSON -> context.getString(R.string.feature_user_rule_choice_import_json)
-            MANUAL -> context.getString(R.string.feature_user_rule_choice_manual)
-        }
-}
-
-private enum class PlaylistAddOption {
-    PICK_FILE,
-    PASTE_JSON,
-    ;
-
-    fun label(context: Context): String =
-        when (this) {
-            PICK_FILE -> context.getString(R.string.feature_user_playlist_choice_file)
-            PASTE_JSON -> context.getString(R.string.feature_user_playlist_choice_paste)
         }
 }
 
 /**
- * 播放源管理界面：
- * 采用双 Tab 清晰切分「解析规则」与「自备片单」，操作收拢至右下角悬浮按钮，降低视觉与心智负担。
+ * 播放规则与源管理界面：
+ * 全面聚焦远程规则订阅（TVBox/MiniBgm）、单站智能探测与规则导入。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,45 +89,8 @@ fun PlaybackRulesScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
-    var ruleToEdit by remember { mutableStateOf<PlaybackSourceRule?>(null) }
-    var isAddingRule by remember { mutableStateOf(false) }
     var isImportingRuleJson by remember { mutableStateOf(false) }
-    var isImportingPlaylistJson by remember { mutableStateOf(false) }
-    var showVarsHint by rememberSaveable { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
-
-    val playlistPicker =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val outcome =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { stream ->
-                                val bytes = stream.readNBytes(MAX_IMPORT_BYTES + 1)
-                                require(bytes.size <= MAX_IMPORT_BYTES) {
-                                    context.getString(
-                                        R.string.feature_user_playlist_file_too_large,
-                                        MAX_IMPORT_BYTES / 1024 / 1024,
-                                    )
-                                }
-                                bytes.decodeToString()
-                            } ?: error(context.getString(R.string.feature_user_playlist_file_unreadable))
-                        }
-                    }
-                outcome
-                    .onSuccess { text -> viewModel.importPlaylistsFromJson(text) }
-                    .onFailure { error ->
-                        snackbarHostState.showSnackbar(
-                            context.getString(
-                                R.string.feature_user_playlist_read_failed,
-                                error.message ?: context.getString(R.string.feature_user_common_unknown_error),
-                            ),
-                        )
-                    }
-            }
-        }
 
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
@@ -194,69 +123,34 @@ fun PlaybackRulesScreen(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    if (selectedTabIndex == 0) {
-                        IconButton(onClick = { showVarsHint = !showVarsHint }) {
-                            Icon(
-                                imageVector = BgmIcons.Info,
-                                contentDescription = stringResource(R.string.feature_user_menu_rule_vars),
-                                tint = if (showVarsHint) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
                 },
             )
         },
         floatingActionButton = {
             if (!uiState.isLoading) {
-                if (selectedTabIndex == 0) {
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            scope.launch {
-                                val choice =
-                                    overlayHostState.await(
-                                        SingleChoiceDialogAction(
-                                            title = context.getString(R.string.feature_user_rule_add_choice_title),
-                                            options = RuleAddOption.entries,
-                                            selectedOption = RuleAddOption.SITE_PROBE,
-                                            optionLabel = { it.label(context) },
-                                        ),
-                                    )
-                                when (choice) {
-                                    RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
-                                    RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
-                                    RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
-                                    RuleAddOption.MANUAL -> isAddingRule = true
-                                    null -> {}
-                                }
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        scope.launch {
+                            val choice =
+                                overlayHostState.await(
+                                    SingleChoiceDialogAction(
+                                        title = context.getString(R.string.feature_user_rule_add_choice_title),
+                                        options = RuleAddOption.entries,
+                                        selectedOption = RuleAddOption.SUBSCRIPTION,
+                                        optionLabel = { it.label(context) },
+                                    ),
+                                )
+                            when (choice) {
+                                RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
+                                RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
+                                RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
+                                null -> {}
                             }
-                        },
-                        icon = { Icon(imageVector = BgmIcons.Add, contentDescription = null) },
-                        text = { Text(stringResource(R.string.feature_user_action_add_rule)) },
-                    )
-                } else {
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            scope.launch {
-                                val choice =
-                                    overlayHostState.await(
-                                        SingleChoiceDialogAction(
-                                            title = context.getString(R.string.feature_user_playlist_add_choice_title),
-                                            options = PlaylistAddOption.entries,
-                                            selectedOption = PlaylistAddOption.PICK_FILE,
-                                            optionLabel = { it.label(context) },
-                                        ),
-                                    )
-                                when (choice) {
-                                    PlaylistAddOption.PICK_FILE -> playlistPicker.launch(PLAYLIST_MIME_TYPES)
-                                    PlaylistAddOption.PASTE_JSON -> isImportingPlaylistJson = true
-                                    null -> {}
-                                }
-                            }
-                        },
-                        icon = { Icon(imageVector = BgmIcons.Upload, contentDescription = null) },
-                        text = { Text(stringResource(R.string.feature_user_action_add_playlist)) },
-                    )
-                }
+                        }
+                    },
+                    icon = { Icon(imageVector = BgmIcons.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.feature_user_action_add_rule)) },
+                )
             }
         },
         snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
@@ -268,72 +162,6 @@ fun PlaybackRulesScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
-            PrimaryTabRow(
-                selectedTabIndex = selectedTabIndex,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Tab(
-                    selected = selectedTabIndex == 0,
-                    onClick = { selectedTabIndex = 0 },
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(stringResource(R.string.feature_user_tab_rules))
-                            if (uiState.rules.isNotEmpty()) {
-                                Badge(
-                                    containerColor =
-                                        if (selectedTabIndex == 0) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceContainerHighest
-                                        },
-                                    contentColor =
-                                        if (selectedTabIndex == 0) {
-                                            MaterialTheme.colorScheme.onPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                ) {
-                                    Text("${uiState.rules.size}")
-                                }
-                            }
-                        }
-                    },
-                )
-                Tab(
-                    selected = selectedTabIndex == 1,
-                    onClick = { selectedTabIndex = 1 },
-                    text = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(stringResource(R.string.feature_user_tab_playlists))
-                            if (uiState.playlists.isNotEmpty()) {
-                                Badge(
-                                    containerColor =
-                                        if (selectedTabIndex == 1) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceContainerHighest
-                                        },
-                                    contentColor =
-                                        if (selectedTabIndex == 1) {
-                                            MaterialTheme.colorScheme.onPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                ) {
-                                    Text("${uiState.playlists.size}")
-                                }
-                            }
-                        }
-                    },
-                )
-            }
-
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -341,8 +169,7 @@ fun PlaybackRulesScreen(
                 ) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-            } else if (selectedTabIndex == 0) {
-                // TAB 0: 解析规则
+            } else {
                 LazyColumn(
                     modifier =
                         Modifier
@@ -351,14 +178,6 @@ fun PlaybackRulesScreen(
                     contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    item(key = "vars_hint") {
-                        AnimatedVisibility(visible = showVarsHint) {
-                            Column(modifier = Modifier.padding(bottom = 6.dp)) {
-                                RuleVariablesHintCard()
-                            }
-                        }
-                    }
-
                     if (uiState.subscriptionUrl.isNotBlank()) {
                         item(key = "subscription_status") {
                             Surface(
@@ -471,11 +290,11 @@ fun PlaybackRulesScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
-                                            Text(stringResource(R.string.feature_user_probe_title))
-                                        }
                                         TextButton(onClick = { viewModel.openSubscriptionImport() }) {
                                             Text(stringResource(R.string.feature_user_subscription_title))
+                                        }
+                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
+                                            Text(stringResource(R.string.feature_user_probe_title))
                                         }
                                     }
                                 }
@@ -486,7 +305,6 @@ fun PlaybackRulesScreen(
                             PlaybackRuleCard(
                                 rule = rule,
                                 onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
-                                onEdit = { ruleToEdit = rule },
                                 onDelete = {
                                     scope.launch {
                                         val confirmed =
@@ -511,114 +329,8 @@ fun PlaybackRulesScreen(
                         }
                     }
                 }
-            } else {
-                // TAB 1: 自备片单
-                LazyColumn(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    if (uiState.playlists.isNotEmpty()) {
-                        item(key = "playlists_header") {
-                            SectionHeader(
-                                title = stringResource(R.string.feature_user_playlist_section_title),
-                                supporting = stringResource(R.string.feature_user_playlist_section_desc),
-                                trailing = {
-                                    TextButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val confirmed =
-                                                    overlayHostState.await(
-                                                        ConfirmDialogAction(
-                                                            title = context.getString(R.string.feature_user_playlist_clear_all_title),
-                                                            message =
-                                                                context.getString(
-                                                                    R.string.feature_user_playlist_clear_all_message,
-                                                                ),
-                                                            confirmText = context.getString(R.string.feature_user_action_clear),
-                                                            isDestructive = true,
-                                                        ),
-                                                    )
-                                                if (confirmed) {
-                                                    viewModel.clearPlaylists()
-                                                }
-                                            }
-                                        },
-                                    ) {
-                                        Text(
-                                            stringResource(R.string.feature_user_action_clear),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                },
-                            )
-                        }
-
-                        items(uiState.playlists, key = { "playlist_${it.id}" }) { playlist ->
-                            PlaylistCard(
-                                playlist = playlist,
-                                onDelete = {
-                                    scope.launch {
-                                        val confirmed =
-                                            overlayHostState.await(
-                                                ConfirmDialogAction(
-                                                    title = context.getString(R.string.feature_user_playlist_delete_title),
-                                                    message =
-                                                        context.getString(
-                                                            R.string.feature_user_playlist_delete_message,
-                                                            playlist.name,
-                                                            playlist.entries.size,
-                                                        ),
-                                                    confirmText = context.getString(R.string.feature_user_action_delete),
-                                                    isDestructive = true,
-                                                ),
-                                            )
-                                        if (confirmed) {
-                                            viewModel.deletePlaylist(playlist.id)
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    } else {
-                        item(key = "playlist_empty") {
-                            PlaylistEmptyCard(
-                                onPickFile = { playlistPicker.launch(PLAYLIST_MIME_TYPES) },
-                                onPasteJson = { isImportingPlaylistJson = true },
-                            )
-                        }
-                    }
-
-                    item(key = "playlist_template") {
-                        PlaylistTemplateCard()
-                    }
-                }
             }
         }
-    }
-
-    // 新增/编辑对话框
-    if (isAddingRule || ruleToEdit != null) {
-        val target = ruleToEdit
-        RuleEditDialog(
-            initialRule = target,
-            onDismiss = {
-                isAddingRule = false
-                ruleToEdit = null
-            },
-            onConfirm = { name, url, desc, kind, parserType, headersText ->
-                if (target != null) {
-                    viewModel.updateRule(target.id, name, url, desc, kind, parserType, headersText)
-                } else {
-                    viewModel.addRule(name, url, desc, kind, parserType, headersText)
-                }
-                isAddingRule = false
-                ruleToEdit = null
-            },
-        )
     }
 
     // 规则 JSON 批量导入对话框
@@ -652,17 +364,6 @@ fun PlaybackRulesScreen(
             onToggleSource = viewModel::toggleSubscriptionSource,
             onConfirm = viewModel::confirmSubscriptionImport,
             onDismiss = viewModel::closeSubscriptionImport,
-        )
-    }
-
-    // 片单 JSON 粘贴导入对话框
-    if (isImportingPlaylistJson) {
-        PlaylistImportDialog(
-            onDismiss = { isImportingPlaylistJson = false },
-            onConfirm = { text ->
-                viewModel.importPlaylistsFromJson(text)
-                isImportingPlaylistJson = false
-            },
         )
     }
 

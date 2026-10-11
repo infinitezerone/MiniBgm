@@ -14,8 +14,6 @@ import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
-import com.infinitezerone.minibgm.core.model.matchesForEpisode
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -504,7 +502,6 @@ class ScheduleViewModel(
                     subjectRepository.getEpisodesStream(subjectId).first()
                 }
             }.getOrNull() ?: emptyList()
-        val playlists = settingsRepository.playlists.first()
         val collection =
             runCatching {
                 withTimeoutOrNull(100L) {
@@ -515,7 +512,7 @@ class ScheduleViewModel(
         if (target == null) {
             return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.displayName)
         }
-        return buildEpisodeRoute(subjectId, schedule.displayName, target, playlists)
+        return buildEpisodeRoute(subjectId, schedule.displayName, target)
     }
 
     /** 下一待看集：进度 +1 优先，回退第一个未看正篇，再回退第一集 */
@@ -534,24 +531,17 @@ class ScheduleViewModel(
         subjectId: Long,
         subjectName: String,
         episode: Episode,
-        playlists: List<PlaybackPlaylist>,
-    ): PlayerRoute {
-        val matchedEntry =
-            playlists
-                .matchesForEpisode(subjectId, episode.episodeNumber)
-                .firstOrNull()
-                ?.entry
-        return PlayerRoute(
+    ): PlayerRoute =
+        PlayerRoute(
             subjectId = subjectId,
             episodeId = episode.id,
-            streamUrl = matchedEntry?.url.orEmpty(),
-            requestHeaders = matchedEntry?.headers.orEmpty(),
+            streamUrl = "",
+            requestHeaders = emptyMap(),
             episodeName = episode.primaryName,
             subjectName = subjectName,
             episodeSort = episode.episodeNumber,
             episodeType = episode.type,
         )
-    }
 
     /**
      * 1-tap 快捷追番/移出追番（规范第 3 条「写后读」：写仓后由收藏流回读新状态，无本地乐观旁路；

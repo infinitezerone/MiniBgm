@@ -16,7 +16,6 @@ import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.Subject
@@ -126,7 +125,6 @@ data class SubjectDetailUiState(
     val episodeComments: Map<Long, List<EpisodeComment>> = emptyMap(),
     val isEpisodeCommentsLoading: Boolean = false,
     val playbackRules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule> = emptyList(),
-    val playlists: List<com.infinitezerone.minibgm.core.model.PlaybackPlaylist> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
     val customFilterTags: List<String> = emptyList(),
@@ -140,10 +138,9 @@ private data class SubjectCoreData(
     val collection: UserCollection?,
 )
 
-/** 播放规则/片单/失败归因投影的中间态（私有于 [SubjectDetailViewModel]） */
+/** 播放规则/失败归因投影的中间态（私有于 [SubjectDetailViewModel]） */
 private data class SubjectPlaybackData(
     val playbackRules: List<PlaybackSourceRule>,
-    val playlists: List<PlaybackPlaylist>,
     val failedSourceReasons: Map<String, String>,
 )
 
@@ -241,7 +238,6 @@ class SubjectDetailViewModel(
                     ?.displayName
                     .orEmpty(),
             episode = episode,
-            playlists = _uiState.value.playlists,
         )
 
     private val isLoggedIn =
@@ -282,10 +278,9 @@ class SubjectDetailViewModel(
                 isLoggedIn,
                 combine(
                     settingsRepository?.playbackRules ?: flowOf(emptyList()),
-                    settingsRepository?.playlists ?: flowOf(emptyList()),
                     failureStore?.recentFailures ?: flowOf(emptyMap()),
-                ) { rules, playlists, failures ->
-                    SubjectPlaybackData(rules, playlists, failures)
+                ) { rules, failures ->
+                    SubjectPlaybackData(rules, failures)
                 },
                 searchRepository?.getCustomFilterTags() ?: flowOf(emptyList()),
             ) { core, (hasMore, totalEpisodes), loggedIn, playback, customTags ->
@@ -317,7 +312,6 @@ class SubjectDetailViewModel(
                         isLoggedIn = snapshot.isLoggedIn,
                         hasMoreEpisodes = snapshot.hasMoreEpisodes,
                         playbackRules = snapshot.playback.playbackRules,
-                        playlists = snapshot.playback.playlists,
                         failedSourceReasons = snapshot.playback.failedSourceReasons,
                         customFilterTags = snapshot.customFilterTags,
                         isLoading = if (snapshot.core.subject != null || state.subject != null) false else state.isLoading,

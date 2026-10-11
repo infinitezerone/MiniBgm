@@ -6,10 +6,8 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import kotlinx.coroutines.channels.Channel
@@ -27,11 +25,10 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * 播放源管理界面状态：自备片单为主入口，解析规则为高级入口
+ * 播放源管理界面状态：解析规则与订阅管理
  */
 data class PlaybackRulesUiState(
     val rules: List<PlaybackSourceRule> = emptyList(),
-    val playlists: List<PlaybackPlaylist> = emptyList(),
     val isLoading: Boolean = false,
     /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
     val playbackPositions: Map<String, Long> = emptyMap(),
@@ -87,9 +84,9 @@ sealed interface PlaybackRulesUiEvent {
 }
 
 /**
- * 播放源管理 ViewModel：自备片单（JSON 导入）与第三方解析规则的读写。
+ * 播放源管理 ViewModel：规则订阅、智能探测与第三方解析规则的读写。
  *
- * 结构 = 「主列表投影 + 两个对话框会话态」：[uiState] 是三仓库流（规则 / 片单 / 续播位置）
+ * 结构 = 「主列表投影 + 两个对话框会话态」：[uiState] 是仓库流（规则 / 续播位置）
  * `combine` 出的只读投影；[siteProbe] 与 [subscriptionImport] 是两个对话框的局部会话态，
  * 按响应式 UDF 规范第 5 条保留为独立意图流（见各字段 KDoc），不并入主投影。
  */
@@ -127,14 +124,12 @@ class PlaybackRulesViewModel(
     val uiState: StateFlow<PlaybackRulesUiState> =
         combine(
             settingsRepository.playbackRules,
-            settingsRepository.playlists,
             settingsRepository.playbackPositions,
             settingsRepository.playbackSubscriptionUrl,
             isRefreshingSubscriptionFlow,
-        ) { rules, playlists, positions, subUrl, isRefreshing ->
+        ) { rules, positions, subUrl, isRefreshing ->
             PlaybackRulesUiState(
                 rules = rules,
-                playlists = playlists,
                 playbackPositions = positions,
                 subscriptionUrl = subUrl,
                 isRefreshingSubscription = isRefreshing,
@@ -146,56 +141,11 @@ class PlaybackRulesViewModel(
             initialValue = PlaybackRulesUiState(isLoading = true),
         )
 
-    /** 导入文本来自 SAF 文件或粘贴框，解析/校验/合并由 SettingsRepository 负责 */
-    fun importPlaylistsFromJson(jsonText: String) {
-        val trimmed = jsonText.trim()
-        if (trimmed.isBlank()) {
-            sendSnackbar("导入内容不能为空")
-            return
-        }
-        viewModelScope.launch {
-            when (val result = settingsRepository.importPlaylistsFromJson(trimmed)) {
-                is AppResult.Success -> sendSnackbar(describeImport(result.data))
-                is AppResult.Error -> sendSnackbar(result.message)
-                AppResult.Loading -> Unit
-            }
-        }
-    }
-
     /** 清除单条续播记录 */
     fun clearPlaybackPosition(url: String) {
         viewModelScope.launch {
             settingsRepository.clearPlaybackPosition(url)
             sendSnackbar("已清除该续播记录")
-        }
-    }
-
-    fun deletePlaylist(playlistId: String) {
-        viewModelScope.launch {
-            val target = uiState.value.playlists.firstOrNull { it.id == playlistId }
-            settingsRepository.deletePlaylist(playlistId)
-            sendSnackbar("已删除片单${if (target != null) "：${target.name}" else ""}")
-        }
-    }
-
-    fun clearPlaylists() {
-        viewModelScope.launch {
-            settingsRepository.clearPlaylists()
-            sendSnackbar("已清空全部自备片单")
-        }
-    }
-
-    private fun describeImport(summary: PlaylistImportSummary): String {
-        val parts =
-            buildList {
-                if (summary.addedCount > 0) add("新增 ${summary.addedCount} 份片单")
-                if (summary.replacedCount > 0) add("覆盖 ${summary.replacedCount} 份")
-            }
-        val head = if (parts.isEmpty()) "没有导入任何片单" else parts.joinToString("，")
-        return if (summary.issues.isEmpty()) {
-            head
-        } else {
-            "$head；${summary.issues.size} 条问题：${summary.issues.first()}"
         }
     }
 
@@ -399,71 +349,6 @@ class PlaybackRulesViewModel(
         return "订阅里探活通过的来源为 0（共 ${report.totalRules} 条），请检查地址或稍后重试"
     }
 
-    @OptIn(ExperimentalUuidApi::class)
-    fun addRule(
-        name: String,
-        urlTemplate: String,
-        description: String = "",
-        kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
-        parserType: RuleParserType = RuleParserType.AUTO,
-        headersText: String = "",
-    ) {
-        val trimmedName = name.trim()
-        val trimmedUrl = urlTemplate.trim()
-        if (trimmedName.isBlank() || trimmedUrl.isBlank()) {
-            sendSnackbar("规则名称和 URL 模板不能为空")
-            return
-        }
-        viewModelScope.launch {
-            val rule =
-                PlaybackSourceRule(
-                    id = Uuid.random().toString(),
-                    name = trimmedName,
-                    urlTemplate = trimmedUrl,
-                    description = description.trim(),
-                    isEnabled = true,
-                    kind = kind,
-                    parserType = parserType,
-                    headers = parseHeaderLines(headersText),
-                )
-            settingsRepository.addPlaybackRule(rule)
-            sendSnackbar("已添加规则：$trimmedName")
-        }
-    }
-
-    fun updateRule(
-        id: String,
-        name: String,
-        urlTemplate: String,
-        description: String = "",
-        kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
-        parserType: RuleParserType = RuleParserType.AUTO,
-        headersText: String = "",
-    ) {
-        val trimmedName = name.trim()
-        val trimmedUrl = urlTemplate.trim()
-        if (trimmedName.isBlank() || trimmedUrl.isBlank()) {
-            sendSnackbar("规则名称和 URL 模板不能为空")
-            return
-        }
-        viewModelScope.launch {
-            val existing = uiState.value.rules.firstOrNull { it.id == id }
-            val rule =
-                PlaybackSourceRule(
-                    id = id,
-                    name = trimmedName,
-                    urlTemplate = trimmedUrl,
-                    description = description.trim(),
-                    isEnabled = existing?.isEnabled ?: true,
-                    kind = kind,
-                    parserType = parserType,
-                    headers = parseHeaderLines(headersText),
-                )
-            settingsRepository.updatePlaybackRule(rule)
-            sendSnackbar("已更新规则：$trimmedName")
-        }
-    }
-
     fun deleteRule(id: String) {
         viewModelScope.launch {
             val target = uiState.value.rules.firstOrNull { it.id == id }
@@ -531,16 +416,4 @@ class PlaybackRulesViewModel(
             _events.send(PlaybackRulesUiEvent.ShowSnackbar(message))
         }
     }
-
-/** 规则编辑器里的请求头按 "Key: Value" 每行一条书写；空行与无冒号的行忽略 */
-    internal fun parseHeaderLines(text: String): Map<String, String> =
-        text
-            .lines()
-            .mapNotNull { line ->
-                val separator = line.indexOf(':')
-                if (separator <= 0) return@mapNotNull null
-                val name = line.substring(0, separator).trim()
-                val value = line.substring(separator + 1).trim()
-                if (name.isEmpty() || value.isEmpty()) null else name to value
-            }.toMap()
 }

@@ -5,11 +5,7 @@ import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylistDocument
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylistSchema
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.model.PlaylistImportSummary
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
@@ -149,20 +145,6 @@ interface SettingsRepository {
      * JSON 解析失败返回 [AppResult.Error]，文案固定为「规则解析失败，请检查 JSON 格式」。
      */
     suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary>
-
-    /** 用户自备播放列表（解码失败按空处理；损坏的原始数据只读不写回） */
-    val playlists: Flow<List<PlaybackPlaylist>>
-
-    /**
-     * 校验并导入播放列表 JSON（信封格式，见 [PlaybackPlaylistDocument]）。
-     * 同 id 覆盖、新 id 追加；现有数据损坏时拒绝写入以免静默覆盖。
-     */
-    suspend fun importPlaylistsFromJson(jsonText: String): AppResult<PlaylistImportSummary>
-
-    suspend fun deletePlaylist(playlistId: String)
-
-    /** 重置全部播放列表（现有数据损坏时的恢复出口） */
-    suspend fun clearPlaylists()
 
     /**
      * 断点续播位置表（key = 播放地址，value = 上次观看位置毫秒）。
@@ -464,85 +446,6 @@ internal class SettingsRepositoryImpl(
             // 对用户没有意义。这里真正有用的是"检查 JSON 格式"的行动提示。
             AppResult.Error(IllegalStateException("规则解析失败，请检查 JSON 格式"))
         }
-
-    private val playlistsWriteMutex = Mutex()
-
-    private fun decodePlaylistDocument(raw: String): PlaybackPlaylistDocument? =
-        if (raw.isBlank()) {
-            PlaybackPlaylistDocument(playlists = emptyList())
-        } else {
-            runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlaybackPlaylistDocument>(raw) }.getOrNull()
-        }
-
-    override val playlists: Flow<List<PlaybackPlaylist>> =
-        userPreferences.userPreferences.map { prefs ->
-            decodePlaylistDocument(prefs.playlistsJson)?.playlists ?: emptyList()
-        }
-
-    override suspend fun importPlaylistsFromJson(jsonText: String): AppResult<PlaylistImportSummary> =
-        playlistsWriteMutex.withLock {
-            val raw = userPreferences.userPreferences.first().playlistsJson
-            val existingDocument = decodePlaylistDocument(raw)
-            if (existingDocument == null) {
-                return@withLock AppResult.Error(
-                    IllegalStateException("现有播放列表数据无法解析，为避免丢失未执行覆盖导入；可在片单管理中重置后重试。"),
-                )
-            }
-            val document =
-                runCatching { BgmHttpClient.jsonConfig.decodeFromString<PlaybackPlaylistDocument>(jsonText) }
-                    .getOrElse {
-                        // 不拼 it.message：反序列化异常的原文是英文（如 "Unexpected JSON token at offset 12"），
-                        // 对用户没有意义。这里真正有用的是"该长什么样"的格式提示，留下它、去掉原文。
-                        return@withLock AppResult.Error(
-                            IllegalStateException("JSON 格式不合法，需为 {\"schemaVersion\":1,\"playlists\":[...]} 信封格式"),
-                        )
-                    }
-            val validation = PlaybackPlaylistSchema.validate(document)
-            if (validation.validPlaylists.isEmpty()) {
-                return@withLock AppResult.Error(
-                    IllegalStateException(validation.issues.joinToString("；").ifBlank { "没有可导入的合法播放列表" }),
-                )
-            }
-
-            var added = 0
-            var replaced = 0
-            val issues = validation.issues.toMutableList()
-            val merged = existingDocument.playlists.toMutableList()
-            validation.validPlaylists.forEach { incoming ->
-                val index = merged.indexOfFirst { it.id == incoming.id }
-                if (index >= 0) {
-                    merged[index] = incoming
-                    replaced++
-                } else if (merged.size >= PlaybackPlaylistSchema.MAX_PLAYLISTS) {
-                    issues += "播放列表已达 ${PlaybackPlaylistSchema.MAX_PLAYLISTS} 份上限，《${incoming.name}》未加入"
-                } else {
-                    merged += incoming
-                    added++
-                }
-            }
-            userPreferences.setPlaylistsJson(
-                BgmHttpClient.jsonConfig.encodeToString(PlaybackPlaylistDocument(playlists = merged)),
-            )
-            AppResult.Success(PlaylistImportSummary(addedCount = added, replacedCount = replaced, issues = issues))
-        }
-
-    override suspend fun deletePlaylist(playlistId: String) {
-        playlistsWriteMutex.withLock {
-            val raw = userPreferences.userPreferences.first().playlistsJson
-            val document = decodePlaylistDocument(raw) ?: return@withLock
-            val updated = document.playlists.filterNot { it.id == playlistId }
-            if (updated.size == document.playlists.size) return@withLock
-            userPreferences.setPlaylistsJson(
-                BgmHttpClient.jsonConfig.encodeToString(PlaybackPlaylistDocument(playlists = updated)),
-            )
-        }
-    }
-
-    override suspend fun clearPlaylists() {
-        playlistsWriteMutex.withLock {
-            userPreferences.setPlaylistsJson("")
-        }
-    }
 
     private val playbackPositionsWriteMutex = Mutex()
 

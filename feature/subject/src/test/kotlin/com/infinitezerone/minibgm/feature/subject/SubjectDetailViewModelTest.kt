@@ -9,8 +9,7 @@ import com.infinitezerone.minibgm.core.model.CommentUser
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
-import com.infinitezerone.minibgm.core.model.PlaybackPlaylist
-import com.infinitezerone.minibgm.core.model.PlaylistEntry
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
@@ -1502,7 +1501,7 @@ class SubjectDetailViewModelTest {
         }
 
     @Test
-    fun uiState_exposesPlaylistsAndRecentPlaybackFailures() =
+    fun uiState_exposesPlaybackRulesAndRecentPlaybackFailures() =
         runTest {
             val settingsRepository = FakeSettingsRepository()
             val failureStore = PlaybackFailureStore()
@@ -1517,26 +1516,23 @@ class SubjectDetailViewModelTest {
                     failureStore = failureStore,
                 )
 
-            settingsRepository.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl-1",
-                        name = "我的片源",
-                        bgmSubjectId = sampleSubject.id,
-                        entries = listOf(PlaylistEntry(label = "01", url = "https://cdn.example.com/a.m3u8")),
-                    ),
-                ),
-            )
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule-1",
+                    name = "测试源",
+                    urlTemplate = "https://example.com/{title}/{ep}",
+                )
+            settingsRepository.setPlaybackRules(listOf(rule))
             failureStore.markFailed("https://cdn.example.com/a.m3u8", "网络不可达")
 
-            val state = viewModel.uiState.first { it.playlists.isNotEmpty() && it.failedSourceReasons.isNotEmpty() }
+            val state = viewModel.uiState.first { it.playbackRules.isNotEmpty() && it.failedSourceReasons.isNotEmpty() }
 
-            assertEquals(listOf("pl-1"), state.playlists.map { it.id })
+            assertEquals(listOf("rule-1"), state.playbackRules.map { it.id })
             assertEquals("网络不可达", state.failedSourceReasons["https://cdn.example.com/a.m3u8"])
         }
 
     @Test
-    fun buildPlayerRoute_matchesPlaylistDirectLinkAndFallsBackToSniffing() =
+    fun buildPlayerRoute_buildsRouteForPlayerRuleSniffing() =
         runTest {
             val settingsRepository = FakeSettingsRepository()
             val viewModel =
@@ -1551,26 +1547,10 @@ class SubjectDetailViewModelTest {
 
             val episode = sampleEpisodeList.first()
 
-            // 无片单：直链为空，交由播放器内的规则嗅探
-            val fallbackRoute = viewModel.buildPlayerRoute(episode)
-            assertTrue(fallbackRoute.streamUrl.isBlank())
-            assertEquals(episode.id, fallbackRoute.episodeId)
-            assertEquals(episode.episodeNumber, fallbackRoute.episodeSort)
-
-            settingsRepository.setPlaylists(
-                listOf(
-                    PlaybackPlaylist(
-                        id = "pl-1",
-                        name = "我的片源",
-                        bgmSubjectId = sampleSubject.id,
-                        entries = listOf(PlaylistEntry(label = "01", url = "https://cdn.example.com/a.m3u8")),
-                    ),
-                ),
-            )
-
-            viewModel.uiState.first { it.playlists.isNotEmpty() }
             val route = viewModel.buildPlayerRoute(episode)
-            assertEquals("https://cdn.example.com/a.m3u8", route.streamUrl)
+            assertTrue(route.streamUrl.isBlank())
+            assertEquals(episode.id, route.episodeId)
+            assertEquals(episode.episodeNumber, route.episodeSort)
             assertEquals(sampleSubject.displayName, route.subjectName)
         }
 
