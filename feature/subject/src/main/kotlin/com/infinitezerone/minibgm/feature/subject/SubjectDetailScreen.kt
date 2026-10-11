@@ -385,6 +385,13 @@ fun SubjectDetailScreen(
     val currentEpisodes = groupedEpisodes[activeGroup] ?: emptyList()
     var showSourcesBottomSheet by rememberSaveable { mutableStateOf(false) }
     var selectedEpisodeForSources by remember { mutableStateOf<Episode?>(null) }
+
+    androidx.compose.runtime.LaunchedEffect(showSourcesBottomSheet, selectedEpisodeForSources) {
+        if (showSourcesBottomSheet) {
+            viewModel.loadMikanResources(selectedEpisodeForSources)
+        }
+    }
+
     var activeTagForAction by rememberSaveable { mutableStateOf<String?>(null) }
     val tagActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -760,6 +767,8 @@ fun SubjectDetailScreen(
         onManageRules = onManageRules,
         playbackRules = uiState.playbackRules,
         failedSourceReasons = uiState.failedSourceReasons,
+        mikanResources = uiState.mikanResources,
+        isMikanLoading = uiState.isMikanLoading,
     )
 
     if (activeTagForAction != null) {

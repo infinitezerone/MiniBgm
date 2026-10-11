@@ -2,8 +2,10 @@ package com.infinitezerone.minibgm.feature.subject.player
 
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
+import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
@@ -1282,5 +1284,60 @@ class PlayerViewModelTest {
             vm.loadMoreEpisodes()
             advanceUntilIdle()
             assertEquals(1, fakeSubjectRepo.loadMoreEpisodesCallCount)
+        }
+
+    @Test
+    fun danmaku_toggleAndLoad_updatesUiState() =
+        runTest {
+            val sampleDanmakus =
+                listOf(
+                    DanmakuItem(timeMs = 1000L, text = "弹幕测试", color = 0xFFFFFF),
+                )
+            val fakeDanmaku =
+                object : DanmakuRepository {
+                    var queryCount = 0
+
+                    override suspend fun getDanmaku(
+                        title: String,
+                        episodeSort: Float,
+                        appId: String?,
+                        appSecret: String?,
+                        apiEndpoint: String?,
+                    ): List<DanmakuItem> {
+                        queryCount++
+                        return sampleDanmakus
+                    }
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            streamUrl = initialStreamUrl,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                    danmakuRepository = fakeDanmaku,
+                )
+            advanceUntilIdle()
+
+            // 默认开启
+            assertTrue(vm.uiState.value.isDanmakuEnabled)
+
+            // 切换开关
+            vm.toggleDanmaku()
+            assertFalse(vm.uiState.value.isDanmakuEnabled)
+
+            vm.toggleDanmaku()
+            assertTrue(vm.uiState.value.isDanmakuEnabled)
+
+            // 验证弹幕加载成功
+            assertEquals(sampleDanmakus, vm.uiState.value.danmakus)
+            assertTrue(fakeDanmaku.queryCount >= 1)
         }
 }

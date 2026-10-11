@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolver
+import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolverImpl
 import com.infinitezerone.minibgm.core.data.repository.resolver.countMacCmsListItems
 import com.infinitezerone.minibgm.core.data.repository.resolver.detectAdParking
 import com.infinitezerone.minibgm.core.data.repository.resolver.detectSearchUrlPattern
@@ -145,6 +147,7 @@ internal class PlaybackResolverRepositoryImpl(
     private val pageFetchService: PageFetchService,
     private val playbackRuleEngine: PlaybackRuleEngine = PlaybackRuleEngineImpl(pageFetchService),
     private val webViewCaptureService: WebViewCaptureService? = null,
+    private val kitsuMappingResolver: KitsuMappingResolver = KitsuMappingResolverImpl(pageFetchService),
 ) : PlaybackResolverRepository {
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -212,9 +215,26 @@ internal class PlaybackResolverRepositoryImpl(
                     if (rule.headers.isEmpty()) sources else sources.map { it.copy(headers = it.headers + rule.headers) }
                 }
                 RuleParserType.STREMIO -> {
-                    val epStr = if (epNumber > 0f) epNumber.toInt().toString() else ""
-                    val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
-                    val fetched = pageFetchService.fetchHtml(url, rule.headers) ?: return@withContext emptyList()
+                    val epStr = if (epNumber > 0f) epNumber.toInt().toString() else "1"
+                    val kitsuId = kitsuMappingResolver.resolveKitsuId(title).orEmpty()
+                    val targetUrl =
+                        when {
+                            rule.urlTemplate.contains("{kitsuId}") || rule.urlTemplate.contains("{id}") -> {
+                                rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)
+                            }
+                            !rule.urlTemplate.contains("/stream/") -> {
+                                val base = rule.urlTemplate.removeSuffix("/manifest.json").removeSuffix("/")
+                                if (kitsuId.isNotBlank()) {
+                                    "$base/stream/series/kitsu:$kitsuId:$epStr.json"
+                                } else {
+                                    rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)
+                                }
+                            }
+                            else -> {
+                                rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)
+                            }
+                        }
+                    val fetched = pageFetchService.fetchHtml(targetUrl, rule.headers) ?: return@withContext emptyList()
                     parseStreamManifest(fetched.html, fetched.url, epNumber, rule.name, rule.headers).orEmpty()
                 }
                 RuleParserType.AUTO -> {

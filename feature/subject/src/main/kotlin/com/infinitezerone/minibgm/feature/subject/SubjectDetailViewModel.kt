@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.MikanRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -15,6 +16,7 @@ import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
@@ -129,6 +131,8 @@ data class SubjectDetailUiState(
     val failedSourceReasons: Map<String, String> = emptyMap(),
     val customFilterTags: List<String> = emptyList(),
     val totalEpisodes: Int = 0,
+    val mikanResources: List<MikanTorrentResource> = emptyList(),
+    val isMikanLoading: Boolean = false,
 )
 
 /** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
@@ -187,6 +191,7 @@ class SubjectDetailViewModel(
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
     private val searchRepository: SearchRepository? = null,
+    private val mikanRepository: MikanRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
     val uiState: StateFlow<SubjectDetailUiState> = _uiState.asStateFlow()
@@ -218,6 +223,23 @@ class SubjectDetailViewModel(
         val prompt = "帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"
         viewModelScope.launch {
             _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))
+        }
+    }
+
+    /** 检索蜜柑原画字幕组 BT 种子与磁力链接资源 */
+    fun loadMikanResources(episode: Episode? = null) {
+        val title = _uiState.value.subject?.displayName ?: return
+        val epSort = episode?.episodeNumber
+        _uiState.update { it.copy(isMikanLoading = true) }
+        viewModelScope.launch {
+            val resources =
+                mikanRepository
+                    ?.getTorrentResources(
+                        title = title,
+                        mikanId = null,
+                        episodeSort = epSort,
+                    ).orEmpty()
+            _uiState.update { it.copy(mikanResources = resources, isMikanLoading = false) }
         }
     }
 

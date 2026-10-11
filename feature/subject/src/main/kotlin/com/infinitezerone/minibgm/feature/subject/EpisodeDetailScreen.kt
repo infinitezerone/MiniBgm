@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -136,6 +137,12 @@ fun EpisodeDetailScreen(
     }
     val overlayHostState = rememberOverlayHostState()
     var showSourcesSheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showSourcesSheet) {
+        if (showSourcesSheet) {
+            viewModel.loadMikanResources(uiState.episode)
+        }
+    }
 
     val handleAppNotInstalled: (String, String) -> Unit = { appName, webUrl ->
         coroutineScope.launch {
@@ -797,6 +804,8 @@ fun EpisodeDetailScreen(
                 },
             playbackRules = uiState.playbackRules,
             failedSourceReasons = uiState.failedSourceReasons,
+            mikanResources = uiState.mikanResources,
+            isMikanLoading = uiState.isMikanLoading,
         )
     }
 

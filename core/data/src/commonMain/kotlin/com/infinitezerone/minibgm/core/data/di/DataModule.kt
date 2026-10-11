@@ -8,6 +8,10 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
+import com.infinitezerone.minibgm.core.data.repository.DanmakuRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.MikanRepository
+import com.infinitezerone.minibgm.core.data.repository.MikanRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleSampleReplayer
@@ -22,6 +26,8 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolver
+import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolverImpl
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
 import com.infinitezerone.minibgm.core.database.dao.AirEventDao
 import com.infinitezerone.minibgm.core.database.dao.AirScheduleDao
@@ -73,10 +79,26 @@ val dataModule =
                 communityService = get<BangumiCommunityService>(),
             )
         }
+        single<KitsuMappingResolver> {
+            KitsuMappingResolverImpl(
+                pageFetchService = get<PageFetchService>(),
+            )
+        }
         single<PlaybackResolverRepository> {
             PlaybackResolverRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
                 webViewCaptureService = getOrNull(),
+                kitsuMappingResolver = get<KitsuMappingResolver>(),
+            )
+        }
+        single<MikanRepository> {
+            MikanRepositoryImpl(
+                pageFetchService = get<PageFetchService>(),
+            )
+        }
+        single<DanmakuRepository> {
+            DanmakuRepositoryImpl(
+                pageFetchService = get<PageFetchService>(),
             )
         }
         single<PlaybackSourceVerifier> {

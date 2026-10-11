@@ -1,5 +1,11 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +47,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
+import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
@@ -70,9 +77,12 @@ fun SubjectSourcesBottomSheet(
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
     failedSourceReasons: Map<String, String> = emptyMap(),
+    mikanResources: List<MikanTorrentResource> = emptyList(),
+    isMikanLoading: Boolean = false,
 ) {
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val displayName = subject.displayName
     val runAfterDismiss: (() -> Unit) -> Unit = { action ->
         coroutineScope.hideThenDismiss(sheetState) {
@@ -203,6 +213,13 @@ fun SubjectSourcesBottomSheet(
                             }
                         },
                     )
+
+                    MikanResourcesSection(
+                        isMikanLoading = isMikanLoading,
+                        mikanResources = mikanResources,
+                        context = context,
+                        onDismissAndRun = runAfterDismiss,
+                    )
                 }
             }
         }
@@ -225,8 +242,6 @@ fun SubjectSourcesBottomSheet(
                     }
                 StreamingIntentResolver.buildMikanUrl(mikanId = mikanId, keyword = keyword)
             }
-
-        val context = LocalContext.current
 
         // 外部播放器直链候选：解析为媒体直链的播放规则
         val externalPlayerStreamUrl =
@@ -498,6 +513,13 @@ fun SubjectSourcesBottomSheet(
                             },
                         )
                     }
+
+                    MikanResourcesSection(
+                        isMikanLoading = isMikanLoading,
+                        mikanResources = mikanResources,
+                        context = context,
+                        onDismissAndRun = runAfterDismiss,
+                    )
                 }
             }
         }
@@ -697,4 +719,79 @@ fun isLikelyMediaStream(
     }
     val desc = description.lowercase()
     return desc.contains("直链") || desc.contains("m3u8") || desc.contains("stream") || desc.contains("视频流")
+}
+
+@Composable
+private fun MikanResourcesSection(
+    isMikanLoading: Boolean,
+    mikanResources: List<MikanTorrentResource>,
+    context: Context,
+    onDismissAndRun: (() -> Unit) -> Unit,
+) {
+    if (!isMikanLoading && mikanResources.isEmpty()) return
+
+    Spacer(modifier = Modifier.height(4.dp))
+    SourcesSectionLabel(stringResource(R.string.feature_subject_source_mikan_fansub_section))
+    if (isMikanLoading) {
+        Text(
+            text = stringResource(R.string.feature_subject_source_mikan_loading),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        )
+    } else {
+        for (resource in mikanResources.take(15)) {
+            val groupTitle =
+                buildString {
+                    if (resource.fansubName.isNotBlank()) append("[${resource.fansubName}] ")
+                    if (resource.resolution.isNotBlank()) append("${resource.resolution} ")
+                    if (resource.formattedSize.isNotBlank()) append("· ${resource.formattedSize}")
+                }.trim().ifBlank { resource.title }
+
+            EpisodeSourceActionCard(
+                title = groupTitle,
+                subtitle = resource.title,
+                iconVector = BgmIcons.Download,
+                iconTint = MaterialTheme.colorScheme.primary,
+                trailingContent = {
+                    Text(
+                        text = stringResource(R.string.feature_subject_source_mikan_copy_magnet),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                onClick = {
+                    onDismissAndRun {
+                        copyMagnetAndLaunch(context, resource)
+                    }
+                },
+            )
+        }
+    }
+}
+
+private fun copyMagnetAndLaunch(
+    context: Context,
+    resource: MikanTorrentResource,
+) {
+    if (resource.magnetUrl.isNotBlank()) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = ClipData.newPlainText("magnet", resource.magnetUrl)
+        clipboard?.setPrimaryClip(clip)
+        Toast
+            .makeText(
+                context,
+                context.getString(R.string.feature_subject_source_mikan_copied_magnet),
+                Toast.LENGTH_SHORT,
+            ).show()
+        runCatching {
+            val intent =
+                Intent(Intent.ACTION_VIEW).apply {
+                    data = Uri.parse(resource.magnetUrl)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            context.startActivity(intent)
+        }
+    }
 }

@@ -41,11 +41,12 @@ internal fun isPlayableMediaUrl(url: String): Boolean = URL_FILE_EXTENSION.conta
 
 internal val NOISE_NUMBERS_FLOAT: Set<Float> = NOISE_NUMBERS.mapNotNull { it.toFloatOrNull() }.toSet()
 
-/** 流清单条目：Stremio `/stream` 响应的兼容子集——url 必填，title/headers 可选，未知字段忽略 */
+/** 流清单条目：Stremio `/stream` 响应的兼容子集——url 必填，title/name/headers 可选，未知字段忽略 */
 @Serializable
 internal data class StreamManifestEntry(
     val url: String = "",
     val title: String = "",
+    val name: String = "",
     val headers: Map<String, String> = emptyMap(),
 )
 
@@ -85,10 +86,22 @@ internal fun parseStreamManifest(
             ) {
                 return@mapNotNull null
             }
+            val labelText =
+                buildString {
+                    if (entry.name.isNotBlank()) {
+                        append(entry.name.replace("\n", " ").trim())
+                    }
+                    if (entry.title.isNotBlank()) {
+                        if (isNotEmpty()) append(" - ")
+                        append(entry.title.replace("\n", " ").trim())
+                    }
+                }.ifBlank {
+                    if (epNumber > 0f) "第 ${epNumber.toInt()} 话" else ""
+                }
             PlayableSource(
                 url = candidateUrl,
                 kind = PlaylistEntryKind.DIRECT,
-                label = entry.title.ifBlank { if (epNumber > 0f) "第 ${epNumber.toInt()} 话" else "" },
+                label = labelText,
                 episodeSort = epNumber,
                 siteName = siteName,
                 pageUrl = pageUrl,

@@ -8,6 +8,7 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.MikanRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeParser
@@ -15,6 +16,7 @@ import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -64,6 +66,8 @@ data class EpisodeDetailUiState(
     val playbackRules: List<PlaybackSourceRule> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
+    val mikanResources: List<MikanTorrentResource> = emptyList(),
+    val isMikanLoading: Boolean = false,
 )
 
 /** 单集详情页一次性单发事件 */
@@ -128,6 +132,8 @@ private data class SessionData(
     val sortOrder: CommentSortOrder,
     val showLoginPromptDialog: Boolean,
     val actionError: String?,
+    val mikanResources: List<MikanTorrentResource> = emptyList(),
+    val isMikanLoading: Boolean = false,
 )
 
 /**
@@ -157,6 +163,7 @@ class EpisodeDetailViewModel(
     private val authRepository: AuthRepository,
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
+    private val mikanRepository: MikanRepository? = null,
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     // ── 缓存预热基线：投影在各路仓库流未命中时的回落值，保证进页首帧即有数据 ──
@@ -176,6 +183,9 @@ class EpisodeDetailViewModel(
 
     /** 评论刷新会话与表态命令共用的落位容器（见 [CommentsUi]） */
     private val commentsUi = MutableStateFlow(CommentsUi())
+
+    /** 蜜柑 BT 资源状态（列表 + 加载中标记） */
+    private val mikanState = MutableStateFlow(Pair(emptyList<MikanTorrentResource>(), false))
 
     /** 评论排序模式（默认热门优先） */
     private val commentSortOrder = MutableStateFlow(CommentSortOrder.HOT)
@@ -217,8 +227,21 @@ class EpisodeDetailViewModel(
             ) { rules, failures ->
                 PlaybackData(playbackRules = rules, failedSourceReasons = failures)
             },
-            combine(commentsUi, commentSortOrder, loginPromptVisible, actionError) { comments, sortOrder, prompt, error ->
-                SessionData(comments = comments, sortOrder = sortOrder, showLoginPromptDialog = prompt, actionError = error)
+            combine(
+                commentsUi,
+                commentSortOrder,
+                loginPromptVisible,
+                actionError,
+                mikanState,
+            ) { comments, sortOrder, prompt, error, mikan ->
+                SessionData(
+                    comments = comments,
+                    sortOrder = sortOrder,
+                    showLoginPromptDialog = prompt,
+                    actionError = error,
+                    mikanResources = mikan.first,
+                    isMikanLoading = mikan.second,
+                )
             },
         ) { episodeData, identity, playback, session ->
             EpisodeDetailUiState(
@@ -239,6 +262,8 @@ class EpisodeDetailViewModel(
                 subject = identity.subject,
                 playbackRules = playback.playbackRules,
                 failedSourceReasons = playback.failedSourceReasons,
+                mikanResources = session.mikanResources,
+                isMikanLoading = session.isMikanLoading,
             )
         }.stateIn(
             viewModelScope,
@@ -342,6 +367,24 @@ class EpisodeDetailViewModel(
             }
         viewModelScope.launch {
             _events.send(EpisodeDetailUiEvent.OpenSourceSearch("帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"))
+        }
+    }
+
+    /** 检索蜜柑原画字幕组 BT 种子与磁力链接资源 */
+    fun loadMikanResources(episode: Episode? = null) {
+        val targetEpisode = episode ?: uiState.value.episode
+        val title = uiState.value.subject?.displayName ?: return
+        val epSort = targetEpisode?.episodeNumber
+        mikanState.value = mikanState.value.copy(second = true)
+        viewModelScope.launch {
+            val resources =
+                mikanRepository
+                    ?.getTorrentResources(
+                        title = title,
+                        mikanId = null,
+                        episodeSort = epSort,
+                    ).orEmpty()
+            mikanState.value = Pair(resources, false)
         }
     }
 

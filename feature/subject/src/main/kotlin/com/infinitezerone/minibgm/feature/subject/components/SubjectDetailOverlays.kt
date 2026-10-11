@@ -75,6 +75,8 @@ internal fun SubjectDetailOverlays(
     onManageRules: (() -> Unit)?,
     playbackRules: List<PlaybackSourceRule>,
     failedSourceReasons: Map<String, String>,
+    mikanResources: List<com.infinitezerone.minibgm.core.model.MikanTorrentResource> = emptyList(),
+    isMikanLoading: Boolean = false,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -199,6 +201,8 @@ internal fun SubjectDetailOverlays(
                 },
             playbackRules = playbackRules,
             failedSourceReasons = failedSourceReasons,
+            mikanResources = mikanResources,
+            isMikanLoading = isMikanLoading,
         )
     }
 }

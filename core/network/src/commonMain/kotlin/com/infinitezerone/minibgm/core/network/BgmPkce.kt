@@ -29,7 +29,7 @@ object BgmPkce {
 }
 
 /** RFC 6234 SHA-256 纯 Kotlin 实现（KMP 无官方 crypto 库）；正确性由官方测试向量保证，见 BgmPkceTest */
-internal fun sha256(message: ByteArray): ByteArray {
+fun sha256(message: ByteArray): ByteArray {
     val k =
         intArrayOf(
             0x428a2f98u.toInt(),

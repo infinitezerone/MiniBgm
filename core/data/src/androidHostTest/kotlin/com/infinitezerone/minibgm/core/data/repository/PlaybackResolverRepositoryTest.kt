@@ -1220,4 +1220,98 @@ class PlaybackResolverRepositoryTest {
             assertEquals("葬送的芙莉莲", probe.sampleTitleUsed)
             assertEquals("https://anime.example.com/watch/202", probe.sampleEpisodeUrl)
         }
+
+    @Test
+    fun `RuleParserType STREMIO 支持 Addon BaseURL 自动补全 kitsu 路径并映射直链`() =
+        runTest {
+            val stremioJson =
+                """
+                {
+                  "streams": [
+                    {
+                      "name": "Torrentio 1080p",
+                      "title": "[SubsPlease] Sousou no Frieren - 02.mkv",
+                      "url": "https://fast.stream.example.com/debrid/frieren_02.mp4"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            val fakeKitsuJson =
+                """
+                {"data":[{"id":"46474","attributes":{"canonicalTitle":"Sousou no Frieren"}}]}
+                """.trimIndent()
+            val fake =
+                FakePageFetchService(
+                    mapOf(
+                        "https://kitsu.io/api/edge/anime?filter%5Btext%5D=${PlaybackSourceRule.encodeParam(
+                            "Sousou no Frieren",
+                        )}&page%5Blimit%5D=5" to
+                            fakeKitsuJson,
+                        "https://torrentio.strem.fun/stream/series/kitsu:46474:2.json" to stremioJson,
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "stremio_base",
+                    name = "Torrentio Stremio",
+                    urlTemplate = "https://torrentio.strem.fun",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.STREMIO,
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "Sousou no Frieren", epNumber = 2f)
+
+            assertEquals(1, sources.size)
+            val source = sources.single()
+            assertEquals("https://fast.stream.example.com/debrid/frieren_02.mp4", source.url)
+            assertEquals("Torrentio 1080p - [SubsPlease] Sousou no Frieren - 02.mkv", source.label)
+            assertEquals(2f, source.episodeSort)
+            assertEquals("Torrentio Stremio", source.siteName)
+        }
+
+    @Test
+    fun `RuleParserType STREMIO 支持显式占位符 kitsuId 模板替换`() =
+        runTest {
+            val stremioJson =
+                """
+                {
+                  "streams": [
+                    {
+                      "title": "Sousou no Frieren Ep 1",
+                      "url": "https://cdn.example.com/ep1.m3u8"
+                    }
+                  ]
+                }
+                """.trimIndent()
+            val fakeKitsuJson =
+                """
+                {"data":[{"id":"46474","attributes":{"canonicalTitle":"Sousou no Frieren"}}]}
+                """.trimIndent()
+            val fake =
+                FakePageFetchService(
+                    mapOf(
+                        "https://kitsu.io/api/edge/anime?filter%5Btext%5D=${PlaybackSourceRule.encodeParam(
+                            "Sousou no Frieren",
+                        )}&page%5Blimit%5D=5" to
+                            fakeKitsuJson,
+                        "https://myaddon.strem.fun/stream/series/kitsu:46474:1.json" to stremioJson,
+                    ),
+                )
+            val repo = PlaybackResolverRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "stremio_template",
+                    name = "Custom Stremio",
+                    urlTemplate = "https://myaddon.strem.fun/stream/series/kitsu:{kitsuId}:{ep}.json",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.STREMIO,
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "Sousou no Frieren", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/ep1.m3u8", sources.single().url)
+            assertEquals("Sousou no Frieren Ep 1", sources.single().label)
+        }
 }

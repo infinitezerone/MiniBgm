@@ -86,6 +86,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.compose.ContentFrame
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -605,6 +606,9 @@ fun PlayerScreen(
                     isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
                     currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
                     onOpenTrackSelection = { isTrackSheetOpen = true },
+                    danmakus = uiState.danmakus,
+                    isDanmakuEnabled = uiState.isDanmakuEnabled,
+                    onToggleDanmaku = viewModel::toggleDanmaku,
                     modifier =
                         Modifier
                             .fillMaxSize()
@@ -775,6 +779,9 @@ fun PlayerScreen(
                         isSubtitlesActive = tracksSnapshot.subtitleMode != SubtitleMode.OFF,
                         currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
                         onOpenTrackSelection = { isTrackSheetOpen = true },
+                        danmakus = uiState.danmakus,
+                        isDanmakuEnabled = uiState.isDanmakuEnabled,
+                        onToggleDanmaku = viewModel::toggleDanmaku,
                         modifier =
                             Modifier
                                 .fillMaxSize()
@@ -981,6 +988,9 @@ private fun PlayerVideoStage(
     isSubtitlesActive: Boolean = false,
     currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
+    danmakus: List<DanmakuItem> = emptyList(),
+    isDanmakuEnabled: Boolean = true,
+    onToggleDanmaku: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -998,7 +1008,18 @@ private fun PlayerVideoStage(
             onScrubbing = onGestureScrubbing,
         ) {
             when {
-                streamUrl.isNotBlank() -> videoContent()
+                streamUrl.isNotBlank() -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        videoContent()
+                        val currentMs by position.collectAsStateWithLifecycle()
+                        DanmakuView(
+                            danmakus = danmakus,
+                            currentPositionMs = currentMs,
+                            isEnabled = isDanmakuEnabled,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
 
                 isResolvingSource ->
                     PlayerResolvingView(
@@ -1114,6 +1135,8 @@ private fun PlayerVideoStage(
                 isSubtitlesActive = isSubtitlesActive,
                 currentQualityLabel = currentQualityLabel,
                 onOpenTrackSelection = onOpenTrackSelection,
+                isDanmakuEnabled = isDanmakuEnabled,
+                onToggleDanmaku = onToggleDanmaku,
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
                 onSingleTap = onSingleTap,

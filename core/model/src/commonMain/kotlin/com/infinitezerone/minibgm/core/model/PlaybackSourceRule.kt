@@ -111,12 +111,15 @@ data class PlaybackSourceRule(
         ep: String,
         subjectId: Long = 0L,
         episodeId: Long = 0L,
+        kitsuId: String = "",
     ): String =
         urlTemplate
             .replace("{title}", encodeParam(title))
             .replace("{ep}", encodeParam(ep))
             .replace("{subjectId}", subjectId.toString())
             .replace("{episodeId}", episodeId.toString())
+            .replace("{kitsuId}", encodeParam(kitsuId))
+            .replace("{id}", encodeParam(kitsuId.ifBlank { subjectId.toString() }))
 
     /**
      * 规则里配置的解析方式是否真有执行路径。

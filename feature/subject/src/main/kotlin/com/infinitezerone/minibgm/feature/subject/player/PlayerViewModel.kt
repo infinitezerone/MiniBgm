@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
@@ -17,6 +18,7 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.CommentReaction
+import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -157,6 +159,12 @@ data class PlayerUiState(
     val pipEnabled: Boolean = true,
     /** 源站返回的真实匹配条目名（用于在播放器与选源栏向用户展示） */
     val matchedVodName: String? = null,
+    /** 弹幕开关 */
+    val isDanmakuEnabled: Boolean = true,
+    /** 当前分集已加载的弹幕列表 */
+    val danmakus: List<DanmakuItem> = emptyList(),
+    /** 弹幕加载中状态 */
+    val isDanmakuLoading: Boolean = false,
 ) {
     val hasNext: Boolean
         get() {
@@ -298,6 +306,7 @@ class PlayerViewModel(
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
     private val communityRepository: CommunityRepository? = null,
+    private val danmakuRepository: DanmakuRepository? = null,
 ) : ViewModel() {
     /** 播放队列：调用方给了分集队列就用之，否则退化为单集播放（兼容空直链占位启动） */
     private val queue: List<PlayerQueueEntry> =
@@ -558,6 +567,7 @@ class PlayerViewModel(
         if (route.episodeId > 0) {
             loadComments()
         }
+        loadDanmaku()
     }
 
     /**
@@ -970,6 +980,7 @@ class PlayerViewModel(
         }
         resolveCurrentEpisodeStream()
         commentsDelegate.loadComments(episode.id, force = true)
+        loadDanmaku()
     }
 
     /**
@@ -1013,6 +1024,26 @@ class PlayerViewModel(
         val epId = _uiState.value.episodeId
         if (epId <= 0L) return
         commentsDelegate.loadComments(epId, force)
+    }
+
+    /** 切换弹幕开关 */
+    fun toggleDanmaku() {
+        _uiState.update { it.copy(isDanmakuEnabled = !it.isDanmakuEnabled) }
+    }
+
+    /** 异步拉取当前分集的弹弹play全网聚合弹幕 */
+    fun loadDanmaku() {
+        val repo = danmakuRepository ?: return
+        val current = _uiState.value
+        val title = current.subjectName.ifBlank { session.subjectOriginalName }
+        val epSort = current.episodeSort
+        if (title.isBlank() || epSort <= 0f) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDanmakuLoading = true) }
+            val items = repo.getDanmaku(title, epSort)
+            _uiState.update { it.copy(danmakus = items, isDanmakuLoading = false) }
+        }
     }
 
     /** 切换单集吐槽排序规则（热门 / 楼层 / 最新） */

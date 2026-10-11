@@ -186,6 +186,11 @@
     <string name="feature_subject_source_last_failed_format">%1$s · 上次播放失败：%2$s</string>
     <string name="feature_subject_source_ep_num_format">第%1$s集</string>
     <string name="feature_subject_source_ep_hua_format">第%1$s话</string>
+    <string name="feature_subject_source_mikan_fansub_section">字幕组原画资源 (蜜柑计划)</string>
+    <string name="feature_subject_source_mikan_copy_magnet">复制磁力</string>
+    <string name="feature_subject_source_mikan_copied_magnet">已复制磁力链接，可粘贴至外部下载器或网盘</string>
+    <string name="feature_subject_source_mikan_loading">正在获取字幕组资源…</string>
+    <string name="feature_subject_source_mikan_empty">暂未检索到当前分集的字幕组资源</string>
 
     <!-- 9. 分集详情与讨论 -->
     <string name="feature_subject_ep_detail_title">分集详情</string>
@@ -329,4 +334,9 @@
     <string name="feature_subject_player_expand_all">全部剧集</string>
     <string name="feature_subject_player_collapse">收起</string>
     <string name="feature_subject_player_retry_comments">重新加载吐槽</string>
+
+    <!-- 弹弹play 弹幕 -->
+    <string name="feature_subject_player_danmaku_on">关闭弹幕</string>
+    <string name="feature_subject_player_danmaku_off">开启弹幕</string>
+    <string name="feature_subject_player_danmaku_loading">弹幕加载中…</string>
 </resources>

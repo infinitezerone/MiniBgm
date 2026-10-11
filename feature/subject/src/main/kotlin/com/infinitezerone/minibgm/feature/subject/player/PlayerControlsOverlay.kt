@@ -99,6 +99,8 @@ internal fun PlayerControlsOverlay(
     isSubtitlesActive: Boolean = false,
     currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
+    isDanmakuEnabled: Boolean = true,
+    onToggleDanmaku: () -> Unit = {},
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
@@ -471,6 +473,27 @@ internal fun PlayerControlsOverlay(
                             )
                         }
                     }
+                }
+
+                // 弹幕开关
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = onToggleDanmaku,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
+                        contentDescription =
+                            stringResource(
+                                if (isDanmakuEnabled) {
+                                    R.string.feature_subject_player_danmaku_on
+                                } else {
+                                    R.string.feature_subject_player_danmaku_off
+                                },
+                            ),
+                        tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))

@@ -57,6 +57,9 @@ private val MACCMS_PLAY_URL_REGEX =
 private val MACCMS_VOD_NAME_REGEX =
     Regex(""""vod_name"\s*:\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
 
+private val MACCMS_TYPE_NAME_REGEX =
+    Regex(""""type_name"\s*:\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
+
 /**
  * 把 MacCMS 响应按 `vod_name` 切成逐条目片段。
  *
@@ -76,10 +79,66 @@ internal fun splitMacCmsEntries(html: String): List<String> {
 
 private fun segmentVodName(segment: String): String? = MACCMS_VOD_NAME_REGEX.find(segment)?.groupValues?.get(1)
 
+private fun segmentTypeName(segment: String): String? =
+    MACCMS_TYPE_NAME_REGEX
+        .find(segment)
+        ?.groupValues
+        ?.get(1)
+        ?.trim()
+
+/**
+ * 判断分类名称是否明确为非动漫类型（真人电视剧、综艺、纪录片等）。
+ *
+ * 如果分类名称明确包含"动漫"、"动画"、"二次元"、"番剧"，判定为动漫；
+ * 如果包含"电视剧"、"连续剧"、"国产剧"、"日剧"、"韩剧"、"美剧"、"欧美剧"、"泰剧"、"综艺"、"纪录片"等词汇，
+ * 且不含动漫关键字，则判定为非动漫，防止同名真人剧污染；
+ * 未提供分类时返回 false（不拦截）。
+ */
+internal fun isExplicitNonAnimeType(typeName: String?): Boolean {
+    if (typeName.isNullOrBlank()) return false
+    val lower = typeName.lowercase()
+    if (lower.contains("动漫") || lower.contains("动画") || lower.contains("二次元") || lower.contains("番剧") || lower.contains("anime")) {
+        return false
+    }
+    val nonAnimeKeywords =
+        listOf(
+            "电视剧",
+            "连续剧",
+            "国产剧",
+            "华语剧",
+            "大陆剧",
+            "香港剧",
+            "港剧",
+            "台湾剧",
+            "台剧",
+            "日剧",
+            "韩剧",
+            "美剧",
+            "欧美剧",
+            "泰剧",
+            "海外剧",
+            "综艺",
+            "真人秀",
+            "纪录片",
+            "短剧",
+            "微短剧",
+            "电影",
+            "动作片",
+            "喜剧片",
+            "爱情片",
+            "科幻片",
+            "恐怖片",
+            "剧情片",
+            "战争片",
+        )
+    return nonAnimeKeywords.any { lower.contains(it) }
+}
+
 /**
  * 抽取 MacCMS 剧集直链。
  *
  * - 多条目响应优先取 [title] 对得上且通过季数/版本断言的那一段（同名续作、剧场版混在搜索结果里时避免播错番）；
+ * - 排除真人电视剧、综艺等非动漫分类条目；
  * - 当指定了 [title] 时，只有满足标题与季数兼容的条目才会被采用；杜绝无条件回退第一段导致的盲目串季；
  * - 季数拓扑纠偏：若分集连续编号（如第二季标为 13..24），自动纠偏为对应集；
  * - 分隔符：`$$$` 分线路、`#` 分集、`集名$地址`；支持多线路标注与展开，避免首线异常全盘判死。
@@ -97,6 +156,9 @@ internal fun extractMacCmsSources(
     val matchedSegment =
         if (title.isNotBlank()) {
             segments.firstOrNull { entry ->
+                val typeName = segmentTypeName(entry)
+                if (isExplicitNonAnimeType(typeName)) return@firstOrNull false
+
                 val vodName = segmentVodName(entry)
                 if (vodName != null) {
                     titleMatches(vodName, title) && EpisodeSanityChecker.isSeasonAndEditionCompatible(title, vodName)
@@ -105,9 +167,12 @@ internal fun extractMacCmsSources(
                 }
             } ?: if (segments.size == 1) {
                 // 单条目响应（单番详情接口或只有一个结果）：
-                // 仅当 vodName 为空，或通过季数/版本断言时采纳
+                // 仅当 vodName 为空，或通过季数/版本与类型断言时采纳
                 val singleVodName = segmentVodName(segments.first())
-                if (singleVodName == null || EpisodeSanityChecker.isSeasonAndEditionCompatible(title, singleVodName)) {
+                val singleTypeName = segmentTypeName(segments.first())
+                if (!isExplicitNonAnimeType(singleTypeName) &&
+                    (singleVodName == null || EpisodeSanityChecker.isSeasonAndEditionCompatible(title, singleVodName))
+                ) {
                     segments.first()
                 } else {
                     null
@@ -116,7 +181,9 @@ internal fun extractMacCmsSources(
                 null
             }
         } else {
-            segments.firstOrNull()
+            segments.firstOrNull { entry ->
+                !isExplicitNonAnimeType(segmentTypeName(entry))
+            }
         } ?: return emptyList()
 
     val vodTitle = segmentVodName(matchedSegment).orEmpty()

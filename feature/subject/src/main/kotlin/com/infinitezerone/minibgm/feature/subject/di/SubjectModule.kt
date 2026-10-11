@@ -21,6 +21,7 @@ val subjectModule =
                 settingsRepository = get(),
                 failureStore = get(),
                 searchRepository = getOrNull(),
+                mikanRepository = getOrNull(),
             )
         }
 
@@ -34,6 +35,7 @@ val subjectModule =
                 authRepository = get(),
                 settingsRepository = get(),
                 failureStore = get(),
+                mikanRepository = getOrNull(),
             )
         }
 
@@ -59,6 +61,7 @@ val subjectModule =
                 playbackResolverRepository = get(),
                 playbackSourceVerifier = getOrNull(),
                 communityRepository = getOrNull(),
+                danmakuRepository = getOrNull(),
             )
         }
     }
