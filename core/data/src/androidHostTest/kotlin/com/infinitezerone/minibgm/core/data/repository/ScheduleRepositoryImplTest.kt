@@ -329,6 +329,8 @@ class ScheduleRepositoryImplTest {
         override suspend fun getMappingsByAniListIds(anilistIds: List<Long>): List<AniListBgmMappingEntity> =
             mappings.value.filter { it.anilistId in anilistIds }
 
+        override suspend fun getMappingsByBgmId(bgmId: Long): List<AniListBgmMappingEntity> = mappings.value.filter { it.bgmId == bgmId }
+
         override suspend fun upsertMappings(mappings: List<AniListBgmMappingEntity>) {
             val current =
                 this.mappings.value

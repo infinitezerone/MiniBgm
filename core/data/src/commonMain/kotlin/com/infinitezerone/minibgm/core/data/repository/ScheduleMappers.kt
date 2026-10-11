@@ -89,6 +89,9 @@ private val SITE_RESOLVERS: Map<String, Pair<String, (String) -> String>> =
         "ani_one_asia" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
         "nicovideo" to ("NicoNico" to { "https://ch.nicovideo.jp/$it" }),
         "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
+        // kitsu 是元数据站而非播放渠道：进 sitesJson 供 Stremio 规则做 bgmId→kitsuId 确定性映射，
+        // 展示侧由 toModel 过滤（见下），不混入播放渠道推荐
+        "kitsu" to ("Kitsu" to { "https://kitsu.io/anime/$it" }),
     )
 
 internal fun buildBroadcastRule(
@@ -159,12 +162,14 @@ internal fun AirScheduleEntity.toAniListBgmMapping(
     )
 
 internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
+    // kitsu 行仅供播放解析侧做 bgmId→kitsuId 映射（经 anilist_bgm_mapping.sitesJson 持久化），
+    // 不是可观看渠道，展示前过滤掉，保持播放渠道推荐列表语义不变
     val links: List<SiteLink> =
         try {
-            json.decodeFromString(sitesJson)
+            json.decodeFromString<List<SiteLink>>(sitesJson)
         } catch (_: Exception) {
             emptyList()
-        }
+        }.filterNot { it.siteName.equals("kitsu", ignoreCase = true) }
 
     val calculatedEp = nextEpisode.takeIf { it > 0 } ?: 0
 

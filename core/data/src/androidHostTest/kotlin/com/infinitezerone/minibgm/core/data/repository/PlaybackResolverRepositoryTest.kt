@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolver
 import com.infinitezerone.minibgm.core.data.repository.resolver.countMacCmsListItems
 import com.infinitezerone.minibgm.core.data.repository.resolver.episodeNumberFromLabel
 import com.infinitezerone.minibgm.core.data.repository.resolver.episodeNumberFromUrl
@@ -233,6 +234,72 @@ class PlaybackResolverRepositoryTest {
 
             assertTrue(repo.resolvePages(listOf("https://gone.example.com/x.html")).isEmpty())
             assertEquals(listOf("https://gone.example.com/x.html"), fake.requested)
+        }
+
+    @Test
+    fun `stremio 规则 Kitsu 映射失败时宁可无候选不跨命名空间冒充`() =
+        runTest {
+            val fake = FakePageFetchService(emptyMap())
+            val repo =
+                PlaybackResolverRepositoryImpl(
+                    pageFetchService = fake,
+                    kitsuMappingResolver =
+                        object : KitsuMappingResolver {
+                            override suspend fun resolveKitsuId(
+                                title: String,
+                                subjectId: Long,
+                            ): String? = null
+                        },
+                )
+            val rule =
+                PlaybackSourceRule(
+                    id = "stremio-1",
+                    name = "Stremio 测试",
+                    urlTemplate = "https://addon.example.com/manifest.json",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.STREMIO,
+                )
+
+            assertTrue(repo.resolveRule(rule, "未知番剧", 1f, subjectId = 123L, episodeId = 456L).isEmpty())
+            // 映射失败连模板请求都不该发：{id} 位若回退填 subjectId 会拼出"合法但指向别的番"的地址
+            assertTrue(fake.requested.isEmpty())
+        }
+
+    @Test
+    fun `stremio 规则映射成功时按 kitsu 拼出 stream 地址并解析直链`() =
+        runTest {
+            val fake =
+                FakePageFetchService(
+                    mapOf(
+                        "https://addon.example.com/stream/series/kitsu:46474:3.json" to
+                            """{"streams":[{"title":"第3话","url":"https://cdn.example.com/e3.m3u8"}]}""",
+                    ),
+                )
+            val repo =
+                PlaybackResolverRepositoryImpl(
+                    pageFetchService = fake,
+                    kitsuMappingResolver =
+                        object : KitsuMappingResolver {
+                            override suspend fun resolveKitsuId(
+                                title: String,
+                                subjectId: Long,
+                            ): String? = "46474"
+                        },
+                )
+            val rule =
+                PlaybackSourceRule(
+                    id = "stremio-2",
+                    name = "Stremio 测试",
+                    urlTemplate = "https://addon.example.com/manifest.json",
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.STREMIO,
+                )
+
+            val sources = repo.resolveRule(rule, "某番", 3f, subjectId = 123L, episodeId = 456L)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example.com/e3.m3u8", sources.single().url)
+            assertEquals(listOf("https://addon.example.com/stream/series/kitsu:46474:3.json"), fake.requested)
         }
 
     @Test

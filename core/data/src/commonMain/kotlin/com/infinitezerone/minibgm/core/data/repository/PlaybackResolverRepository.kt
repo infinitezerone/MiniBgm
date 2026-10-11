@@ -216,19 +216,21 @@ internal class PlaybackResolverRepositoryImpl(
                 }
                 RuleParserType.STREMIO -> {
                     val epStr = if (epNumber > 0f) epNumber.toInt().toString() else "1"
-                    val kitsuId = kitsuMappingResolver.resolveKitsuId(title).orEmpty()
+                    val kitsuId = kitsuMappingResolver.resolveKitsuId(title, subjectId).orEmpty()
                     val targetUrl =
                         when {
+                            // 模板需要 Kitsu id 而映射失败时宁可无候选：{id} 位若回退填 subjectId，
+                            // 会拼出"合法但指向别的番"的地址，静默返回错误来源——禁止跨命名空间冒充
                             rule.urlTemplate.contains("{kitsuId}") || rule.urlTemplate.contains("{id}") -> {
+                                if (kitsuId.isBlank()) return@withContext emptyList()
                                 rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)
                             }
                             !rule.urlTemplate.contains("/stream/") -> {
+                                // manifest 形态必须由 kitsuId 拼出 stream 地址：
+                                // 抓 manifest 本体解析不出流，同样是空候选，不必发起无谓请求
+                                if (kitsuId.isBlank()) return@withContext emptyList()
                                 val base = rule.urlTemplate.removeSuffix("/manifest.json").removeSuffix("/")
-                                if (kitsuId.isNotBlank()) {
-                                    "$base/stream/series/kitsu:$kitsuId:$epStr.json"
-                                } else {
-                                    rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)
-                                }
+                                "$base/stream/series/kitsu:$kitsuId:$epStr.json"
                             }
                             else -> {
                                 rule.resolveUrl(title, epStr, subjectId, episodeId, kitsuId)

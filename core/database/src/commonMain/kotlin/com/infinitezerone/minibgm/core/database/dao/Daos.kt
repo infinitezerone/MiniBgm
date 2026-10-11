@@ -143,6 +143,10 @@ interface AniListMappingDao {
     @Query("SELECT * FROM anilist_bgm_mapping WHERE anilistId IN (:anilistIds)")
     suspend fun getMappingsByAniListIds(anilistIds: List<Long>): List<AniListBgmMappingEntity>
 
+    /** 一个 bgmId 可对应多个 anilistId（拆季/多条目），按 bgmId 取回全部映射行（含 sitesJson 桥） */
+    @Query("SELECT * FROM anilist_bgm_mapping WHERE bgmId = :bgmId")
+    suspend fun getMappingsByBgmId(bgmId: Long): List<AniListBgmMappingEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMappings(mappings: List<AniListBgmMappingEntity>)
 

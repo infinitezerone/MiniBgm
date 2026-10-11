@@ -1,5 +1,8 @@
 package com.infinitezerone.minibgm.core.data.repository.resolver
 
+import com.infinitezerone.minibgm.core.database.dao.AniListMappingDao
+import com.infinitezerone.minibgm.core.database.entity.AniListBgmMappingEntity
+import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.test.runTest
@@ -29,6 +32,36 @@ private class FakeKitsuPageFetchService(
         requestHeaders: Map<String, String>,
     ): FetchedPage? = null
 }
+
+private class FakeAniListMappingDao(
+    private val byBgmId: List<AniListBgmMappingEntity> = emptyList(),
+) : AniListMappingDao {
+    override suspend fun getMappingsByAniListIds(anilistIds: List<Long>): List<AniListBgmMappingEntity> = emptyList()
+
+    override suspend fun getMappingsByBgmId(bgmId: Long): List<AniListBgmMappingEntity> = byBgmId
+
+    override suspend fun upsertMappings(mappings: List<AniListBgmMappingEntity>) = Unit
+
+    override suspend fun getMonthEtag(monthKey: String): BangumiDataMonthEtagEntity? = null
+
+    override suspend fun upsertMonthEtag(etag: BangumiDataMonthEtagEntity) = Unit
+}
+
+private fun mappingRow(
+    bgmId: Long,
+    sitesJson: String,
+): AniListBgmMappingEntity =
+    AniListBgmMappingEntity(
+        anilistId = bgmId + 1000,
+        bgmId = bgmId,
+        sitesJson = sitesJson,
+        title = "t",
+        titleCn = "t",
+        beginIso = "",
+        endIso = "",
+        monthKey = "",
+        updatedAt = 0L,
+    )
 
 class KitsuMappingResolverTest {
     private val sampleKitsuJson =
@@ -125,5 +158,95 @@ class KitsuMappingResolverTest {
             assertNull(resolver.resolveKitsuId(""))
             assertNull(resolver.resolveKitsuId("   "))
             assertNull(resolver.resolveKitsuId("unknown"))
+        }
+
+    @Test
+    fun `搜索无精确匹配时不采信排名首条`() =
+        runTest {
+            val fake =
+                FakeKitsuPageFetchService(
+                    mapOf(
+                        "filter" to
+                            """
+                            {
+                              "data": [
+                                {
+                                  "id": "11111",
+                                  "type": "anime",
+                                  "attributes": {
+                                    "canonicalTitle": "别的番",
+                                    "titles": { "ja_jp": "某某别的东西" }
+                                  }
+                                }
+                              ]
+                            }
+                            """.trimIndent(),
+                    ),
+                )
+            val resolver = KitsuMappingResolverImpl(fake)
+
+            // 请求标题与任何候选都不精确相等：宁可 null 也不猜首条——
+            // 猜错会拼出"合法但指向别的番"的 stream 地址
+            assertNull(resolver.resolveKitsuId("葬送的芙莉莲"))
+            assertEquals(1, fake.callCount)
+        }
+
+    @Test
+    fun `sites 桥命中时优先确定性映射且零网络请求`() =
+        runTest {
+            val fake = FakeKitsuPageFetchService(emptyMap())
+            val dao =
+                FakeAniListMappingDao(
+                    listOf(
+                        mappingRow(
+                            bgmId = 404724L,
+                            sitesJson =
+                                """[{"siteName":"bilibili","displayName":"哔哩哔哩","playUrl":"https://www.bilibili.com/bangumi/media/md28235523"},
+                                    |{"siteName":"kitsu","displayName":"Kitsu","playUrl":"https://kitsu.io/anime/46474"}]
+                                """.trimMargin(),
+                        ),
+                    ),
+                )
+            val resolver = KitsuMappingResolverImpl(fake, dao)
+
+            val id = resolver.resolveKitsuId("葬送的芙莉莲", subjectId = 404724L)
+
+            assertEquals("46474", id)
+            assertEquals(0, fake.callCount)
+        }
+
+    @Test
+    fun `sites 桥未命中时回退标题搜索`() =
+        runTest {
+            val fake = FakeKitsuPageFetchService(mapOf("filter" to sampleKitsuJson))
+            val dao = FakeAniListMappingDao(emptyList())
+            val resolver = KitsuMappingResolverImpl(fake, dao)
+
+            val id = resolver.resolveKitsuId("Sousou no Frieren", subjectId = 99999L)
+
+            assertEquals("46474", id)
+            assertEquals(1, fake.callCount)
+        }
+
+    @Test
+    fun `sites 桥里 kitsu 链接异常时忽略该行继续找`() =
+        runTest {
+            val fake = FakeKitsuPageFetchService(mapOf("filter" to sampleKitsuJson))
+            val dao =
+                FakeAniListMappingDao(
+                    listOf(
+                        mappingRow(
+                            bgmId = 404724L,
+                            sitesJson =
+                                """[{"siteName":"kitsu","displayName":"Kitsu","playUrl":"https://kitsu.io/anime/not-a-number"}]""",
+                        ),
+                    ),
+                )
+            val resolver = KitsuMappingResolverImpl(fake, dao)
+
+            val id = resolver.resolveKitsuId("Sousou no Frieren", subjectId = 404724L)
+
+            assertEquals("46474", id)
+            assertEquals(1, fake.callCount)
         }
 }

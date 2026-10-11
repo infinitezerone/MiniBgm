@@ -82,6 +82,7 @@ val dataModule =
         single<KitsuMappingResolver> {
             KitsuMappingResolverImpl(
                 pageFetchService = get<PageFetchService>(),
+                anilistMappingDao = getOrNull<AniListMappingDao>(),
             )
         }
         single<PlaybackResolverRepository> {
