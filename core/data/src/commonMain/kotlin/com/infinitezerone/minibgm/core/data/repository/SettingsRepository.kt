@@ -51,6 +51,8 @@ data class UserSettings(
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
+    /** 清晰度选择记忆（0 = 自动自适应；>0 = 用户偏好的视频高度，如 1080，下次起播自动匹配最接近档位） */
+    val preferredQualityHeight: Int = 0,
 )
 
 /**
@@ -103,6 +105,9 @@ interface SettingsRepository {
 
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
+
+    /** 记录清晰度选择偏好（0 = 自动自适应；>0 = 偏好视频高度） */
+    suspend fun setPreferredQualityHeight(height: Int)
 
     suspend fun setShowRestrictedContent(enabled: Boolean)
 
@@ -239,6 +244,7 @@ internal class SettingsRepositoryImpl(
                 themeMode = prefs.themeMode,
                 dynamicColor = prefs.dynamicColor,
                 pipEnabled = prefs.pipEnabled,
+                preferredQualityHeight = prefs.preferredQualityHeight,
                 showRestrictedContent = prefs.showRestrictedContent,
             )
         }
@@ -332,6 +338,10 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun setPipEnabled(enabled: Boolean) {
         userPreferences.setPipEnabled(enabled)
+    }
+
+    override suspend fun setPreferredQualityHeight(height: Int) {
+        userPreferences.setPreferredQualityHeight(height)
     }
 
     override suspend fun setShowRestrictedContent(enabled: Boolean) {

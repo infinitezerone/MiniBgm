@@ -1053,6 +1053,22 @@ class PlayerViewModel(
         commentsDelegate.loadComments(epId, force)
     }
 
+    /**
+     * 清晰度选择记忆偏好（0 = 自动自适应；>0 = 期望视频高度）。
+     * 起播后由界面在轨道就绪时自动匹配最接近档位；用户手动切换时经 [onQualitySelected] 记录。
+     */
+    val preferredQualityHeight: StateFlow<Int> =
+        settingsRepository.settings
+            .map { it.preferredQualityHeight }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /** 记录用户手动选择的清晰度偏好（0 = 恢复自动自适应） */
+    fun onQualitySelected(height: Int) {
+        viewModelScope.launch {
+            settingsRepository.setPreferredQualityHeight(height)
+        }
+    }
+
     /** 切换弹幕开关 */
     fun toggleDanmaku() {
         val targetEnabled = !_uiState.value.isDanmakuEnabled

@@ -86,6 +86,8 @@ data class UserPreferences(
     val danmakuEndpoint: String = "",
     /** 弹弹play 开放平台应用 ID */
     val danmakuAppId: String = "",
+    /** 清晰度选择记忆（0 = 自动自适应；>0 = 偏好视频高度，如 1080，下次起播自动匹配最接近档位） */
+    val preferredQualityHeight: Int = 0,
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

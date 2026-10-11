@@ -117,6 +117,10 @@ class FakeSettingsRepository(
         settingsState.value = settingsState.value.copy(pipEnabled = enabled)
     }
 
+    override suspend fun setPreferredQualityHeight(height: Int) {
+        settingsState.value = settingsState.value.copy(preferredQualityHeight = height)
+    }
+
     override suspend fun setShowRestrictedContent(enabled: Boolean) {
         setShowRestrictedContentCallCount++
         settingsState.value = settingsState.value.copy(showRestrictedContent = enabled)

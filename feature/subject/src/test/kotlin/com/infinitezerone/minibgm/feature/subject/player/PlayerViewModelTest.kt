@@ -88,6 +88,21 @@ class PlayerViewModelTest {
         )
 
     @Test
+    fun onQualitySelected_persistsPreference() =
+        runTest {
+            val settingsRepo = FakeSettingsRepository()
+            val viewModel = viewModel(settingsRepository = settingsRepo)
+
+            viewModel.onQualitySelected(1080)
+            advanceUntilIdle()
+            assertEquals(1080, settingsRepo.settings.first().preferredQualityHeight)
+
+            viewModel.onQualitySelected(0)
+            advanceUntilIdle()
+            assertEquals(0, settingsRepo.settings.first().preferredQualityHeight)
+        }
+
+    @Test
     fun initialState_matchesProvidedArguments() {
         val state = viewModel().uiState.value
         assertEquals(subjectId, state.subjectId)

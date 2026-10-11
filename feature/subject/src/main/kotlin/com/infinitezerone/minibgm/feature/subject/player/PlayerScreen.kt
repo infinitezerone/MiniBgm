@@ -470,6 +470,24 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // 清晰度选择记忆：起播（mediaUrl 变化）后轨道就绪时，自动匹配用户偏好高度最接近的档位；
+    // 每个媒体地址只自动应用一次，之后的手动切换不受干扰（用户手动选择经 onQualitySelected 更新偏好）
+    val preferredQualityHeight by viewModel.preferredQualityHeight.collectAsStateWithLifecycle()
+    var qualityAppliedKey by remember { mutableStateOf("") }
+    LaunchedEffect(playback.mediaUrl, tracksSnapshot, preferredQualityHeight) {
+        val target = preferredQualityHeight
+        if (target <= 0 || playback.mediaUrl.isBlank() || qualityAppliedKey == playback.mediaUrl) {
+            return@LaunchedEffect
+        }
+        val tracks = tracksSnapshot.qualityTracks
+        if (tracks.isEmpty()) return@LaunchedEffect
+        val match = tracks.minByOrNull { kotlin.math.abs(it.height - target) }
+        if (match != null && match.group != null) {
+            controller.selectVideoQuality(match)
+        }
+        qualityAppliedKey = playback.mediaUrl
+    }
+
     // 单实例渲染节点：利用 movableContentOf 在常规树与 PiP 极简树之间无损转移 Surface，
     // 彻底杜绝销毁重建引发的黑闪与解码器 Surface 重附着开销。
     val videoSurface =
@@ -778,8 +796,14 @@ fun PlayerScreen(
                 onOpenDanmakuPicker = openDanmakuPicker,
                 isLooping = playback.isLooping,
                 onToggleLoop = { controller.setLooping(!playback.isLooping) },
-                onSelectQuality = controller::selectVideoQuality,
-                onAutoQuality = controller::selectAutoVideoQuality,
+                onSelectQuality = {
+                    controller.selectVideoQuality(it)
+                    viewModel.onQualitySelected(it.height)
+                },
+                onAutoQuality = {
+                    controller.selectAutoVideoQuality()
+                    viewModel.onQualitySelected(0)
+                },
                 onSelectSubtitle = controller::selectSubtitleTrack,
                 onDisableSubtitles = controller::disableSubtitles,
                 onAutoSubtitles = controller::autoSelectSubtitles,

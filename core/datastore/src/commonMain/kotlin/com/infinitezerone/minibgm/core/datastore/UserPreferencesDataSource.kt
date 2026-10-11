@@ -329,4 +329,11 @@ class UserPreferencesDataSource(
             )
         }
     }
+
+    /** 记录清晰度选择偏好（0 = 自动自适应；>0 = 偏好视频高度） */
+    suspend fun setPreferredQualityHeight(height: Int) {
+        dataStore.updateData { current ->
+            current.copy(preferredQualityHeight = height)
+        }
+    }
 }
