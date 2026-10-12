@@ -876,6 +876,33 @@ class ArchitectureRulesTest {
         return literals
     }
 
+    /**
+     * WebView 可观测性红线（见 AGENTS.md 领域规则）：
+     * 生产代码中声明 WebChromeClient 必须实现 onConsoleMessage。
+     * 严禁静默吞掉前端控制台与 JS 报错，导致排查陷入盲区。
+     */
+    @Test
+    fun webChromeClient_must_implement_onConsoleMessage() {
+        val violations = mutableListOf<String>()
+        projectRoot
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES && !it.name.startsWith(".") }
+            .filter { it.isFile && it.extension == "kt" && !it.path.replace(File.separatorChar, '/').contains("/build/") }
+            .forEach { file ->
+                val content = file.readText()
+                if (content.contains("WebChromeClient()") || content.contains(": WebChromeClient")) {
+                    if (!content.contains("onConsoleMessage")) {
+                        val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                        violations.add("$relPath 实现了 WebChromeClient 但未重写 onConsoleMessage")
+                    }
+                }
+            }
+        assertTrue(
+            violations.isEmpty(),
+            "违反 WebView 可观测性红线（见 AGENTS.md 领域规则）：\n" + violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
