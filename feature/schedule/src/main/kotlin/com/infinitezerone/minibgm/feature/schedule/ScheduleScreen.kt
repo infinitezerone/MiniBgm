@@ -42,7 +42,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Velocity
@@ -52,15 +51,12 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDial
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
-import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
-import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
-import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.schedule.R
 import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
@@ -68,7 +64,6 @@ import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleErrorState
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleNowIndicator
-import com.infinitezerone.minibgm.feature.schedule.components.ScheduleSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleTimelineSkeleton
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleUntimedSection
 import com.infinitezerone.minibgm.feature.schedule.components.TIMELINE_SLOT_SPACING
@@ -81,7 +76,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import kotlin.math.roundToInt
-import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,39 +90,13 @@ fun ScheduleScreen(
     scrollToTop: Flow<Unit>? = null,
     viewModel: ScheduleViewModel = koinViewModel(),
 ) {
-    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val filterBarHeight = 44.dp
     val filterBarHeightPx = with(density) { filterBarHeight.toPx() }
-    var selectedScheduleForSources by remember { mutableStateOf<AirSchedule?>(null) }
     val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
-
-    val notInstalledTitleFormat = stringResource(R.string.feature_schedule_app_not_installed_title)
-    val notInstalledMessageFormat = stringResource(R.string.feature_schedule_app_not_installed_message)
-    val openBrowserText = stringResource(DesignSystemR.string.core_designsystem_action_open_browser)
-    val handleLaunchStreamingUrl: (String) -> Unit = { url ->
-        context.launchStreamingUrl(
-            url = url,
-            onAppNotInstalled = { appName, webUrl ->
-                coroutineScope.launch {
-                    val confirmed =
-                        overlayHostState.await(
-                            ConfirmDialogAction(
-                                title = String.format(java.util.Locale.getDefault(), notInstalledTitleFormat, appName),
-                                message = String.format(java.util.Locale.getDefault(), notInstalledMessageFormat, appName),
-                                confirmText = openBrowserText,
-                            ),
-                        )
-                    if (confirmed) {
-                        context.launchWebUrl(webUrl)
-                    }
-                }
-            },
-        )
-    }
 
     // 13天平滑滑动的 Pager，初始定位到今天（索引 6）
     val pagerState =
@@ -350,7 +318,6 @@ fun ScheduleScreen(
                                     allDaySchedules = allDaySchedules,
                                     uiState = uiState,
                                     onSubjectClick = onSubjectClick,
-                                    onShowSources = { selectedScheduleForSources = it },
                                     onSwitchToAll = viewModel::toggleOnlyWatching,
                                     listState = listState,
                                 )
@@ -360,34 +327,6 @@ fun ScheduleScreen(
                 }
             }
         }
-    }
-
-    selectedScheduleForSources?.let { schedule ->
-        val aiSearchPromptFormat = stringResource(R.string.feature_schedule_ai_search_prompt)
-        ScheduleSourcesBottomSheet(
-            schedule = schedule,
-            onDismissRequest = { selectedScheduleForSources = null },
-            onOpenUrl = handleLaunchStreamingUrl,
-            onAiSourceSearch =
-                if (onAssistantClick != null) {
-                    {
-                        val title = schedule.displayName
-                        onSourceSearch(
-                            String.format(java.util.Locale.getDefault(), aiSearchPromptFormat, title, schedule.bgmId),
-                        )
-                    }
-                } else {
-                    null
-                },
-            onInternalPlayClick =
-                onPlayClick?.let { play ->
-                    {
-                        coroutineScope.launch {
-                            play(viewModel.resolvePlayRoute(schedule))
-                        }
-                    }
-                },
-        )
     }
 
     BgmOverlayHost(hostState = overlayHostState) {
@@ -414,7 +353,6 @@ private fun DayScheduleList(
     allDaySchedules: List<AirSchedule>,
     uiState: ScheduleUiState,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onShowSources: (AirSchedule) -> Unit,
     onSwitchToAll: () -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -483,7 +421,6 @@ private fun DayScheduleList(
                             isToday = isTodayPage,
                             watchingSubjectIds = uiState.watchingSubjectIds,
                             onSubjectClick = onSubjectClick,
-                            onShowSources = onShowSources,
                             currentMinutesCst = nowMinutes,
                         )
                     }
@@ -502,7 +439,6 @@ private fun DayScheduleList(
                             schedules = allDaySchedules,
                             watchingSubjectIds = uiState.watchingSubjectIds,
                             onSubjectClick = onSubjectClick,
-                            onShowSources = onShowSources,
                         )
                     }
                 }

@@ -31,7 +31,6 @@
     <string name="feature_schedule_watching_badge">在追</string>
     <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
     <string name="feature_schedule_episode_format">第 %1$d 话</string>
-    <string name="feature_schedule_cd_play">播放</string>
     <string name="feature_schedule_now_indicator">现在 %1$s</string>
 
     <!-- 未定番剧区 -->
@@ -48,19 +47,5 @@
     <string name="feature_schedule_load_failed_title">放送表加载失败</string>
     <string name="feature_schedule_error_network">网络连接异常</string>
 
-    <!-- 播放来源 BottomSheet -->
-    <string name="feature_schedule_source_sheet_subtitle">选择播放或跳转来源</string>
-    <string name="feature_schedule_source_internal_player_section">应用内播放</string>
-    <string name="feature_schedule_source_internal_player_title">用内置播放器播放</string>
-    <string name="feature_schedule_source_ai_section">AI 找源</string>
-    <string name="feature_schedule_source_ai_title">让 AI 助手找源</string>
-    <string name="feature_schedule_source_external_section">外部跳转</string>
-    <string name="feature_schedule_source_bilibili_title">哔哩哔哩搜索</string>
-    <string name="feature_schedule_source_mikan_title">蜜柑计划</string>
-    <string name="feature_schedule_source_other_platforms">其他外部平台 (%1$d)</string>
-    <string name="feature_schedule_source_cd_open">打开</string>
-    <string name="feature_schedule_app_not_installed_title">未安装 %1$s 客户端</string>
-    <string name="feature_schedule_app_not_installed_message">未检测到 %1$s 客户端，是否在应用内使用浏览器打开该播放源？</string>
-    <string name="feature_schedule_ai_search_prompt">帮我找《%1$s》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 %2$d）</string>
     <string name="feature_schedule_login_prompt_desc">追番与打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。</string>
 </resources>

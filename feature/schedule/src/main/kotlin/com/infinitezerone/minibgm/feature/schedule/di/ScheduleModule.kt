@@ -12,7 +12,6 @@ val scheduleModule =
                 collectionRepository = get(),
                 settingsRepository = get(),
                 authRepository = get(),
-                subjectRepository = get(),
             )
         }
     }

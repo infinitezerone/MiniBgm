@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +42,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -131,7 +129,6 @@ fun TimelineSlotRow(
     isToday: Boolean,
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
     currentMinutesCst: Int = getCurrentMinutesCst(),
 ) {
@@ -222,7 +219,6 @@ fun TimelineSlotRow(
                     schedule = singleSchedule,
                     isWatching = watchingSubjectIds.contains(singleSchedule.bgmId),
                     onSubjectClick = onSubjectClick,
-                    onShowSources = onShowSources,
                 )
             }
         }
@@ -322,7 +318,6 @@ fun ScheduleTimelineSingleCard(
     schedule: AirSchedule,
     isWatching: Boolean,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -511,35 +506,6 @@ fun ScheduleTimelineSingleCard(
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // 播放按钮：视觉 28dp，触控判定区 38dp
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(38.dp)
-                                .clickable {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    onShowSources(schedule)
-                                },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = BgmIcons.Play,
-                                    contentDescription = stringResource(R.string.feature_schedule_cd_play),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(15.dp),
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -633,7 +599,6 @@ fun ScheduleUntimedSection(
     schedules: List<AirSchedule>,
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
-    onShowSources: (AirSchedule) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by remember { mutableStateOf(true) }
@@ -712,7 +677,6 @@ fun ScheduleUntimedSection(
                             schedule = schedule,
                             isWatching = watchingSubjectIds.contains(schedule.bgmId),
                             onSubjectClick = onSubjectClick,
-                            onShowSources = onShowSources,
                         )
                     }
                 }

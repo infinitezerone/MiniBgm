@@ -10,11 +10,8 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
-import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.Episode
-import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -24,13 +21,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -210,7 +205,6 @@ class ScheduleViewModel(
     private val collectionRepository: CollectionRepository,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
-    private val subjectRepository: SubjectRepository,
     /**
      * 时钟注入点，默认取系统时间。
      *
@@ -492,56 +486,6 @@ class ScheduleViewModel(
             _userMessage.send("已开启追番开播提醒")
         }
     }
-
-    /** 来源 sheet 的「应用内播放」：非阻塞式组装路由（读取本地缓存快照，不阻塞等网络接口；网络补齐由 PlayerViewModel 在后台异步进行） */
-    suspend fun resolvePlayRoute(schedule: AirSchedule): PlayerRoute {
-        val subjectId = schedule.bgmId
-        val episodes =
-            runCatching {
-                withTimeoutOrNull(100L) {
-                    subjectRepository.getEpisodesStream(subjectId).first()
-                }
-            }.getOrNull() ?: emptyList()
-        val collection =
-            runCatching {
-                withTimeoutOrNull(100L) {
-                    collectionRepository.getCollectionStream(subjectId).first()
-                }
-            }.getOrNull()
-        val target = resolveTargetEpisode(episodes, collection?.epStatus ?: 0)
-        if (target == null) {
-            return PlayerRoute(subjectId = subjectId, episodeId = 0L, subjectName = schedule.displayName)
-        }
-        return buildEpisodeRoute(subjectId, schedule.displayName, target)
-    }
-
-    /** 下一待看集：进度 +1 优先，回退第一个未看正篇，再回退第一集 */
-    private fun resolveTargetEpisode(
-        episodes: List<Episode>,
-        watchedCount: Int,
-    ): Episode? {
-        val mainEpisodes = episodes.filter { it.isMain }.sortedBy { it.sort }
-
-        return mainEpisodes.firstOrNull { it.episodeInt == watchedCount + 1 }
-            ?: mainEpisodes.firstOrNull { it.episodeInt > watchedCount }
-            ?: mainEpisodes.firstOrNull()
-    }
-
-    private fun buildEpisodeRoute(
-        subjectId: Long,
-        subjectName: String,
-        episode: Episode,
-    ): PlayerRoute =
-        PlayerRoute(
-            subjectId = subjectId,
-            episodeId = episode.id,
-            streamUrl = "",
-            requestHeaders = emptyMap(),
-            episodeName = episode.primaryName,
-            subjectName = subjectName,
-            episodeSort = episode.episodeNumber,
-            episodeType = episode.type,
-        )
 
     /**
      * 1-tap 快捷追番/移出追番（规范第 3 条「写后读」：写仓后由收藏流回读新状态，无本地乐观旁路；
