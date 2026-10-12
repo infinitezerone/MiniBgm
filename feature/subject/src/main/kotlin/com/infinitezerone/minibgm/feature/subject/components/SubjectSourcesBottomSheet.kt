@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
+import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
@@ -172,6 +173,9 @@ fun SubjectSourcesBottomSheet(
                 isMikanLoading = isMikanLoading,
                 mikanResources = mikanResources,
                 context = context,
+                subject = subject,
+                episode = null,
+                onInternalPlayClick = onInternalPlayClick,
                 onDismissAndRun = runAfterDismiss,
             )
         } else {
@@ -416,6 +420,9 @@ fun SubjectSourcesBottomSheet(
                 isMikanLoading = isMikanLoading,
                 mikanResources = mikanResources,
                 context = context,
+                subject = subject,
+                episode = episode,
+                onInternalPlayClick = onInternalPlayClick,
                 onDismissAndRun = runAfterDismiss,
             )
         }
@@ -491,10 +498,14 @@ private fun MikanResourcesSection(
     isMikanLoading: Boolean,
     mikanResources: List<MikanTorrentResource>,
     context: Context,
+    subject: Subject,
+    episode: Episode?,
+    onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
     onDismissAndRun: (() -> Unit) -> Unit,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
+    val torrentStreamEngine: TorrentStreamEngine = koinInject()
     val coroutineScope = rememberCoroutineScope()
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
 
@@ -522,6 +533,65 @@ private fun MikanResourcesSection(
                     isExpanded = expandedIndex == index,
                     onToggleExpand = {
                         expandedIndex = if (expandedIndex == index) null else index
+                    },
+                    onStreamPlay = {
+                        coroutineScope.launch {
+                            if (!torrentStreamEngine.isPluginInstalled()) {
+                                withContext(Dispatchers.Main) {
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            context.getString(R.string.feature_subject_source_mikan_plugin_installing),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                }
+                                val installResult = torrentStreamEngine.installPlugin()
+                                if (installResult.isFailure) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "组件安装失败，请检查网络", Toast.LENGTH_SHORT).show()
+                                    }
+                                    return@launch
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast
+                                    .makeText(
+                                        context,
+                                        context.getString(R.string.feature_subject_source_mikan_stream_buffering),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                            }
+                            val streamResult =
+                                torrentStreamEngine.startStream(
+                                    title = resource.title,
+                                    magnetUrl = resource.magnetUrl,
+                                    torrentUrl = resource.torrentUrl.ifBlank { null },
+                                )
+                            streamResult
+                                .onSuccess { streamUrl ->
+                                    withContext(Dispatchers.Main) {
+                                        onDismissAndRun {
+                                            if (onInternalPlayClick != null) {
+                                                val route =
+                                                    PlayerRoute(
+                                                        subjectId = subject.id,
+                                                        episodeId = episode?.id ?: 0L,
+                                                        streamUrl = streamUrl,
+                                                        episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
+                                                        subjectName = subject.displayName,
+                                                        episodeSort = episode?.episodeNumber ?: 1f,
+                                                        episodeType = episode?.type ?: 0,
+                                                    )
+                                                onInternalPlayClick(route)
+                                            }
+                                        }
+                                    }
+                                }.onFailure { err ->
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, err.message ?: "起播失败", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        }
                     },
                     onInAppDownload = {
                         coroutineScope.launch {
@@ -595,6 +665,7 @@ private fun MikanTorrentCard(
     resource: MikanTorrentResource,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
+    onStreamPlay: () -> Unit,
     onInAppDownload: () -> Unit,
     onExternalLaunch: () -> Unit,
     onDownloadTorrent: () -> Unit,
@@ -671,6 +742,18 @@ private fun MikanTorrentCard(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    // 边下边播 (Hero 强调主操作)
+                    MikanActionButton(
+                        text = stringResource(R.string.feature_subject_source_mikan_stream_play),
+                        icon = BgmIcons.PlayCircle,
+                        isPrimary = true,
+                        onClick = onStreamPlay,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -678,7 +761,7 @@ private fun MikanTorrentCard(
                         MikanActionButton(
                             text = stringResource(R.string.feature_subject_source_mikan_in_app_download),
                             icon = BgmIcons.Download,
-                            isPrimary = true,
+                            isPrimary = false,
                             onClick = onInAppDownload,
                             modifier = Modifier.weight(1f),
                         )

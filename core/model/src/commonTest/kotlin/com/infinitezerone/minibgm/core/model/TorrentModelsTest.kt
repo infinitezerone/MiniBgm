@@ -47,4 +47,28 @@ class TorrentModelsTest {
         assertTrue(player.isPlayer)
         assertFalse(downloader.isPlayer)
     }
+
+    @Test
+    fun torrentStreamState_stateVariants_instantiateCorrectly() {
+        val pluginReq = TorrentStreamState.PluginRequired(estimatedSizeBytes = 3_000_000L)
+        assertEquals(3_000_000L, pluginReq.estimatedSizeBytes)
+
+        val buffering =
+            TorrentStreamState.Buffering(
+                progress = 0.3f,
+                bufferedBytes = 300L,
+                targetBytes = 1000L,
+                speedBytesPerSec = 1024L * 1024L,
+            )
+        assertEquals(0.3f, buffering.progress)
+        assertEquals(1024L * 1024L, buffering.speedBytesPerSec)
+
+        val ready =
+            TorrentStreamState.Ready(
+                streamUrl = "http://127.0.0.1:8899/stream",
+                title = "Episode 01",
+                totalBytes = 500_000_000L,
+            )
+        assertEquals("http://127.0.0.1:8899/stream", ready.streamUrl)
+    }
 }

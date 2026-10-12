@@ -108,3 +108,58 @@ sealed interface TorrentEngineState {
         val reason: String,
     ) : TorrentEngineState
 }
+
+/**
+ * 边下边播流状态机。
+ */
+@Serializable
+sealed interface TorrentStreamState {
+    /** 初始空闲状态 */
+    @Serializable
+    data object Idle : TorrentStreamState
+
+    /** 插件未安装，需要用户确认后按需下载 */
+    @Serializable
+    data class PluginRequired(
+        val estimatedSizeBytes: Long = 2_500_000L,
+    ) : TorrentStreamState
+
+    /** 正在按需安装 BT 流化插件 */
+    @Serializable
+    data class InstallingPlugin(
+        val progress: Float,
+    ) : TorrentStreamState
+
+    /** 正在连接 Peer 并解析种子元数据 */
+    @Serializable
+    data class Resolving(
+        val infoHash: String = "",
+    ) : TorrentStreamState
+
+    /**
+     * 正在缓冲首部数据（Moov Atom / EBML Header），确保起播不卡顿。
+     */
+    @Serializable
+    data class Buffering(
+        val progress: Float,
+        val bufferedBytes: Long,
+        val targetBytes: Long,
+        val speedBytesPerSec: Long = 0L,
+    ) : TorrentStreamState
+
+    /**
+     * 流已就绪，提供本地代理 HTTP URL（如 http://127.0.0.1:port/stream）供播放器消费。
+     */
+    @Serializable
+    data class Ready(
+        val streamUrl: String,
+        val title: String,
+        val totalBytes: Long = 0L,
+    ) : TorrentStreamState
+
+    /** 启动或播放失败 */
+    @Serializable
+    data class Error(
+        val message: String,
+    ) : TorrentStreamState
+}
