@@ -43,16 +43,6 @@ fn init_logger() {
     }
 }
 
-fn extract_info_hash(magnet_url: &str) -> String {
-    if let Some(pos) = magnet_url.find("xt=urn:btih:") {
-        let after = &magnet_url[pos + "xt=urn:btih:".len()..];
-        let end = after.find('&').unwrap_or(after.len());
-        after[..end].to_string()
-    } else {
-        "unknown_hash".to_string()
-    }
-}
-
 #[no_mangle]
 pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_AndroidTorrentStreamEngine_nativeIsAvailable(
     _env: JNIEnv,
@@ -86,7 +76,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         Err(_) => String::new(),
     };
 
-    let save_dir_str: String = match env.get_string(&save_dir) {
+    let _save_dir_str: String = match env.get_string(&save_dir) {
         Ok(s) => s.into(),
         Err(e) => {
             return env
@@ -101,11 +91,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         Err(e) => return env.new_string(format!("ERROR: {e}")).unwrap().into_raw(),
     };
 
-    let info_hash = extract_info_hash(&magnet_str);
     let config = StreamConfig {
-        info_hash: info_hash.clone(),
-        title: String::new(),
-        save_dir: PathBuf::from(save_dir_str),
+        magnet_url: magnet_str,
         torrent_path: if torrent_path_str.is_empty() {
             None
         } else {
@@ -126,9 +113,8 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 
     match start_result {
         Ok(server) => {
-            let port = server.port;
-            let stream_url = format!("http://127.0.0.1:{port}/stream?hash={info_hash}");
-            log::info!("原生 BT 流化服务启动成功: {}", stream_url);
+            let stream_url = server.stream_url.clone();
+            log::info!("原生 BT 内存流化服务启动成功: {}", stream_url);
 
             let mut server_guard = active_server().lock().unwrap();
             *server_guard = Some(server);
@@ -136,7 +122,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
             env.new_string(stream_url).unwrap().into_raw()
         }
         Err(e) => {
-            log::error!("原生 BT 流化服务启动失败: {:?}", e);
+            log::error!("原生 BT 内存流化服务启动失败: {:?}", e);
             env.new_string(format!("ERROR: 启动流服务失败: {e}"))
                 .unwrap()
                 .into_raw()
@@ -166,7 +152,15 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         server_guard.as_ref().map(|s| s.get_stats())
     };
 
-    let (downloaded, total, speed, peers) = stats.unwrap_or((0, 0, 0, 0));
+    let (downloaded, total, speed, peers) = match stats {
+        Some(s) => (
+            s.downloaded_bytes,
+            s.total_bytes,
+            s.speed_bytes_per_sec,
+            s.connected_peers,
+        ),
+        None => (0, 0, 0, 0),
+    };
 
     let array = match env.new_long_array(4) {
         Ok(arr) => arr,
