@@ -39,7 +39,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 仅作元数据与平台映射，不得污染官方播出时间。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（模块内白名单见 ArchitectureRulesTest）。
 - Ktor 401 自动刷新；刷新彻底失败自动登出——调用方永远不会看到 401。
-- 流媒体发流真实性：流引擎严禁派发未就绪的空 Socket 伪地址；扩展下载与后台大任务严禁静默触发，必须经 `BgmOverlayHost` 显式确认。
+- 流媒体发流真实性：流引擎严禁派发未就绪的空 Socket 伪地址；扩展下载与后台大任务严禁静默触发，必须经 `BgmOverlayHost` 显式确认；纯内存流播必须配置后缀过滤与单集锁定（`only_files`），杜绝整季合集全量进 RAM 导致 OOM；本地 HTTP API 必须严格置 `read_only: true` 封闭控制面。
 
 ## 规范先例与协同流
 
