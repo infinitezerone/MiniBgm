@@ -32,15 +32,20 @@ class AndroidTorrentStreamEngine(
 
     private var activeStreamJob: Job? = null
 
-    override suspend fun isPluginInstalled(): Boolean = isNativeLoaded && runCatching { nativeIsAvailable() }.getOrDefault(false)
+    override suspend fun isPluginInstalled(): Boolean = ensureNativeLoaded() && runCatching { nativeIsAvailable() }.getOrDefault(false)
 
     override suspend fun installPlugin(): Result<Unit> =
         withContext(Dispatchers.IO) {
             if (isPluginInstalled()) {
                 Result.success(Unit)
             } else {
-                logger.e { "BT 原生流化库 (libminibgm_torrent.so) 缺失或当前架构不支持" }
-                Result.failure(IllegalStateException("原生流化扩展组件未就绪"))
+                ensureNativeLoaded()
+                if (isPluginInstalled()) {
+                    Result.success(Unit)
+                } else {
+                    logger.e { "BT 原生流化库 (libminibgm_torrent.so) 缺失或当前设备架构不支持" }
+                    Result.failure(IllegalStateException("原生流化扩展组件未就绪"))
+                }
             }
         }
 
@@ -61,7 +66,7 @@ class AndroidTorrentStreamEngine(
                 val infoHash = extractInfoHash(magnetUrl)
                 _streamState.value = TorrentStreamState.Resolving(infoHash = infoHash)
 
-                val downloadDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "downloads").apply { mkdirs() }
+                val cacheDir = File(context.cacheDir, "torrent_stream").apply { mkdirs() }
                 val torrentFilePath = ""
 
                 logger.i { "调用 Rust 原生引擎启动 HTTP 流媒体代理: $infoHash" }
@@ -69,7 +74,7 @@ class AndroidTorrentStreamEngine(
                     nativeStartStream(
                         magnetUrl = magnetUrl,
                         torrentPath = torrentFilePath,
-                        saveDir = downloadDir.absolutePath,
+                        saveDir = cacheDir.absolutePath,
                     )
 
                 if (resultUrl.startsWith("ERROR:")) {
@@ -80,6 +85,10 @@ class AndroidTorrentStreamEngine(
 
                 logger.i { "原生流媒体服务就绪: $resultUrl" }
 
+                // 立即获取初次真值 stats（杜绝 100MB 伪分母污染）
+                val initialStats = runCatching { nativeGetStreamStats() }.getOrNull()
+                val initialTotal = initialStats?.getOrNull(1)?.takeIf { it > 0L } ?: 0L
+
                 // 启动流状态与速率轮询
                 activeStreamJob =
                     scope.launch {
@@ -87,7 +96,7 @@ class AndroidTorrentStreamEngine(
                             TorrentStreamState.Ready(
                                 streamUrl = resultUrl,
                                 title = title,
-                                totalBytes = 100L * 1024 * 1024,
+                                totalBytes = initialTotal,
                             )
 
                         while (isActive) {
@@ -132,11 +141,23 @@ class AndroidTorrentStreamEngine(
     }
 
     companion object {
-        private val isNativeLoaded: Boolean =
-            runCatching {
-                System.loadLibrary("minibgm_torrent")
-                true
-            }.getOrDefault(false)
+        @Volatile
+        private var isNativeLoaded: Boolean = false
+
+        init {
+            ensureNativeLoaded()
+        }
+
+        private fun ensureNativeLoaded(): Boolean {
+            if (!isNativeLoaded) {
+                isNativeLoaded =
+                    runCatching {
+                        System.loadLibrary("minibgm_torrent")
+                        true
+                    }.getOrDefault(false)
+            }
+            return isNativeLoaded
+        }
 
         @JvmStatic
         private external fun nativeIsAvailable(): Boolean

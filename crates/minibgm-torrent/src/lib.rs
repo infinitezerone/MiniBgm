@@ -76,7 +76,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         Err(_) => String::new(),
     };
 
-    let _save_dir_str: String = match env.get_string(&save_dir) {
+    let save_dir_str: String = match env.get_string(&save_dir) {
         Ok(s) => s.into(),
         Err(e) => {
             return env
@@ -98,6 +98,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         } else {
             Some(PathBuf::from(torrent_path_str))
         },
+        save_dir: PathBuf::from(save_dir_str),
     };
 
     // 停止已存在的活跃服务
