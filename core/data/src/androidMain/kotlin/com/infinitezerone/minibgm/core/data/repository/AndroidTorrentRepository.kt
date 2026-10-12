@@ -4,10 +4,13 @@ import android.content.Context
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
 import com.infinitezerone.minibgm.core.data.download.TorrentDownloadService
+import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentEngineState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import com.infinitezerone.minibgm.core.network.AssetDownloadService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,11 +21,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.UUID
 
 class AndroidTorrentRepository(
     private val context: Context,
     private val assetDownloader: AssetDownloader,
+    private val assetDownloadService: AssetDownloadService,
+    private val streamEngine: TorrentStreamEngine,
 ) : TorrentRepository {
     private val logger = bgmLogger("Bgm/TorrentRepository")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -118,18 +124,141 @@ class AndroidTorrentRepository(
             return
         }
 
-        // 3. 进入就绪下载态
+        // 3. 启动流媒体 P2P 引擎，获取本地流地址
         updateTask(taskId) {
             it.copy(
                 status = TorrentTaskStatus.DOWNLOADING,
                 errorMessage = null,
             )
         }
+
+        val streamResult =
+            streamEngine.startStream(
+                title = task.title,
+                magnetUrl = task.magnetUrl,
+                torrentUrl = localTorrentPath ?: task.torrentUrl,
+            )
+
+        val streamUrl =
+            streamResult.getOrElse { error ->
+                logger.e(error) { "启动流引擎失败: $taskId" }
+                updateTask(taskId) {
+                    it.copy(
+                        status = TorrentTaskStatus.ERROR,
+                        errorMessage = error.message ?: "启动 P2P 引擎失败",
+                        downloadSpeedBytesPerSec = 0L,
+                    )
+                }
+                return
+            }
+
+        // 4. 执行本地流式落盘写文件
+        downloadStreamToFile(taskId, streamUrl, targetFile)
+    }
+
+    private suspend fun downloadStreamToFile(
+        taskId: String,
+        streamUrl: String,
+        targetFile: File,
+    ) {
+        val tempFile = File("${targetFile.absolutePath}.tmp")
+        tempFile.parentFile?.mkdirs()
+        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
+
+        var lastEmitTime = 0L
+        var lastSpeedCalcTime = System.currentTimeMillis()
+        var bytesSinceLastSpeed = 0L
+        var currentSpeed = 0L
+
+        try {
+            val raf = RandomAccessFile(tempFile, "rw")
+            var currentDownloaded = existingBytes
+            var finalTotalBytes = -1L
+            var isFirstChunk = true
+
+            try {
+                assetDownloadService.streamAsset(
+                    url = streamUrl,
+                    rangeStart = existingBytes,
+                ) { chunk, length, totalBytes, isPartial ->
+                    if (isFirstChunk) {
+                        isFirstChunk = false
+                        if (!isPartial) {
+                            raf.setLength(0L)
+                            raf.seek(0L)
+                            currentDownloaded = 0L
+                        } else {
+                            raf.seek(existingBytes)
+                            currentDownloaded = existingBytes
+                        }
+                    }
+
+                    raf.write(chunk, 0, length)
+                    currentDownloaded += length
+                    finalTotalBytes = totalBytes
+                    bytesSinceLastSpeed += length
+
+                    val now = System.currentTimeMillis()
+                    if (now - lastSpeedCalcTime >= 1000) {
+                        val elapsed = now - lastSpeedCalcTime
+                        currentSpeed = if (elapsed > 0) (bytesSinceLastSpeed * 1000) / elapsed else 0L
+                        lastSpeedCalcTime = now
+                        bytesSinceLastSpeed = 0L
+                    }
+
+                    if (now - lastEmitTime >= 500) {
+                        lastEmitTime = now
+                        updateTask(taskId) {
+                            it.copy(
+                                downloadedBytes = currentDownloaded,
+                                totalBytes = if (finalTotalBytes > 0L) finalTotalBytes else it.totalBytes,
+                                downloadSpeedBytesPerSec = currentSpeed,
+                                status = TorrentTaskStatus.DOWNLOADING,
+                            )
+                        }
+                    }
+                }
+            } finally {
+                raf.close()
+            }
+
+            // 流读取完成，重命名临时文件并标记完成
+            if (tempFile.exists() && (finalTotalBytes <= 0L || tempFile.length() >= finalTotalBytes)) {
+                if (targetFile.exists()) targetFile.delete()
+                tempFile.renameTo(targetFile)
+                val finalLength = targetFile.length()
+                updateTask(taskId) {
+                    it.copy(
+                        status = TorrentTaskStatus.COMPLETED,
+                        downloadedBytes = finalLength,
+                        totalBytes = finalLength,
+                        downloadSpeedBytesPerSec = 0L,
+                        completionTimestamp = System.currentTimeMillis(),
+                    )
+                }
+                logger.i { "任务 $taskId 下载完成并落盘: ${targetFile.absolutePath} ($finalLength 字节)" }
+            }
+        } catch (e: CancellationException) {
+            logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
+            throw e
+        } catch (e: Exception) {
+            logger.e(e) { "任务 $taskId 下载异常: ${e.message}" }
+            updateTask(taskId) {
+                it.copy(
+                    status = TorrentTaskStatus.ERROR,
+                    errorMessage = e.message ?: "下载流读取失败",
+                    downloadSpeedBytesPerSec = 0L,
+                )
+            }
+        } finally {
+            streamEngine.stopStream()
+        }
     }
 
     override suspend fun pauseDownload(taskId: String) {
         activeJobs[taskId]?.cancel()
         activeJobs.remove(taskId)
+        streamEngine.stopStream()
         updateTask(taskId) {
             it.copy(
                 status = TorrentTaskStatus.PAUSED,
@@ -154,10 +283,12 @@ class AndroidTorrentRepository(
     ) {
         activeJobs[taskId]?.cancel()
         activeJobs.remove(taskId)
+        streamEngine.stopStream()
         val task = _tasks.value.firstOrNull { it.id == taskId }
         if (deleteFiles && task != null) {
             runCatching {
                 File(task.savePath).delete()
+                File("${task.savePath}.tmp").delete()
                 task.torrentFilePath?.let { File(it).delete() }
             }
         }

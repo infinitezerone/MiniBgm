@@ -37,6 +37,8 @@ val platformDataModule =
             AndroidTorrentRepository(
                 context = androidContext(),
                 assetDownloader = get(),
+                assetDownloadService = get(),
+                streamEngine = get(),
             )
         }
         single<TorrentStreamEngine> {
