@@ -35,6 +35,7 @@ import kotlin.test.fail
  * 18. 事件文案资源化：ViewModel 的一次性事件（ShowSnackbar）严禁内联用户可见文案（CJK 字面量），
  *     必须以 @StringRes + formatArgs 下发、UI 侧解析；服务端运行时消息经 message 字段透传（源自播放器文案硬编码复盘）
  * 19. 流媒体发流真实性：流引擎严禁派发未就绪的空 Socket 伪地址；严禁使用虚假 placeholder 桩伪装媒体流（源自磁力边下边播虚假桩复盘）
+ * 20. Koin DI 平台契约完整性：platformDataModule 必须显式声明所有底层系统服务契约（ApkInstaller、UpdateRepository、TorrentRepository 等），杜绝单测假桩掩盖导致真机 NoDefinitionFoundException 闪退（源自更新服务 ApkInstaller 漏绑闪退复盘）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -731,6 +732,45 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反流媒体发流真实性规范（严禁伪造 placeholder 虚假文件或未绑定的空 Socket 伪地址欺骗播放器）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun platform_data_module_declares_all_referenced_services() {
+        val platformModuleFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/di/DataModule.android.kt",
+            )
+        assertTrue(platformModuleFile.isFile, "DataModule.android.kt 未找到: ${platformModuleFile.absolutePath}")
+
+        val content = platformModuleFile.readText()
+        val violations = mutableListOf<String>()
+
+        // 必须显式注册的底层核心契约，杜绝在 UpdateRepositoryImpl / AndroidTorrentRepository 等处调用 get() 时发生 NoDefinitionFoundException
+        val requiredBindings =
+            listOf(
+                "single<ApkInstaller>",
+                "single<UpdateRepository>",
+                "single<TorrentRepository>",
+                "single<TorrentStreamEngine>",
+                "single<TorrentIntentDispatcher>",
+                "single<AssetDownloader>",
+                "single<NetworkMonitor>",
+                "single<CrashLogRepository>",
+            )
+
+        requiredBindings.forEach { binding ->
+            if (!content.contains(binding)) {
+                violations.add("platformDataModule 缺少必须的显式服务绑定声明: '$binding'（防止运行期 NoDefinitionFoundException 崩溃）")
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反 Koin DI 平台模块绑定完整性规范（源自更新服务与流引擎参数未注册导致闪退复盘）：\n" +
                     violations.joinToString("\n"),
             )
         }

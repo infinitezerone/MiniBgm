@@ -32,6 +32,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁在 feature 中写散落的 `var showDialog` 状态机；通用登录提示收口于 `BgmLoginPromptDialog`；ViewModel 一次性事件（Channel(BUFFERED)）严禁裸 `collect`，必须经 `ObserveAsEvents` 绑定生命周期（STARTED）。一次性事件的用户可见文案必须以 `@StringRes` + 格式化参数下发、UI 侧解析（服务端运行时消息经 message 字段透传），严禁 VM 内联文案绕开资源体系。
 3. 可播地址只来自 `findPlayableSources`；一切写操作止于 PENDING_CONFIRMATION 提案卡，用户确认才落库。
 4. 凭据只存在于 `AuthTokensDataSource`；不绕过/削弱 `BgmPkce`；不剥离或覆盖 `User-Agent`；关键写操作包 `withContext(NonCancellable)`。
+5. DI 真实性与契约闭环：底层平台模块（如 platformDataModule）与 feature ViewModel 必须保持依赖定义闭环；严禁在单测中仅用手工假模块伪造 Koin 验证，必须通过真实容器集成测试（AppModuleTest）断言全量解析，严禁构造器新增依赖后遗漏注册引发运行时 NoDefinitionFoundException。
 
 ## 领域规则
 
