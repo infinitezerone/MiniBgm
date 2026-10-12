@@ -338,4 +338,14 @@
     <string name="feature_user_undo_failed">撤销失败，请检查网络连接</string>
     <string name="feature_user_update_failed">更新失败，请检查网络连接</string>
     <string name="feature_user_collection_updated">收藏已更新</string>
+
+    <!-- 18. 应用内更新与安装 -->
+    <string name="feature_user_action_download_update">立即下载安装</string>
+    <string name="feature_user_action_install_now">立即安装</string>
+    <string name="feature_user_update_downloading">正在下载新版本… %1$s</string>
+    <string name="feature_user_update_download_success">下载完成，正在准备安装…</string>
+    <string name="feature_user_update_download_failed">下载失败: %1$s</string>
+    <string name="feature_user_update_permission_title">需要安装未知应用权限</string>
+    <string name="feature_user_update_permission_message">覆盖安装新版本需要授予 MiniBgm 安装应用的系统权限。是否前往设置开启？</string>
+    <string name="feature_user_action_grant_install_permission">前往开启</string>
 </resources>

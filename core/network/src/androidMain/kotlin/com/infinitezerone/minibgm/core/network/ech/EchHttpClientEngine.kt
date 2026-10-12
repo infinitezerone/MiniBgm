@@ -50,10 +50,20 @@ class EchHttpClientEngine(
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
         val callContext = callContext()
         val requestTime = GMTDate()
-        // 一个请求预算覆盖"连接 + ECH 握手 + 响应头 + 响应体"全程。响应体是分块拉取的，
-        // 必须逐块扣减剩余预算：本引擎声明了 HttpTimeoutCapability，Ktor 不会再用
-        // socketTimeoutMillis 兜底，服务端在响应头之后卡住就会让请求永久悬挂。
-        val deadlineNanos = System.nanoTime() + config.timeoutMillis * NANOS_PER_MILLI
+        val timeoutConfig = data.getCapabilityOrNull(HttpTimeoutCapability)
+        val requestBudgetMillis = timeoutConfig?.requestTimeoutMillis ?: config.timeoutMillis
+        val socketTimeoutMillis = timeoutConfig?.socketTimeoutMillis ?: config.timeoutMillis
+        val connectTimeoutMillis = timeoutConfig?.connectTimeoutMillis ?: 10_000L
+
+        val deadlineNanos =
+            if (requestBudgetMillis != null &&
+                requestBudgetMillis > 0L &&
+                requestBudgetMillis != Long.MAX_VALUE
+            ) {
+                System.nanoTime() + requestBudgetMillis * NANOS_PER_MILLI
+            } else {
+                Long.MAX_VALUE
+            }
 
         return withContext(dispatcher) {
             val urlString = data.url.toString()
@@ -135,7 +145,12 @@ class EchHttpClientEngine(
                         headerKeys = headerKeysList.toTypedArray(),
                         headerValues = headerValuesList.toTypedArray(),
                         body = bodyBytes,
-                        timeoutMs = remainingMillis(deadlineNanos),
+                        timeoutMs =
+                            if (deadlineNanos != Long.MAX_VALUE) {
+                                remainingMillis(deadlineNanos).coerceAtLeast(connectTimeoutMillis)
+                            } else {
+                                maxOf(connectTimeoutMillis, socketTimeoutMillis)
+                            },
                         targetAddrs = targetAddrs,
                         enableEch = enableEch,
                         requireEch = config.requireEch && enableEch,
@@ -182,19 +197,25 @@ class EchHttpClientEngine(
                         val remaining = remainingMillis(deadlineNanos)
                         if (remaining <= 0L) {
                             throw IOException(
-                                "ECH response body exceeded the ${config.timeoutMillis} ms request budget",
+                                "ECH response body exceeded the $requestBudgetMillis ms request budget",
                             )
                         }
+                        val chunkTimeout =
+                            if (deadlineNanos != Long.MAX_VALUE) {
+                                minOf(socketTimeoutMillis, remaining)
+                            } else {
+                                socketTimeoutMillis
+                            }
                         val chunk =
                             try {
-                                withTimeout(remaining) {
+                                withTimeout(chunkTimeout) {
                                     EchNativeClient.nativeReadBodyChunkCancellable(nativeCall.requestId)
                                 }
                             } catch (timeout: TimeoutCancellationException) {
                                 // 必须翻译成 IOException：TimeoutCancellationException 属于取消语义，
                                 // 上层会把它当作"调用方主动取消"而不是"读超时"，两者的重试含义完全不同。
                                 throw IOException(
-                                    "ECH response body read timed out after ${config.timeoutMillis} ms",
+                                    "ECH response body read timed out after $chunkTimeout ms",
                                     timeout,
                                 )
                             }
@@ -221,7 +242,10 @@ class EchHttpClientEngine(
     }
 
     /** 剩余预算（毫秒，向下取整且不小于 0）。 */
-    private fun remainingMillis(deadlineNanos: Long): Long = ((deadlineNanos - System.nanoTime()) / NANOS_PER_MILLI).coerceAtLeast(0L)
+    private fun remainingMillis(deadlineNanos: Long): Long {
+        if (deadlineNanos == Long.MAX_VALUE) return Long.MAX_VALUE
+        return ((deadlineNanos - System.nanoTime()) / NANOS_PER_MILLI).coerceAtLeast(0L)
+    }
 
     private companion object {
         const val NANOS_PER_MILLI = 1_000_000L

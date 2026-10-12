@@ -65,6 +65,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
+import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -97,9 +98,28 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val downloadState by viewModel.updateDownloadState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(downloadState) {
+        when (val state = downloadState) {
+            is DownloadState.Completed -> {
+                snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.feature_user_update_download_success),
+                    duration = SnackbarDuration.Short,
+                )
+            }
+            is DownloadState.Failed -> {
+                snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.feature_user_update_download_failed, state.message),
+                    duration = SnackbarDuration.Long,
+                )
+            }
+            else -> Unit
+        }
+    }
 
     val openWebUrl = { url: String ->
         context.launchWebUrl(url)
@@ -305,24 +325,57 @@ fun SettingsScreen(
                                         append(info.releaseNotes.trim())
                                     }
                                 }
+                            val hasDownloadUrl = !info.downloadUrl.isNullOrBlank()
                             val confirmed =
                                 overlayHostState.await(
                                     ConfirmDialogAction(
                                         title = context.getString(R.string.feature_user_update_found_title, info.latestVersion),
                                         message = message,
-                                        confirmText = context.getString(R.string.feature_user_action_go_release),
+                                        confirmText =
+                                            if (hasDownloadUrl) {
+                                                context.getString(R.string.feature_user_action_download_update)
+                                            } else {
+                                                context.getString(R.string.feature_user_action_go_release)
+                                            },
                                         dismissText = context.getString(R.string.feature_user_action_update_later),
                                         isPrimary = true,
-                                        icon = BgmIcons.OpenInNew,
+                                        icon = if (hasDownloadUrl) BgmIcons.Download else BgmIcons.OpenInNew,
                                     ),
                                 )
                             if (confirmed) {
-                                val targetUrl =
-                                    info.releaseUrl.ifBlank {
-                                        info.downloadUrl
-                                            ?: "https://github.com/infinitezerone/MiniBgm/releases/latest"
+                                if (hasDownloadUrl) {
+                                    val downloadUrl = info.downloadUrl.orEmpty()
+                                    if (!viewModel.canRequestPackageInstalls()) {
+                                        val grantConfirmed =
+                                            overlayHostState.await(
+                                                ConfirmDialogAction(
+                                                    title = context.getString(R.string.feature_user_update_permission_title),
+                                                    message = context.getString(R.string.feature_user_update_permission_message),
+                                                    confirmText = context.getString(R.string.feature_user_action_grant_install_permission),
+                                                    dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                                    isPrimary = true,
+                                                    icon = BgmIcons.Settings,
+                                                ),
+                                            )
+                                        if (grantConfirmed) {
+                                            viewModel.openInstallPermissionSettings()
+                                        }
                                     }
-                                openWebUrl(targetUrl)
+                                    snackbarHostState.showSnackbar(
+                                        message = context.getString(R.string.feature_user_update_downloading, "0%"),
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                    viewModel.downloadAndInstallUpdate(
+                                        downloadUrl = downloadUrl,
+                                        targetVersion = info.latestVersion,
+                                    )
+                                } else {
+                                    val targetUrl =
+                                        info.releaseUrl.ifBlank {
+                                            "https://github.com/infinitezerone/MiniBgm/releases/latest"
+                                        }
+                                    openWebUrl(targetUrl)
+                                }
                             }
                         } else {
                             snackbarHostState.showSnackbar(

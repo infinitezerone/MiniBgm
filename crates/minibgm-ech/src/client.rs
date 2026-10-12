@@ -20,6 +20,7 @@ use tokio_rustls::TlsConnector;
 use url::Url;
 
 const MAX_RESPONSE_BODY_SIZE: usize = 16 * 1024 * 1024;
+const MAX_STREAM_RESPONSE_BODY_SIZE: usize = 1024 * 1024 * 1024;
 const MAX_REQUEST_BODY_SIZE: usize = 16 * 1024 * 1024;
 const MAX_REQUEST_HEADERS: usize = 128;
 const MAX_HEADER_VALUE_SIZE: usize = 16 * 1024;
@@ -1002,12 +1003,12 @@ async fn process_hyper_response(
                 Ok(frame) => {
                     if let Ok(data) = frame.into_data() {
                         total = total.saturating_add(data.len());
-                        if total > MAX_RESPONSE_BODY_SIZE {
+                        if total > MAX_STREAM_RESPONSE_BODY_SIZE {
                             let _ = send_event(
                                 stream,
                                 StreamEvent::Error(format!(
-                                    "HTTP response exceeds {} bytes",
-                                    MAX_RESPONSE_BODY_SIZE
+                                    "HTTP streaming response exceeds {} bytes",
+                                    MAX_STREAM_RESPONSE_BODY_SIZE
                                 )),
                             )
                             .await;

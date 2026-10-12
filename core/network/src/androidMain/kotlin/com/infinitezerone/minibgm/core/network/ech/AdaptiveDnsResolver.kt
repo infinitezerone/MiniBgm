@@ -105,7 +105,14 @@ internal object AdaptiveDnsResolver {
         port: Int,
     ): Array<String>? {
         if (!isCloudflareHosted(host)) {
-            return null
+            val standardIps = resolveStandardHostIps(host)
+            return if (standardIps.isNotEmpty()) {
+                val candidates = standardIps.map { formatAddress(it, port) }
+                resolvedCandidates[host] = candidates
+                candidates.toTypedArray()
+            } else {
+                null
+            }
         }
 
         val result = LinkedHashSet<String>()
@@ -186,7 +193,12 @@ internal object AdaptiveDnsResolver {
         val candidates = resolvedCandidates[host].orEmpty()
         val index = candidates.indexOfFirst { EchEdgePool.normalizeIp(it) == succeededIp }
         if (index <= 0) return
-        candidates.take(index).forEach { EchEdgePool.recordFailure(it) }
+        candidates.take(index).forEach { candidate ->
+            val ip = EchEdgePool.normalizeIp(candidate) ?: candidate
+            if (isCloudflareIp(ip)) {
+                EchEdgePool.recordFailure(candidate)
+            }
+        }
         logger.d { "[DNS] $host connected via $succeededIp; demoted $index preceding candidate(s)" }
     }
 
@@ -196,10 +208,32 @@ internal object AdaptiveDnsResolver {
      */
     fun recordFailure(host: String) {
         val candidates = resolvedCandidates[host].orEmpty()
-        candidates.forEach { EchEdgePool.recordFailure(it) }
+        candidates.forEach { candidate ->
+            val ip = EchEdgePool.normalizeIp(candidate) ?: candidate
+            if (isCloudflareIp(ip)) {
+                EchEdgePool.recordFailure(candidate)
+            }
+        }
         if (candidates.isNotEmpty()) {
             logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s)" }
         }
+    }
+
+    private fun resolveStandardHostIps(host: String): List<String> {
+        val now = TimeUtils.nowEpochMillis()
+        val cached = dnsCache[host]
+        if (cached != null && cached.expiresAt > now && cached.ips.isNotEmpty()) {
+            return cached.ips
+        }
+        val ips =
+            runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
+                .onFailure { logger.d { "[DNS] standard resolution failed for $host: ${it.message}" } }
+                .getOrDefault(emptyList())
+
+        if (ips.isNotEmpty()) {
+            dnsCache[host] = DnsCacheEntry(ips, now + DNS_CACHE_TTL_MILLIS)
+        }
+        return ips
     }
 
     private fun resolveHostIps(host: String): List<String> {

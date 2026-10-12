@@ -1,57 +1,24 @@
 package com.infinitezerone.minibgm.feature.schedule.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
-import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
-import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
-import com.infinitezerone.minibgm.core.designsystem.component.hideThenDismiss
-import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesSectionLabel
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.AirSchedule
-import com.infinitezerone.minibgm.core.model.sortedBySitePriority
 import com.infinitezerone.minibgm.feature.schedule.R
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleSourcesBottomSheet(
     schedule: AirSchedule,
@@ -62,8 +29,6 @@ fun ScheduleSourcesBottomSheet(
     onInternalPlayClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
-    val coroutineScope = rememberCoroutineScope()
     val displayName = schedule.displayName
 
     val bilibiliTarget =
@@ -80,288 +45,70 @@ fun ScheduleSourcesBottomSheet(
             mikanLink?.playUrl ?: StreamingIntentResolver.buildMikanUrl(keyword = displayName)
         }
 
-    val otherLinks =
-        remember(schedule.siteLinks) {
-            schedule.siteLinks
-                .filterNot {
-                    it.siteName.equals("bilibili", ignoreCase = true) ||
-                        it.siteName.equals("mikan", ignoreCase = true)
-                }.sortedBySitePriority()
-        }
-
-    var isOtherExpanded by remember { mutableStateOf(false) }
-
-    BgmModalBottomSheet(
+    BgmSourcesBottomSheet(
+        title = displayName,
+        coverUrl = schedule.coverUrl,
+        subtitle = stringResource(R.string.feature_schedule_source_sheet_subtitle),
         onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-                    .navigationBarsPadding(),
-        ) {
-            // 头部番剧信息
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(width = 44.dp, height = 60.dp)
-                            .clip(BgmShapes.small),
-                ) {
-                    CoverImage(
-                        url = schedule.coverUrl,
-                        contentDescription = displayName,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+    ) { runAfterDismiss ->
+        if (onInternalPlayClick != null) {
+            BgmSourcesSectionLabel(stringResource(R.string.feature_schedule_source_internal_player_section))
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.feature_schedule_source_sheet_subtitle),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        coroutineScope.hideThenDismiss(sheetState, onDismissRequest)
-                    },
-                ) {
+            BgmSourceActionCard(
+                title = stringResource(R.string.feature_schedule_source_internal_player_title),
+                subtitle = stringResource(DesignSystemR.string.core_designsystem_sources_internal_player_subtitle),
+                iconVector = BgmIcons.PlayCircle,
+                trailingContent = {
                     Icon(
-                        imageVector = BgmIcons.Close,
-                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 外部跳转列表
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (onInternalPlayClick != null) {
-                    Text(
-                        text = stringResource(R.string.feature_schedule_source_internal_player_section),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
-
-                    ScheduleSourceCard(
-                        title = stringResource(R.string.feature_schedule_source_internal_player_title),
-                        iconVector = BgmIcons.PlayCircle,
-                        onClick = {
-                            coroutineScope.hideThenDismiss(sheetState) {
-                                onDismissRequest()
-                                onInternalPlayClick()
-                            }
-                        },
-                    )
-                }
-
-                if (onAiSourceSearch != null) {
-                    Text(
-                        text = stringResource(R.string.feature_schedule_source_ai_section),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
-
-                    ScheduleSourceCard(
-                        title = stringResource(R.string.feature_schedule_source_ai_title),
-                        iconVector = BgmIcons.Assistant,
-                        onClick = {
-                            coroutineScope.hideThenDismiss(sheetState) {
-                                onDismissRequest()
-                                onAiSourceSearch()
-                            }
-                        },
-                    )
-                }
-
-                Text(
-                    text = stringResource(R.string.feature_schedule_source_external_section),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                )
-
-                // 源 1：哔哩哔哩 (Bilibili 搜索)
-                ScheduleSourceCard(
-                    title = stringResource(R.string.feature_schedule_source_bilibili_title),
-                    iconVector = BgmIcons.Tv,
-                    onClick = {
-                        coroutineScope.hideThenDismiss(sheetState) {
-                            onDismissRequest()
-                            val targetUrl =
-                                bilibiliTarget.deepLinkUri
-                                    ?: bilibiliTarget.webFallbackUrl
-                            onOpenUrl(targetUrl)
-                        }
-                    },
-                )
-
-                // 源 2：蜜柑计划 (Mikan)
-                ScheduleSourceCard(
-                    title = stringResource(R.string.feature_schedule_source_mikan_title),
-                    iconVector = BgmIcons.Download,
-                    onClick = {
-                        coroutineScope.hideThenDismiss(sheetState) {
-                            onDismissRequest()
-                            onOpenUrl(mikanUrl)
-                        }
-                    },
-                )
-
-                // 其他播放渠道（默认收纳）
-                if (otherLinks.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Surface(
-                        onClick = { isOtherExpanded = !isOtherExpanded },
-                        shape = BgmShapes.medium,
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.feature_schedule_source_other_platforms, otherLinks.size),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-
-                            Icon(
-                                imageVector =
-                                    if (isOtherExpanded) {
-                                        BgmIcons.KeyboardArrowUp
-                                    } else {
-                                        BgmIcons.KeyboardArrowDown
-                                    },
-                                contentDescription =
-                                    if (isOtherExpanded) {
-                                        stringResource(R.string.feature_schedule_cd_collapse)
-                                    } else {
-                                        stringResource(R.string.feature_schedule_cd_expand)
-                                    },
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = isOtherExpanded,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
-                    ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(top = 4.dp),
-                        ) {
-                            otherLinks.forEach { siteLink ->
-                                ScheduleSourceCard(
-                                    title = siteLink.displayName,
-                                    iconVector = BgmIcons.PlayCircle,
-                                    onClick = {
-                                        coroutineScope.hideThenDismiss(sheetState) {
-                                            onDismissRequest()
-                                            onOpenUrl(siteLink.playUrl)
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleSourceCard(
-    title: String,
-    iconVector: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        shape = BgmShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(
-                shape = BgmShapes.small,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.size(40.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = iconVector,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        imageVector = BgmIcons.KeyboardArrowRight,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_sources_action_play),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(20.dp),
                     )
-                }
-            }
-
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
+                },
+                onClick = { runAfterDismiss(onInternalPlayClick) },
             )
 
-            Icon(
-                imageVector = BgmIcons.OpenInNew,
-                contentDescription = stringResource(R.string.feature_schedule_source_cd_open),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                modifier = Modifier.size(18.dp),
-            )
+            Spacer(modifier = Modifier.height(4.dp))
         }
+
+        if (onAiSourceSearch != null) {
+            BgmSourcesSectionLabel(stringResource(R.string.feature_schedule_source_ai_section))
+
+            BgmSourceActionCard(
+                title = stringResource(DesignSystemR.string.core_designsystem_sources_ai_search_title),
+                subtitle = stringResource(DesignSystemR.string.core_designsystem_sources_ai_search_subtitle),
+                iconVector = BgmIcons.AutoAwesome,
+                onClick = { runAfterDismiss(onAiSourceSearch) },
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        BgmSourcesSectionLabel(stringResource(R.string.feature_schedule_source_external_section))
+
+        // 源 1：哔哩哔哩 (Bilibili)
+        BgmSourceActionCard(
+            title = stringResource(R.string.feature_schedule_source_bilibili_title),
+            subtitle = stringResource(DesignSystemR.string.core_designsystem_sources_bilibili_subtitle),
+            iconVector = BgmIcons.Tv,
+            onClick = {
+                runAfterDismiss {
+                    val targetUrl =
+                        bilibiliTarget.deepLinkUri
+                            ?: bilibiliTarget.webFallbackUrl
+                    onOpenUrl(targetUrl)
+                }
+            },
+        )
+
+        // 源 2：蜜柑计划 (Mikan 社区磁力)
+        BgmSourceActionCard(
+            title = stringResource(R.string.feature_schedule_source_mikan_title),
+            subtitle = stringResource(DesignSystemR.string.core_designsystem_sources_mikan_subtitle),
+            iconVector = BgmIcons.Download,
+            onClick = { runAfterDismiss { onOpenUrl(mikanUrl) } },
+        )
     }
 }

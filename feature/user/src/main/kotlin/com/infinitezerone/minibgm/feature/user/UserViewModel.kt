@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
+import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -252,6 +253,44 @@ class UserViewModel(
             isCheckingUpdateFlow.value = false
         }
     }
+
+    /** 观察安装包下载状态 */
+    val updateDownloadState: StateFlow<DownloadState> = updateRepository.downloadState
+
+    /** 开始应用内下载并自动安装更新 */
+    fun downloadAndInstallUpdate(
+        downloadUrl: String,
+        targetVersion: String,
+        customMirrorPrefix: String? = null,
+    ) {
+        viewModelScope.launch {
+            val result =
+                updateRepository.downloadUpdateApk(
+                    downloadUrl = downloadUrl,
+                    targetVersion = targetVersion,
+                    customMirrorPrefix = customMirrorPrefix,
+                )
+            if (result is DownloadState.Completed) {
+                updateRepository.installUpdateApk(result.filePath)
+            }
+        }
+    }
+
+    /** 取消当前更新下载 */
+    fun cancelUpdateDownload() {
+        updateRepository.cancelDownload()
+    }
+
+    /** 检查未知应用安装权限 (Android 8.0+) */
+    fun canRequestPackageInstalls(): Boolean = updateRepository.canRequestPackageInstalls()
+
+    /** 跳转未知应用安装权限设置页 */
+    fun openInstallPermissionSettings() {
+        updateRepository.openInstallPermissionSettings()
+    }
+
+    /** 再次尝试拉起安装已下载完成的 APK */
+    fun installDownloadedApk(apkPath: String? = null): Boolean = updateRepository.installUpdateApk(apkPath)
 
     /** 刷新个人中心：同步最新个人资料并触发收藏统计链换挡重拉，再全量同步追番收藏 */
     fun refresh(onComplete: ((Boolean) -> Unit)? = null) {

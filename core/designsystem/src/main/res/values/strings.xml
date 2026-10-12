@@ -82,4 +82,23 @@
     <string name="core_designsystem_bbcode_action_show">显示</string>
     <string name="core_designsystem_bbcode_action_hide">隐藏</string>
     <string name="core_designsystem_bbcode_action_hide_cd">重新隐藏</string>
+
+    <!-- 播放来源底栏 (Sources Bottom Sheet) -->
+    <string name="core_designsystem_sources_sheet_default_subtitle">选择播放平台或直达源</string>
+    <string name="core_designsystem_sources_internal_player_title">应用内播放</string>
+    <string name="core_designsystem_sources_internal_player_subtitle">画质切换 · 外挂/内置弹幕 · 手势控制</string>
+    <string name="core_designsystem_sources_section_internal_player">应用内播放</string>
+    <string name="core_designsystem_sources_section_ai_search">AI 找源</string>
+    <string name="core_designsystem_sources_section_external_nav">外部平台跳转</string>
+    <string name="core_designsystem_sources_ai_search_title">AI 追番助手搜索</string>
+    <string name="core_designsystem_sources_ai_search_subtitle">向 AI 询问本番可播放的站点与资源</string>
+    <string name="core_designsystem_sources_bilibili_title">哔哩哔哩 (Bilibili)</string>
+    <string name="core_designsystem_sources_bilibili_subtitle">在哔哩哔哩搜索并观看</string>
+    <string name="core_designsystem_sources_mikan_title">蜜柑计划 (Mikan)</string>
+    <string name="core_designsystem_sources_mikan_subtitle">动漫 BT 种子资源聚合</string>
+    <string name="core_designsystem_sources_other_platforms">其他放送平台 (%1$d)</string>
+    <string name="core_designsystem_sources_cd_collapse">收起</string>
+    <string name="core_designsystem_sources_cd_expand">展开</string>
+    <string name="core_designsystem_sources_action_play">播放</string>
+    <string name="core_designsystem_sources_action_open">打开</string>
 </resources>

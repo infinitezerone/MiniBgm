@@ -83,4 +83,8 @@ fun networkModule(
             com.infinitezerone.minibgm.core.network
                 .UpdateServiceImpl(get(named("unauthenticated")))
         }
+        single<com.infinitezerone.minibgm.core.network.AssetDownloadService> {
+            com.infinitezerone.minibgm.core.network
+                .AssetDownloadServiceImpl(get(named("unauthenticated")))
+        }
     }

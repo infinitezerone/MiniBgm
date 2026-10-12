@@ -228,17 +228,6 @@ fun EpisodeDetailScreen(
                 },
                 actions = {
                     if (episode != null) {
-                        if (onPlayClick != null) {
-                            IconButton(
-                                onClick = { onPlayClick(viewModel.buildPlayerRoute(episode)) },
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Play,
-                                    contentDescription = stringResource(R.string.feature_subject_ep_play_current),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
                         IconButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
