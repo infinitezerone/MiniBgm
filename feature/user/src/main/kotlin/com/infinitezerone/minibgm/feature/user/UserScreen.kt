@@ -77,15 +77,18 @@ import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 fun UserScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onLoginRequest: () -> Unit = {},
     onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
     viewModel: UserViewModel = koinViewModel(),
     collectionsViewModel: UserCollectionsViewModel = koinViewModel(),
+    downloadViewModel: DownloadViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val collectionsState by collectionsViewModel.uiState.collectAsStateWithLifecycle()
+    val downloadGroups by downloadViewModel.downloadGroups.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -148,6 +151,8 @@ fun UserScreen(
         },
         onRetryCollections = collectionsViewModel::retry,
         onSettingsClick = onSettingsClick,
+        onDownloadsClick = onDownloadsClick,
+        downloadGroups = downloadGroups,
         onSwitchAccount = viewModel::switchAccount,
         onLogoutAccount = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
@@ -176,6 +181,8 @@ fun UserScreenContent(
     onRefresh: () -> Unit,
     onRetryCollections: () -> Unit = {},
     onSettingsClick: () -> Unit,
+    onDownloadsClick: () -> Unit = {},
+    downloadGroups: List<com.infinitezerone.minibgm.core.model.SubjectDownloadGroup> = emptyList(),
     onSwitchAccount: (Long) -> Unit,
     onLogoutAccount: (Long) -> Unit,
     onLogoutAll: () -> Unit,
@@ -238,6 +245,29 @@ fun UserScreenContent(
                     Text(text = stringResource(R.string.feature_user_title_home))
                 },
                 actions = {
+                    IconButton(onClick = onDownloadsClick) {
+                        val activeDownloadCount = downloadGroups.sumOf { it.downloadingCount }
+                        if (activeDownloadCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text(text = "$activeDownloadCount")
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Download,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_title),
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = BgmIcons.Download,
+                                contentDescription = stringResource(R.string.feature_user_downloads_title),
+                            )
+                        }
+                    }
+
                     if (uiState.isLoggedIn) {
                         IconButton(onClick = { showAccountSheet = true }) {
                             if (uiState.savedAccounts.size > 1) {

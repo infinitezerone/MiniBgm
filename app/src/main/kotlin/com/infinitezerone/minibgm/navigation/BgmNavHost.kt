@@ -19,6 +19,7 @@ import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
+import com.infinitezerone.minibgm.core.navigation.DownloadRoute
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
@@ -31,6 +32,7 @@ import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
+import com.infinitezerone.minibgm.core.navigation.SubjectDownloadDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TagSubjectsRoute
 import com.infinitezerone.minibgm.core.navigation.TopicDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
@@ -46,10 +48,12 @@ import com.infinitezerone.minibgm.feature.subject.navigation.linkedSubjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.playerEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
+import com.infinitezerone.minibgm.feature.user.navigation.downloadEntry
 import com.infinitezerone.minibgm.feature.user.navigation.inAppLoginEntry
 import com.infinitezerone.minibgm.feature.user.navigation.inAppWebEntry
 import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
+import com.infinitezerone.minibgm.feature.user.navigation.subjectDownloadDetailEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 import kotlinx.coroutines.Dispatchers
@@ -171,10 +175,25 @@ fun BgmNavHost(
                             userEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSettingsClick = { navState.navigateTo(SettingsRoute) },
+                                onDownloadsClick = { navState.navigateTo(DownloadRoute) },
                                 onLoginRequest = openLogin,
                                 onOpenTokenPage = openTokenPage,
                                 scrollToTop = userScrollToTop,
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
+                            )
+
+                            downloadEntry(
+                                onBackClick = { navState.goBack() },
+                                onSubjectClick = { subjectId, subjectName ->
+                                    navState.navigateTo(SubjectDownloadDetailRoute(subjectId = subjectId, subjectName = subjectName))
+                                },
+                                metadata = bgmDetailPane(),
+                            )
+
+                            subjectDownloadDetailEntry(
+                                onBackClick = { navState.goBack() },
+                                onPlayEpisode = { route -> navState.navigateTo(route) },
+                                metadata = bgmDetailPane(),
                             )
 
                             // 登录接管页与 bgm 网页浏览页：全屏场景（不参与分栏策略）

@@ -183,3 +183,20 @@ data class PlayerQueueEntry(
  */
 @Serializable
 data object PlaybackRulesRoute : DetailChainRoute
+
+/**
+ * 下载管理总览界面路由（按番剧合集文件夹聚合展示）。
+ * 声明为 [DetailChainRoute]：可从设置、用户中心或条目详情压栈，返回时精确回到前驱页面。
+ */
+@Serializable
+data object DownloadRoute : DetailChainRoute
+
+/**
+ * 番剧分集下载管理与离线播放列表界面路由。
+ * 声明为 [DetailChainRoute]：下钻查看某部番剧的具体分集状态、离线播放与单独控速。
+ */
+@Serializable
+data class SubjectDownloadDetailRoute(
+    val subjectId: Long,
+    val subjectName: String = "",
+) : DetailChainRoute

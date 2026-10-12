@@ -613,20 +613,25 @@ private fun MikanResourcesSection(
                     },
                     onInAppDownload = {
                         coroutineScope.launch {
-                            val useExternal =
-                                overlayHostState.await(
-                                    ConfirmDialogAction(
-                                        title = context.getString(R.string.feature_subject_source_mikan_offline_notice_title),
-                                        message = context.getString(R.string.feature_subject_source_mikan_offline_notice_message),
-                                        confirmText = context.getString(R.string.feature_subject_source_mikan_offline_notice_external_btn),
-                                        dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
-                                        isPrimary = true,
-                                    ),
-                                )
-                            if (useExternal) {
-                                onDismissAndRun {
-                                    torrentIntentDispatcher.launchMagnet(resource.magnetUrl)
-                                }
+                            torrentRepository.startDownload(
+                                title = resource.title,
+                                magnetUrl = resource.magnetUrl,
+                                torrentUrl = resource.torrentUrl.ifBlank { null },
+                                totalBytes = resource.contentLength,
+                                subjectId = subject.id,
+                                subjectName = subject.displayName,
+                                subjectCoverUrl = subject.images?.bestImage.orEmpty(),
+                                episodeId = episode?.id ?: 0L,
+                                episodeSort = episode?.episodeNumber ?: 1f,
+                                episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast
+                                    .makeText(
+                                        context,
+                                        context.getString(R.string.feature_subject_source_mikan_download_started),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
                             }
                         }
                     },

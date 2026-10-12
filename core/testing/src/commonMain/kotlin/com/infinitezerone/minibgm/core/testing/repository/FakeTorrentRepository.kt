@@ -32,6 +32,12 @@ class FakeTorrentRepository : TorrentRepository {
         magnetUrl: String,
         torrentUrl: String?,
         totalBytes: Long,
+        subjectId: Long,
+        subjectName: String,
+        subjectCoverUrl: String,
+        episodeId: Long,
+        episodeSort: Float,
+        episodeName: String,
     ): String {
         startDownloadCallCount++
         val taskId = "fake-task-${mutableTasks.value.size + 1}"
@@ -45,6 +51,12 @@ class FakeTorrentRepository : TorrentRepository {
                 totalBytes = totalBytes,
                 downloadedBytes = 0L,
                 savePath = "/fake/download/$title.mp4",
+                subjectId = subjectId,
+                subjectName = subjectName,
+                subjectCoverUrl = subjectCoverUrl,
+                episodeId = episodeId,
+                episodeSort = episodeSort,
+                episodeName = episodeName,
             )
         mutableTasks.update { it + task }
         return taskId

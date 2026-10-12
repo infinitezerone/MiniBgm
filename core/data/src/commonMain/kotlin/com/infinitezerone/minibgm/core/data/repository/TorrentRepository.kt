@@ -32,6 +32,12 @@ interface TorrentRepository {
         magnetUrl: String,
         torrentUrl: String? = null,
         totalBytes: Long = 0L,
+        subjectId: Long = 0L,
+        subjectName: String = "",
+        subjectCoverUrl: String = "",
+        episodeId: Long = 0L,
+        episodeSort: Float = 0f,
+        episodeName: String = "",
     ): String
 
     /**

@@ -47,6 +47,12 @@ data class TorrentTask(
     val errorMessage: String? = null,
     val createdTimestamp: Long = 0L,
     val completionTimestamp: Long? = null,
+    val subjectId: Long = 0L,
+    val subjectName: String = "",
+    val subjectCoverUrl: String = "",
+    val episodeId: Long = 0L,
+    val episodeSort: Float = 0f,
+    val episodeName: String = "",
 ) {
     /** 下载进度百分比 (0.0f ~ 1.0f) */
     val progress: Float
@@ -80,6 +86,53 @@ data class TorrentTask(
                 downloadSpeedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(downloadSpeedBytesPerSec / (1024.0 * 1024.0))
                 else -> "%d KB/s".format(downloadSpeedBytesPerSec / 1024)
             }
+}
+
+/**
+ * 按番剧聚合的下载合集视图模型。
+ */
+@Serializable
+data class SubjectDownloadGroup(
+    val subjectId: Long,
+    val subjectName: String,
+    val subjectCoverUrl: String,
+    val tasks: List<TorrentTask>,
+) {
+    val totalTasks: Int get() = tasks.size
+    val completedCount: Int get() = tasks.count { it.isCompleted }
+    val downloadingCount: Int get() = tasks.count { it.status == TorrentTaskStatus.DOWNLOADING }
+    val isAllCompleted: Boolean get() = tasks.isNotEmpty() && tasks.all { it.isCompleted }
+    val totalBytes: Long get() = tasks.sumOf { it.totalBytes }
+    val downloadedBytes: Long get() = tasks.sumOf { it.downloadedBytes }
+    val totalSpeedBytesPerSec: Long get() = tasks.sumOf { it.downloadSpeedBytesPerSec }
+
+    val activeTaskCount: Int get() =
+        tasks.count {
+            it.status == TorrentTaskStatus.DOWNLOADING ||
+                it.status == TorrentTaskStatus.RESOLVING ||
+                it.status == TorrentTaskStatus.QUEUED
+        }
+    val sortedTasks: List<TorrentTask> get() = tasks.sortedBy { it.episodeSort }
+    val progress: Float get() = if (totalBytes > 0L) (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f) else 0f
+    val percentage: Int get() = (progress * 100).toInt()
+
+    val formattedTotalSpeed: String
+        get() =
+            when {
+                totalSpeedBytesPerSec <= 0L -> "0 KB/s"
+                totalSpeedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(totalSpeedBytesPerSec / (1024.0 * 1024.0))
+                else -> "%d KB/s".format(totalSpeedBytesPerSec / 1024)
+            }
+
+    val formattedTotalSize: String
+        get() {
+            val gb = totalBytes / (1024.0 * 1024.0 * 1024.0)
+            return if (gb >= 1.0) {
+                "%.1f GB".format(gb)
+            } else {
+                "%.1f MB".format(totalBytes / (1024.0 * 1024.0))
+            }
+        }
 }
 
 /**

@@ -348,4 +348,25 @@
     <string name="feature_user_update_permission_title">需要安装未知应用权限</string>
     <string name="feature_user_update_permission_message">覆盖安装新版本需要授予 MiniBgm 安装应用的系统权限。是否前往设置开启？</string>
     <string name="feature_user_action_grant_install_permission">前往开启</string>
+
+    <!-- 19. 离线缓存与下载管理 -->
+    <string name="feature_user_downloads_title">下载管理</string>
+    <string name="feature_user_downloads_empty">暂无下载任务</string>
+    <string name="feature_user_downloads_empty_desc">在番剧详情页检索字幕组资源并添加到下载</string>
+    <string name="feature_user_downloads_all_pause">全部暂停</string>
+    <string name="feature_user_downloads_all_resume">全部继续</string>
+    <string name="feature_user_downloads_completed_format">已完成 %1$d / 共 %2$d 集</string>
+    <string name="feature_user_downloads_delete_task_title">删除下载任务</string>
+    <string name="feature_user_downloads_delete_task_message">确定删除「%1$s」？将同步清理本地已下载的文件。</string>
+    <string name="feature_user_downloads_delete_all_subject_title">清空该番剧下载</string>
+    <string name="feature_user_downloads_delete_all_subject_message">确定删除「%1$s」的所有分集下载记录并清理本地文件吗？</string>
+    <string name="feature_user_downloads_play_offline">离线播放</string>
+    <string name="feature_user_downloads_status_queued">排队中</string>
+    <string name="feature_user_downloads_status_paused">已暂停</string>
+    <string name="feature_user_downloads_status_error">下载失败</string>
+    <string name="feature_user_downloads_status_resolving">解析元数据…</string>
+    <string name="feature_user_downloads_status_completed">已完成</string>
+    <string name="feature_user_downloads_card_summary">%1$d 个任务下载中 · %2$s</string>
+    <string name="feature_user_downloads_card_all_done">%1$d 部番剧已离线</string>
 </resources>
+

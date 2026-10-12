@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 fun EntryProviderScope<NavKey>.userEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onLoginRequest: () -> Unit = {},
     onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
@@ -33,6 +34,7 @@ fun EntryProviderScope<NavKey>.userEntry(
         UserScreen(
             onSubjectClick = onSubjectClick,
             onSettingsClick = onSettingsClick,
+            onDownloadsClick = onDownloadsClick,
             onLoginRequest = onLoginRequest,
             onOpenTokenPage = onOpenTokenPage,
             scrollToTop = scrollToTop,
@@ -103,6 +105,36 @@ fun EntryProviderScope<NavKey>.inAppWebEntry(
             title = route.title,
             onBack = onBackClick,
             onOpenInBrowser = onOpenInBrowser,
+        )
+    }
+}
+
+/** 离线下载管理总览条目（番剧合集文件夹） */
+fun EntryProviderScope<NavKey>.downloadEntry(
+    onBackClick: () -> Unit = {},
+    onSubjectClick: (Long, String) -> Unit = { _, _ -> },
+    metadata: Map<String, Any> = emptyMap(),
+) {
+    entry<com.infinitezerone.minibgm.core.navigation.DownloadRoute>(metadata = metadata) {
+        com.infinitezerone.minibgm.feature.user.DownloadScreen(
+            onBackClick = onBackClick,
+            onSubjectClick = onSubjectClick,
+        )
+    }
+}
+
+/** 番剧分集离线下载与播放条目 */
+fun EntryProviderScope<NavKey>.subjectDownloadDetailEntry(
+    onBackClick: () -> Unit = {},
+    onPlayEpisode: (com.infinitezerone.minibgm.core.navigation.PlayerRoute) -> Unit = {},
+    metadata: Map<String, Any> = emptyMap(),
+) {
+    entry<com.infinitezerone.minibgm.core.navigation.SubjectDownloadDetailRoute>(metadata = metadata) { route ->
+        com.infinitezerone.minibgm.feature.user.SubjectDownloadDetailScreen(
+            subjectId = route.subjectId,
+            subjectName = route.subjectName,
+            onBackClick = onBackClick,
+            onPlayEpisode = onPlayEpisode,
         )
     }
 }

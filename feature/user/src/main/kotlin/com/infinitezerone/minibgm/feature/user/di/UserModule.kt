@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user.di
 
+import com.infinitezerone.minibgm.feature.user.DownloadViewModel
 import com.infinitezerone.minibgm.feature.user.InAppWebViewModel
 import com.infinitezerone.minibgm.feature.user.PlaybackRulesViewModel
 import com.infinitezerone.minibgm.feature.user.UserCollectionsViewModel
@@ -13,4 +14,5 @@ val userModule =
         viewModelOf(::UserCollectionsViewModel)
         viewModelOf(::PlaybackRulesViewModel)
         viewModelOf(::InAppWebViewModel)
+        viewModelOf(::DownloadViewModel)
     }

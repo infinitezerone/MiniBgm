@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use librqbit::api::{Api, TorrentIdOrHash};
 use librqbit::http_api::{HttpApi, HttpApiOptions};
-use librqbit::storage::examples::inmemory::InMemoryExampleStorageFactory;
+use librqbit::storage::filesystem::FilesystemStorageFactory;
 use librqbit::storage::StorageFactoryExt;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
@@ -43,8 +43,8 @@ pub struct StreamServer {
 
 impl StreamServer {
     pub async fn start(config: StreamConfig) -> Result<Self> {
-        // 1. 初始化纯内存存储工厂（0 闪存写入，纯 RAM 流化）
-        let storage_factory = InMemoryExampleStorageFactory::default().boxed();
+        // 1. 初始化标准文件系统存储工厂（利用 OS Page Cache 高性能零拷贝，彻底杜绝 OOM）
+        let storage_factory = FilesystemStorageFactory::default().boxed();
 
         let cancel_token = CancellationToken::new();
         let session_opts = SessionOptions {
@@ -62,7 +62,7 @@ impl StreamServer {
         // 使用应用传入的私有缓存目录作为 Session 根目录（杜绝根目录 / 权限异常）
         let session = Session::new_with_opts(config.save_dir, session_opts)
             .await
-            .context("初始化 librqbit 内存 Session 失败")?;
+            .context("初始化 librqbit 文件系统 Session 失败")?;
 
         // 2. 绑定本地回环端口启动只读 HTTP 流媒体服务（消除未授权写入/控制攻击面）
         let bind_addr = (Ipv4Addr::LOCALHOST, 0).into();

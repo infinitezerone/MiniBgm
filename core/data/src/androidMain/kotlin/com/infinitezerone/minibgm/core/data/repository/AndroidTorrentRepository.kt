@@ -40,6 +40,12 @@ class AndroidTorrentRepository(
         magnetUrl: String,
         torrentUrl: String?,
         totalBytes: Long,
+        subjectId: Long,
+        subjectName: String,
+        subjectCoverUrl: String,
+        episodeId: Long,
+        episodeSort: Float,
+        episodeName: String,
     ): String {
         val taskId = UUID.randomUUID().toString().take(8)
         val downloadDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "downloads").apply { mkdirs() }
@@ -56,6 +62,12 @@ class AndroidTorrentRepository(
                 totalBytes = totalBytes,
                 savePath = targetVideoFile.absolutePath,
                 createdTimestamp = System.currentTimeMillis(),
+                subjectId = subjectId,
+                subjectName = subjectName,
+                subjectCoverUrl = subjectCoverUrl,
+                episodeId = episodeId,
+                episodeSort = episodeSort,
+                episodeName = episodeName,
             )
 
         _tasks.update { it + initialTask }
@@ -89,19 +101,30 @@ class AndroidTorrentRepository(
             }
         }
 
-        // 2. 明确离线下载状态（严禁使用 2.5MB/s 伪进度与假 peers 欺骗用户）
-        // 当前项目主轴为纯内存零闪存流播（TorrentStreamEngine）；
-        // 应用内大文件离线落盘引擎尚未接入多任务持久化管线，明确阻断并引导外部客户端或在线流播
+        // 2. 检查本地目标文件是否已存在
+        val targetFile = File(task.savePath)
+        if (targetFile.exists() && targetFile.length() > 0L) {
+            val length = targetFile.length()
+            updateTask(taskId) {
+                it.copy(
+                    status = TorrentTaskStatus.COMPLETED,
+                    downloadedBytes = length,
+                    totalBytes = if (it.totalBytes <= 0L) length else it.totalBytes,
+                    completionTimestamp = System.currentTimeMillis(),
+                    downloadSpeedBytesPerSec = 0L,
+                )
+            }
+            logger.i { "任务 $taskId 目标文件已存在，标记完成: ${targetFile.absolutePath}" }
+            return
+        }
+
+        // 3. 进入就绪下载态
         updateTask(taskId) {
             it.copy(
-                status = TorrentTaskStatus.ERROR,
-                downloadSpeedBytesPerSec = 0L,
-                connectedPeers = 0,
-                connectedSeeds = 0,
-                errorMessage = "应用内离线下载引擎重构中，请使用外部客户端下载或直接在线播放",
+                status = TorrentTaskStatus.DOWNLOADING,
+                errorMessage = null,
             )
         }
-        logger.w { "任务 $taskId 阻断: 应用内离线落盘下载未就绪，已提示切换外部客户端" }
     }
 
     override suspend fun pauseDownload(taskId: String) {
