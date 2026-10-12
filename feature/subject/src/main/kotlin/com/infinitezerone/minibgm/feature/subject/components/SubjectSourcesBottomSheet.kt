@@ -37,9 +37,12 @@ import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesSectionLabel
+import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
@@ -55,6 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
@@ -507,6 +511,7 @@ private fun MikanResourcesSection(
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
     val torrentStreamEngine: TorrentStreamEngine = koinInject()
     val coroutineScope = rememberCoroutineScope()
+    val overlayHostState = rememberOverlayHostState()
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
 
     Spacer(modifier = Modifier.height(4.dp))
@@ -537,6 +542,19 @@ private fun MikanResourcesSection(
                     onStreamPlay = {
                         coroutineScope.launch {
                             if (!torrentStreamEngine.isPluginInstalled()) {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_title),
+                                            message = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_message),
+                                            confirmText = context.getString(R.string.feature_subject_source_mikan_plugin_install_btn),
+                                            dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                            isPrimary = true,
+                                        ),
+                                    )
+                                if (!confirmed) {
+                                    return@launch
+                                }
                                 withContext(Dispatchers.Main) {
                                     Toast
                                         .makeText(
@@ -657,6 +675,10 @@ private fun MikanResourcesSection(
                 )
             }
         }
+    }
+
+    BgmOverlayHost(hostState = overlayHostState) {
+        confirmDialog()
     }
 }
 
