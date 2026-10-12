@@ -102,7 +102,8 @@ impl StreamServer {
                 .with_context(|| format!("读取种子文件失败: {:?}", path))?;
             AddTorrent::TorrentFileBytes(Bytes::from(data))
         } else {
-            AddTorrent::Url(Cow::Borrowed(&config.magnet_url))
+            let enhanced_magnet = enhance_magnet_url(&config.magnet_url);
+            AddTorrent::Url(enhanced_magnet)
         };
 
         let add_opts = AddTorrentOptions {
@@ -203,5 +204,45 @@ impl StreamServer {
 
     pub fn stop(&self) {
         self.cancel_token.cancel();
+    }
+}
+
+const PUBLIC_TRACKER_PARAMS: &[&str] = &[
+    "udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce",
+    "udp%3A%2F%2Fopen.tracker.cl%3A1337%2Fannounce",
+    "udp%3A%2F%2Fopentracker.i2p.rocks%3A6969%2Fannounce",
+    "udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce",
+    "udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce",
+    "https%3A%2F%2Ftracker.tamersunion.org%3A443%2Fannounce",
+];
+
+fn enhance_magnet_url(raw: &str) -> Cow<'_, str> {
+    if !raw.starts_with("magnet:?") {
+        return Cow::Borrowed(raw);
+    }
+    let mut enhanced = raw.to_string();
+    for tr in PUBLIC_TRACKER_PARAMS {
+        if !enhanced.contains(tr) {
+            enhanced.push_str("&tr=");
+            enhanced.push_str(tr);
+        }
+    }
+    Cow::Owned(enhanced)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_enhance_magnet_url_appends_trackers() {
+        let base = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567";
+        let enhanced = enhance_magnet_url(base);
+        assert!(enhanced.contains("&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"));
+        assert!(enhanced.starts_with(base));
+
+        // 已经包含时不再重复追加
+        let second_pass = enhance_magnet_url(&enhanced);
+        assert_eq!(second_pass, enhanced);
     }
 }

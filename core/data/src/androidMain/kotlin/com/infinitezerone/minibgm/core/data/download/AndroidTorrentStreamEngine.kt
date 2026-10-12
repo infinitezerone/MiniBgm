@@ -23,7 +23,6 @@ import java.io.File
  */
 class AndroidTorrentStreamEngine(
     private val context: Context,
-    @Suppress("UNUSED_PARAMETER") private val assetDownloader: AssetDownloader,
 ) : TorrentStreamEngine {
     private val logger = bgmLogger("Bgm/TorrentStreamEngine")
     private val scope = CoroutineScope(Dispatchers.IO + Job())
