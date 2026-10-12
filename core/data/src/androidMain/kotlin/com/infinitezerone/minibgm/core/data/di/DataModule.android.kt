@@ -3,12 +3,18 @@ package com.infinitezerone.minibgm.core.data.di
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.FileCrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.crashLogDir
+import com.infinitezerone.minibgm.core.data.download.AndroidApkInstaller
 import com.infinitezerone.minibgm.core.data.download.AndroidAssetDownloader
 import com.infinitezerone.minibgm.core.data.download.AndroidTorrentIntentDispatcher
+import com.infinitezerone.minibgm.core.data.download.AndroidTorrentStreamEngine
+import com.infinitezerone.minibgm.core.data.download.ApkInstaller
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
+import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.data.repository.AndroidTorrentRepository
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.data.repository.UpdateRepository
+import com.infinitezerone.minibgm.core.data.repository.UpdateRepositoryImpl
 import com.infinitezerone.minibgm.core.data.seasonal.FileSeasonalDiskCache
 import com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache
 import com.infinitezerone.minibgm.core.data.util.ConnectivityManagerNetworkMonitor
@@ -33,14 +39,15 @@ val platformDataModule =
                 assetDownloader = get(),
             )
         }
-        single<com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine> {
-            com.infinitezerone.minibgm.core.data.download.AndroidTorrentStreamEngine(
+        single<TorrentStreamEngine> {
+            AndroidTorrentStreamEngine(
                 context = androidContext(),
                 assetDownloader = get(),
             )
         }
-        single<com.infinitezerone.minibgm.core.data.repository.UpdateRepository> {
-            com.infinitezerone.minibgm.core.data.repository.UpdateRepositoryImpl(
+        single<ApkInstaller> { AndroidApkInstaller(androidContext()) }
+        single<UpdateRepository> {
+            UpdateRepositoryImpl(
                 updateService = get(),
                 assetDownloader = get(),
                 apkInstaller = get(),
