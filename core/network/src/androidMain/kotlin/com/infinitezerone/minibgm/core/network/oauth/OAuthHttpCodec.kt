@@ -195,17 +195,25 @@ internal object OAuthHttpCodec {
     }
 
     /**
-     * 根据 Content-Type 决定是否需要对响应体进行链接重写。
+     * 根据 Content-Type 决定是否需要对响应体进行链接重写与公共静态资源 CDN 镜像重写。
+     * cdn.jsdelivr.net 在中国大陆网络环境下存在严重 SNI 阻断（RST），
+     * 替换为可用镜像 fastly.jsdelivr.net 保证 CSS/JS 资源正常加载。
      */
     fun prepareResponseBody(
         bytes: ByteArray,
         contentType: String,
     ): ByteArray =
         if (isTextOrHtml(contentType)) {
-            rewriteSecureLinks(bytes.decodeToString()).encodeToByteArray()
+            rewriteHtmlResources(bytes.decodeToString()).encodeToByteArray()
         } else {
             bytes
         }
+
+    fun rewriteHtmlResources(text: String): String =
+        rewriteSecureLinks(text)
+            .replace("https://cdn.jsdelivr.net", "https://fastly.jsdelivr.net")
+            .replace("http://cdn.jsdelivr.net", "https://fastly.jsdelivr.net")
+            .replace("//cdn.jsdelivr.net", "//fastly.jsdelivr.net")
 
     /**
      * 将 HTTP 状态行、响应头和响应体完整写出到输出流并刷新。

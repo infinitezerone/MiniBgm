@@ -79,6 +79,19 @@ class OAuthHttpCodecTest {
     }
 
     @Test
+    fun rewriteHtmlResources_rewritesBgmLinksAndJsdelivrDomains() {
+        val input =
+            """<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css">""" +
+                """<a href="https://bgm.tv/demo">Demo</a>"""
+        val rewritten = OAuthHttpCodec.rewriteHtmlResources(input)
+        assertEquals(
+            """<link rel="stylesheet" href="https://fastly.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css">""" +
+                """<a href="http://bgm.tv/demo">Demo</a>""",
+            rewritten,
+        )
+    }
+
+    @Test
     fun restoreSecureScheme_upgradesHttpToHttpsForBgmDomains() {
         val input = "http://bgm.tv/login"
         assertEquals("https://bgm.tv/login", OAuthHttpCodec.restoreSecureScheme(input))

@@ -273,6 +273,12 @@ internal fun applyLoopbackProxy(
                 // 否则同一套挑战的两个 host 会走两条不同路径——这类"部分生效"最难排查。
                 .addBypassRule("challenges.cloudflare.com")
                 .addBypassRule("*.challenges.cloudflare.com")
+                // next.bgm.tv 依赖 jsdelivr 加载 Bootstrap/jQuery/WebAuthn 等前端静态资源，
+                // 配置绕过代理直接走网络直连，避免静态资源挤占本地 ECH 代理端口。
+                .addBypassRule("fastly.jsdelivr.net")
+                .addBypassRule("*.jsdelivr.net")
+                .addBypassRule("cdn.jsdelivr.net")
+                .addBypassRule("*.googleapis.com")
                 .build()
         val listener = onApplied?.let { Runnable { it() } } ?: PROXY_NOOP
         ProxyController.getInstance().setProxyOverride(config, PROXY_EXECUTOR, listener)

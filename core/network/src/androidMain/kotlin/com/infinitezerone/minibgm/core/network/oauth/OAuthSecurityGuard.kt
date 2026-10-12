@@ -13,10 +13,13 @@ internal object OAuthSecurityGuard {
     /** 代理允许转发的目标主域白名单（含其所有子域名），防止沦为任意目标的开放代理。 */
     val ALLOWED_PROXY_DOMAINS: List<String> = listOf("bgm.tv", "bangumi.tv", "chii.in")
 
-    /** CONNECT 隧道允许连接的外部辅助域（如 Cloudflare 挑战）。 */
+    /** CONNECT 隧道允许连接的外部辅助域（如 Cloudflare 挑战、前端静态资源 CDN）。 */
     val ALLOWED_CONNECT_DOMAINS: List<String> =
         listOf(
             "challenges.cloudflare.com",
+            "cdn.jsdelivr.net",
+            "jsdelivr.net",
+            "fastly.jsdelivr.net",
         )
 
     /**

@@ -22,6 +22,8 @@ class OAuthSecurityGuardTest {
         assertTrue(OAuthSecurityGuard.isAllowedConnectHost("chii.in:443", "bgm.tv"))
         assertTrue(OAuthSecurityGuard.isAllowedConnectHost("challenges.cloudflare.com:443", "bgm.tv"))
         assertTrue(OAuthSecurityGuard.isAllowedConnectHost("sub.challenges.cloudflare.com:443", "bgm.tv"))
+        assertTrue(OAuthSecurityGuard.isAllowedConnectHost("cdn.jsdelivr.net:443", "bgm.tv"))
+        assertTrue(OAuthSecurityGuard.isAllowedConnectHost("fastly.jsdelivr.net:443", "bgm.tv"))
 
         assertFalse(OAuthSecurityGuard.isAllowedConnectHost("malicious.com:443", "bgm.tv"))
     }
