@@ -613,22 +613,22 @@ private fun MikanResourcesSection(
                     },
                     onInAppDownload = {
                         coroutineScope.launch {
-                            torrentRepository.startDownload(
-                                title = resource.title,
-                                magnetUrl = resource.magnetUrl,
-                                torrentUrl = resource.torrentUrl.ifBlank { null },
-                                totalBytes = resource.contentLength,
-                            )
-                            withContext(Dispatchers.Main) {
-                                Toast
-                                    .makeText(
-                                        context,
-                                        context.getString(R.string.feature_subject_source_mikan_download_started),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
+                            val useExternal =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = context.getString(R.string.feature_subject_source_mikan_offline_notice_title),
+                                        message = context.getString(R.string.feature_subject_source_mikan_offline_notice_message),
+                                        confirmText = context.getString(R.string.feature_subject_source_mikan_offline_notice_external_btn),
+                                        dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                        isPrimary = true,
+                                    ),
+                                )
+                            if (useExternal) {
+                                onDismissAndRun {
+                                    torrentIntentDispatcher.launchMagnet(resource.magnetUrl)
+                                }
                             }
                         }
-                        onDismissAndRun {}
                     },
                     onExternalLaunch = {
                         onDismissAndRun {

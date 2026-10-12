@@ -47,4 +47,14 @@ class TorrentStreamEngineTest {
             engine.stopStream()
             assertTrue(engine.streamState.value is TorrentStreamState.Idle)
         }
+
+    @Test
+    fun startStream_withTorrentUrl_succeeds() =
+        runTest {
+            val engine = FakeTorrentStreamEngine(initialInstalled = true)
+
+            val streamResult = engine.startStream("Title", "magnet:?xt=urn:btih:abc", "https://example.com/test.torrent")
+            assertTrue(streamResult.isSuccess)
+            assertEquals("http://127.0.0.1:8899/stream?hash=fake", streamResult.getOrNull())
+        }
 }

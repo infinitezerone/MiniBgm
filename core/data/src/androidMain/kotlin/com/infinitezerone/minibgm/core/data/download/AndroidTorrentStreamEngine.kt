@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.download
 
 import android.content.Context
 import com.infinitezerone.minibgm.core.common.bgmLogger
+import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import java.io.File
  */
 class AndroidTorrentStreamEngine(
     private val context: Context,
+    private val assetDownloader: AssetDownloader? = null,
 ) : TorrentStreamEngine {
     private val logger = bgmLogger("Bgm/TorrentStreamEngine")
     private val scope = CoroutineScope(Dispatchers.IO + Job())
@@ -66,9 +68,31 @@ class AndroidTorrentStreamEngine(
                 _streamState.value = TorrentStreamState.Resolving(infoHash = infoHash)
 
                 val cacheDir = File(context.cacheDir, "torrent_stream").apply { mkdirs() }
-                val torrentFilePath = ""
+                var torrentFilePath = ""
 
-                logger.i { "调用 Rust 原生引擎启动 HTTP 流媒体代理: $infoHash" }
+                // 若提供了种子直链，优先预取 .torrent 文件以跳过漫长的 DHT metadata 协商
+                if (!torrentUrl.isNullOrBlank() && assetDownloader != null) {
+                    val torrentsDir = File(context.cacheDir, "torrents").apply { mkdirs() }
+                    val safeName = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+                    val targetTorrentFile = File(torrentsDir, "$safeName.torrent")
+                    if (targetTorrentFile.exists() && targetTorrentFile.length() > 0L) {
+                        torrentFilePath = targetTorrentFile.absolutePath
+                        logger.i { "使用已缓存的种子文件: $torrentFilePath" }
+                    } else {
+                        val dlResult =
+                            runCatching {
+                                assetDownloader.downloadAsset(torrentUrl, targetTorrentFile.absolutePath)
+                            }.getOrNull()
+                        if (dlResult is DownloadState.Completed || (targetTorrentFile.exists() && targetTorrentFile.length() > 0L)) {
+                            torrentFilePath = targetTorrentFile.absolutePath
+                            logger.i { "预取种子文件成功，直接装载种子: $torrentFilePath" }
+                        } else {
+                            logger.w { "预取种子文件失败，平滑降级至纯磁力 DHT 寻道" }
+                        }
+                    }
+                }
+
+                logger.i { "调用 Rust 原生引擎启动 HTTP 流媒体代理: $infoHash (torrent: $torrentFilePath)" }
                 val resultUrl =
                     nativeStartStream(
                         magnetUrl = magnetUrl,

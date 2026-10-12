@@ -107,7 +107,6 @@ internal class CommunityRepositoryImpl(
     ): AppResult<Unit> =
         asAppResult(errorMessage = { it.toUserFriendlyMessage("表态") }) {
             communityService.setLike(target, id, reactionValue)
-            Unit
         }
 
     override suspend fun removeLike(
@@ -116,6 +115,5 @@ internal class CommunityRepositoryImpl(
     ): AppResult<Unit> =
         asAppResult(errorMessage = { it.toUserFriendlyMessage("取消表态") }) {
             communityService.removeLike(target, id)
-            Unit
         }
 }

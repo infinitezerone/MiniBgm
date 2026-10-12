@@ -36,6 +36,7 @@ val platformDataModule =
         single<com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine> {
             com.infinitezerone.minibgm.core.data.download.AndroidTorrentStreamEngine(
                 context = androidContext(),
+                assetDownloader = get(),
             )
         }
         single<com.infinitezerone.minibgm.core.data.repository.UpdateRepository> {

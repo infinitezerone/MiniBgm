@@ -203,7 +203,9 @@
     <string name="feature_subject_source_mikan_copied_magnet">已复制磁力链接，可粘贴至外部下载器或网盘</string>
     <string name="feature_subject_source_mikan_loading">正在获取字幕组资源…</string>
     <string name="feature_subject_source_mikan_empty">暂未检索到当前分集的字幕组资源</string>
-
+    <string name="feature_subject_source_mikan_offline_notice_title">离线下载说明</string>
+    <string name="feature_subject_source_mikan_offline_notice_message">应用内离线落盘引擎正在重构，建议直接使用“边下边播”在线观看，或调用外部专业客户端下载。</string>
+    <string name="feature_subject_source_mikan_offline_notice_external_btn">使用外部客户端</string>
 
     <!-- 9. 分集详情与讨论 -->
     <string name="feature_subject_ep_detail_title">分集详情</string>

@@ -261,7 +261,7 @@ abstract class BuildTorrentNativeTask : DefaultTask() {
             ?.let { return File(it).takeIf { dir -> dir.isDirectory } }
         return candidateNdkDirs()
             ?.filter(::isUsableNdk)
-            ?.maxByOrNull { it.name }
+            ?.maxByOrNull { ndkSortKey(it.name) }
     }
 
     private fun isUsableNdk(directory: File): Boolean =
@@ -298,10 +298,18 @@ abstract class BuildTorrentNativeTask : DefaultTask() {
                 File("/usr/bin"),
             )
         val allDirs = (pathEntries.map { File(it) } + standardLocations).distinct()
-        for (dir in allDirs) {
-            val candidate = File(dir, name)
-            if (candidate.canExecute()) return candidate
-        }
-        return null
+        val suffixes =
+            if (System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)) {
+                listOf(".exe", ".cmd", ".bat", "")
+            } else {
+                listOf("")
+            }
+        return allDirs
+            .asSequence()
+            .flatMap { directory -> suffixes.asSequence().map { suffix -> File(directory, name + suffix) } }
+            .firstOrNull { it.isFile }
     }
 }
+
+private fun ndkSortKey(version: String): String = version.split('.').joinToString(".") { it.padStart(6, '0') }
+

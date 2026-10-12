@@ -56,8 +56,7 @@ class EchHttpClientEngine(
         val connectTimeoutMillis = timeoutConfig?.connectTimeoutMillis ?: 10_000L
 
         val deadlineNanos =
-            if (requestBudgetMillis != null &&
-                requestBudgetMillis > 0L &&
+            if (requestBudgetMillis > 0L &&
                 requestBudgetMillis != Long.MAX_VALUE
             ) {
                 System.nanoTime() + requestBudgetMillis * NANOS_PER_MILLI
