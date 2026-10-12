@@ -215,7 +215,7 @@ internal class LocalOAuthProxyServer(
         output: BufferedOutputStream,
     ) {
         val targetUrl = "https://$targetHost$rawPath"
-        log.d { "[PROXY:REQ] $method $rawPath -> $targetUrl" }
+        log.i { "[PROXY:REQ] $method $rawPath -> $targetUrl" }
 
         val originalContentType = OAuthHttpCodec.parseContentType(inboundHeaders)
         val forwardedHeaders = OAuthHttpCodec.filterInboundHeaders(inboundHeaders)
@@ -229,6 +229,7 @@ internal class LocalOAuthProxyServer(
                     setBody(ByteArrayContent(bodyBytes, originalContentType ?: ContentType.Application.OctetStream))
                 }
             }
+        log.i { "[PROXY:RESP] ${response.status.value} for $method $rawPath" }
 
         OAuthHttpCodec.writeResponse(output, response.status, response.headers, response.bodyAsBytes())
     }

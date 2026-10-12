@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
@@ -43,7 +44,14 @@ private const val INAPP_WEB_USER_AGENT =
 internal fun applyInAppWebSessionCookie(session: InAppWebSession) {
     val cookieManager = CookieManager.getInstance()
     cookieManager.setAcceptCookie(true)
-    cookieManager.setCookie(session.url, "${session.cookieName}=${session.cookieValue}; Path=/; HttpOnly")
+    val uri = runCatching { Uri.parse(session.url) }.getOrNull()
+    val host = uri?.host?.lowercase() ?: "next.bgm.tv"
+    val cookieValue = "${session.cookieName}=${session.cookieValue}; Path=/; HttpOnly"
+    cookieManager.setCookie("http://$host", cookieValue)
+    cookieManager.setCookie("http://$host", "${session.cookieName}=${session.cookieValue}; Domain=.$host; Path=/; HttpOnly")
+    cookieManager.setCookie("http://next.bgm.tv", cookieValue)
+    cookieManager.setCookie("http://next.bgm.tv", "${session.cookieName}=${session.cookieValue}; Domain=.next.bgm.tv; Path=/; HttpOnly")
+    cookieManager.setCookie("http://bgm.tv", cookieValue)
     cookieManager.setCookie("http://bgm.tv", "${session.cookieName}=${session.cookieValue}; Domain=.bgm.tv; Path=/; HttpOnly")
     cookieManager.flush()
 }
@@ -99,6 +107,7 @@ internal fun InAppWebView(
 
     AndroidView(
         factory = { context ->
+            WebView.setWebContentsDebuggingEnabled(true)
             WebView(context).apply {
                 setBackgroundColor(Color.TRANSPARENT)
                 layoutParams =
@@ -130,6 +139,20 @@ internal fun InAppWebView(
                             if (!title.isNullOrBlank()) {
                                 currentOnTitleReceived(title)
                             }
+                        }
+
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                            if (consoleMessage != null) {
+                                val level = consoleMessage.messageLevel()
+                                val text =
+                                    "[CONSOLE:$level] ${consoleMessage.message()} (${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
+                                when (level) {
+                                    ConsoleMessage.MessageLevel.ERROR -> proxyLogger.e { text }
+                                    ConsoleMessage.MessageLevel.WARNING -> proxyLogger.w { text }
+                                    else -> proxyLogger.i { text }
+                                }
+                            }
+                            return super.onConsoleMessage(consoleMessage)
                         }
 
                         override fun onJsAlert(
@@ -196,6 +219,21 @@ internal fun InAppWebView(
                             currentOnPageLoadingChanged(false)
                             url?.let(currentOnUrlChanged)
                             currentOnCanGoBackChanged(view?.canGoBack() == true)
+                            view?.evaluateJavascript(
+                                """
+                                (function() {
+                                    if (window.__minibgm_diag_installed) return;
+                                    window.__minibgm_diag_installed = true;
+                                    window.addEventListener('unhandledrejection', function(e) {
+                                        console.error('[MINIBGM_UNHANDLED_REJECTION]', e.reason ? (e.reason.stack || e.reason) : e);
+                                    });
+                                    window.addEventListener('error', function(e) {
+                                        console.error('[MINIBGM_GLOBAL_ERROR]', e.message, e.filename, e.lineno);
+                                    });
+                                })();
+                                """.trimIndent(),
+                                null,
+                            )
                         }
 
                         override fun onReceivedError(

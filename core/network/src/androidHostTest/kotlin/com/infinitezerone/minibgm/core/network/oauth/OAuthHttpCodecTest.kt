@@ -143,6 +143,20 @@ class OAuthHttpCodecTest {
     }
 
     @Test
+    fun filterOutboundHeaders_rewritesCspToAllowFastlyJsdelivr() {
+        val csp = "script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net/ https://challenges.cloudflare.com/"
+        val headers =
+            headersOf(
+                "Content-Security-Policy" to listOf(csp),
+            )
+        val filtered = OAuthHttpCodec.filterOutboundHeaders(headers)
+        val rewrittenCsp = filtered.firstOrNull { it.first.equals("Content-Security-Policy", ignoreCase = true) }?.second
+
+        assertTrue(rewrittenCsp?.contains("https://fastly.jsdelivr.net/") == true)
+        assertTrue(rewrittenCsp?.contains("https://cdn.jsdelivr.net/") == true)
+    }
+
+    @Test
     fun writeResponse_formatsCompleteHttpMessage() {
         val out = ByteArrayOutputStream()
         val headers =

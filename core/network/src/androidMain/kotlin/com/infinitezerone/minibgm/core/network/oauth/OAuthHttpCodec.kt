@@ -186,6 +186,8 @@ internal object OAuthHttpCodec {
                     when (lower) {
                         "location" -> rewriteSecureLinks(rawVal)
                         "set-cookie" -> sanitizeSetCookie(rawVal)
+                        "content-security-policy", "content-security-policy-report-only" ->
+                            rewriteContentSecurityPolicy(rawVal)
                         else -> rawVal
                     }
                 result.add(name to finalVal)
@@ -193,6 +195,18 @@ internal object OAuthHttpCodec {
         }
         return result
     }
+
+    private val JSDELIVR_CSP_REGEX: Regex = Regex("""(https?://cdn\.jsdelivr\.net)(/?)""")
+
+    /**
+     * 重写 CSP 策略头，放行 fastly.jsdelivr.net CDN 镜像，防止浏览器因白名单缺失阻断 Bootstrap 与 jQuery。
+     */
+    fun rewriteContentSecurityPolicy(csp: String): String =
+        JSDELIVR_CSP_REGEX.replace(csp) { match ->
+            val origin = match.groupValues[1]
+            val slash = match.groupValues[2]
+            "$origin$slash https://fastly.jsdelivr.net$slash"
+        }
 
     /**
      * 根据 Content-Type 决定是否需要对响应体进行链接重写与公共静态资源 CDN 镜像重写。
